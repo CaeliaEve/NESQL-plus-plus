@@ -1,0 +1,49 @@
+<?xml version="1.0" encoding="UTF-8" ?>
+<persistence
+        xmlns="http://xmlns.jcp.org/xml/ns/persistence"
+        xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance"
+        xsi:schemaLocation="http://xmlns.jcp.org/xml/ns/persistence http://xmlns.jcp.org/xml/ns/persistence/persistence_2_2.xsd"
+        version="2.2">
+
+    <persistence-unit name="NESQL" transaction-type="RESOURCE_LOCAL">
+        <provider>org.hibernate.jpa.HibernatePersistenceProvider</provider>
+
+        <!-- Explicitly list all entity classes to avoid autodetection issues in reobfuscated JAR -->
+        <class>com.github.dcysteine.nesql.sql.base.fluid.Fluid</class>
+        <class>com.github.dcysteine.nesql.sql.base.fluid.FluidGroup</class>
+        <class>com.github.dcysteine.nesql.sql.base.item.Item</class>
+        <class>com.github.dcysteine.nesql.sql.base.item.ItemGroup</class>
+        <class>com.github.dcysteine.nesql.sql.base.recipe.Recipe</class>
+        <class>com.github.dcysteine.nesql.sql.base.recipe.RecipeType</class>
+        <class>com.github.dcysteine.nesql.sql.forge.FluidBlock</class>
+        <class>com.github.dcysteine.nesql.sql.forge.FluidContainer</class>
+        <class>com.github.dcysteine.nesql.sql.forge.OreDictionary</class>
+        <class>com.github.dcysteine.nesql.sql.gregtech.GregTechRecipe</class>
+        <class>com.github.dcysteine.nesql.sql.quest.Quest</class>
+        <class>com.github.dcysteine.nesql.sql.quest.QuestLine</class>
+        <class>com.github.dcysteine.nesql.sql.quest.QuestLineEntry</class>
+        <class>com.github.dcysteine.nesql.sql.quest.Reward</class>
+        <class>com.github.dcysteine.nesql.sql.quest.Task</class>
+        <class>com.github.dcysteine.nesql.sql.thaumcraft.Aspect</class>
+        <class>com.github.dcysteine.nesql.sql.thaumcraft.AspectEntry</class>
+
+        <properties>
+            <property name="hibernate.connection.driver_class" value="org.hsqldb.jdbc.JDBCDriver"/>
+            <property name="hibernate.connection.username" value="sa"/>
+            <property name="hibernate.connection.password" value=""/>
+            <property name="hibernate.dialect" value="org.hibernate.dialect.HSQLDialect"/>
+            <property name="hibernate.hbm2ddl.auto" value="create"/>
+            <property name="hibernate.archive.autodetection" value="class"/>
+            <!-- Generate nicer table and column names. -->
+            <property name="hibernate.physical_naming_strategy"
+                      value="org.hibernate.boot.model.naming.CamelCaseToUnderscoresNamingStrategy"/>
+            <!-- Needed to handle multiple fields of the same embedded type. -->
+            <property name="hibernate.implicit_naming_strategy" value="component-path"/>
+            <!-- Set this to true to log SQL. -->
+            <property name="hibernate.show_sql" value="false"/>
+            <!-- This should enable SQL statistics, but doesn't seem to work.
+                 Maybe it needs DEBUG-level logging output enabled? -->
+            <property name="hibernate.generate_statistics" value="false"/>
+        </properties>
+    </persistence-unit>
+</persistence>

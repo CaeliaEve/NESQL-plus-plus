@@ -1,0 +1,222 @@
+package com.github.dcysteine.nesql.exporter.util.render;
+
+import com.github.dcysteine.nesql.exporter.main.Logger;
+import net.minecraft.item.Item;
+import net.minecraft.item.ItemStack;
+
+import java.util.HashSet;
+import java.util.Set;
+
+/**
+ * Registry for items that are known to have animated textures in GTNH.
+ * This is used to force multi-frame capture for specific items.
+ */
+public enum AnimatedItemRegistry {
+    INSTANCE;
+
+    // Set of item IDs that are known to have animations
+    private final Set<String> animatedItemIds = new HashSet<>();
+
+    private AnimatedItemRegistry() {
+        initializeAnimatedItems();
+    }
+
+    /**
+     * Initialize the list of known animated items.
+     * These items will always be captured as multi-frame animations.
+     */
+    private void initializeAnimatedItems() {
+        // GregTech 5 Animated Materials
+        addGregTechAnimatedItems();
+
+        // Thaumcraft Animated Items
+        addThaumcraftAnimatedItems();
+
+        // Botania Animated Items
+        addBotaniaAnimatedItems();
+
+        // Other Animated Items
+        addOtherAnimatedItems();
+
+        Logger.MOD.info("Initialized AnimatedItemRegistry with {} animated items",
+                       animatedItemIds.size());
+    }
+
+    private void addGregTechAnimatedItems() {
+        // GT5 glitch/phase materials
+        animatedItemIds.add("gregtech:gt.metaitem.01"); // SixPhasedCopper, etc.
+
+        // GT5 machines with animations
+        // Most GT5 machine blocks have animated textures when active
+        // We'll capture the item forms as static, but the blocks could be animated
+    }
+
+    private void addThaumcraftAnimatedItems() {
+        animatedItemIds.add("Thaumcraft:ItemPrimordialPearl");
+        animatedItemIds.add("Thaumcraft:ItemEldritchObject");
+        animatedItemIds.add("Thaumcraft:ItemResource");
+        animatedItemIds.add("Thaumcraft:ItemWispEssence");
+
+        // Thaumcraft crystals
+        animatedItemIds.add("Thaumcraft:ItemCrystalEssence");
+        animatedItemIds.add("Thaumcraft:ItemCrystal");
+    }
+
+    private void addBotaniaAnimatedItems() {
+        animatedItemIds.add("Botania:manaTablet");
+        animatedItemIds.add("Botania:poolMinecart");
+        animatedItemIds.add("Botania:manaBottle");
+        animatedItemIds.add("Botania:manaPowder");
+
+        // Botania flowers with animation
+        animatedItemIds.add("Botania:flower");
+    }
+
+    private void addOtherAnimatedItems() {
+        // Avaritia - ALL Avaritia items have animated textures
+        addAvaritiaAnimatedItems();
+
+        // Railcraft
+        animatedItemIds.add("Railcraft:cube");
+        animatedItemIds.add("Railcraft:firestone");
+
+        // Extra Utilities
+        animatedItemIds.add("extrautils:decorativeBlock1");
+        animatedItemIds.add("extrautils:decorativeBlock2");
+
+        // Ender IO
+        animatedItemIds.add("enderio:itemBasicCapacitor");
+        animatedItemIds.add("enderio:itemMaterial");
+
+        // Fluid items that have animation
+        // These are captured as fluid type, not item type
+    }
+
+    private void addAvaritiaAnimatedItems() {
+        // Avaritia items all have custom animated renders
+        // These include rainbow effects, pulsing glows, rotation animations, etc.
+
+        // Infinity Tools (rainbow animation)
+        animatedItemIds.add("Avaritia:Infinity_Sword");
+        animatedItemIds.add("Avaritia:Infinity_Pickaxe");
+        animatedItemIds.add("Avaritia:Infinity_Axe");
+        animatedItemIds.add("Avaritia:Infinity_Shovel");
+        animatedItemIds.add("Avaritia:Infinity_Bow");
+        animatedItemIds.add("Avaritia:Infinity_Helm");
+        animatedItemIds.add("Avaritia:Infinity_Chest");
+        animatedItemIds.add("Avaritia:Infinity_Pants");
+        animatedItemIds.add("Avaritia:Infinity_Shoes");
+
+        // Singularity (black hole rotation animation)
+        animatedItemIds.add("Avaritia:Singularity");
+        animatedItemIds.add("Avaritia:Resource"); // Same as Singularity
+
+        // Other animated items
+        animatedItemIds.add("Avaritia:Akashic_Record");
+        animatedItemIds.add("Avaritia:Crystal_Matrix");
+        animatedItemIds.add("Avaritia:Matter_Cluster");
+        animatedItemIds.add("Avaritia:Neutronium_Compressor");
+        animatedItemIds.add("Avaritia:Neutron_Collector");
+        animatedItemIds.add("Avaritia:Orb_Armok");
+        animatedItemIds.add("Avaritia:Big_Pearl");
+        animatedItemIds.add("Avaritia:Endest_Pearl");
+        animatedItemIds.add("Avaritia:Cosmic_Meatballs");
+        animatedItemIds.add("Avaritia:Ultimate_Stew");
+        animatedItemIds.add("Avaritia:Skull_Sword");
+        animatedItemIds.add("Avaritia:infinitato");
+
+        // Avaritia crafting items
+        animatedItemIds.add("Avaritia:Double_Craft");
+        animatedItemIds.add("Avaritia:Triple_Craft");
+        animatedItemIds.add("Avaritia:Dire_Craft");
+
+        // Avaritia blocks
+        animatedItemIds.add("Avaritia:Resource_Block");
+        animatedItemIds.add("Avaritia:Neutronium_Compressor");
+
+        // Add all Avaritia items by mod ID prefix
+        animatedItemIds.add("Avaritia");
+    }
+
+    /**
+     * Check if an item is known to have animation.
+     * @param stack The item stack to check
+     * @return true if the item is in the animated registry
+     */
+    public boolean isAnimatedItem(ItemStack stack) {
+        if (stack == null || stack.getItem() == null) {
+            return false;
+        }
+
+        Item item = stack.getItem();
+        String itemId = getItemId(item);
+
+        // Check exact match
+        if (animatedItemIds.contains(itemId)) {
+            logAnimatedItem(itemId, stack.getItemDamage());
+            return true;
+        }
+
+        // Check mod ID prefix (e.g., "Avaritia" matches "Avaritia:Infinity_Sword")
+        String modId = itemId.split(":")[0];
+        if (animatedItemIds.contains(modId)) {
+            logAnimatedItem(itemId, stack.getItemDamage());
+            return true;
+        }
+
+        // Special check for Avaritia items (check if itemId starts with "Avaritia")
+        if (itemId.startsWith("Avaritia") || itemId.contains("Avaritia")) {
+            logAnimatedItem(itemId, stack.getItemDamage());
+            return true;
+        }
+
+        return false;
+    }
+
+    private void logAnimatedItem(String itemId, int damage) {
+        if (Logger.intermittentLog(0)) {
+            Logger.MOD.info("Detected animated item: {} (damage: {})", itemId, damage);
+        }
+    }
+
+    /**
+     * Get the item ID in mod:item format.
+     */
+    private String getItemId(Item item) {
+        try {
+            String registryName = item.getUnlocalizedName();
+            // Convert from tile.name format to mod:item format
+            if (registryName.startsWith("tile.")) {
+                registryName = registryName.substring(5);
+            } else if (registryName.startsWith("item.")) {
+                registryName = registryName.substring(5);
+            }
+
+            // Try to get the real registry name
+            Object registryNameObj = net.minecraft.item.Item.itemRegistry.getNameForObject(item);
+            if (registryNameObj != null) {
+                return registryNameObj.toString();
+            }
+
+            return registryName;
+        } catch (Exception e) {
+            return "unknown";
+        }
+    }
+
+    /**
+     * Add an item ID to the animated registry dynamically.
+     * @param itemId The item ID (mod:item format)
+     */
+    public void addAnimatedItem(String itemId) {
+        animatedItemIds.add(itemId);
+        Logger.MOD.info("Added animated item to registry: {}", itemId);
+    }
+
+    /**
+     * Get the total number of registered animated items.
+     */
+    public int getAnimatedItemCount() {
+        return animatedItemIds.size();
+    }
+}

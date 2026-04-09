@@ -1,0 +1,287 @@
+package com.github.dcysteine.nesql.exporter.main.config;
+
+import com.github.dcysteine.nesql.sql.Plugin;
+import com.google.common.collect.ImmutableList;
+import net.minecraftforge.common.config.Property;
+
+import java.util.ArrayList;
+import java.util.Arrays;
+import java.util.List;
+import java.util.function.Supplier;
+
+public final class ConfigOptions {
+    private static final List<Option<?>> allOptions = new ArrayList<>();
+
+    public static final Option<String> REPOSITORY_NAME =
+            new StringOption(
+                    Category.OPTIONS, "repository_name", "nesql-repository",
+                    "The default name of the exported repository.")
+                    .register();
+
+    public static final Option<List<String>> ENABLED_PLUGINS =
+            new StringListOption(
+                    Category.OPTIONS, "enabled_plugins", Plugin.NAMES,
+                    "The list of enabled plugins."
+                            + " You should not normally need to modify this.")
+                    .register();
+
+    public static final Option<Boolean> AUTO_EXPORT_ON_CONNECT =
+            new BooleanOption(
+                    Category.OPTIONS, "auto_export_on_connect", false,
+                    "Whether to automatically export upon connecting to a world."
+                            + "\nThe default repository name will be used.")
+                    .register();
+
+    public static final Option<Boolean> ENABLE_CONFIG_FILE =
+            new BooleanOption(
+                    Category.OPTIONS, "enable_config_file", false,
+                    "Whether to generate a config file."
+                            + "\nConfig changes will be forgotten if this option is not enabled!"
+                            + "\nDISABLING THIS OPTION WILL DELETE YOUR CONFIG FILE!")
+                    .register();
+
+    public static final Option<Integer> ICON_DIMENSION =
+            new IntegerOption(
+                    Category.OPTIONS, "icon_dimension", 64,
+                    "The size of rendered icons, in pixels. Should probably be a multiple of 32."
+                            + "\nHas no effect if render_icons is false.")
+                    .register();
+
+    public static final Option<Boolean> RENDER_ICONS =
+            new BooleanOption(
+                    Category.OPTIONS, "render_icons", true,
+                    "Whether to render item and fluid icons when exporting.")
+                    .register();
+
+    public static final Option<Integer> RENDER_ICONS_PER_TICK =
+            new IntegerOption(
+                    Category.OPTIONS, "render_icons_per_tick", 256,
+                    "The number of icons to render per tick. Lower this if your computer"
+                            + " can't handle the default.")
+                    .register();
+
+    public static final Option<Integer> LOGGING_FREQUENCY =
+            new IntegerOption(
+                    Category.OPTIONS, "logging_frequency", 100,
+                    "How often to log progress. Lower is more frequent."
+                            + " Set to <=0 to disable.")
+                    .register();
+
+    // GIF Animation Options
+    public static final Option<Boolean> EXPORT_GIF =
+            new BooleanOption(
+                    Category.OPTIONS, "export_gif", true,
+                    "Whether to export animated GIF for items with texture animations."
+                            + "\nNOTE: This will significantly increase export time (4-10x slower)."
+                            + "\nOnly enable if you need to capture animated item textures.")
+                    .register();
+
+    public static final Option<Integer> GIF_FRAMES =
+            new IntegerOption(
+                    Category.OPTIONS, "gif_frames", 8,
+                    "Number of frames to capture for each GIF animation."
+                            + "\nMore frames = smoother animation but larger file size and memory usage."
+                            + "\nWARNING: Requires at least 4GB JVM heap to avoid OutOfMemoryError!"
+                            + "\nRecommended: Allocate 6-8GB memory (-Xmx6G or -Xmx8G)")
+                    .register();
+
+    public static final Option<Integer> GIF_FRAME_DELAY_MS =
+            new IntegerOption(
+                    Category.OPTIONS, "gif_frame_delay_ms", 50,
+                    "Delay between frames in milliseconds."
+                            + "\nLower values = faster animation."
+                            + "\nRecommended: 50ms (0.5tick) for smooth playback.")
+                    .register();
+
+    public static final Option<Integer> GIF_LOOP_COUNT =
+            new IntegerOption(
+                    Category.OPTIONS, "gif_loop_count", 0,
+                    "Number of times to loop the animation."
+                            + "\n0 = infinite loop (recommended).")
+                    .register();
+
+    public static final Option<Boolean> FORCE_ALL_ITEMS_ANIMATED =
+            new BooleanOption(
+                    Category.OPTIONS, "force_all_items_animated", false,
+                    "Force ALL items and fluids to be captured as multi-frame animations."
+                            + "\nThis will capture every item/fluid with multiple frames to detect any animations."
+                            + "\nWARNING: This will increase export time by 10-20x!"
+                            + "\nUse this to discover which items/fluids have animated textures."
+                            + "\nRecommended: Set gif_frames to 5-10 for faster initial discovery.")
+                    .register();
+
+    public static final Option<String> TEST_MOD_FILTER =
+            new StringOption(
+                    Category.OPTIONS, "test_mod_filter", "",
+                    "TEST MODE: Only export items from this mod (e.g., 'Avaritia')."
+                            + "\nLeave empty to export all mods.")
+                    .register();
+
+    public enum Category {
+        OPTIONS("options");
+
+        private final String name;
+
+        Category(String name) {
+            this.name = name;
+        }
+
+        @Override
+        public String toString() {
+            return name;
+        }
+    }
+
+    public abstract static class Option<T> implements Supplier<T> {
+        final Category category;
+        final String key;
+        final T defaultValue;
+        final String comment;
+        final boolean requiresRestart;
+
+        Property property;
+
+        Option(
+                Category category, String key, T defaultValue, String comment,
+                boolean requiresRestart) {
+            this.category = category;
+            this.key = key;
+            this.defaultValue = defaultValue;
+            this.comment = comment + buildDefaultComment(defaultValue);
+            this.requiresRestart = requiresRestart;
+        }
+
+        Option(Category category, String key, T defaultValue, String comment) {
+            this(category, key, defaultValue, comment, false);
+        }
+
+        /** Chain this method right after construction. */
+        Option<T> register() {
+            allOptions.add(this);
+            return this;
+        }
+
+        public void initialize() {
+            property = getProperty();
+            property.setRequiresMcRestart(requiresRestart);
+
+            // Load this option, so that it gets saved if it's missing from the config.
+            get();
+        }
+
+        /**
+         * Sadly, this abstract method is needed because we cannot in-line getting the property in
+         * {@link #initialize()} due to type shenanigans.
+         */
+        abstract Property getProperty();
+
+        @Override
+        public abstract T get();
+    }
+
+    public static final class BooleanOption extends Option<Boolean> {
+        private BooleanOption(Category category, String key, boolean defaultValue, String comment) {
+            super(category, key, defaultValue, comment);
+        }
+
+        private BooleanOption(
+                Category category, String key, boolean defaultValue, String comment,
+                boolean requiresRestart) {
+            super(category, key, defaultValue, comment, requiresRestart);
+        }
+
+        @Override
+        Property getProperty() {
+            return Config.CONFIG.get(category.toString(), key, defaultValue, comment);
+        }
+
+        @Override
+        public Boolean get() {
+            return property.getBoolean();
+        }
+    }
+
+    public static final class IntegerOption extends Option<Integer> {
+        private IntegerOption(Category category, String key, int defaultValue, String comment) {
+            super(category, key, defaultValue, comment);
+        }
+
+        private IntegerOption(
+                Category category, String key, int defaultValue, String comment,
+                boolean requiresRestart) {
+            super(category, key, defaultValue, comment, requiresRestart);
+        }
+
+        @Override
+        Property getProperty() {
+            return Config.CONFIG.get(category.toString(), key, defaultValue, comment);
+        }
+
+        @Override
+        public Integer get() {
+            return property.getInt();
+        }
+    }
+
+    public static final class StringOption extends Option<String> {
+        private StringOption(
+                Category category, String key, String defaultValue, String comment) {
+            super(category, key, defaultValue, comment);
+        }
+
+        private StringOption(
+                Category category, String key, String defaultValue, String comment,
+                boolean requiresRestart) {
+            super(category, key, defaultValue, comment, requiresRestart);
+        }
+
+        @Override
+        Property getProperty() {
+            return Config.CONFIG.get(category.toString(), key, defaultValue, comment);
+        }
+
+        @Override
+        public String get() {
+            return property.getString();
+        }
+    }
+
+    public static final class StringListOption extends Option<List<String>> {
+        private StringListOption(
+                Category category, String key, List<String> defaultValue, String comment) {
+            super(category, key, defaultValue, comment);
+        }
+
+        private StringListOption(
+                Category category, String key, List<String> defaultValue, String comment,
+                boolean requiresRestart) {
+            super(category, key, defaultValue, comment, requiresRestart);
+        }
+
+        @Override
+        Property getProperty() {
+            return Config.CONFIG.get(
+                    category.toString(), key, defaultValue.toArray(new String[0]), comment);
+        }
+
+        @Override
+        public List<String> get() {
+            return Arrays.asList(property.getStringList());
+        }
+    }
+
+    // Static class.
+    private ConfigOptions() {}
+
+    static void setCategoryComments() {
+        Config.CONFIG.setCategoryComment(Category.OPTIONS.toString(), "General usage options.");
+    }
+
+    static ImmutableList<Option<?>> getAllOptions() {
+        return ImmutableList.copyOf(allOptions);
+    }
+
+    private static String buildDefaultComment(Object defaultValue) {
+        return String.format("\nDefault: %s", defaultValue);
+    }
+}

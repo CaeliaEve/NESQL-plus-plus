@@ -1,0 +1,26 @@
+syntax = "proto3";
+
+package com.github.dcysteine.nesql.exporter.proto;
+
+option java_multiple_files = true;
+
+import "fluid.proto";
+import "item.proto";
+
+// Message that encodes all of the needed information to uniquely identify a recipe.
+// We will serialize this message and use that as the primary key for the recipe table.
+//
+// For the ingredient lists in this message, add an empty Item or Fluid message (equal to default
+// instance) to indicate an empty spot. This is used for shaped recipes that have gaps.
+message RecipePb {
+  RecipeTypePb recipe_type = 1;
+  map<int32, ItemGroupPb> item_input = 2;
+  map<int32, FluidGroupPb> fluid_input = 3;
+  map<int32, ItemStackWithProbabilityPb> item_output = 4;
+  map<int32, FluidStackWithProbabilityPb> fluid_output = 5;
+}
+
+message RecipeTypePb {
+  string category = 1;
+  string type = 2;
+}

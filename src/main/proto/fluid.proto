@@ -1,0 +1,24 @@
+syntax = "proto3";
+
+package com.github.dcysteine.nesql.exporter.proto;
+
+option java_multiple_files = true;
+
+message FluidGroupPb {
+  repeated FluidStackPb fluid_stack = 1;
+}
+
+message FluidStackPb {
+  string mod_id = 1;
+  string internal_name = 2;
+  int32 amount = 3;
+  string nbt = 4;
+}
+
+message FluidStackWithProbabilityPb {
+  string mod_id = 1;
+  string internal_name = 2;
+  int32 amount = 3;
+  string nbt = 4;
+  double probability = 5;
+}
