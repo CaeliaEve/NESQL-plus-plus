@@ -60,6 +60,7 @@ public final class Main {
         event.registerServerCommand(new ExportCommand());  // Complete export (data + images)
         event.registerServerCommand(new DataExportCommand());  // Data only (no images)
         event.registerServerCommand(new ImageExportCommand());  // Images only (requires existing data)
+        event.registerServerCommand(new ThaumcraftDataExportCommand()); // Debug: Thaumcraft-family data only
         event.registerServerCommand(new RenderContractsExportCommand()); // Rebuild render canonical/atlas/index only
         event.registerServerCommand(new AnimatedAtlasExportCommand()); // Animated atlas manifest only
         event.registerServerCommand(new GregTechMultiblockExportCommand()); // GregTech multiblock voxel blueprints
@@ -68,6 +69,7 @@ public final class Main {
         Logger.MOD.info("Export commands registered!");
         Logger.MOD.info("  /nesql - Complete export (data + images) [profile={}]", ExportProfile.FULL_V104.profileId);
         Logger.MOD.info("  /nesql-data - Data only (no images, with V14 export) [profile={}]", ExportProfile.DATA_ONLY_V14.profileId);
+        Logger.MOD.info("  /nesql-data-thaumcraft - Debug data export for Thaumcraft-family NEI handlers only");
         Logger.MOD.info("  /nesql-images - Images only (requires existing database) [profile={}]", ExportProfile.IMAGES_ONLY.profileId);
         Logger.MOD.info("  /nesql-render-contracts - Rebuild render-assets / animation / atlas / render-index only");
         Logger.MOD.info("  /nesql-animated-atlas - Rebuild animated atlas outputs only");

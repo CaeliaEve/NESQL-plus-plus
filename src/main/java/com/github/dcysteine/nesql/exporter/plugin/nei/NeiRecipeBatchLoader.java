@@ -50,6 +50,12 @@ public class NeiRecipeBatchLoader {
             String handlerName = baseHandler.getRecipeName();
 
             try {
+                if (!NeiExportDebugFilter.shouldProcess(baseHandler)) {
+                    Logger.MOD.info("Skipping handler due to debug filter {}: {}",
+                            NeiExportDebugFilter.getMode(), handlerName);
+                    processedHandlers.incrementAndGet();
+                    continue;
+                }
                 Logger.MOD.info("Processing handler {}/{}: {}",
                         handlerIndex, GuiCraftingRecipe.craftinghandlers.size(), handlerName);
 
