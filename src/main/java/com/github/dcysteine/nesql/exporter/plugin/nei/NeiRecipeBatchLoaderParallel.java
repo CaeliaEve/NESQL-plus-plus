@@ -4,6 +4,7 @@ import codechicken.nei.ItemList;
 import codechicken.nei.recipe.GuiCraftingRecipe;
 import codechicken.nei.recipe.GuiUsageRecipe;
 import codechicken.nei.recipe.ICraftingHandler;
+import codechicken.nei.recipe.IRecipeHandler;
 import codechicken.nei.recipe.IUsageHandler;
 import codechicken.nei.recipe.TemplateRecipeHandler;
 
@@ -88,7 +89,7 @@ public class NeiRecipeBatchLoaderParallel {
                     int exported = exporter.exportSingleCraftingHandler(
                             result.handlerId,
                             result.handlerName,
-                            result.loadedHandler
+                            (ICraftingHandler) result.loadedHandler
                     );
 
                     totalRecipes.addAndGet(exported);
@@ -159,12 +160,12 @@ public class NeiRecipeBatchLoaderParallel {
                     Thread.currentThread().getName(),
                     handlerIndex + 1, totalHandlers, result.handlerName);
 
-            // Create a NEW instance for this handler
-            TemplateRecipeHandler workingHandler = null;
+            // Create a NEW instance for this handler when possible.
+            ICraftingHandler workingHandler = null;
             if (baseHandler instanceof TemplateRecipeHandler) {
                 workingHandler = ((TemplateRecipeHandler) baseHandler).newInstance();
             } else {
-                workingHandler = (TemplateRecipeHandler) baseHandler.getRecipeHandler("item", ItemList.items.get(0));
+                workingHandler = baseHandler.getRecipeHandler("item", ItemList.items.get(0));
             }
 
             if (workingHandler == null) {
@@ -173,7 +174,9 @@ public class NeiRecipeBatchLoaderParallel {
             }
 
             // Load all recipes for this handler (CPU-intensive, thread-safe)
-            int recipeCount = loadRecipesForHandler(workingHandler);
+            int recipeCount = workingHandler instanceof TemplateRecipeHandler
+                    ? loadRecipesForHandler((TemplateRecipeHandler) workingHandler)
+                    : workingHandler.numRecipes();
 
             if (recipeCount > 0) {
                 result.loadedHandler = workingHandler;
@@ -234,7 +237,7 @@ public class NeiRecipeBatchLoaderParallel {
                     int exported = exporter.exportSingleUsageHandler(
                             result.handlerId,
                             result.handlerName,
-                            result.loadedHandler
+                            (IUsageHandler) result.loadedHandler
                     );
 
                     totalRecipes.addAndGet(exported);
@@ -302,12 +305,12 @@ public class NeiRecipeBatchLoaderParallel {
                     Thread.currentThread().getName(),
                     handlerIndex + 1, totalHandlers, result.handlerName);
 
-            // Create a NEW instance for this handler
-            TemplateRecipeHandler workingHandler = null;
+            // Create a NEW instance for this handler when possible.
+            IUsageHandler workingHandler = null;
             if (baseHandler instanceof TemplateRecipeHandler) {
                 workingHandler = ((TemplateRecipeHandler) baseHandler).newInstance();
             } else {
-                workingHandler = (TemplateRecipeHandler) baseHandler.getUsageHandler("item", ItemList.items.get(0));
+                workingHandler = baseHandler.getUsageHandler("item", ItemList.items.get(0));
             }
 
             if (workingHandler == null) {
@@ -316,7 +319,9 @@ public class NeiRecipeBatchLoaderParallel {
             }
 
             // Load all usage recipes for this handler
-            int recipeCount = loadUsageRecipesForHandler(workingHandler);
+            int recipeCount = workingHandler instanceof TemplateRecipeHandler
+                    ? loadUsageRecipesForHandler((TemplateRecipeHandler) workingHandler)
+                    : workingHandler.numRecipes();
 
             if (recipeCount > 0) {
                 result.loadedHandler = workingHandler;
@@ -402,7 +407,7 @@ public class NeiRecipeBatchLoaderParallel {
     private static class LoaderResult {
         String handlerId;
         String handlerName;
-        TemplateRecipeHandler loadedHandler;
+        IRecipeHandler loadedHandler;
         int recipeCount;
         String error;
     }

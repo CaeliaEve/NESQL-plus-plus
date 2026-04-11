@@ -20,7 +20,15 @@ public class SpecialRecipeMetadataRegistry {
      * @param metadata The metadata to register
      */
     public static void registerMetadata(String recipeId, SpecialRecipeMetadata metadata) {
-        metadataMap.put(recipeId, metadata);
+        SpecialRecipeMetadata existing = metadataMap.get(recipeId);
+        if (existing == null) {
+            metadataMap.put(recipeId, metadata);
+            return;
+        }
+
+        Map<String, Object> merged = new HashMap<>(existing.getData());
+        merged.putAll(metadata.getData());
+        metadataMap.put(recipeId, new SpecialRecipeMetadata(existing.getRecipeType(), merged));
     }
 
     /**

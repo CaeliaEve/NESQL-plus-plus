@@ -74,6 +74,9 @@ public final class ExportWriterSupport {
         try {
             new CanonicalRepositorySnapshotWriter(entityManager, repositoryDirectory, profileId, includeRenderAssets)
                     .export();
+            new GregTechCircuitProgressionWriter(repositoryDirectory).export();
+            new GregTechMaterialPartsWriter(repositoryDirectory).export();
+            new ForestryGeneticsWriter(repositoryDirectory).export();
         } catch (Exception e) {
             Logger.MOD.error("Failed to export NESQL++ canonical snapshot", e);
             Logger.chatMessage(

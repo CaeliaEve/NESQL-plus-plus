@@ -12,6 +12,7 @@ import com.github.dcysteine.nesql.sql.base.recipe.Dimension;
 import com.github.dcysteine.nesql.sql.base.recipe.Recipe;
 import com.github.dcysteine.nesql.sql.base.recipe.RecipeType;
 import com.github.dcysteine.nesql.sql.gregtech.GregTechRecipe;
+import com.github.dcysteine.nesql.exporter.util.SpecialRecipeMetadataRegistry;
 
 import java.io.File;
 import java.util.ArrayList;
@@ -301,6 +302,13 @@ public final class CanonicalExportMapper {
             if (voltageInfo.voltage != null) {
                 metadata.put("voltage", voltageInfo.voltage);
             }
+        }
+
+        SpecialRecipeMetadataRegistry.SpecialRecipeMetadata specialMetadata =
+                SpecialRecipeMetadataRegistry.getMetadata(recipe.getId());
+        if (specialMetadata != null && specialMetadata.getData() != null) {
+            metadata.putAll(specialMetadata.getData());
+            metadata.put("specialRecipeType", specialMetadata.getRecipeType());
         }
         return metadata;
     }

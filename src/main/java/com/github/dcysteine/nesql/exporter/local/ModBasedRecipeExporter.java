@@ -154,6 +154,7 @@ public class ModBasedRecipeExporter {
         public List<FluidGroupDTO> fluidInputs = new ArrayList<>();
         public List<FluidStackDTO> fluidOutputs = new ArrayList<>();
         public MachineInfoDTO machineInfo;
+        public java.util.Map<String, Object> additionalData;
         public RecipeMetadataDTO metadata;
     }
 
@@ -219,5 +220,12 @@ public class ModBasedRecipeExporter {
         public Boolean requiresLowGravity;
         public String additionalInfo;
         public List<ItemDTO> specialItems;
+        public java.util.Map<String, Integer> aspects;
+        public String specialRecipeType;
+        public String research;
+        public String centralItemId;
+        public Integer centerInputSlotIndex;
+        public Integer instability;
+        public List<Integer> componentSlotOrder;
     }
 }

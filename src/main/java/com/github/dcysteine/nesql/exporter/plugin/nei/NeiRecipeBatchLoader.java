@@ -14,6 +14,8 @@ import net.minecraft.item.ItemStack;
 
 import com.google.common.base.Stopwatch;
 
+import java.util.HashSet;
+import java.util.Set;
 import java.util.concurrent.atomic.AtomicInteger;
 
 /**
@@ -51,14 +53,25 @@ public class NeiRecipeBatchLoader {
                 Logger.MOD.info("Processing handler {}/{}: {}",
                         handlerIndex, GuiCraftingRecipe.craftinghandlers.size(), handlerName);
 
-                // Create a NEW instance for this handler
-                TemplateRecipeHandler workingHandler = null;
-                if (baseHandler instanceof TemplateRecipeHandler) {
-                    workingHandler = ((TemplateRecipeHandler) baseHandler).newInstance();
-                } else {
-                    // For non-TemplateRecipeHandler, use getRecipeHandler
-                    workingHandler = (TemplateRecipeHandler) baseHandler.getRecipeHandler("item", ItemList.items.get(0));
+                if (!(baseHandler instanceof TemplateRecipeHandler)) {
+                    if (isCustomDiagramHandler(baseHandler)) {
+                        Logger.MOD.info("Skipping NEI custom diagram handler; NESQL++ exports structured diagram data separately: {}",
+                                handlerName);
+                        processedHandlers.incrementAndGet();
+                        continue;
+                    }
+                    int exported = exportNonTemplateCraftingHandler(
+                            exporter,
+                            baseHandler,
+                            handlerIndex,
+                            GuiCraftingRecipe.craftinghandlers.size());
+                    totalRecipes.addAndGet(exported);
+                    processedHandlers.incrementAndGet();
+                    continue;
                 }
+
+                // Create a NEW instance for this handler when possible.
+                ICraftingHandler workingHandler = ((TemplateRecipeHandler) baseHandler).newInstance();
 
                 if (workingHandler == null) {
                     Logger.MOD.warn("Could not create handler instance for: {}", handlerName);
@@ -73,7 +86,7 @@ public class NeiRecipeBatchLoader {
                 if (needsItemScan) {
                     Logger.chatMessage(String.format("[%d/%d] Loading recipes for: %s...",
                             handlerIndex, GuiCraftingRecipe.craftinghandlers.size(), handlerName));
-                    recipeCount = loadRecipesForHandler(workingHandler);
+                    recipeCount = loadRecipesForHandler((TemplateRecipeHandler) workingHandler);
                 } else {
                     // Handler不需要物品扫描，配方已经在arecipes中
                     Logger.MOD.debug("Handler {} doesn't need item scan, using pre-loaded recipes", handlerName);
@@ -96,7 +109,9 @@ public class NeiRecipeBatchLoader {
                 }
 
                 // Clear and allow GC to reclaim memory
-                workingHandler.arecipes.clear();
+                if (workingHandler instanceof TemplateRecipeHandler) {
+                    ((TemplateRecipeHandler) workingHandler).arecipes.clear();
+                }
                 processedHandlers.incrementAndGet();
 
                 // Progress every 10 handlers, and flush database to free memory
@@ -132,6 +147,72 @@ public class NeiRecipeBatchLoader {
         return totalRecipes.get();
     }
 
+    private static boolean isCustomDiagramHandler(ICraftingHandler handler) {
+        return handler != null
+                && handler.getClass().getName().startsWith("com.github.dcysteine.neicustomdiagram.");
+    }
+
+    private static int exportNonTemplateCraftingHandler(
+            NeiRecipeExportProcessor exporter,
+            ICraftingHandler baseHandler,
+            int handlerIndex,
+            int totalHandlers) {
+        String handlerName = baseHandler.getRecipeName();
+        Logger.MOD.info("Processing non-template crafting handler {}/{}: {}",
+                handlerIndex, totalHandlers, handlerName);
+
+        try {
+            if (baseHandler.numRecipes() > 0) {
+                int exported = exporter.exportSingleCraftingHandler(
+                        baseHandler.getHandlerId(),
+                        handlerName,
+                        baseHandler);
+                Logger.chatMessage(String.format("[%d/%d] ✓ Completed: %s (%d recipes)",
+                        handlerIndex, totalHandlers, handlerName, exported));
+                return exported;
+            }
+
+            int exported = 0;
+            Set<String> exportedKeys = new HashSet<>();
+            for (ItemStack item : ItemList.items) {
+                try {
+                    ICraftingHandler derived = baseHandler.getRecipeHandler("item", item);
+                    if (derived == null || derived.numRecipes() <= 0) {
+                        continue;
+                    }
+
+                    String dedupeKey = derived.getHandlerId()
+                            + "::"
+                            + item.getItem().getUnlocalizedName()
+                            + "::"
+                            + item.getItemDamage();
+                    if (!exportedKeys.add(dedupeKey)) {
+                        continue;
+                    }
+
+                    exported += exporter.exportSingleCraftingHandler(
+                            derived.getHandlerId(),
+                            derived.getRecipeName(),
+                            derived);
+                } catch (Exception ignored) {
+                }
+            }
+
+            if (exported > 0) {
+                Logger.chatMessage(String.format("[%d/%d] ✓ Completed: %s (%d recipes)",
+                        handlerIndex, totalHandlers, handlerName, exported));
+            } else {
+                Logger.MOD.warn("No recipes resolved for non-template handler: {}", handlerName);
+            }
+            return exported;
+        } catch (Exception e) {
+            Logger.MOD.error("Error processing non-template crafting handler: " + handlerName, e);
+            Logger.chatMessage(String.format("[%d/%d] ⚠ Skipped: %s (error)",
+                    handlerIndex, totalHandlers, handlerName));
+            return 0;
+        }
+    }
+
     /**
      * Streaming export of all usage recipes.
      *
@@ -158,13 +239,13 @@ public class NeiRecipeBatchLoader {
                 Logger.MOD.info("Processing usage handler {}/{}: {}",
                         handlerIndex, GuiUsageRecipe.usagehandlers.size(), handlerName);
 
-                // Create a NEW instance for this handler
-                TemplateRecipeHandler workingHandler = null;
+                // Create a NEW instance for this handler when possible.
+                IUsageHandler workingHandler = null;
                 if (baseHandler instanceof TemplateRecipeHandler) {
                     workingHandler = ((TemplateRecipeHandler) baseHandler).newInstance();
                 } else {
-                    // For non-TemplateRecipeHandler, use getUsageHandler
-                    workingHandler = (TemplateRecipeHandler) baseHandler.getUsageHandler("item", ItemList.items.get(0));
+                    // Non-template handlers may still return a non-template handler instance.
+                    workingHandler = baseHandler.getUsageHandler("item", ItemList.items.get(0));
                 }
 
                 if (workingHandler == null) {
@@ -176,7 +257,7 @@ public class NeiRecipeBatchLoader {
                 Logger.chatMessage(String.format("[%d/%d] Loading usage recipes for: %s...",
                         handlerIndex, GuiUsageRecipe.usagehandlers.size(), handlerName));
 
-                int recipeCount = loadUsageRecipesForHandler(workingHandler);
+                int recipeCount = loadUsageRecipesForHandler((TemplateRecipeHandler) workingHandler);
 
                 if (recipeCount > 0) {
                     Logger.chatMessage(String.format("[%d/%d] Exporting %d usage recipes from: %s",
@@ -194,7 +275,9 @@ public class NeiRecipeBatchLoader {
                 }
 
                 // Clear and allow GC to reclaim memory
-                workingHandler.arecipes.clear();
+                if (workingHandler instanceof TemplateRecipeHandler) {
+                    ((TemplateRecipeHandler) workingHandler).arecipes.clear();
+                }
                 processedHandlers.incrementAndGet();
 
                 // Progress every 10 handlers

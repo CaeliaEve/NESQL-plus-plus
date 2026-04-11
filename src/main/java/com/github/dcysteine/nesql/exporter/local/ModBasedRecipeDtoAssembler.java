@@ -34,6 +34,7 @@ final class ModBasedRecipeDtoAssembler {
         dto.machineInfo = buildMachineInfo(recipe, canonicalRecipe);
         populateItemSlots(dto, recipe);
         populateFluidSlots(dto, recipe);
+        dto.additionalData = canonicalRecipe.metadata.isEmpty() ? null : new java.util.LinkedHashMap<>(canonicalRecipe.metadata);
         dto.metadata = buildMetadataFromCanonical(canonicalRecipe, null);
         return dto;
     }
@@ -105,6 +106,13 @@ final class ModBasedRecipeDtoAssembler {
         metadata.requiresCleanroom = asBoolean(canonicalRecipe.metadata.get("requiresCleanroom"), metadata.requiresCleanroom);
         metadata.requiresLowGravity = asBoolean(canonicalRecipe.metadata.get("requiresLowGravity"), metadata.requiresLowGravity);
         metadata.additionalInfo = asString(canonicalRecipe.metadata.get("additionalInfo"), metadata.additionalInfo);
+        metadata.aspects = asStringIntegerMap(canonicalRecipe.metadata.get("aspects"));
+        metadata.specialRecipeType = asString(canonicalRecipe.metadata.get("specialRecipeType"), metadata.specialRecipeType);
+        metadata.research = asString(canonicalRecipe.metadata.get("research"), metadata.research);
+        metadata.centralItemId = asString(canonicalRecipe.metadata.get("centralItemId"), metadata.centralItemId);
+        metadata.centerInputSlotIndex = asInteger(canonicalRecipe.metadata.get("centerInputSlotIndex"), metadata.centerInputSlotIndex);
+        metadata.instability = asInteger(canonicalRecipe.metadata.get("instability"), metadata.instability);
+        metadata.componentSlotOrder = asIntegerList(canonicalRecipe.metadata.get("componentSlotOrder"));
         attachGregTechSpecialItems(metadata, canonicalRecipe);
         return metadata;
     }
@@ -232,14 +240,41 @@ final class ModBasedRecipeDtoAssembler {
     }
 
     private Integer asInteger(Object value, Integer fallback) {
-        return value instanceof Number ? ((Number) value).intValue() : fallback;
+        return value instanceof Number ? Integer.valueOf(((Number) value).intValue()) : fallback;
     }
 
     private Long asLong(Object value, Long fallback) {
-        return value instanceof Number ? ((Number) value).longValue() : fallback;
+        return value instanceof Number ? Long.valueOf(((Number) value).longValue()) : fallback;
     }
 
     private Boolean asBoolean(Object value, Boolean fallback) {
         return value instanceof Boolean ? (Boolean) value : fallback;
+    }
+
+    @SuppressWarnings("unchecked")
+    private Map<String, Integer> asStringIntegerMap(Object value) {
+        if (!(value instanceof Map<?, ?>)) {
+            return null;
+        }
+        Map<String, Integer> converted = new java.util.LinkedHashMap<>();
+        for (Map.Entry<?, ?> entry : ((Map<?, ?>) value).entrySet()) {
+            if (entry.getKey() instanceof String && entry.getValue() instanceof Number) {
+                converted.put((String) entry.getKey(), ((Number) entry.getValue()).intValue());
+            }
+        }
+        return converted.isEmpty() ? null : converted;
+    }
+
+    private List<Integer> asIntegerList(Object value) {
+        if (!(value instanceof List<?>)) {
+            return null;
+        }
+        List<Integer> converted = new ArrayList<>();
+        for (Object element : (List<?>) value) {
+            if (element instanceof Number) {
+                converted.add(((Number) element).intValue());
+            }
+        }
+        return converted.isEmpty() ? null : converted;
     }
 }

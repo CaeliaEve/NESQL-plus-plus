@@ -19,6 +19,7 @@ import net.minecraft.init.Blocks;
 import net.minecraft.item.ItemStack;
 
 import java.util.ArrayList;
+import java.util.Collection;
 import java.util.Collections;
 import java.util.Comparator;
 import java.util.HashMap;
@@ -540,6 +541,9 @@ public class NeiRecipeExportProcessor extends PluginHelper {
         String lowerId = handlerId.toLowerCase();
 
         try {
+            if (lowerId.contains("worldcraft") || handler.getClass().getName().toLowerCase().contains("neiworldcrafting")) {
+                extractAe2WorldCraftingData(handler, recipeIndex, builtRecipe);
+            }
             // Thaumcraft - extract aspects
             if (lowerId.contains("thaum") || lowerId.contains("tc")) {
                 extractThaumcraftAspects(handler, recipeIndex, builtRecipe);
@@ -547,6 +551,10 @@ public class NeiRecipeExportProcessor extends PluginHelper {
             // Blood Magic - extract blood cost
             else if (lowerId.contains("blood") || lowerId.contains("awwayof")) {
                 extractBloodMagicCost(handler, recipeIndex, builtRecipe);
+            }
+            else if (lowerId.contains("breeding") || lowerId.contains("produce")
+                    || handler.getClass().getName().toLowerCase().contains("neiaddons.forestry")) {
+                extractForestryMetadata(handler, recipeIndex, builtRecipe);
             }
             // Witchery - extract special data
             else if (lowerId.contains("witch")) {
@@ -565,6 +573,8 @@ public class NeiRecipeExportProcessor extends PluginHelper {
             int recipeIndex,
             com.github.dcysteine.nesql.sql.base.recipe.Recipe builtRecipe) {
         try {
+            Map<String, Object> metadata = new HashMap<>();
+
             // Try to access the internal recipe object
             Object recipe = getRecipeFromHandler(handler, recipeIndex);
 
@@ -598,24 +608,265 @@ public class NeiRecipeExportProcessor extends PluginHelper {
 
                         // Register metadata if we found aspects
                         if (!aspectMap.isEmpty()) {
-                            Map<String, Object> metadata = new HashMap<>();
                             metadata.put("aspects", aspectMap);
-
-                            com.github.dcysteine.nesql.exporter.util.SpecialRecipeMetadataRegistry.registerMetadata(
-                                    builtRecipe.getId(),
-                                    new com.github.dcysteine.nesql.exporter.util.SpecialRecipeMetadataRegistry.SpecialRecipeMetadata(
-                                            "NEI_Thaumcraft", metadata
-                                    )
-                            );
-                            logger.debug("Extracted aspects for recipe {}: {}", builtRecipe.getId(), aspectMap);
                         }
                     }
                 } catch (NoSuchMethodException e) {
                     logger.debug("No getAspects method on recipe object");
                 }
+
+                extractThaumcraftLayoutMetadata(recipe, handler, recipeIndex, metadata);
+            }
+
+            if (!metadata.isEmpty()) {
+                com.github.dcysteine.nesql.exporter.util.SpecialRecipeMetadataRegistry.registerMetadata(
+                        builtRecipe.getId(),
+                        new com.github.dcysteine.nesql.exporter.util.SpecialRecipeMetadataRegistry.SpecialRecipeMetadata(
+                                "NEI_Thaumcraft", metadata
+                        )
+                );
+                logger.debug("Extracted Thaumcraft metadata for recipe {}: {}", builtRecipe.getId(), metadata);
             }
         } catch (Exception e) {
             logger.debug("Failed to extract Thaumcraft aspects", e);
+        }
+    }
+
+    private void extractThaumcraftLayoutMetadata(
+            Object recipe,
+            codechicken.nei.recipe.IRecipeHandler handler,
+            int recipeIndex,
+            Map<String, Object> metadata) {
+        String recipeClass = recipe.getClass().getName().toLowerCase();
+        if (recipeClass.contains("infusion")) {
+            metadata.put("thaumcraftLayout", "infusion");
+        } else if (recipeClass.contains("arcane")) {
+            metadata.put("thaumcraftLayout", "arcane");
+        }
+
+        String research = readThaumcraftResearch(recipe);
+        if (research != null && !research.isEmpty()) {
+            metadata.put("research", research);
+        }
+
+        Integer instability = readThaumcraftInstability(recipe);
+        if (instability != null) {
+            metadata.put("instability", instability);
+        }
+
+        List<PositionedStack> ingredients = null;
+        try {
+            java.lang.reflect.Method getIngredients = recipe.getClass().getMethod("getIngredients");
+            Object value = getIngredients.invoke(recipe);
+            if (value instanceof List<?>) {
+                @SuppressWarnings("unchecked")
+                List<PositionedStack> cast = (List<PositionedStack>) value;
+                ingredients = cast;
+            }
+        } catch (Exception ignored) {
+        }
+
+        if (ingredients == null) {
+            try {
+                ingredients = handler.getIngredientStacks(recipeIndex);
+            } catch (Exception ignored) {
+            }
+        }
+
+        if (ingredients == null || ingredients.isEmpty()) {
+            return;
+        }
+
+        List<Integer> componentSlotOrder = new ArrayList<>();
+        Integer centerInputSlotIndex = null;
+        String centralItemId = null;
+
+        for (PositionedStack ingredient : ingredients) {
+            if (!hasValidIngredient(ingredient)) continue;
+
+            net.minecraft.item.ItemStack representative = ingredient.item;
+            if (representative == null && ingredient.items != null && ingredient.items.length > 0) {
+                representative = ingredient.items[0];
+            }
+            if (representative == null || representative.getItem() == null) continue;
+            if (isThaumcraftAspectStack(representative)) continue;
+
+            Integer x = readStackX(ingredient);
+            Integer y = readStackY(ingredient);
+            if (x == null || y == null) continue;
+
+            int encodedSlot = encodePositionedSlotIndex(x, y);
+            if (centerInputSlotIndex == null) {
+                centerInputSlotIndex = encodedSlot;
+                centralItemId = itemFactory.get(representative).getId();
+            } else {
+                componentSlotOrder.add(encodedSlot);
+            }
+        }
+
+        if (centerInputSlotIndex != null) {
+            metadata.put("centerInputSlotIndex", centerInputSlotIndex);
+        }
+        if (centralItemId != null) {
+            metadata.put("centralItemId", centralItemId);
+        }
+        if (!componentSlotOrder.isEmpty()) {
+            metadata.put("componentSlotOrder", componentSlotOrder);
+        }
+    }
+
+    private String readThaumcraftResearch(Object recipe) {
+        try {
+            java.lang.reflect.Field researchItemField = recipe.getClass().getDeclaredField("researchItem");
+            researchItemField.setAccessible(true);
+            Object researchItem = researchItemField.get(recipe);
+            if (researchItem != null) {
+                try {
+                    java.lang.reflect.Field keyField = researchItem.getClass().getField("key");
+                    Object key = keyField.get(researchItem);
+                    if (key instanceof String) {
+                        return (String) key;
+                    }
+                } catch (Exception ignored) {
+                }
+            }
+        } catch (Exception ignored) {
+        }
+        return null;
+    }
+
+    private Integer readThaumcraftInstability(Object recipe) {
+        try {
+            java.lang.reflect.Method getInstability = recipe.getClass().getDeclaredMethod("getInstability");
+            getInstability.setAccessible(true);
+            Object value = getInstability.invoke(recipe);
+            if (value instanceof Number) {
+                return ((Number) value).intValue();
+            }
+        } catch (Exception ignored) {
+        }
+
+        try {
+            java.lang.reflect.Field instabilityField = recipe.getClass().getDeclaredField("instability");
+            instabilityField.setAccessible(true);
+            Object value = instabilityField.get(recipe);
+            if (value instanceof Number) {
+                return ((Number) value).intValue();
+            }
+        } catch (Exception ignored) {
+        }
+
+        return null;
+    }
+
+    private boolean isThaumcraftAspectStack(net.minecraft.item.ItemStack stack) {
+        if (stack == null || stack.getItem() == null) return false;
+        String itemClass = stack.getItem().getClass().getName().toLowerCase();
+        if (itemClass.contains("aspect")) return true;
+        String unlocalized = stack.getUnlocalizedName();
+        return unlocalized != null && unlocalized.toLowerCase().contains("aspect");
+    }
+
+    private int encodePositionedSlotIndex(int x, int y) {
+        return x * 100 + y;
+    }
+
+    private void extractAe2WorldCraftingData(
+            codechicken.nei.recipe.IRecipeHandler handler,
+            int recipeIndex,
+            com.github.dcysteine.nesql.sql.base.recipe.Recipe builtRecipe) {
+        try {
+            Map<String, Object> metadata = new HashMap<>();
+            metadata.put("specialRecipeType", "AE2WorldCrafting");
+
+            java.lang.reflect.Field offsetsField = handler.getClass().getDeclaredField("offsets");
+            java.lang.reflect.Field detailsField = handler.getClass().getDeclaredField("details");
+            offsetsField.setAccessible(true);
+            detailsField.setAccessible(true);
+
+            Object offsets = offsetsField.get(handler);
+            Object details = detailsField.get(handler);
+            if (offsets instanceof List<?> && details instanceof Map<?, ?>) {
+                List<?> offsetList = (List<?>) offsets;
+                Map<?, ?> detailsMap = (Map<?, ?>) details;
+                if (recipeIndex >= 0 && recipeIndex < offsetList.size()) {
+                    Object key = offsetList.get(recipeIndex);
+                    Object detail = detailsMap.get(key);
+                    if (detail instanceof String) {
+                        metadata.put("worldCraftingDescription", detail);
+                    }
+                }
+            }
+
+            if (metadata.size() > 1) {
+                com.github.dcysteine.nesql.exporter.util.SpecialRecipeMetadataRegistry.registerMetadata(
+                        builtRecipe.getId(),
+                        new com.github.dcysteine.nesql.exporter.util.SpecialRecipeMetadataRegistry.SpecialRecipeMetadata(
+                                "AE2WorldCrafting", metadata
+                        )
+                );
+            }
+        } catch (Exception e) {
+            logger.debug("Failed to extract AE2 world crafting metadata", e);
+        }
+    }
+
+    private void extractForestryMetadata(
+            codechicken.nei.recipe.IRecipeHandler handler,
+            int recipeIndex,
+            com.github.dcysteine.nesql.sql.base.recipe.Recipe builtRecipe) {
+        try {
+            Object recipe = getRecipeFromHandler(handler, recipeIndex);
+            if (recipe == null) {
+                return;
+            }
+
+            Map<String, Object> metadata = new HashMap<>();
+            String recipeClass = recipe.getClass().getName().toLowerCase();
+            if (recipeClass.contains("breeding")) {
+                metadata.put("specialRecipeType", "ForestryBreeding");
+            } else if (recipeClass.contains("produce")) {
+                metadata.put("specialRecipeType", "ForestryProduce");
+            }
+
+            try {
+                java.lang.reflect.Field chanceField = recipe.getClass().getDeclaredField("chance");
+                chanceField.setAccessible(true);
+                Object value = chanceField.get(recipe);
+                if (value instanceof Number) {
+                    metadata.put("chance", ((Number) value).doubleValue());
+                }
+            } catch (Exception ignored) {
+            }
+
+            try {
+                java.lang.reflect.Field requirementsField = recipe.getClass().getDeclaredField("requirements");
+                requirementsField.setAccessible(true);
+                Object value = requirementsField.get(recipe);
+                if (value instanceof Collection<?>) {
+                    List<String> requirements = new ArrayList<>();
+                    for (Object requirement : (Collection<?>) value) {
+                        if (requirement != null) {
+                            requirements.add(String.valueOf(requirement));
+                        }
+                    }
+                    if (!requirements.isEmpty()) {
+                        metadata.put("requirements", requirements);
+                    }
+                }
+            } catch (Exception ignored) {
+            }
+
+            if (metadata.size() > 1) {
+                com.github.dcysteine.nesql.exporter.util.SpecialRecipeMetadataRegistry.registerMetadata(
+                        builtRecipe.getId(),
+                        new com.github.dcysteine.nesql.exporter.util.SpecialRecipeMetadataRegistry.SpecialRecipeMetadata(
+                                "ForestryNEI", metadata
+                        )
+                );
+            }
+        } catch (Exception e) {
+            logger.debug("Failed to extract Forestry metadata", e);
         }
     }
 
@@ -734,9 +985,17 @@ public class NeiRecipeExportProcessor extends PluginHelper {
             // Try to access handler's internal recipe array
             java.lang.reflect.Field recipesField = handler.getClass().getDeclaredField("arecipes");
             recipesField.setAccessible(true);
-            Object[] recipes = (Object[]) recipesField.get(handler);
-            if (recipes != null && recipeIndex < recipes.length) {
-                return recipes[recipeIndex];
+            Object recipes = recipesField.get(handler);
+            if (recipes instanceof java.util.List<?>) {
+                java.util.List<?> recipeList = (java.util.List<?>) recipes;
+                if (recipeIndex >= 0 && recipeIndex < recipeList.size()) {
+                    return recipeList.get(recipeIndex);
+                }
+            } else if (recipes instanceof Object[]) {
+                Object[] recipeArray = (Object[]) recipes;
+                if (recipeIndex >= 0 && recipeIndex < recipeArray.length) {
+                    return recipeArray[recipeIndex];
+                }
             }
         } catch (Exception e) {
             logger.debug("Could not access recipe from handler", e);
@@ -754,7 +1013,7 @@ public class NeiRecipeExportProcessor extends PluginHelper {
      * @return The number of recipes exported
      */
     public int exportSingleCraftingHandler(String handlerId, String handlerName,
-                                             codechicken.nei.recipe.TemplateRecipeHandler handler) {
+                                             ICraftingHandler handler) {
         try {
             // Create or get RecipeType for this handler
             RecipeType recipeType = getOrCreateRecipeType(handlerId, handlerName, "crafting");
@@ -866,7 +1125,7 @@ public class NeiRecipeExportProcessor extends PluginHelper {
      * @return The number of recipes exported
      */
     public int exportSingleUsageHandler(String handlerId, String handlerName,
-                                          codechicken.nei.recipe.TemplateRecipeHandler handler) {
+                                          IUsageHandler handler) {
         try {
             // Create or get RecipeType for this handler
             RecipeType recipeType = getOrCreateRecipeType(handlerId, handlerName, "usage");

@@ -214,7 +214,7 @@ public class CanonicalAnimatedAtlasPackWriter {
         if (asset.nativeSpriteAtlasFile == null || asset.timeline == null || asset.baseSize == null) {
             return;
         }
-        File atlasFile = new File(exportDirectory, asset.nativeSpriteAtlasFile.replace('/', File.separatorChar));
+        File atlasFile = resolveExportFile(asset.nativeSpriteAtlasFile);
         if (!atlasFile.exists()) {
             return;
         }
@@ -344,6 +344,20 @@ public class CanonicalAnimatedAtlasPackWriter {
             return basePath.substring(0, basePath.length() - 4) + ".sprite-atlas.png";
         }
         return basePath + ".sprite-atlas.png";
+    }
+
+    private File resolveExportFile(String relativePath) {
+        File direct = new File(exportDirectory, relativePath.replace('/', File.separatorChar));
+        if (direct.exists()) {
+            return direct;
+        }
+        if (!relativePath.startsWith("image/")) {
+            File underImage = new File(exportDirectory, ("image/" + relativePath).replace('/', File.separatorChar));
+            if (underImage.exists()) {
+                return underImage;
+            }
+        }
+        return direct;
     }
 
     private int countAssets(List<AnimatedAtlasGroupManifest> groups) {

@@ -3,3 +3,12 @@
 
 build/
 run/
+
+.tmp-*
+bin/
+compile-*.log
+docs/superpowers/
+include/
+local-maven/
+readme.txt
+temp_jar/
