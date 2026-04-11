@@ -539,25 +539,30 @@ public class NeiRecipeExportProcessor extends PluginHelper {
             PositionedStack result) {
         String handlerId = handler.getHandlerId();
         String lowerId = handlerId.toLowerCase();
+        String lowerHandlerClass = handler.getClass().getName().toLowerCase();
+        String lowerRecipeName = handler.getRecipeName() == null ? "" : handler.getRecipeName().toLowerCase();
+        String combinedHandlerText = lowerId + " " + lowerHandlerClass + " " + lowerRecipeName;
 
         try {
-            if (lowerId.contains("worldcraft") || handler.getClass().getName().toLowerCase().contains("neiworldcrafting")) {
+            if (combinedHandlerText.contains("worldcraft") || combinedHandlerText.contains("neiworldcrafting")) {
                 extractAe2WorldCraftingData(handler, recipeIndex, builtRecipe);
             }
             // Thaumcraft - extract aspects
-            if (lowerId.contains("thaum") || lowerId.contains("tc")) {
+            if (combinedHandlerText.contains("thaum")
+                    || combinedHandlerText.contains("tcnei")
+                    || combinedHandlerText.contains("timeconqueror")) {
                 extractThaumcraftAspects(handler, recipeIndex, builtRecipe);
             }
             // Blood Magic - extract blood cost
-            else if (lowerId.contains("blood") || lowerId.contains("awwayof")) {
+            else if (combinedHandlerText.contains("blood") || combinedHandlerText.contains("awwayof")) {
                 extractBloodMagicCost(handler, recipeIndex, builtRecipe);
             }
-            else if (lowerId.contains("breeding") || lowerId.contains("produce")
-                    || handler.getClass().getName().toLowerCase().contains("neiaddons.forestry")) {
+            else if (combinedHandlerText.contains("breeding") || combinedHandlerText.contains("produce")
+                    || combinedHandlerText.contains("neiaddons.forestry")) {
                 extractForestryMetadata(handler, recipeIndex, builtRecipe);
             }
             // Witchery - extract special data
-            else if (lowerId.contains("witch")) {
+            else if (combinedHandlerText.contains("witch")) {
                 extractWitcheryData(handler, recipeIndex, builtRecipe);
             }
         } catch (Exception e) {
@@ -983,7 +988,10 @@ public class NeiRecipeExportProcessor extends PluginHelper {
     private Object getRecipeFromHandler(codechicken.nei.recipe.IRecipeHandler handler, int recipeIndex) {
         try {
             // Try to access handler's internal recipe array
-            java.lang.reflect.Field recipesField = handler.getClass().getDeclaredField("arecipes");
+            java.lang.reflect.Field recipesField = findField(handler.getClass(), "arecipes");
+            if (recipesField == null) {
+                return null;
+            }
             recipesField.setAccessible(true);
             Object recipes = recipesField.get(handler);
             if (recipes instanceof java.util.List<?>) {
@@ -999,6 +1007,18 @@ public class NeiRecipeExportProcessor extends PluginHelper {
             }
         } catch (Exception e) {
             logger.debug("Could not access recipe from handler", e);
+        }
+        return null;
+    }
+
+    private static java.lang.reflect.Field findField(Class<?> type, String fieldName) {
+        Class<?> current = type;
+        while (current != null) {
+            try {
+                return current.getDeclaredField(fieldName);
+            } catch (NoSuchFieldException ignored) {
+                current = current.getSuperclass();
+            }
         }
         return null;
     }
@@ -1047,6 +1067,10 @@ public class NeiRecipeExportProcessor extends PluginHelper {
 
                     // Build the recipe
                     com.github.dcysteine.nesql.sql.base.recipe.Recipe builtRecipe = builder.build();
+
+                    // Streaming export is the active data path. Preserve the same
+                    // handler-specific metadata that the older batch path attached.
+                    extractModSpecificMetadata(handler, i, builtRecipe, result);
                     exported++;
 
                 } catch (Exception e) {
