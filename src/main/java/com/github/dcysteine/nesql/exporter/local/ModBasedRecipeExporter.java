@@ -12,8 +12,10 @@ import java.io.IOException;
 import java.io.OutputStreamWriter;
 import java.nio.charset.StandardCharsets;
 import java.util.ArrayList;
+import java.util.Collections;
 import java.util.List;
 import java.util.Map;
+import java.util.Set;
 
 /**
  * V14 mod-organized recipe exporter.
@@ -25,11 +27,17 @@ public class ModBasedRecipeExporter {
     private final EntityManager entityManager;
     private final File exportDirectory;
     private final ModBasedRecipeGroupingBuilder groupingBuilder;
+    private final Set<String> modFilter;
 
     public ModBasedRecipeExporter(EntityManager entityManager, File exportDirectory) {
+        this(entityManager, exportDirectory, Collections.emptySet());
+    }
+
+    public ModBasedRecipeExporter(EntityManager entityManager, File exportDirectory, Set<String> modFilter) {
         this.entityManager = entityManager;
         this.exportDirectory = exportDirectory;
         this.groupingBuilder = new ModBasedRecipeGroupingBuilder(new ModBasedRecipeDtoAssembler(entityManager));
+        this.modFilter = modFilter == null ? Collections.emptySet() : modFilter;
     }
 
     public void exportRecipes() throws IOException {
@@ -64,6 +72,11 @@ public class ModBasedRecipeExporter {
 
             Logger.MOD.info("Grouping recipes by output mod...");
             Map<String, List<RecipeDTO>> recipesByMod = groupingBuilder.groupByOutputMod(dataset, recipeType);
+            if (!modFilter.isEmpty()) {
+                recipesByMod.entrySet().removeIf(entry -> !matchesModFilter(entry.getKey()));
+                Logger.MOD.info("Applying mod filter: {} -> {} matching mods", modFilter, recipesByMod.size());
+                Logger.chatMessage(String.format("Safe merge: writing only %d target mod recipe files", recipesByMod.size()));
+            }
             Logger.MOD.info("Found {} unique mods", recipesByMod.size());
 
             File recipesDir = new File(exportDirectory, "recipes/" + recipeType);
@@ -144,6 +157,18 @@ public class ModBasedRecipeExporter {
             Logger.MOD.error(String.format("Failed to export %s", recipeType), e);
             throw e;
         }
+    }
+
+    private boolean matchesModFilter(String modId) {
+        if (modFilter.isEmpty()) {
+            return true;
+        }
+        for (String candidate : modFilter) {
+            if (candidate != null && candidate.equalsIgnoreCase(modId)) {
+                return true;
+            }
+        }
+        return false;
     }
 
     public static class RecipeDTO {

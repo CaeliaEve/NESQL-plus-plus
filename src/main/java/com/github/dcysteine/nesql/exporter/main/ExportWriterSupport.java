@@ -23,10 +23,10 @@ public final class ExportWriterSupport {
 
     public static void writeModBasedItems(EntityManager entityManager, File repositoryDirectory) throws Exception {
         Logger.MOD.info("============================================================");
-        Logger.MOD.info("=== V14 Step 1/2: Starting item export ===");
+        Logger.MOD.info("=== v1.04 Step 1/2: Starting item export ===");
         Logger.MOD.info("============================================================");
         Logger.chatMessage(EnumChatFormatting.AQUA + "=== Step 1/2: Exporting Items ===");
-        Logger.chatMessage(EnumChatFormatting.YELLOW + "Structure: items/{modId}/items.json");
+        Logger.chatMessage(EnumChatFormatting.YELLOW + "Structure: items/{modId}/items.json.gz");
         try {
             Logger.MOD.info("Creating ModBasedItemExporter...");
             ModBasedItemExporter itemExporter = new ModBasedItemExporter(entityManager, repositoryDirectory);
@@ -43,15 +43,22 @@ public final class ExportWriterSupport {
     }
 
     public static void writeModBasedRecipes(EntityManager entityManager, File repositoryDirectory) throws Exception {
+        writeModBasedRecipes(entityManager, repositoryDirectory, java.util.Collections.emptySet());
+    }
+
+    public static void writeModBasedRecipes(
+            EntityManager entityManager,
+            File repositoryDirectory,
+            java.util.Set<String> modFilter) throws Exception {
         Logger.MOD.info("============================================================");
-        Logger.MOD.info("=== V14 Step 2/2: Starting recipe export ===");
+        Logger.MOD.info("=== v1.04 Step 2/2: Starting recipe export ===");
         Logger.MOD.info("============================================================");
         Logger.chatMessage(EnumChatFormatting.AQUA + "=== Step 2/2: Exporting Recipes ===");
-        Logger.chatMessage(EnumChatFormatting.YELLOW + "Structure: recipes/{type}/{modId}/recipes.json");
-        Logger.chatMessage(EnumChatFormatting.YELLOW + "Types: crafting (craft), usage (usage)");
+        Logger.chatMessage(EnumChatFormatting.YELLOW + "Structure: recipes/crafting/{modId}/recipes.json.gz");
+        Logger.chatMessage(EnumChatFormatting.YELLOW + "Usage links are derived by NeoNEI backend");
         try {
             Logger.MOD.info("Creating ModBasedRecipeExporter...");
-            ModBasedRecipeExporter recipeExporter = new ModBasedRecipeExporter(entityManager, repositoryDirectory);
+            ModBasedRecipeExporter recipeExporter = new ModBasedRecipeExporter(entityManager, repositoryDirectory, modFilter);
             Logger.MOD.info("ModBasedRecipeExporter created");
             Logger.MOD.info("Calling exportRecipes()...");
             recipeExporter.exportRecipes();

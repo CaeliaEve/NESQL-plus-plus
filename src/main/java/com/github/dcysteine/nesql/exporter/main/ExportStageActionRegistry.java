@@ -31,7 +31,10 @@ final class ExportStageActionRegistry {
         });
         actions.put(ExportStage.WRITE_MOD_BASED_RECIPES, () -> {
             announceWritePreamble(exportContext, stageState);
-            ExportWriterSupport.writeModBasedRecipes(stageState.runtime.entityManager, exportContext.paths.repositoryDirectory);
+            ExportWriterSupport.writeModBasedRecipes(
+                    stageState.runtime.entityManager,
+                    exportContext.paths.repositoryDirectory,
+                    exportContext.recipeExportModFilter);
         });
         actions.put(ExportStage.WRITE_MULTIBLOCK_BLUEPRINTS, () ->
                 ExportWriterSupport.writeGregTechMultiblocks(exportContext.paths.repositoryName));

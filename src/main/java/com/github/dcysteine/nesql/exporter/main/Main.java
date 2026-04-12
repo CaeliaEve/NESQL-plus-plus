@@ -69,7 +69,7 @@ public final class Main {
         event.registerServerCommand(new ThaumcraftUnlockAspectsCommand()); // Unlock scanned item aspects
         Logger.MOD.info("Export commands registered!");
         Logger.MOD.info("  /nesql - Complete export (data + images) [profile={}]", ExportProfile.FULL_V104.profileId);
-        Logger.MOD.info("  /nesql-data - Data only (no images, with V14 export) [profile={}]", ExportProfile.DATA_ONLY_V14.profileId);
+        Logger.MOD.info("  /nesql-data - Data only (no images, v1.04 indexed export) [profile={}]", ExportProfile.DATA_ONLY_V14.profileId);
         Logger.MOD.info("  /nesql-data-thaumcraft - Debug data export for Thaumcraft-family NEI handlers only");
         Logger.MOD.info("  /nesql-data-botania - Debug data export for Botania-family NEI handlers only");
         Logger.MOD.info("  /nesql-images - Images only (requires existing database) [profile={}]", ExportProfile.IMAGES_ONLY.profileId);

@@ -39,9 +39,10 @@ final class ThaumcraftDataExportCommand implements ICommand {
         ExportProgressGui gui = new ExportProgressGui();
         gui.clear();
         gui.setTitle("NESQL++ 1.04");
-        gui.setSubtitle("Data Export / Thaumcraft debug / " + (args.length == 1 ? args[0] : "default"));
-        gui.addMessage("Starting Thaumcraft-family debug data export...");
-        gui.addMessage(EnumChatFormatting.YELLOW + "Note: /nesql-data remains the full export command");
+        gui.setSubtitle("Targeted Data Export / Thaumcraft / " + (args.length == 1 ? args[0] : "default"));
+        gui.addMessage("Starting Thaumcraft targeted v1.04 data export...");
+        gui.addMessage(EnumChatFormatting.YELLOW + "Safe merge: non-Thaumcraft recipe files are preserved");
+        gui.addMessage(EnumChatFormatting.AQUA + "Use this only for Thaumcraft recipe fixes");
 
         Minecraft.getMinecraft().displayGuiScreen(gui);
 

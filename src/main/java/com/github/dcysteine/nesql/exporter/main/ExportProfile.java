@@ -16,7 +16,7 @@ public enum ExportProfile {
             true,
             true),
     DATA_ONLY_V14(
-            "data-only-v14",
+            "v1.04-data",
             false,
             false,
             true,

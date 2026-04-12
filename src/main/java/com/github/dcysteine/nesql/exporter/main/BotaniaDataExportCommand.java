@@ -39,9 +39,10 @@ final class BotaniaDataExportCommand implements ICommand {
         ExportProgressGui gui = new ExportProgressGui();
         gui.clear();
         gui.setTitle("NESQL++ 1.04");
-        gui.setSubtitle("Data Export / Botania debug / " + (args.length == 1 ? args[0] : "default"));
-        gui.addMessage("Starting Botania-family debug data export...");
-        gui.addMessage(EnumChatFormatting.YELLOW + "Note: /nesql-data remains the full export command");
+        gui.setSubtitle("Targeted Data Export / Botania / " + (args.length == 1 ? args[0] : "default"));
+        gui.addMessage("Starting Botania targeted v1.04 data export...");
+        gui.addMessage(EnumChatFormatting.YELLOW + "Safe merge: non-Botania recipe files are preserved");
+        gui.addMessage(EnumChatFormatting.AQUA + "Use this only for Botania recipe fixes");
 
         Minecraft.getMinecraft().displayGuiScreen(gui);
 

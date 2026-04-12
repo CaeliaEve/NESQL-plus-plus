@@ -19,8 +19,11 @@ public final class DataExporter {
     }
 
     private DataExporter(String repositoryName, NeiExportDebugFilter.Mode neiDebugMode) {
-        this.exportContext = ExportContext.forProfile(ExportProfile.DATA_ONLY_V14, repositoryName);
         this.neiDebugMode = neiDebugMode == null ? NeiExportDebugFilter.Mode.NONE : neiDebugMode;
+        this.exportContext = ExportContext.forProfile(
+                ExportProfile.DATA_ONLY_V14,
+                repositoryName,
+                recipeModFilterFor(this.neiDebugMode));
     }
 
     public static DataExporter thaumcraftDebug() {
@@ -37,6 +40,34 @@ public final class DataExporter {
 
     public static DataExporter botaniaDebug(String repositoryName) {
         return new DataExporter(repositoryName, NeiExportDebugFilter.Mode.BOTANIA_FAMILY);
+    }
+
+    private static java.util.Set<String> recipeModFilterFor(NeiExportDebugFilter.Mode mode) {
+        java.util.LinkedHashSet<String> mods = new java.util.LinkedHashSet<>();
+        if (mode == NeiExportDebugFilter.Mode.BOTANIA_FAMILY) {
+            mods.add("Botania");
+            return mods;
+        }
+        if (mode == NeiExportDebugFilter.Mode.THAUMCRAFT_FAMILY) {
+            mods.add("Thaumcraft");
+            mods.add("ThaumicTinkerer");
+            mods.add("ThaumicExploration");
+            mods.add("ThaumicHorizons");
+            mods.add("thaumicbases");
+            mods.add("thaumicenergistics");
+            mods.add("thaumicboots");
+            mods.add("ForbiddenMagic");
+            mods.add("Automagy");
+            mods.add("gadomancy");
+            mods.add("NodalMechanics");
+            mods.add("WarpTheory");
+            mods.add("alchgrate");
+            mods.add("salisarcana");
+            mods.add("TaintedMagic");
+            mods.add("Timeconqueror");
+            return mods;
+        }
+        return mods;
     }
 
     /**

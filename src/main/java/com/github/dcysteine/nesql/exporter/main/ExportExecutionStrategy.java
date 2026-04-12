@@ -102,9 +102,9 @@ interface ExportExecutionStrategy {
         @Override
         public void announceStartup(ExportContext exportContext, File repositoryDirectory) {
             Logger.MOD.info("============================================================");
-            Logger.MOD.info("=== NESQL Data Export STARTED ===");
+            Logger.MOD.info("=== NESQL++ v1.04 Data Export STARTED ===");
             Logger.MOD.info("============================================================");
-            ExportLifecycleSupport.announceProfile(exportContext, repositoryDirectory, "Starting NESQL data export...");
+            ExportLifecycleSupport.announceProfile(exportContext, repositoryDirectory, "Starting NESQL++ v1.04 data export...");
             Logger.MOD.info("Database: {}", exportContext.paths.databaseFile.getAbsolutePath());
             Logger.chatMessage(EnumChatFormatting.YELLOW + "Note: Images will NOT be rendered");
             Logger.MOD.info("Checking repository directory...");
@@ -113,14 +113,14 @@ interface ExportExecutionStrategy {
         @Override
         public void announceCompletion(ExportContext exportContext, File repositoryDirectory) {
             Logger.MOD.info("============================================================");
-            Logger.MOD.info("=== NESQL Data Export COMPLETE ===");
+            Logger.MOD.info("=== NESQL++ v1.04 Data Export COMPLETE ===");
             Logger.MOD.info("============================================================");
             Logger.MOD.info("Export directory: {}", repositoryDirectory.getAbsolutePath());
-            Logger.MOD.info("V14 files location:");
+            Logger.MOD.info("v1.04 data files location:");
             Logger.MOD.info("  - items/{modId}/items.json");
             Logger.MOD.info("  - recipes/crafting/{modId}/recipes.json.gz");
-            Logger.chatMessage(EnumChatFormatting.GREEN + "V14 export complete!");
-            Logger.chatMessage(EnumChatFormatting.GREEN + "Database not saved (V14 files only)");
+            Logger.chatMessage(EnumChatFormatting.GREEN + "v1.04 data export complete!");
+            Logger.chatMessage(EnumChatFormatting.GREEN + "Database not saved (data files already written)");
             Logger.chatMessage(EnumChatFormatting.YELLOW + "Export location: " + repositoryDirectory.getAbsolutePath());
         }
 
@@ -158,17 +158,17 @@ interface ExportExecutionStrategy {
             Logger.MOD.info("Step 1-3: exportRuntime.runPluginPipeline()...");
             exportRuntime.runPluginPipeline();
             Logger.MOD.info("Step 3 complete");
-            Logger.MOD.info("=== postProcessPlugins() completed, starting V14 export ===");
+            Logger.MOD.info("=== postProcessPlugins() completed, starting v1.04 file export ===");
         }
 
         @Override
         public void finishTransaction(ExportContext exportContext, EntityTransaction transaction) {
             Logger.MOD.info("============================================================");
-            Logger.MOD.info("=== V14 export complete, skipping database commit ===");
+            Logger.MOD.info("=== v1.04 file export complete, skipping database commit ===");
             Logger.MOD.info("============================================================");
-            Logger.MOD.info("All V14 files have been exported successfully");
+            Logger.MOD.info("All v1.04 data files have been exported successfully");
             Logger.MOD.info("Skipping database commit to save time");
-            Logger.chatMessage(EnumChatFormatting.YELLOW + "Skipping database commit (V14 files already exported)");
+            Logger.chatMessage(EnumChatFormatting.YELLOW + "Skipping database commit (data files already exported)");
             Logger.chatMessage(EnumChatFormatting.YELLOW + "This saves several minutes of disk I/O!");
             ExportLifecycleSupport.finishTransaction(transaction, false);
         }

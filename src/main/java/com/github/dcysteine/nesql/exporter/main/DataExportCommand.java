@@ -43,9 +43,11 @@ final class DataExportCommand implements ICommand {
         ExportProgressGui gui = new ExportProgressGui();
         gui.clear();
         gui.setTitle("NESQL++ 1.04");
-        gui.setSubtitle("Data Export / data-only-v14 / " + (args.length == 1 ? args[0] : "default"));
-        gui.addMessage("Starting data export...");
+        gui.setSubtitle("Data Export / v1.04 indexed / " + (args.length == 1 ? args[0] : "default"));
+        gui.addMessage("Starting v1.04 data export...");
         gui.addMessage(EnumChatFormatting.YELLOW + "Note: Images will NOT be rendered");
+        gui.addMessage(EnumChatFormatting.AQUA + "Output: items + recipes + canonical snapshot");
+        gui.addMessage(EnumChatFormatting.AQUA + "Mode: safe split export; existing files are preserved");
 
         // Open GUI on client side
         Minecraft.getMinecraft().displayGuiScreen(gui);
