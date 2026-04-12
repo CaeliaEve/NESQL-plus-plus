@@ -88,6 +88,16 @@ public class RuneAltarProcessor extends PluginHelper {
             }
 
             RecipeBuilder builder = new RecipeBuilder(exporter, runeAltar);
+            if (recipeOutput instanceof net.minecraft.item.ItemStack) {
+                net.minecraft.item.ItemStack itemStack = (net.minecraft.item.ItemStack) recipeOutput;
+                if (itemStack.getItem() != null) {
+                    builder.addItemOutput(itemStack);
+                }
+            } else {
+                logger.warn("Skipping Rune Altar recipe with unsupported output type: {}",
+                        recipeOutput.getClass().getName());
+                return null;
+            }
 
             // Add inputs - handle API version differences
             try {

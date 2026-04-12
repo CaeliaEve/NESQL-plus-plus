@@ -88,6 +88,16 @@ public class ManaPoolProcessor extends PluginHelper {
             }
 
             RecipeBuilder builder = new RecipeBuilder(exporter, manaPool);
+            if (recipeOutput instanceof net.minecraft.item.ItemStack) {
+                net.minecraft.item.ItemStack itemStack = (net.minecraft.item.ItemStack) recipeOutput;
+                if (itemStack.getItem() != null) {
+                    builder.addItemOutput(itemStack);
+                }
+            } else {
+                logger.warn("Skipping Mana Pool recipe with unsupported output type: {}",
+                        recipeOutput.getClass().getName());
+                return null;
+            }
 
             // Add input - handle API differences
             try {
@@ -136,6 +146,14 @@ public class ManaPoolProcessor extends PluginHelper {
                 builder.skipItemInput();
             } else {
                 builder.addItemInput(itemStack);
+            }
+        } else if (itemInput instanceof String) {
+            java.util.List<net.minecraft.item.ItemStack> itemStacks =
+                    net.minecraftforge.oredict.OreDictionary.getOres((String) itemInput, false);
+            if (itemStacks == null || itemStacks.isEmpty()) {
+                builder.skipItemInput();
+            } else {
+                builder.addItemGroupInput(itemStacks);
             }
         } else {
             // For other types (like ore dictionary), skip for now

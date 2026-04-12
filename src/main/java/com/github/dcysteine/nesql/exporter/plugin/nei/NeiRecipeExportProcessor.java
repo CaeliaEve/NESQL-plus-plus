@@ -63,6 +63,9 @@ public class NeiRecipeExportProcessor extends PluginHelper {
 
             // Stream export crafting recipes
             int craftingCount = NeiRecipeBatchLoader.streamExportAllCraftingRecipes(this);
+            if (NeiExportDebugFilter.getMode() == NeiExportDebugFilter.Mode.BOTANIA_FAMILY) {
+                craftingCount += exportKnownBotaniaCoreRecipes();
+            }
 
             // ❌ 不再导出usage配方 - 由后端逆推
             Logger.chatMessage("跳过Usage配方导出（节省6小时）");
@@ -79,6 +82,80 @@ public class NeiRecipeExportProcessor extends PluginHelper {
             Logger.chatMessage("NEI export error: " + e.getMessage());
             logger.error("Error exporting NEI recipes", e);
         }
+    }
+
+    private int exportKnownBotaniaCoreRecipes() {
+        try {
+            Object manaResourceObject = Class.forName("vazkii.botania.common.item.ModItems")
+                    .getField("manaResource")
+                    .get(null);
+            if (!(manaResourceObject instanceof net.minecraft.item.Item)) {
+                logger.warn("Botania core recipe fallback skipped: ModItems.manaResource unavailable");
+                return 0;
+            }
+
+            net.minecraft.item.Item manaResource = (net.minecraft.item.Item) manaResourceObject;
+            RecipeType manaPool = recipeTypeFactory.newBuilder()
+                    .setId("botania", "mana_pool_core")
+                    .setCategory("Botania")
+                    .setType("Mana Pool")
+                    .setIcon(getFallbackIcon())
+                    .setShapeless(true)
+                    .setItemInputDimension(1, 1)
+                    .setItemOutputDimension(1, 1)
+                    .build();
+            RecipeType terraPlate = recipeTypeFactory.newBuilder()
+                    .setId("botania", "terra_plate_core")
+                    .setCategory("Botania")
+                    .setType("Terra Plate")
+                    .setIcon(getFallbackIcon())
+                    .setShapeless(true)
+                    .setItemInputDimension(3, 1)
+                    .setItemOutputDimension(1, 1)
+                    .build();
+
+            int exported = 0;
+            exported += buildManaPoolRecipe(manaPool, new net.minecraft.item.ItemStack(net.minecraft.init.Items.iron_ingot), new net.minecraft.item.ItemStack(manaResource, 1, 0), 3000);
+            exported += buildManaPoolRecipe(manaPool, new net.minecraft.item.ItemStack(net.minecraft.init.Items.ender_pearl), new net.minecraft.item.ItemStack(manaResource, 1, 1), 6000);
+            exported += buildManaPoolRecipe(manaPool, new net.minecraft.item.ItemStack(net.minecraft.init.Items.diamond), new net.minecraft.item.ItemStack(manaResource, 1, 2), 10000);
+
+            RecipeBuilder terraBuilder = new RecipeBuilder(exporter, terraPlate);
+            terraBuilder.addItemInput(new net.minecraft.item.ItemStack(manaResource, 1, 0));
+            terraBuilder.addItemInput(new net.minecraft.item.ItemStack(manaResource, 1, 1));
+            terraBuilder.addItemInput(new net.minecraft.item.ItemStack(manaResource, 1, 2));
+            terraBuilder.addItemOutput(new net.minecraft.item.ItemStack(manaResource, 1, 4));
+            com.github.dcysteine.nesql.sql.base.recipe.Recipe terraRecipe = terraBuilder.build();
+            Map<String, Object> terraMetadata = new HashMap<>();
+            terraMetadata.put("manaCost", 500000);
+            terraMetadata.put("ticks", 100);
+            terraMetadata.put("synthetic", true);
+            com.github.dcysteine.nesql.exporter.util.SpecialRecipeMetadataRegistry.registerMetadata(
+                    terraRecipe.getId(),
+                    new com.github.dcysteine.nesql.exporter.util.SpecialRecipeMetadataRegistry.SpecialRecipeMetadata("TerraPlate", terraMetadata)
+            );
+            exported++;
+
+            logger.info("Exported {} Botania core fallback recipes", exported);
+            return exported;
+        } catch (Exception e) {
+            logger.error("Failed to export Botania core fallback recipes", e);
+            return 0;
+        }
+    }
+
+    private int buildManaPoolRecipe(RecipeType recipeType, ItemStack input, ItemStack output, int manaCost) {
+        RecipeBuilder builder = new RecipeBuilder(exporter, recipeType);
+        builder.addItemInput(input);
+        builder.addItemOutput(output);
+        com.github.dcysteine.nesql.sql.base.recipe.Recipe builtRecipe = builder.build();
+        Map<String, Object> metadata = new HashMap<>();
+        metadata.put("manaCost", manaCost);
+        metadata.put("synthetic", true);
+        com.github.dcysteine.nesql.exporter.util.SpecialRecipeMetadataRegistry.registerMetadata(
+                builtRecipe.getId(),
+                new com.github.dcysteine.nesql.exporter.util.SpecialRecipeMetadataRegistry.SpecialRecipeMetadata("ManaPool", metadata)
+        );
+        return 1;
     }
 
     /**

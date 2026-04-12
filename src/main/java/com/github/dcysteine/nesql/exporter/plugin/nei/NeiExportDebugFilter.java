@@ -6,7 +6,8 @@ public final class NeiExportDebugFilter {
 
     public enum Mode {
         NONE,
-        THAUMCRAFT_FAMILY
+        THAUMCRAFT_FAMILY,
+        BOTANIA_FAMILY
     }
 
     private static volatile Mode mode = Mode.NONE;
@@ -29,12 +30,14 @@ public final class NeiExportDebugFilter {
         if (mode == Mode.NONE || handler == null) {
             return true;
         }
+
+        String text = (
+                safe(handler.getHandlerId())
+                        + " " + safe(handler.getRecipeName())
+                        + " " + handler.getClass().getName()
+        ).toLowerCase();
+
         if (mode == Mode.THAUMCRAFT_FAMILY) {
-            String text = (
-                    safe(handler.getHandlerId())
-                            + " " + safe(handler.getRecipeName())
-                            + " " + handler.getClass().getName()
-            ).toLowerCase();
             return text.contains("thaum")
                     || text.contains("tcnei")
                     || text.contains("timeconqueror")
@@ -44,12 +47,21 @@ public final class NeiExportDebugFilter {
                     || text.contains("arcane")
                     || text.contains("infusion")
                     || text.contains("crucible")
-                    || text.contains("aspect")
-                    || text.contains("奥术")
-                    || text.contains("注魔")
-                    || text.contains("坩埚")
-                    || text.contains("要素");
+                    || text.contains("aspect");
         }
+
+        if (mode == Mode.BOTANIA_FAMILY) {
+            return text.contains("botania")
+                    || text.contains("vazkii")
+                    || text.contains("mana")
+                    || text.contains("rune")
+                    || text.contains("daisy")
+                    || text.contains("terra")
+                    || text.contains("petal")
+                    || text.contains("elven")
+                    || text.contains("brew");
+        }
+
         return true;
     }
 

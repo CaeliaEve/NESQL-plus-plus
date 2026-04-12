@@ -34,12 +34,16 @@ public class TerraPlateProcessor extends PluginHelper {
             try {
                 recipes = BotaniaAPI.terraPlateRecipes;
             } catch (NoSuchFieldError e) {
-                logger.info("Terra Plate recipes field not found in this Botania version, skipping");
+                logger.info("Terra Plate recipes field not found in this Botania version, exporting synthetic terrasteel recipe");
+                buildTerrasteelRecipe();
+                exporterState.flushEntityManager();
                 return;
             }
 
             if (recipes == null || recipes.isEmpty()) {
-                logger.info("No Terra Plate recipes found!");
+                logger.info("No Terra Plate recipes found; exporting synthetic terrasteel recipe");
+                buildTerrasteelRecipe();
+                exporterState.flushEntityManager();
                 return;
             }
 
@@ -73,8 +77,10 @@ public class TerraPlateProcessor extends PluginHelper {
 
     private Recipe processRecipe(RecipeTerraPlate recipe) {
         try {
+            Object recipeOutput = null;
             try {
-                if (recipe.getOutput() == null) {
+                recipeOutput = recipe.getOutput();
+                if (recipeOutput == null) {
                     logger.warn("Skipping Terra Plate recipe with null output");
                     return null;
                 }
@@ -84,6 +90,16 @@ public class TerraPlateProcessor extends PluginHelper {
             }
 
             RecipeBuilder builder = new RecipeBuilder(exporter, terraPlate);
+            if (recipeOutput instanceof net.minecraft.item.ItemStack) {
+                net.minecraft.item.ItemStack itemStack = (net.minecraft.item.ItemStack) recipeOutput;
+                if (itemStack.getItem() != null) {
+                    builder.addItemOutput(itemStack);
+                }
+            } else {
+                logger.warn("Skipping Terra Plate recipe with unsupported output type: {}",
+                        recipeOutput.getClass().getName());
+                return null;
+            }
 
             // Add inputs - handle API version differences
             try {
@@ -135,6 +151,40 @@ public class TerraPlateProcessor extends PluginHelper {
 
         } catch (Exception e) {
             logger.error("Error processing individual Terra Plate recipe", e);
+            return null;
+        }
+    }
+
+    private Recipe buildTerrasteelRecipe() {
+        try {
+            Object manaResourceObject = Class.forName("vazkii.botania.common.item.ModItems")
+                    .getField("manaResource")
+                    .get(null);
+            if (!(manaResourceObject instanceof net.minecraft.item.Item)) {
+                logger.warn("Could not export synthetic Terra Plate recipe: ModItems.manaResource is unavailable");
+                return null;
+            }
+
+            net.minecraft.item.Item manaResource = (net.minecraft.item.Item) manaResourceObject;
+            RecipeBuilder builder = new RecipeBuilder(exporter, terraPlate);
+            builder.addItemInput(new net.minecraft.item.ItemStack(manaResource, 1, 0)); // Manasteel ingot
+            builder.addItemInput(new net.minecraft.item.ItemStack(manaResource, 1, 1)); // Mana pearl
+            builder.addItemInput(new net.minecraft.item.ItemStack(manaResource, 1, 2)); // Mana diamond
+            builder.addItemOutput(new net.minecraft.item.ItemStack(manaResource, 1, 4)); // Terrasteel ingot
+
+            Recipe builtRecipe = builder.build();
+            Map<String, Object> metadata = new HashMap<>();
+            metadata.put("manaCost", 500000);
+            metadata.put("ticks", 100);
+            metadata.put("synthetic", true);
+            SpecialRecipeMetadataRegistry.registerMetadata(
+                    builtRecipe.getId(),
+                    new SpecialRecipeMetadataRegistry.SpecialRecipeMetadata("TerraPlate", metadata)
+            );
+            logger.info("Exported synthetic Terra Plate terrasteel recipe");
+            return builtRecipe;
+        } catch (Exception e) {
+            logger.error("Error exporting synthetic Terra Plate terrasteel recipe", e);
             return null;
         }
     }

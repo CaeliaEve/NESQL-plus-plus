@@ -31,6 +31,14 @@ public final class DataExporter {
         return new DataExporter(repositoryName, NeiExportDebugFilter.Mode.THAUMCRAFT_FAMILY);
     }
 
+    public static DataExporter botaniaDebug() {
+        return botaniaDebug(ConfigOptions.REPOSITORY_NAME.get());
+    }
+
+    public static DataExporter botaniaDebug(String repositoryName) {
+        return new DataExporter(repositoryName, NeiExportDebugFilter.Mode.BOTANIA_FAMILY);
+    }
+
     /**
      * Wrapper for {@link #export()} which will report exceptions to chat.
      */
