@@ -6,6 +6,8 @@ import codechicken.nei.recipe.GuiUsageRecipe;
 import codechicken.nei.recipe.ICraftingHandler;
 import codechicken.nei.recipe.IRecipeHandler;
 import codechicken.nei.recipe.IUsageHandler;
+import com.github.dcysteine.nesql.exporter.plugin.nei.metadata.NeiHandlerMetadataEntry;
+import com.github.dcysteine.nesql.exporter.plugin.nei.metadata.NeiHandlerMetadataRepository;
 import com.github.dcysteine.nesql.exporter.main.Logger;
 import com.github.dcysteine.nesql.exporter.plugin.PluginExporter;
 import com.github.dcysteine.nesql.exporter.plugin.PluginHelper;
@@ -15,6 +17,8 @@ import com.github.dcysteine.nesql.exporter.plugin.base.factory.RecipeTypeFactory
 import com.github.dcysteine.nesql.exporter.util.ItemUtil;
 import com.github.dcysteine.nesql.sql.base.item.Item;
 import com.github.dcysteine.nesql.sql.base.recipe.RecipeType;
+import cpw.mods.fml.common.registry.GameRegistry;
+import net.minecraft.block.Block;
 import net.minecraft.init.Blocks;
 import net.minecraft.item.ItemStack;
 
@@ -38,6 +42,7 @@ public class NeiRecipeExportProcessor extends PluginHelper {
 
     private final RecipeTypeFactory recipeTypeFactory;
     private final ItemFactory itemFactory;
+    private final NeiHandlerMetadataRepository handlerMetadataRepository;
 
     // Cache for created recipe types
     private final Map<String, RecipeType> recipeTypeCache = new HashMap<>();
@@ -46,6 +51,7 @@ public class NeiRecipeExportProcessor extends PluginHelper {
         super(exporter);
         this.recipeTypeFactory = new RecipeTypeFactory(exporter);
         this.itemFactory = new ItemFactory(exporter);
+        this.handlerMetadataRepository = NeiHandlerMetadataRepository.getInstance();
     }
 
     public void process() {
@@ -256,7 +262,10 @@ public class NeiRecipeExportProcessor extends PluginHelper {
 
         for (int i = 0; i < numRecipes; i++) {
             try {
-                RecipeBuilder builder = new RecipeBuilder(exporter, recipeType);
+                Object neiRecipe = getRecipeFromHandler(handler, i);
+                RecipeType effectiveRecipeType =
+                        resolveEffectiveRecipeType(handler.getHandlerId(), handlerName, handler, recipeType, neiRecipe);
+                RecipeBuilder builder = new RecipeBuilder(exporter, effectiveRecipeType);
 
                 // Get result stack
                 PositionedStack result = handler.getResultStack(i);
@@ -270,7 +279,7 @@ public class NeiRecipeExportProcessor extends PluginHelper {
                 // Get ingredient stacks
                 List<PositionedStack> ingredients = handler.getIngredientStacks(i);
                 if (ingredients != null) {
-                    addIngredientInputs(builder, ingredients, recipeType);
+                    addIngredientInputs(builder, ingredients, effectiveRecipeType);
                 }
 
                 // Get other stacks (fuel, byproducts, etc.)
@@ -301,28 +310,40 @@ public class NeiRecipeExportProcessor extends PluginHelper {
         return exported;
     }
 
-    private RecipeType getOrCreateRecipeType(String handlerId, String recipeTypeName, String category) {
+    private RecipeType getOrCreateRecipeType(
+            String handlerId, String recipeTypeName, String category, Object handler) {
         try {
-            // Try to extract mod name from handler class name
-            String modName = extractModName(handlerId);
+            NeiHandlerMetadataEntry metadata = findHandlerMetadata(handlerId, handler);
+
+            String modName = metadata != null && !isBlank(metadata.getModName())
+                    ? metadata.getModName()
+                    : extractModName(handlerId);
+            String typeName = overrideRecipeTypeName(handlerId, recipeTypeName, handler);
+            String typeId = sanitizeRecipeTypeId(
+                    metadata != null && !isBlank(metadata.getHandler())
+                            ? metadata.getHandler()
+                            : typeName);
 
             // Create a unique recipe type ID
-            String recipeTypeId = modName + " - " + recipeTypeName;
+            String recipeTypeId = modName + " - " + typeId;
 
             // Check cache first
             if (recipeTypeCache.containsKey(recipeTypeId)) {
                 return recipeTypeCache.get(recipeTypeId);
             }
 
-            // Try to get icon from first recipe result
-            Item icon = getFallbackIcon();
+            Item icon = resolveHandlerIcon(metadata);
+            if (icon == null) {
+                icon = getFallbackIcon();
+            }
 
             // Create new recipe type using RecipeTypeFactory
             RecipeType recipeType = recipeTypeFactory.newBuilder()
-                    .setId(modName.toLowerCase().replace(" ", "_"), recipeTypeName.toLowerCase().replace(" ", "_"))
+                    .setId(normalizeIdPart(modName), typeId)
                     .setCategory(modName)
-                    .setType(recipeTypeName)
+                    .setType(typeName)
                     .setIcon(icon)
+                    .setIconInfo(metadata != null ? nullToEmpty(metadata.getItemName()) : "")
                     .setShapeless(false) // Default to shaped
                     .setItemInputDimension(3, 3) // Default to 3x3
                     .setItemOutputDimension(1, 1)
@@ -384,6 +405,141 @@ public class NeiRecipeExportProcessor extends PluginHelper {
         return "Unknown";
     }
 
+    private String overrideRecipeTypeName(String handlerId, String recipeTypeName, Object handler) {
+        String handlerClass = handler == null ? "" : handler.getClass().getName();
+        String combined = (handlerId + " " + handlerClass + " " + recipeTypeName).toLowerCase();
+
+        if (combined.contains("infusionrecipehandler")) {
+            return "奥术注魔";
+        }
+        if (combined.contains("cruciblerecipehandler")) {
+            return "坩埚";
+        }
+        if (combined.contains("neialtarrecipehandler")) {
+            return "Blood Altar";
+        }
+        if (combined.contains("neialchemyrecipehandler")) {
+            return "Alchemy Array";
+        }
+        if (combined.contains("neibindingritualhandler")) {
+            return "Binding Ritual";
+        }
+        if (combined.contains("arcaneshapedrecipehandler")) {
+            return "有序奥术合成";
+        }
+        if (combined.contains("arcaneshapelessrecipehandler")) {
+            return "无序奥术合成";
+        }
+        if (combined.contains("recipehandlerrunicaltar")) {
+            return "符文祭坛";
+        }
+        if (combined.contains("recipehandlermanapool")) {
+            return "Mana Pool";
+        }
+        if (combined.contains("recipehandlerpuredaisy")) {
+            return "Pure Daisy";
+        }
+        if (combined.contains("recipehandlerelventrade")) {
+            return "Elven Trade";
+        }
+        if (combined.contains("recipehandlerpetalapothecary")) {
+            return "Petal Apothecary";
+        }
+
+        return recipeTypeName;
+    }
+
+    private RecipeType resolveEffectiveRecipeType(
+            String handlerId,
+            String handlerName,
+            Object handler,
+            RecipeType baseRecipeType,
+            Object recipe) {
+        RecipeTypeCorrection correction = inferRecipeTypeCorrection(handlerId, handlerName, handler, recipe);
+        if (correction == null) {
+            return baseRecipeType;
+        }
+
+        return getOrCreateRecipeTypeVariant(handlerId, handler, baseRecipeType, correction);
+    }
+
+    private RecipeTypeCorrection inferRecipeTypeCorrection(
+            String handlerId,
+            String handlerName,
+            Object handler,
+            Object recipe) {
+        if (recipe == null) {
+            return null;
+        }
+
+        String recipeClass = recipe.getClass().getName().toLowerCase();
+        String handlerClass = handler == null ? "" : handler.getClass().getName().toLowerCase();
+        String combined = (handlerId + " " + handlerName + " " + handlerClass + " " + recipeClass).toLowerCase();
+
+        if (combined.contains("thaum") || combined.contains("tcnei") || combined.contains("timeconqueror")) {
+            if (recipeClass.contains("infusion")) {
+                return new RecipeTypeCorrection("\u5965\u672f\u6ce8\u9b54", false);
+            }
+            if (recipeClass.contains("crucible")) {
+                return new RecipeTypeCorrection("\u5769\u57da", false);
+            }
+            if (recipeClass.contains("arcane")) {
+                boolean shapeless = recipeClass.contains("shapeless");
+                return new RecipeTypeCorrection(
+                        shapeless
+                                ? "\u65e0\u5e8f\u5965\u672f\u5408\u6210"
+                                : "\u6709\u5e8f\u5965\u672f\u5408\u6210",
+                        shapeless);
+            }
+        }
+
+        return null;
+    }
+
+    private RecipeType getOrCreateRecipeTypeVariant(
+            String handlerId,
+            Object handler,
+            RecipeType baseRecipeType,
+            RecipeTypeCorrection correction) {
+        NeiHandlerMetadataEntry metadata = findHandlerMetadata(handlerId, handler);
+        String modName = metadata != null && !isBlank(metadata.getModName())
+                ? metadata.getModName()
+                : baseRecipeType.getCategory();
+        String typeId = sanitizeRecipeTypeId(correction.typeName);
+        String recipeTypeId = modName + " - " + typeId + " - " + correction.shapeless;
+
+        RecipeType cached = recipeTypeCache.get(recipeTypeId);
+        if (cached != null) {
+            return cached;
+        }
+
+        RecipeType correctedType = recipeTypeFactory.newBuilder()
+                .setId(normalizeIdPart(modName), typeId)
+                .setCategory(modName)
+                .setType(correction.typeName)
+                .setIcon(baseRecipeType.getIcon())
+                .setIconInfo(baseRecipeType.getIconInfo())
+                .setShapeless(correction.shapeless)
+                .setItemInputDimension(baseRecipeType.getItemInputDimension())
+                .setFluidInputDimension(baseRecipeType.getFluidInputDimension())
+                .setItemOutputDimension(baseRecipeType.getItemOutputDimension())
+                .setFluidOutputDimension(baseRecipeType.getFluidOutputDimension())
+                .build();
+
+        recipeTypeCache.put(recipeTypeId, correctedType);
+        return correctedType;
+    }
+
+    private static final class RecipeTypeCorrection {
+        private final String typeName;
+        private final boolean shapeless;
+
+        private RecipeTypeCorrection(String typeName, boolean shapeless) {
+            this.typeName = typeName;
+            this.shapeless = shapeless;
+        }
+    }
+
     private Item getFallbackIcon() {
         try {
             ItemStack craftingTable = ItemUtil.getItemStack(Blocks.crafting_table).get();
@@ -392,6 +548,123 @@ public class NeiRecipeExportProcessor extends PluginHelper {
             logger.warn("Failed to get fallback icon", e);
             return null;
         }
+    }
+
+    private NeiHandlerMetadataEntry findHandlerMetadata(String handlerId, Object handler) {
+        NeiHandlerMetadataEntry metadata = handlerMetadataRepository.findByHandler(handlerId);
+        if (metadata != null) {
+            return metadata;
+        }
+        if (handler != null) {
+            metadata = handlerMetadataRepository.findByHandler(handler.getClass().getName());
+            if (metadata != null) {
+                return metadata;
+            }
+        }
+        return null;
+    }
+
+    private Item resolveHandlerIcon(NeiHandlerMetadataEntry metadata) {
+        if (metadata == null || isBlank(metadata.getItemName())) {
+            return null;
+        }
+        ItemStack stack = resolveItemStack(metadata.getItemName());
+        if (stack == null || stack.getItem() == null) {
+            return null;
+        }
+        try {
+            return itemFactory.get(stack);
+        } catch (Exception e) {
+            logger.debug("Failed to resolve NEI handler icon: {}", metadata.getItemName(), e);
+            return null;
+        }
+    }
+
+    private ItemStack resolveItemStack(String itemName) {
+        if (isBlank(itemName)) {
+            return null;
+        }
+        String trimmed = itemName.trim();
+        String[] parts = trimmed.split(":");
+        if (parts.length < 2) {
+            return null;
+        }
+
+        String modId = parts[0];
+        String name = parts[1];
+        int damage = 0;
+        if (parts.length >= 3) {
+            try {
+                damage = Integer.parseInt(parts[2]);
+            } catch (NumberFormatException ignored) {
+                damage = 0;
+            }
+        }
+
+        net.minecraft.item.Item item = GameRegistry.findItem(modId, name);
+        if (item != null) {
+            return new ItemStack(item, 1, damage);
+        }
+
+        Block block = GameRegistry.findBlock(modId, name);
+        if (block != null) {
+            return new ItemStack(block, 1, damage);
+        }
+        return null;
+    }
+
+    private void registerHandlerMetadata(
+            Object handler,
+            String handlerId,
+            com.github.dcysteine.nesql.sql.base.recipe.Recipe builtRecipe) {
+        NeiHandlerMetadataEntry metadata = findHandlerMetadata(handlerId, handler);
+        if (metadata == null || builtRecipe == null) {
+            return;
+        }
+
+        Map<String, Object> data = new HashMap<>();
+        data.put("handler", nullToEmpty(metadata.getHandler()));
+        data.put("handlerId", nullToEmpty(handlerId));
+        data.put("handlerClass", handler == null ? "" : handler.getClass().getName());
+        data.put("modName", nullToEmpty(metadata.getModName()));
+        data.put("modId", nullToEmpty(metadata.getModId()));
+        data.put("handlerIcon", nullToEmpty(metadata.getItemName()));
+        data.put("handlerHeight", metadata.getHandlerHeightInt());
+        data.put("handlerWidth", metadata.getHandlerWidthInt());
+        data.put("maxRecipesPerPage", metadata.getMaxRecipesPerPageInt());
+        data.put("yShift", metadata.getYShiftInt());
+        data.put("imageResource", nullToEmpty(metadata.getImageResource()));
+        data.put("itemNotes", nullToEmpty(metadata.getItemNotes()));
+
+        com.github.dcysteine.nesql.exporter.util.SpecialRecipeMetadataRegistry.registerMetadata(
+                builtRecipe.getId(),
+                new com.github.dcysteine.nesql.exporter.util.SpecialRecipeMetadataRegistry.SpecialRecipeMetadata(
+                        "NEI_Handler", data
+                )
+        );
+    }
+
+    private static boolean isBlank(String value) {
+        return value == null || value.trim().isEmpty();
+    }
+
+    private static String nullToEmpty(String value) {
+        return value == null ? "" : value;
+    }
+
+    private static String normalizeIdPart(String value) {
+        if (isBlank(value)) {
+            return "nei";
+        }
+        return value.toLowerCase()
+                .replaceAll("[^a-z0-9]+", "_")
+                .replaceAll("^_+", "")
+                .replaceAll("_+$", "");
+    }
+
+    private static String sanitizeRecipeTypeId(String value) {
+        String normalized = normalizeIdPart(value);
+        return normalized.isEmpty() ? "unknown" : normalized;
     }
 
     private static Integer tryReadIntField(Object obj, String fieldName) {
@@ -638,6 +911,14 @@ public class NeiRecipeExportProcessor extends PluginHelper {
                     || combinedHandlerText.contains("neiaddons.forestry")) {
                 extractForestryMetadata(handler, recipeIndex, builtRecipe);
             }
+            else if (combinedHandlerText.contains("botania")
+                    || combinedHandlerText.contains("recipehandlerrunicaltar")
+                    || combinedHandlerText.contains("recipehandlermanapool")
+                    || combinedHandlerText.contains("recipehandlerpuredaisy")
+                    || combinedHandlerText.contains("recipehandlerelventrade")
+                    || combinedHandlerText.contains("recipehandlerpetalapothecary")) {
+                extractBotaniaMetadata(handler, recipeIndex, builtRecipe);
+            }
             // Witchery - extract special data
             else if (combinedHandlerText.contains("witch")) {
                 extractWitcheryData(handler, recipeIndex, builtRecipe);
@@ -722,8 +1003,22 @@ public class NeiRecipeExportProcessor extends PluginHelper {
         String recipeClass = recipe.getClass().getName().toLowerCase();
         if (recipeClass.contains("infusion")) {
             metadata.put("thaumcraftLayout", "infusion");
+            metadata.put("correctedMachineType", "奥术注魔");
         } else if (recipeClass.contains("arcane")) {
             metadata.put("thaumcraftLayout", "arcane");
+            metadata.put(
+                    "correctedMachineType",
+                    recipeClass.contains("shapeless") ? "无序奥术合成" : "有序奥术合成");
+        }
+
+        if (recipeClass.contains("infusion")) {
+            metadata.put("correctedMachineType", "\u5965\u672f\u6ce8\u9b54");
+        } else if (recipeClass.contains("arcane")) {
+            metadata.put(
+                    "correctedMachineType",
+                    recipeClass.contains("shapeless")
+                            ? "\u65e0\u5e8f\u5965\u672f\u5408\u6210"
+                            : "\u6709\u5e8f\u5965\u672f\u5408\u6210");
         }
 
         String research = readThaumcraftResearch(recipe);
@@ -795,6 +1090,99 @@ public class NeiRecipeExportProcessor extends PluginHelper {
         if (!componentSlotOrder.isEmpty()) {
             metadata.put("componentSlotOrder", componentSlotOrder);
         }
+    }
+
+    private void extractBotaniaMetadata(
+            codechicken.nei.recipe.IRecipeHandler handler,
+            int recipeIndex,
+            com.github.dcysteine.nesql.sql.base.recipe.Recipe builtRecipe) {
+        try {
+            Object recipe = getRecipeFromHandler(handler, recipeIndex);
+            if (recipe == null) {
+                return;
+            }
+
+            Map<String, Object> metadata = new HashMap<>();
+            String recipeClass = recipe.getClass().getName().toLowerCase();
+            String handlerClass = handler.getClass().getName().toLowerCase();
+            String combined = handlerClass + " " + recipeClass;
+
+            if (combined.contains("runicaltar")) {
+                metadata.put("specialRecipeType", "RuneAltar");
+                metadata.put("correctedMachineType", "符文祭坛");
+            } else if (combined.contains("manapool")) {
+                metadata.put("specialRecipeType", "ManaPool");
+                metadata.put("correctedMachineType", "Mana Pool");
+            } else if (combined.contains("puredaisy")) {
+                metadata.put("specialRecipeType", "PureDaisy");
+                metadata.put("correctedMachineType", "Pure Daisy");
+            } else if (combined.contains("elventrade")) {
+                metadata.put("specialRecipeType", "ElvenTrade");
+                metadata.put("correctedMachineType", "Elven Trade");
+            } else if (combined.contains("petalapothecary")) {
+                metadata.put("specialRecipeType", "PetalApothecary");
+                metadata.put("correctedMachineType", "Petal Apothecary");
+            }
+
+            Integer manaCost = readPositiveInt(recipe, "getManaUsage");
+            if (manaCost == null) {
+                manaCost = readPositiveInt(recipe, "getManaToConsume");
+            }
+            if (manaCost == null) {
+                manaCost = readPositiveInt(recipe, "getMana");
+            }
+            if (manaCost == null) {
+                manaCost = readPositiveFieldInt(recipe, "manaUsage");
+            }
+            if (manaCost == null) {
+                manaCost = readPositiveFieldInt(recipe, "mana");
+            }
+            if (manaCost != null) {
+                metadata.put("manaCost", manaCost);
+            }
+
+            if (!metadata.isEmpty()) {
+                com.github.dcysteine.nesql.exporter.util.SpecialRecipeMetadataRegistry.registerMetadata(
+                        builtRecipe.getId(),
+                        new com.github.dcysteine.nesql.exporter.util.SpecialRecipeMetadataRegistry.SpecialRecipeMetadata(
+                                String.valueOf(metadata.get("specialRecipeType")), metadata
+                        )
+                );
+            }
+        } catch (Exception e) {
+            logger.debug("Failed to extract Botania metadata", e);
+        }
+    }
+
+    private Integer readPositiveInt(Object target, String methodName) {
+        try {
+            java.lang.reflect.Method method = target.getClass().getMethod(methodName);
+            method.setAccessible(true);
+            Object value = method.invoke(target);
+            if (value instanceof Number) {
+                int intValue = ((Number) value).intValue();
+                return intValue > 0 ? intValue : null;
+            }
+        } catch (Exception ignored) {
+        }
+        return null;
+    }
+
+    private Integer readPositiveFieldInt(Object target, String fieldName) {
+        try {
+            java.lang.reflect.Field field = findField(target.getClass(), fieldName);
+            if (field == null) {
+                return null;
+            }
+            field.setAccessible(true);
+            Object value = field.get(target);
+            if (value instanceof Number) {
+                int intValue = ((Number) value).intValue();
+                return intValue > 0 ? intValue : null;
+            }
+        } catch (Exception ignored) {
+        }
+        return null;
     }
 
     private String readThaumcraftResearch(Object recipe) {
@@ -961,44 +1349,83 @@ public class NeiRecipeExportProcessor extends PluginHelper {
             com.github.dcysteine.nesql.sql.base.recipe.Recipe builtRecipe) {
         try {
             Object recipe = getRecipeFromHandler(handler, recipeIndex);
+            if (recipe == null) {
+                return;
+            }
 
-            if (recipe != null) {
-                Map<String, Object> metadata = new HashMap<>();
+            Map<String, Object> metadata = new HashMap<>();
+            String handlerClass = handler.getClass().getName().toLowerCase();
 
-                // Try to get tier
-                try {
-                    java.lang.reflect.Field tierField = recipe.getClass().getDeclaredField("tier");
-                    tierField.setAccessible(true);
-                    int tier = tierField.getInt(recipe);
-                    metadata.put("tier", tier);
-                } catch (NoSuchFieldException e) {
-                    // tier field doesn't exist, skip
+            Integer tier = readPositiveFieldInt(recipe, "tier");
+            if (tier != null) {
+                metadata.put("tier", tier);
+            }
+
+            if (handlerClass.contains("neialtarrecipehandler")) {
+                metadata.put("specialRecipeType", "BloodAltar");
+                metadata.put("correctedMachineType", "Blood Altar");
+
+                Integer bloodCost = readPositiveFieldInt(recipe, "lp_amount");
+                if (bloodCost == null) {
+                    bloodCost = readPositiveFieldInt(recipe, "liquidRequired");
+                }
+                if (bloodCost != null) {
+                    metadata.put("bloodCost", bloodCost);
                 }
 
-                // Try to get blood cost (try multiple possible field names)
+                Integer consumption = readPositiveFieldInt(recipe, "consumption");
+                if (consumption != null) {
+                    metadata.put("consumptionRate", consumption);
+                }
+
+                Integer drain = readPositiveFieldInt(recipe, "drain");
+                if (drain != null) {
+                    metadata.put("drainRate", drain);
+                }
+            } else if (handlerClass.contains("neialchemyrecipehandler")) {
+                metadata.put("specialRecipeType", "AlchemyArray");
+                metadata.put("correctedMachineType", "Alchemy Array");
+
+                Integer lpCost = readPositiveFieldInt(recipe, "lp");
+                if (lpCost != null) {
+                    metadata.put("lpCost", lpCost);
+                }
+            } else if (handlerClass.contains("neibindingritualhandler")) {
+                metadata.put("specialRecipeType", "BindingRitual");
+                metadata.put("correctedMachineType", "Binding Ritual");
+            }
+
+            // Generic fallback for alternate implementations
+            if (!metadata.containsKey("bloodCost")) {
                 String[] possibleFields = {"bloodCost", "cost", "requiredBlood"};
                 for (String fieldName : possibleFields) {
-                    try {
-                        java.lang.reflect.Field costField = recipe.getClass().getDeclaredField(fieldName);
-                        costField.setAccessible(true);
-                        int cost = costField.getInt(recipe);
+                    Integer cost = readPositiveFieldInt(recipe, fieldName);
+                    if (cost != null) {
                         metadata.put("bloodCost", cost);
-                        break; // Found it, stop looking
-                    } catch (NoSuchFieldException e) {
-                        // Try next field name
+                        break;
                     }
                 }
+            }
 
-                // Register metadata if we found anything
-                if (!metadata.isEmpty()) {
-                    com.github.dcysteine.nesql.exporter.util.SpecialRecipeMetadataRegistry.registerMetadata(
-                            builtRecipe.getId(),
-                            new com.github.dcysteine.nesql.exporter.util.SpecialRecipeMetadataRegistry.SpecialRecipeMetadata(
-                                    "NEI_BloodMagic", metadata
-                            )
-                    );
-                    logger.debug("Extracted Blood Magic metadata for recipe {}: {}", builtRecipe.getId(), metadata);
+            if (!metadata.containsKey("lpCost")) {
+                String[] possibleFields = {"lpCost", "requiredLP", "lpRequired"};
+                for (String fieldName : possibleFields) {
+                    Integer cost = readPositiveFieldInt(recipe, fieldName);
+                    if (cost != null) {
+                        metadata.put("lpCost", cost);
+                        break;
+                    }
                 }
+            }
+
+            if (!metadata.isEmpty()) {
+                com.github.dcysteine.nesql.exporter.util.SpecialRecipeMetadataRegistry.registerMetadata(
+                        builtRecipe.getId(),
+                        new com.github.dcysteine.nesql.exporter.util.SpecialRecipeMetadataRegistry.SpecialRecipeMetadata(
+                                "NEI_BloodMagic", metadata
+                        )
+                );
+                logger.debug("Extracted Blood Magic metadata for recipe {}: {}", builtRecipe.getId(), metadata);
             }
         } catch (Exception e) {
             logger.debug("Failed to extract Blood Magic metadata", e);
@@ -1113,7 +1540,7 @@ public class NeiRecipeExportProcessor extends PluginHelper {
                                              ICraftingHandler handler) {
         try {
             // Create or get RecipeType for this handler
-            RecipeType recipeType = getOrCreateRecipeType(handlerId, handlerName, "crafting");
+            RecipeType recipeType = getOrCreateRecipeType(handlerId, handlerName, "crafting", handler);
 
             int exported = 0;
             int numRecipes = handler.numRecipes();
@@ -1121,11 +1548,15 @@ public class NeiRecipeExportProcessor extends PluginHelper {
             // Export each recipe from this handler
             for (int i = 0; i < numRecipes; i++) {
                 // Declare variables outside try block for exception handling
+                Object neiRecipe = null;
                 PositionedStack result = null;
                 List<PositionedStack> ingredients = null;
 
                 try {
-                    RecipeBuilder builder = new RecipeBuilder(exporter, recipeType);
+                    neiRecipe = getRecipeFromHandler(handler, i);
+                    RecipeType effectiveRecipeType =
+                            resolveEffectiveRecipeType(handlerId, handlerName, handler, recipeType, neiRecipe);
+                    RecipeBuilder builder = new RecipeBuilder(exporter, effectiveRecipeType);
 
                     // Get result stack
                     result = handler.getResultStack(i);
@@ -1139,7 +1570,7 @@ public class NeiRecipeExportProcessor extends PluginHelper {
                     // Get ingredient stacks
                     ingredients = handler.getIngredientStacks(i);
                     if (ingredients != null) {
-                        addIngredientInputs(builder, ingredients, recipeType);
+                        addIngredientInputs(builder, ingredients, effectiveRecipeType);
                     }
 
                     // Build the recipe
@@ -1148,6 +1579,7 @@ public class NeiRecipeExportProcessor extends PluginHelper {
                     // Streaming export is the active data path. Preserve the same
                     // handler-specific metadata that the older batch path attached.
                     extractModSpecificMetadata(handler, i, builtRecipe, result);
+                    registerHandlerMetadata(handler, handlerId, builtRecipe);
                     exported++;
 
                 } catch (Exception e) {
@@ -1229,7 +1661,7 @@ public class NeiRecipeExportProcessor extends PluginHelper {
                                           IUsageHandler handler) {
         try {
             // Create or get RecipeType for this handler
-            RecipeType recipeType = getOrCreateRecipeType(handlerId, handlerName, "usage");
+            RecipeType recipeType = getOrCreateRecipeType(handlerId, handlerName, "usage", handler);
 
             int exported = 0;
             int numRecipes = handler.numRecipes();
@@ -1256,6 +1688,7 @@ public class NeiRecipeExportProcessor extends PluginHelper {
 
                     // Build the recipe
                     com.github.dcysteine.nesql.sql.base.recipe.Recipe builtRecipe = builder.build();
+                    registerHandlerMetadata(handler, handlerId, builtRecipe);
                     exported++;
 
                 } catch (Exception e) {

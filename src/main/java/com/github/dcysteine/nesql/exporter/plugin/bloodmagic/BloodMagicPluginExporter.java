@@ -21,23 +21,30 @@ public class BloodMagicPluginExporter extends PluginExporter {
 
     @Override
     public void process() {
-        // Direct API access to Blood Magic recipe managers is unreliable
-        // (static fields are often null at export time due to lazy initialization)
-        // We now rely on the NEI plugin to export these recipes as a fallback
-        Logger.MOD.info("Blood Magic plugin: Direct API access skipped, relying on NEI fallback");
-        Logger.chatMessage("Blood Magic recipes will be exported via NEI handlers");
+        Logger.MOD.info("Blood Magic plugin: attempting direct API export before NEI fallback");
+        Logger.chatMessage("Blood Magic direct export: altar / alchemy / sacrificial / tartaric");
 
-        // The NEI plugin (running last) will capture all Blood Magic recipes from NEI handlers
-        // This approach is more reliable than direct API access
+        boolean hadFailure = false;
+        hadFailure |= runProcessor("altar", () -> new AltarProcessor(this, recipeTypeHandler).process());
+        hadFailure |= runProcessor("alchemy array", () -> new AlchemyArrayProcessor(this, recipeTypeHandler).process());
+        hadFailure |= runProcessor("sacrificial", () -> new SacrificialProcessor(this, recipeTypeHandler).process());
+        hadFailure |= runProcessor("tartaric forge", () -> new TartarForgeProcessor(this, recipeTypeHandler).process());
 
-        // If you want to try direct access anyway, uncomment below:
-        // try {
-        //     new AltarProcessor(this, recipeTypeHandler).process();
-        //     new AlchemyArrayProcessor(this, recipeTypeHandler).process();
-        //     new SacrificialProcessor(this, recipeTypeHandler).process();
-        //     new TartarForgeProcessor(this, recipeTypeHandler).process();
-        // } catch (Exception e) {
-        //     Logger.MOD.warn("Direct Blood Magic API access failed (expected), NEI will handle it");
-        // }
+        if (hadFailure) {
+            Logger.MOD.warn("Blood Magic direct API export completed with one or more failures; NEI fallback will still run");
+            Logger.chatMessage("Blood Magic direct export had errors, but NEI fallback will handle any missing recipes");
+        } else {
+            Logger.MOD.info("Blood Magic direct API export completed");
+        }
+    }
+
+    private boolean runProcessor(String name, Runnable processor) {
+        try {
+            processor.run();
+            return false;
+        } catch (Exception e) {
+            Logger.MOD.warn("Blood Magic direct API export failed for {} processor, NEI fallback will still run", name, e);
+            return true;
+        }
     }
 }

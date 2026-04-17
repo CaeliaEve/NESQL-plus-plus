@@ -247,10 +247,18 @@ public class ModBasedRecipeExporter {
         public List<ItemDTO> specialItems;
         public java.util.Map<String, Integer> aspects;
         public String specialRecipeType;
+        public String correctedMachineType;
         public String research;
         public String centralItemId;
         public Integer centerInputSlotIndex;
         public Integer instability;
         public List<Integer> componentSlotOrder;
+        public Integer tier;
+        public Integer bloodCost;
+        public Integer lpCost;
+        public Integer consumptionRate;
+        public Integer drainRate;
+        public Integer tartaricCost;
+        public Boolean isWeakActivation;
     }
 }

@@ -108,11 +108,19 @@ final class ModBasedRecipeDtoAssembler {
         metadata.additionalInfo = asString(canonicalRecipe.metadata.get("additionalInfo"), metadata.additionalInfo);
         metadata.aspects = asStringIntegerMap(canonicalRecipe.metadata.get("aspects"));
         metadata.specialRecipeType = asString(canonicalRecipe.metadata.get("specialRecipeType"), metadata.specialRecipeType);
+        metadata.correctedMachineType = asString(canonicalRecipe.metadata.get("correctedMachineType"), metadata.correctedMachineType);
         metadata.research = asString(canonicalRecipe.metadata.get("research"), metadata.research);
         metadata.centralItemId = asString(canonicalRecipe.metadata.get("centralItemId"), metadata.centralItemId);
         metadata.centerInputSlotIndex = asInteger(canonicalRecipe.metadata.get("centerInputSlotIndex"), metadata.centerInputSlotIndex);
         metadata.instability = asInteger(canonicalRecipe.metadata.get("instability"), metadata.instability);
         metadata.componentSlotOrder = asIntegerList(canonicalRecipe.metadata.get("componentSlotOrder"));
+        metadata.tier = asInteger(canonicalRecipe.metadata.get("tier"), metadata.tier);
+        metadata.bloodCost = asInteger(canonicalRecipe.metadata.get("bloodCost"), metadata.bloodCost);
+        metadata.lpCost = asInteger(canonicalRecipe.metadata.get("lpCost"), metadata.lpCost);
+        metadata.consumptionRate = asInteger(canonicalRecipe.metadata.get("consumptionRate"), metadata.consumptionRate);
+        metadata.drainRate = asInteger(canonicalRecipe.metadata.get("drainRate"), metadata.drainRate);
+        metadata.tartaricCost = asInteger(canonicalRecipe.metadata.get("tartaricCost"), metadata.tartaricCost);
+        metadata.isWeakActivation = asBoolean(canonicalRecipe.metadata.get("isWeakActivation"), metadata.isWeakActivation);
         attachGregTechSpecialItems(metadata, canonicalRecipe);
         return metadata;
     }

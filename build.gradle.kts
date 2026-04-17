@@ -6,6 +6,13 @@ import java.net.URL
 
 buildscript {
     repositories {
+        val repoLocalMaven = File(rootDir, "local-maven").takeIf { it.exists() }
+        if (repoLocalMaven != null) {
+            maven {
+                url = uri(repoLocalMaven)
+                name = "NESQL Repo Local Maven"
+            }
+        }
         val localMavenRepo = System.getenv("NESQL_LOCAL_MAVEN_REPO")?.takeIf { it.isNotBlank() }
         if (localMavenRepo != null) {
             maven {
@@ -132,6 +139,13 @@ configurations.all {
 }
 
 repositories {
+    val repoLocalMaven = File(rootDir, "local-maven").takeIf { it.exists() }
+    if (repoLocalMaven != null) {
+        maven {
+            url = uri(repoLocalMaven)
+            name = "NESQL Repo Local Maven"
+        }
+    }
     val localMavenRepo = System.getenv("NESQL_LOCAL_MAVEN_REPO")?.takeIf { it.isNotBlank() }
     if (localMavenRepo != null) {
         maven {
