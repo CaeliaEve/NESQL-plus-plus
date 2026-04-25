@@ -1,6 +1,5 @@
 package com.github.dcysteine.nesql.exporter.util;
 
-import com.github.dcysteine.nesql.exporter.util.render.Renderer;
 import cpw.mods.fml.common.registry.GameRegistry;
 import net.minecraft.item.Item;
 import net.minecraft.item.ItemStack;
@@ -43,7 +42,7 @@ public final class IdUtil {
         int firstIndex = itemId.indexOf(ID_SEPARATOR);
         return "item" + File.separator + itemId.substring(0, firstIndex) + File.separator
                 + itemId.substring(firstIndex + ID_SEPARATOR.length())
-                + Renderer.IMAGE_FILE_EXTENSION;
+                + ".png";
     }
 
     public static String fluidId(FluidStack fluidStack) {
@@ -72,7 +71,7 @@ public final class IdUtil {
         int firstIndex = fluidId.indexOf(ID_SEPARATOR);
         return "fluid" + File.separator + fluidId.substring(0, firstIndex) + File.separator
                 + fluidId.substring(firstIndex + ID_SEPARATOR.length())
-                + Renderer.IMAGE_FILE_EXTENSION;
+                + ".png";
     }
 
     /**

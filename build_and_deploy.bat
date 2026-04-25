@@ -1,8 +1,20 @@
 @echo off
 setlocal EnableDelayedExpansion
 
-REM 设置JDK路径
-set "JAVA_HOME=C:\Users\13231\.jdks\corretto-1.8.0_472"
+set "SCRIPT_DIR=%~dp0"
+if "%SCRIPT_DIR:~-1%"=="\\" set "SCRIPT_DIR=%SCRIPT_DIR:~0,-1%"
+
+if not defined JAVA_HOME (
+  if exist "C:\Program Files\Eclipse Adoptium\jdk-8.0.482.8-hotspot\bin\java.exe" (
+    set "JAVA_HOME=C:\Program Files\Eclipse Adoptium\jdk-8.0.482.8-hotspot"
+  )
+)
+
+if not exist "%JAVA_HOME%\bin\java.exe" (
+  echo ERROR: JAVA_HOME must point to a Java 8 JDK.
+  exit /b 1
+)
+
 set "PATH=%JAVA_HOME%\bin;%PATH%"
 
 echo ========================================
@@ -12,23 +24,20 @@ echo.
 echo Using Java from: %JAVA_HOME%
 echo.
 
-REM 显示Java版本
 echo Checking Java version...
 java -version
 echo.
 
-REM 清理并构建
-echo.
 echo Building project with Gradle...
 echo.
+pushd "%SCRIPT_DIR%"
 call gradlew.bat clean build --no-daemon
-
 if %ERRORLEVEL% NEQ 0 (
+    popd
     echo.
     echo ========================================
     echo BUILD FAILED!
     echo ========================================
-    pause
     exit /b 1
 )
 
@@ -38,61 +47,52 @@ echo BUILD SUCCESS!
 echo ========================================
 echo.
 
-REM 查找生成的JAR文件
-echo Looking for generated JAR files...
-cd build\libs
-for /f "delims=" %%f in ('dir /b /o-d NESQL++-*.jar 2^>nul') do (
-    set "JAR_FILE=%%f"
-    goto :found_jar
-)
+if not defined NESQL_MOD_DIR set "NESQL_MOD_DIR=E:\GTNH\.minecraft\versions\GT New Horizons 2.8.0\mods"
 
-:found_jar
-if "!JAR_FILE!"=="" (
-    echo ERROR: No JAR file found in build\libs\
-    pause
+if not exist "%NESQL_MOD_DIR%" (
+    popd
+    echo ERROR: Mods directory does not exist: %NESQL_MOD_DIR%
     exit /b 1
 )
 
-echo Found JAR: !JAR_FILE!
-echo.
-
-REM 目标mod文件夹
-set "MOD_DIR=C:\Users\13231\AppData\Roaming\PrismLauncher\instances\GT_New_Horizons_2.8.4_Java_8\.minecraft\mods"
-
-REM 删除旧的NESQL JAR文件
-echo.
 echo ========================================
 echo Cleaning old NESQL JAR files from mods...
 echo ========================================
 echo.
-if exist "%MOD_DIR%\NESQL++-*.jar" (
-    del "%MOD_DIR%\NESQL++-*.jar"
-    echo Old JAR files deleted successfully.
-) else (
-    echo No old NESQL JAR files found.
+for %%f in ("%NESQL_MOD_DIR%\NESQL++-*.jar") do (
+    if exist "%%~f" del "%%~f"
 )
 
-echo.
 echo ========================================
-echo Copying new JAR to mods folder...
+echo Copying runtime JARs to mods folder...
 echo ========================================
 echo.
-copy "!JAR_FILE!" "%MOD_DIR%\"
-echo.
+set "COPIED_ANY="
+for %%f in ("build\libs\NESQL++-*.jar") do (
+    set "NAME=%%~nxf"
+    echo !NAME! | findstr /I /C:"-dev.jar" /C:"-sources.jar" /C:"-sql.jar" >nul
+    if errorlevel 1 (
+        copy /Y "%%~f" "%NESQL_MOD_DIR%\" >nul
+        echo Copied !NAME!
+        set "COPIED_ANY=1"
+    )
+)
 
-if %ERRORLEVEL% NEQ 0 (
-    echo ERROR: Failed to copy JAR to mods folder!
-    pause
+if not defined COPIED_ANY (
+    popd
+    echo ERROR: No runtime JARs were copied from build\libs.
     exit /b 1
 )
+
+popd
 
 echo.
 echo ========================================
 echo DEPLOYMENT SUCCESS!
 echo ========================================
 echo.
-echo JAR file deployed to: %MOD_DIR%
+echo JAR files deployed to: %NESQL_MOD_DIR%
 echo.
 echo You can now launch Minecraft and test the export!
 echo.
-pause
+exit /b 0

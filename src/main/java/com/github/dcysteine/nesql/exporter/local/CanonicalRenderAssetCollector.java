@@ -6,6 +6,7 @@ import com.github.dcysteine.nesql.exporter.canonical.CanonicalItem;
 import com.github.dcysteine.nesql.exporter.canonical.CanonicalRenderAsset;
 import com.github.dcysteine.nesql.exporter.main.config.ConfigOptions;
 import com.github.dcysteine.nesql.exporter.main.Logger;
+import com.github.dcysteine.nesql.exporter.util.render.GifRenderer;
 import com.google.gson.Gson;
 import com.google.gson.stream.JsonReader;
 import com.github.dcysteine.nesql.sql.base.fluid.Fluid;
@@ -13,6 +14,10 @@ import com.github.dcysteine.nesql.sql.base.item.Item;
 import jakarta.persistence.EntityManager;
 
 import javax.imageio.ImageIO;
+import javax.imageio.ImageReader;
+import javax.imageio.metadata.IIOMetadata;
+import javax.imageio.metadata.IIOMetadataNode;
+import javax.imageio.stream.ImageInputStream;
 import java.awt.image.BufferedImage;
 import java.io.File;
 import java.io.FileInputStream;
@@ -25,7 +30,9 @@ import java.util.HashMap;
 import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
+import java.util.Iterator;
 import java.util.zip.GZIPInputStream;
+import java.util.regex.Pattern;
 
 public final class CanonicalRenderAssetCollector {
     private static final Gson GSON = new Gson();
@@ -97,20 +104,23 @@ public final class CanonicalRenderAssetCollector {
     }
 
     private List<CanonicalRenderAsset> collectItemAssetsFromFiles() {
-        File itemsRoot = new File(exportDirectory, "items");
         List<CanonicalRenderAsset> assets = new ArrayList<>();
-        if (!itemsRoot.exists()) {
+        File itemsRoot = new File(exportDirectory, "items");
+        if (itemsRoot.exists()) {
+            List<File> itemFiles = new ArrayList<>();
+            collectJsonGzFiles(itemsRoot, itemFiles);
+            itemFiles.sort(Comparator.comparing(File::getAbsolutePath));
+
+            for (File itemFile : itemFiles) {
+                assets.addAll(readItemAssetsFromFile(itemFile));
+            }
+        }
+
+        if (!assets.isEmpty()) {
             return assets;
         }
 
-        List<File> itemFiles = new ArrayList<>();
-        collectJsonGzFiles(itemsRoot, itemFiles);
-        itemFiles.sort(Comparator.comparing(File::getAbsolutePath));
-
-        for (File itemFile : itemFiles) {
-            assets.addAll(readItemAssetsFromFile(itemFile));
-        }
-        return assets;
+        return collectFamilyAssetsFromImageFiles("item");
     }
 
     private List<CanonicalRenderAsset> readItemAssetsFromFile(File itemFile) {
@@ -138,36 +148,54 @@ public final class CanonicalRenderAssetCollector {
     }
 
     private List<CanonicalRenderAsset> collectFluidAssetsFromFiles() {
-        File fluidsRoot = new File(exportDirectory, "image" + File.separator + "fluid");
+        return collectFamilyAssetsFromImageFiles("fluid");
+    }
+
+    private List<CanonicalRenderAsset> collectFamilyAssetsFromImageFiles(String familyDirectory) {
+        File familyRoot = new File(exportDirectory, "image" + File.separator + familyDirectory);
         List<CanonicalRenderAsset> assets = new ArrayList<>();
-        if (!fluidsRoot.exists()) {
+        if (!familyRoot.exists()) {
             return assets;
         }
 
-        List<File> primaryArtifacts = new ArrayList<>();
-        collectPrimaryImageArtifacts(fluidsRoot, primaryArtifacts);
+        Map<String, File> primaryArtifactsByStem = new LinkedHashMap<>();
+        collectPrimaryImageArtifacts(familyRoot, primaryArtifactsByStem);
+        List<File> primaryArtifacts = new ArrayList<>(primaryArtifactsByStem.values());
         primaryArtifacts.sort(Comparator.comparing(File::getAbsolutePath));
 
         for (File baseFile : primaryArtifacts) {
-            String variantKey = buildVariantKey(fluidsRoot, baseFile);
+            String variantKey = buildVariantKey(familyRoot, baseFile);
             if (variantKey == null || variantKey.isEmpty()) {
                 continue;
             }
-            String normalizedVariant = variantKey.replace(File.separatorChar, '/');
-            int separator = normalizedVariant.indexOf('/');
-            if (separator <= 0 || separator == normalizedVariant.length() - 1) {
+            String assetId = buildAssetId(familyDirectory, variantKey);
+            if (assetId == null || assetId.isEmpty()) {
                 continue;
             }
-            String modId = normalizedVariant.substring(0, separator);
-            String internalName = normalizedVariant.substring(separator + 1).replace('/', '~');
-            String assetId = "nesqlpp:fluid/f~" + modId + "~" + internalName;
-            CanonicalRenderAsset asset = buildAssetFromImagePath(assetId, "fluid", normalizedVariant);
+            CanonicalRenderAsset asset =
+                    buildAssetFromImagePath(
+                            assetId,
+                            familyDirectory,
+                            variantKey.replace(File.separatorChar, '/'));
             if (asset != null) {
                 assets.add(asset);
             }
         }
 
         return assets;
+    }
+
+    private String buildAssetId(String familyDirectory, String variantKey) {
+        String normalizedVariant = variantKey.replace(File.separatorChar, '/');
+        int separator = normalizedVariant.indexOf('/');
+        if (separator <= 0 || separator == normalizedVariant.length() - 1) {
+            return null;
+        }
+
+        String modId = normalizedVariant.substring(0, separator);
+        String internalName = normalizedVariant.substring(separator + 1).replace('/', '~');
+        String idPrefix = "item".equals(familyDirectory) ? "i" : "f";
+        return "nesqlpp:" + familyDirectory + "/" + idPrefix + "~" + modId + "~" + internalName;
     }
 
     private String safeNextString(JsonReader reader) throws IOException {
@@ -192,7 +220,7 @@ public final class CanonicalRenderAssetCollector {
         }
     }
 
-    private void collectPrimaryImageArtifacts(File directory, List<File> output) {
+    private void collectPrimaryImageArtifacts(File directory, Map<String, File> output) {
         File[] children = directory.listFiles();
         if (children == null) {
             return;
@@ -206,21 +234,41 @@ public final class CanonicalRenderAssetCollector {
                 continue;
             }
             String name = child.getName();
-            if (name.endsWith(".gif")) {
-                output.add(child);
-                continue;
-            }
-            if (!name.endsWith(".png")) {
-                continue;
-            }
             if (name.endsWith(".sprite-atlas.png") || name.endsWith(".sprite.json")) {
                 continue;
             }
-            if (name.matches(".*_frame\\d+\\.png")) {
+            if (name.matches(".*_frame_?\\d+\\.png")) {
                 continue;
             }
-            output.add(child);
+            if (!name.endsWith(".png") && !name.endsWith(".gif")) {
+                continue;
+            }
+
+            String stem = primaryArtifactStem(child);
+            if (stem == null) {
+                continue;
+            }
+
+            File existing = output.get(stem);
+            if (existing == null || shouldPreferPrimaryArtifact(child, existing)) {
+                output.put(stem, child);
+            }
         }
+    }
+
+    private boolean shouldPreferPrimaryArtifact(File candidate, File existing) {
+        return isGifFile(candidate) && !isGifFile(existing);
+    }
+
+    private String primaryArtifactStem(File file) {
+        String name = file.getName();
+        if (name.endsWith(".gif")) {
+            return new File(file.getParentFile(), name.substring(0, name.length() - 4)).getAbsolutePath();
+        }
+        if (name.endsWith(".png")) {
+            return new File(file.getParentFile(), name.substring(0, name.length() - 4)).getAbsolutePath();
+        }
+        return null;
     }
 
     private CanonicalRenderAsset buildAssetFromImagePath(
@@ -255,16 +303,21 @@ public final class CanonicalRenderAssetCollector {
         }
 
         CanonicalRenderAsset asset = new CanonicalRenderAsset();
-        asset.schemaVersion = "nesqlpp/render-asset/v1-draft";
+        asset.schemaVersion = "nesqlpp/render-asset/v2-draft";
+        asset.contractVersion = "nesqlpp/render-contract/v2-draft";
         asset.assetId = assetId;
         asset.variantKey = familyDirectory + "/" + variantKey.replace(File.separatorChar, '/');
         asset.sourceType = familyDirectory;
         asset.family = familyDirectory;
         File metadataFile = metadataFile(baseFile);
-        asset.contentHash = computeAssetFingerprint(baseFile, metadataFile, null);
+        File renderContractFile = renderContractFile(baseFile);
+        asset.contentHash = computeAssetFingerprint(baseFile, metadataFile, renderContractFile, null);
         asset.mode = "static_snapshot";
+        asset.renderMode = "native_sprite";
         asset.animationMode = "none";
         asset.captureMethod = "single_frame_render";
+        asset.captureSource = "framebuffer_singleframe";
+        asset.playbackHint = "native_sprite";
         asset.sourceFormat = "png-sequence";
         asset.primaryArtifact = relativizeFromExportDirectory(baseFile);
         asset.loop = Boolean.TRUE;
@@ -283,28 +336,32 @@ public final class CanonicalRenderAssetCollector {
         asset.atlasTexture = null;
         asset.atlasExportFile = null;
         asset.spriteMetadataFile = null;
+        asset.contractFile = renderContractFile.exists() ? relativizeFromExportDirectory(renderContractFile) : null;
         asset.nativeSpriteAtlasFile = null;
         asset.staticFile = relativizeFromExportDirectory(baseFile);
         applyNativeSpriteMetadata(asset, baseFile);
+        applyRenderContractMetadata(asset, renderContractFile);
         boolean nativeAnimated = isNativeSpriteAnimated(asset);
-        boolean nativeSnapshot = isNativeSpriteSnapshot(asset);
+        GifAnimationInfo gifAnimation = inspectGifAnimation(baseFile);
+        boolean nativeSnapshot = isNativeSpriteSnapshot(asset) && !gifAnimation.animated;
 
         List<File> frameFiles = Collections.emptyList();
         boolean shouldScanFrames =
-                normalizedImagePath.endsWith(".gif")
-                        && (asset.spriteMetadataFile == null || firstFrameFile(baseFile).exists());
+                isGifFile(baseFile)
+                        && gifAnimation.frameCount <= 1
+                        && (asset.spriteMetadataFile == null || firstFrameFile(baseFile).exists() || legacyFirstFrameFile(baseFile).exists());
         if (shouldScanFrames) {
             frameFiles = findFrameFiles(baseFile);
-            asset.contentHash = computeAssetFingerprint(baseFile, metadataFile, frameFiles);
+            asset.contentHash = computeAssetFingerprint(baseFile, metadataFile, renderContractFile, frameFiles);
         }
-        if (!nativeAnimated && !nativeSnapshot) {
+        if (!nativeAnimated && !nativeSnapshot && !gifAnimation.animated) {
             asset.frames = new ArrayList<>();
             asset.timeline = new ArrayList<>();
             asset.frames.add(frameDescriptor(baseFile, 0));
             asset.timeline.add(timelineEntry(baseFile, 0, null));
             for (int i = 0; i < frameFiles.size(); i++) {
                 asset.frames.add(frameDescriptor(frameFiles.get(i), i + 1));
-                asset.timeline.add(timelineEntry(frameFiles.get(i), i + 1, ConfigOptions.GIF_FRAME_DELAY_MS.get()));
+            asset.timeline.add(timelineEntry(frameFiles.get(i), i + 1, GifRenderer.DEFAULT_CAPTURE_FRAME_DELAY_MS));
             }
             asset.frameCount = asset.frames.size();
             asset.capturedFrameCount = asset.frames.size();
@@ -314,16 +371,44 @@ public final class CanonicalRenderAssetCollector {
             asset.mode = "native_sprite_animation";
             asset.animationMode = "native_sprite";
             asset.captureMethod = "native_sprite_metadata";
+            asset.renderMode = "native_sprite";
+            asset.captureSource = "native_sprite_metadata";
+            asset.playbackHint = "native_sprite";
             asset.atlasGroup = familyDirectory + "-native-animated";
             asset.atlasCandidate = Boolean.TRUE;
             asset.frames = null;
             asset.framePattern = null;
             asset.capturedFrameCount = 0;
             asset.configuredFrameCount = 0;
+        } else if (gifAnimation.animated) {
+            asset.mode = "rendered_frames";
+            asset.animationMode = "gif_sequence";
+            asset.captureMethod = "multi_frame_render";
+            asset.renderMode = "captured_final_atlas";
+            asset.captureSource = "framebuffer_multiframe";
+            asset.playbackHint = "atlas_timeline";
+            asset.sourceFormat = "gif";
+            asset.frameDurationMs = gifAnimation.defaultFrameDurationMs;
+            asset.loop = Boolean.TRUE;
+            asset.loopMode = "loop";
+            asset.framePattern = null;
+            asset.atlasGroup = familyDirectory + "-animated";
+            asset.atlasCandidate = Boolean.FALSE;
+            asset.frames = gifAnimation.frames;
+            asset.timeline = gifAnimation.timeline;
+            asset.frameCount = gifAnimation.frameCount;
+            asset.capturedFrameCount = gifAnimation.frameCount;
+            asset.configuredFrameCount = gifAnimation.frameCount;
+            if (asset.baseSize == null && gifAnimation.baseSize != null) {
+                asset.baseSize = gifAnimation.baseSize;
+            }
         } else if (nativeSnapshot) {
             asset.mode = "native_sprite_snapshot";
             asset.animationMode = "none";
             asset.captureMethod = "native_sprite_metadata";
+            asset.renderMode = "native_sprite";
+            asset.captureSource = "native_sprite_metadata";
+            asset.playbackHint = "native_sprite";
             asset.atlasGroup = familyDirectory + "-native-static";
             asset.atlasCandidate = Boolean.TRUE;
             asset.frames = null;
@@ -334,7 +419,10 @@ public final class CanonicalRenderAssetCollector {
             asset.mode = "rendered_frames";
             asset.animationMode = "frame_sequence";
             asset.captureMethod = "multi_frame_render";
-            asset.frameDurationMs = ConfigOptions.GIF_FRAME_DELAY_MS.get();
+            asset.renderMode = "captured_final_atlas";
+            asset.captureSource = "framebuffer_multiframe";
+            asset.playbackHint = "atlas_timeline";
+            asset.frameDurationMs = GifRenderer.DEFAULT_CAPTURE_FRAME_DELAY_MS;
             asset.loop = ConfigOptions.GIF_LOOP_COUNT.get() == 0;
             asset.loopMode = asset.loop ? "loop" : "once";
             asset.framePattern = buildFramePattern(baseFile);
@@ -346,6 +434,7 @@ public final class CanonicalRenderAssetCollector {
         if (asset.baseSize == null && "rendered_frames".equals(asset.mode)) {
             asset.baseSize = readBaseSize(baseFile);
         }
+        applyLegacyRenderContractDefaults(asset);
         assetTemplateCache.put(cacheKey, copyAsset(asset));
         return asset;
     }
@@ -368,14 +457,35 @@ public final class CanonicalRenderAssetCollector {
             return exactPath;
         }
 
+        File alternateGif = replaceExtension(familyRoot, normalizedImagePath, ".gif");
+        if (alternateGif != null && alternateGif.exists()) {
+            return alternateGif;
+        }
+
+        File alternatePng = replaceExtension(familyRoot, normalizedImagePath, ".png");
+        if (alternatePng != null && alternatePng.exists()) {
+            return alternatePng;
+        }
+
         File directPng = new File(familyRoot, normalizedImagePath + ".png");
+        File directGif = new File(familyRoot, normalizedImagePath + ".gif");
+        if (directGif.exists()) {
+            if (!directPng.exists() || inspectGifAnimation(directGif).animated) {
+                return directGif;
+            }
+        }
+
         if (directPng.exists()) {
             return directPng;
         }
 
-        File directGif = new File(familyRoot, normalizedImagePath + ".gif");
         if (directGif.exists()) {
             return directGif;
+        }
+
+        File siblingVariant = findSiblingVariantArtifact(familyRoot, normalizedImagePath);
+        if (siblingVariant != null) {
+            return siblingVariant;
         }
 
         File spriteAtlas = new File(familyRoot, normalizedImagePath + ".sprite-atlas.png");
@@ -384,6 +494,73 @@ public final class CanonicalRenderAssetCollector {
         }
 
         return exactPath;
+    }
+
+    private File replaceExtension(File familyRoot, String normalizedImagePath, String extension) {
+        int dot = normalizedImagePath.lastIndexOf('.');
+        if (dot < 0) {
+            return null;
+        }
+        String swappedPath = normalizedImagePath.substring(0, dot) + extension;
+        return new File(familyRoot, swappedPath);
+    }
+
+    private File findSiblingVariantArtifact(File familyRoot, String normalizedImagePath) {
+        File requestedFile = new File(familyRoot, normalizedImagePath);
+        File parent = requestedFile.getParentFile();
+        if (parent == null || !parent.exists()) {
+            return null;
+        }
+
+        String requestedName = requestedFile.getName();
+        int dot = requestedName.lastIndexOf('.');
+        String stem = dot >= 0 ? requestedName.substring(0, dot) : requestedName;
+        String extension = dot >= 0 ? requestedName.substring(dot).toLowerCase() : "";
+        Pattern pattern = Pattern.compile("^" + Pattern.quote(stem) + "~.+\\.(png|gif)$", Pattern.CASE_INSENSITIVE);
+
+        File[] siblings = parent.listFiles();
+        if (siblings == null) {
+            return null;
+        }
+
+        File bestMatch = null;
+        for (File sibling : siblings) {
+            if (!sibling.isFile() || !pattern.matcher(sibling.getName()).matches()) {
+                continue;
+            }
+            if (bestMatch == null) {
+                bestMatch = sibling;
+                continue;
+            }
+            bestMatch = preferVariantArtifact(bestMatch, sibling, extension);
+        }
+
+        return bestMatch;
+    }
+
+    private File preferVariantArtifact(File current, File candidate, String requestedExtension) {
+        String currentName = current.getName().toLowerCase();
+        String candidateName = candidate.getName().toLowerCase();
+        boolean currentMatchesRequested = !requestedExtension.isEmpty() && currentName.endsWith(requestedExtension);
+        boolean candidateMatchesRequested = !requestedExtension.isEmpty() && candidateName.endsWith(requestedExtension);
+
+        if (candidateMatchesRequested && !currentMatchesRequested) {
+            return candidate;
+        }
+        if (currentMatchesRequested && !candidateMatchesRequested) {
+            return current;
+        }
+
+        boolean currentAnimatedGif = currentName.endsWith(".gif") && inspectGifAnimation(current).animated;
+        boolean candidateAnimatedGif = candidateName.endsWith(".gif") && inspectGifAnimation(candidate).animated;
+        if (candidateAnimatedGif && !currentAnimatedGif) {
+            return candidate;
+        }
+        if (currentAnimatedGif && !candidateAnimatedGif) {
+            return current;
+        }
+
+        return candidate.getName().compareToIgnoreCase(current.getName()) < 0 ? candidate : current;
     }
 
     private String buildVariantKey(File familyRoot, File baseFile) {
@@ -486,6 +663,35 @@ public final class CanonicalRenderAssetCollector {
         }
     }
 
+    private void applyRenderContractMetadata(CanonicalRenderAsset asset, File renderContractFile) {
+        if (renderContractFile == null || !renderContractFile.exists()) {
+            return;
+        }
+
+        try (FileInputStream inputStream = new FileInputStream(renderContractFile)) {
+            @SuppressWarnings("unchecked")
+            Map<String, Object> metadata = GSON.fromJson(
+                    new java.io.InputStreamReader(inputStream, java.nio.charset.StandardCharsets.UTF_8),
+                    Map.class);
+            if (metadata == null) {
+                return;
+            }
+
+            asset.contractVersion = stringValue(metadata.get("schemaVersion"), asset.contractVersion);
+            asset.contractFile = relativizeFromExportDirectory(renderContractFile);
+            asset.renderMode = stringValue(metadata.get("renderMode"), asset.renderMode);
+            asset.rendererFamily = stringValue(metadata.get("rendererFamily"), asset.rendererFamily);
+            asset.captureSource = stringValue(metadata.get("captureSource"), asset.captureSource);
+            asset.playbackHint = stringValue(metadata.get("playbackHint"), asset.playbackHint);
+            asset.layers = castMapList(metadata.get("layers"), asset.layers);
+            asset.rendererContract = castMap(metadata.get("rendererContract"), asset.rendererContract);
+            asset.shaderContract = castMap(metadata.get("shaderContract"), asset.shaderContract);
+            asset.captureContract = castMap(metadata.get("captureContract"), asset.captureContract);
+        } catch (Exception e) {
+            Logger.MOD.warn("Failed to read render contract metadata for {}", renderContractFile.getAbsolutePath(), e);
+        }
+    }
+
     private boolean isNativeSpriteAnimated(CanonicalRenderAsset asset) {
         return "native_sprite".equals(asset.animationMode) || "native_sprite_animation".equals(asset.mode);
     }
@@ -510,11 +716,19 @@ public final class CanonicalRenderAssetCollector {
 
         List<File> result = new ArrayList<>();
         for (int index = 1; ; index++) {
-            File candidate = new File(parent, stem + "_frame" + index + ".png");
-            if (!candidate.exists()) {
+            File candidate = new File(parent, stem + "_frame_" + index + ".png");
+            File legacyCandidate = new File(parent, stem + "_frame" + index + ".png");
+            if (candidate.exists()) {
+                result.add(candidate);
+                continue;
+            }
+            if (legacyCandidate.exists()) {
+                result.add(legacyCandidate);
+                continue;
+            }
+            if (!candidate.exists() && !legacyCandidate.exists()) {
                 break;
             }
-            result.add(candidate);
         }
         List<File> cachedResult = Collections.unmodifiableList(result);
         frameFilesCache.put(cacheKey, cachedResult);
@@ -522,6 +736,13 @@ public final class CanonicalRenderAssetCollector {
     }
 
     private File firstFrameFile(File baseFile) {
+        String fileName = baseFile.getName();
+        int dot = fileName.lastIndexOf('.');
+        String stem = dot >= 0 ? fileName.substring(0, dot) : fileName;
+        return new File(baseFile.getParentFile(), stem + "_frame_1.png");
+    }
+
+    private File legacyFirstFrameFile(File baseFile) {
         String fileName = baseFile.getName();
         int dot = fileName.lastIndexOf('.');
         String stem = dot >= 0 ? fileName.substring(0, dot) : fileName;
@@ -548,12 +769,12 @@ public final class CanonicalRenderAssetCollector {
     private String buildFramePattern(File baseFile) {
         String relative = relativizeFromExportDirectory(baseFile);
         if (relative.endsWith(".png")) {
-            return relative.substring(0, relative.length() - 4) + "_frame{index}.png";
+            return relative.substring(0, relative.length() - 4) + "_frame_{index}.png";
         }
         if (relative.endsWith(".gif")) {
-            return relative.substring(0, relative.length() - 4) + "_frame{index}.png";
+            return relative.substring(0, relative.length() - 4) + "_frame_{index}.png";
         }
-        return relative + "_frame{index}.png";
+        return relative + "_frame_{index}.png";
     }
 
     private File metadataFile(File baseFile) {
@@ -567,6 +788,17 @@ public final class CanonicalRenderAssetCollector {
         return new File(path + ".sprite.json");
     }
 
+    private File renderContractFile(File baseFile) {
+        String path = baseFile.getAbsolutePath();
+        if (path.endsWith(".png")) {
+            return new File(path.substring(0, path.length() - 4) + ".render.json");
+        }
+        if (path.endsWith(".gif")) {
+            return new File(path.substring(0, path.length() - 4) + ".render.json");
+        }
+        return new File(path + ".render.json");
+    }
+
     private File inferNativeSpriteAtlasFile(File baseFile) {
         String path = baseFile.getAbsolutePath();
         if (path.endsWith(".png")) {
@@ -578,10 +810,15 @@ public final class CanonicalRenderAssetCollector {
         return new File(path + ".sprite-atlas.png");
     }
 
-    private String computeAssetFingerprint(File baseFile, File metadataFile, List<File> frameFiles) {
+    private String computeAssetFingerprint(
+            File baseFile,
+            File metadataFile,
+            File renderContractFile,
+            List<File> frameFiles) {
         StringBuilder builder = new StringBuilder();
         appendFingerprint(builder, baseFile);
         appendFingerprint(builder, metadataFile);
+        appendFingerprint(builder, renderContractFile);
         if (frameFiles != null) {
             for (File frameFile : frameFiles) {
                 appendFingerprint(builder, frameFile);
@@ -639,19 +876,25 @@ public final class CanonicalRenderAssetCollector {
     private CanonicalRenderAsset copyAsset(CanonicalRenderAsset source) {
         CanonicalRenderAsset copy = new CanonicalRenderAsset();
         copy.schemaVersion = source.schemaVersion;
+        copy.contractVersion = source.contractVersion;
         copy.assetId = source.assetId;
         copy.variantKey = source.variantKey;
         copy.sourceType = source.sourceType;
         copy.family = source.family;
         copy.contentHash = source.contentHash;
         copy.mode = source.mode;
+        copy.renderMode = source.renderMode;
         copy.animationMode = source.animationMode;
         copy.captureMethod = source.captureMethod;
+        copy.captureSource = source.captureSource;
+        copy.rendererFamily = source.rendererFamily;
+        copy.playbackHint = source.playbackHint;
         copy.sourceFormat = source.sourceFormat;
         copy.sourcePath = source.sourcePath;
         copy.atlasTexture = source.atlasTexture;
         copy.atlasExportFile = source.atlasExportFile;
         copy.spriteMetadataFile = source.spriteMetadataFile;
+        copy.contractFile = source.contractFile;
         copy.nativeSpriteAtlasFile = source.nativeSpriteAtlasFile;
         copy.primaryArtifact = source.primaryArtifact;
         copy.staticFile = source.staticFile;
@@ -672,6 +915,9 @@ public final class CanonicalRenderAssetCollector {
         copy.rect = copyNestedMap(source.rect);
         copy.baseSize = copyNestedMap(source.baseSize);
         copy.layers = copyNestedMapList(source.layers);
+        copy.rendererContract = copyNestedMap(source.rendererContract);
+        copy.shaderContract = copyNestedMap(source.shaderContract);
+        copy.captureContract = copyNestedMap(source.captureContract);
         return copy;
     }
 
@@ -693,6 +939,31 @@ public final class CanonicalRenderAssetCollector {
         return copy;
     }
 
+    private Map<String, Object> castMap(Object value, Map<String, Object> fallback) {
+        if (!(value instanceof Map)) {
+            return fallback;
+        }
+        @SuppressWarnings("unchecked")
+        Map<String, Object> cast = (Map<String, Object>) value;
+        return new LinkedHashMap<>(cast);
+    }
+
+    private List<Map<String, Object>> castMapList(Object value, List<Map<String, Object>> fallback) {
+        if (!(value instanceof List)) {
+            return fallback;
+        }
+        List<?> list = (List<?>) value;
+        List<Map<String, Object>> cast = new ArrayList<>();
+        for (Object entry : list) {
+            if (entry instanceof Map) {
+                @SuppressWarnings("unchecked")
+                Map<String, Object> map = (Map<String, Object>) entry;
+                cast.add(new LinkedHashMap<>(map));
+            }
+        }
+        return cast;
+    }
+
     private Integer integerValue(Object value) {
         return value instanceof Number ? ((Number) value).intValue() : null;
     }
@@ -703,9 +974,165 @@ public final class CanonicalRenderAssetCollector {
         }
     }
 
+    private boolean isGifFile(File file) {
+        return file != null && file.getName().toLowerCase().endsWith(".gif");
+    }
+
+    private GifAnimationInfo inspectGifAnimation(File baseFile) {
+        if (!isGifFile(baseFile) || !baseFile.exists()) {
+            return GifAnimationInfo.none();
+        }
+
+        try (ImageInputStream stream = ImageIO.createImageInputStream(baseFile)) {
+            if (stream == null) {
+                return GifAnimationInfo.none();
+            }
+
+            Iterator<ImageReader> readers = ImageIO.getImageReaders(stream);
+            if (!readers.hasNext()) {
+                return GifAnimationInfo.none();
+            }
+
+            ImageReader reader = readers.next();
+            try {
+                reader.setInput(stream, false, false);
+                int frameCount = reader.getNumImages(true);
+                if (frameCount <= 1) {
+                    return GifAnimationInfo.none();
+                }
+
+                BufferedImage firstFrame = reader.read(0);
+                Map<String, Object> baseSize = null;
+                if (firstFrame != null) {
+                    baseSize = new LinkedHashMap<>();
+                    baseSize.put("width", firstFrame.getWidth());
+                    baseSize.put("height", firstFrame.getHeight());
+                }
+
+                List<Map<String, Object>> frames = new ArrayList<>(frameCount);
+                List<Map<String, Object>> timeline = new ArrayList<>(frameCount);
+                Integer defaultFrameDurationMs = null;
+                String relativePath = relativizeFromExportDirectory(baseFile);
+                for (int index = 0; index < frameCount; index++) {
+                    Map<String, Object> frame = new LinkedHashMap<>();
+                    frame.put("index", index);
+                    frame.put("frameIndex", index);
+                    frame.put("path", relativePath);
+                    frames.add(frame);
+
+                    Integer durationMs = readGifFrameDelayMs(reader.getImageMetadata(index));
+                    if (durationMs == null) {
+                        durationMs = GifRenderer.DEFAULT_CAPTURE_FRAME_DELAY_MS;
+                    }
+                    if (defaultFrameDurationMs == null) {
+                        defaultFrameDurationMs = durationMs;
+                    }
+
+                    Map<String, Object> timelineEntry = new LinkedHashMap<>();
+                    timelineEntry.put("timelineIndex", index);
+                    timelineEntry.put("index", index);
+                    timelineEntry.put("frameIndex", index);
+                    timelineEntry.put("path", relativePath);
+                    timelineEntry.put("durationMs", durationMs);
+                    timeline.add(timelineEntry);
+                }
+
+                GifAnimationInfo info = new GifAnimationInfo();
+                info.animated = true;
+                info.frameCount = frameCount;
+                info.frames = frames;
+                info.timeline = timeline;
+                info.defaultFrameDurationMs =
+                        defaultFrameDurationMs != null ? defaultFrameDurationMs : GifRenderer.DEFAULT_CAPTURE_FRAME_DELAY_MS;
+                info.baseSize = baseSize;
+                return info;
+            } finally {
+                reader.dispose();
+            }
+        } catch (Exception e) {
+            Logger.MOD.warn("Failed to inspect GIF animation metadata for {}", baseFile.getAbsolutePath(), e);
+            return GifAnimationInfo.none();
+        }
+    }
+
+    private void applyLegacyRenderContractDefaults(CanonicalRenderAsset asset) {
+        if (asset.renderMode == null || asset.renderMode.isEmpty()) {
+            if ("native_sprite_animation".equals(asset.mode) || "native_sprite_snapshot".equals(asset.mode)) {
+                asset.renderMode = "native_sprite";
+            } else if ("rendered_frames".equals(asset.mode)) {
+                asset.renderMode = "captured_final_atlas";
+            } else if (asset.layers != null && asset.layers.size() > 1) {
+                asset.renderMode = "layered_item";
+            } else {
+                asset.renderMode = "native_sprite";
+            }
+        }
+
+        if (asset.captureSource == null || asset.captureSource.isEmpty()) {
+            if ("native_sprite".equals(asset.renderMode)) {
+                asset.captureSource = "native_sprite_metadata";
+            } else if ("rendered_frames".equals(asset.mode)) {
+                asset.captureSource = "framebuffer_multiframe";
+            } else {
+                asset.captureSource = "framebuffer_singleframe";
+            }
+        }
+
+        if (asset.playbackHint == null || asset.playbackHint.isEmpty()) {
+            if ("layered_item".equals(asset.renderMode)) {
+                asset.playbackHint = "layered_canvas";
+            } else if ("renderer_family".equals(asset.renderMode)) {
+                asset.playbackHint = "renderer_family_adapter";
+            } else if ("captured_final_atlas".equals(asset.renderMode)) {
+                asset.playbackHint = "atlas_timeline";
+            } else {
+                asset.playbackHint = "native_sprite";
+            }
+        }
+    }
+
+    private Integer readGifFrameDelayMs(IIOMetadata metadata) {
+        if (metadata == null) {
+            return null;
+        }
+        try {
+            String formatName = metadata.getNativeMetadataFormatName();
+            if (formatName == null) {
+                return null;
+            }
+            IIOMetadataNode root = (IIOMetadataNode) metadata.getAsTree(formatName);
+            for (int i = 0; i < root.getLength(); i++) {
+                if (!"GraphicControlExtension".equals(root.item(i).getNodeName())) {
+                    continue;
+                }
+                IIOMetadataNode node = (IIOMetadataNode) root.item(i);
+                String delayTime = node.getAttribute("delayTime");
+                if (delayTime == null || delayTime.isEmpty()) {
+                    return null;
+                }
+                return Integer.parseInt(delayTime) * 10;
+            }
+        } catch (Exception ignored) {
+        }
+        return null;
+    }
+
     private static final class ItemExportEntry {
         String renderAssetRef;
         String imageFileName;
+    }
+
+    private static final class GifAnimationInfo {
+        boolean animated;
+        int frameCount;
+        Integer defaultFrameDurationMs;
+        List<Map<String, Object>> frames;
+        List<Map<String, Object>> timeline;
+        Map<String, Object> baseSize;
+
+        static GifAnimationInfo none() {
+            return new GifAnimationInfo();
+        }
     }
 
 }

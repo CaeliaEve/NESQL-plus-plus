@@ -16,11 +16,13 @@ import com.github.dcysteine.nesql.exporter.plugin.base.factory.RecipeBuilder;
 import com.github.dcysteine.nesql.exporter.plugin.base.factory.RecipeTypeFactory;
 import com.github.dcysteine.nesql.exporter.util.ItemUtil;
 import com.github.dcysteine.nesql.sql.base.item.Item;
+import com.github.dcysteine.nesql.sql.base.recipe.Dimension;
 import com.github.dcysteine.nesql.sql.base.recipe.RecipeType;
 import cpw.mods.fml.common.registry.GameRegistry;
 import net.minecraft.block.Block;
 import net.minecraft.init.Blocks;
 import net.minecraft.item.ItemStack;
+import net.minecraftforge.fluids.FluidRegistry;
 
 import java.util.ArrayList;
 import java.util.Collection;
@@ -28,6 +30,8 @@ import java.util.Collections;
 import java.util.Comparator;
 import java.util.HashMap;
 import java.util.HashSet;
+import java.util.IdentityHashMap;
+import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
 import java.util.Set;
@@ -313,6 +317,41 @@ public class NeiRecipeExportProcessor extends PluginHelper {
     private RecipeType getOrCreateRecipeType(
             String handlerId, String recipeTypeName, String category, Object handler) {
         try {
+            if (isMobsInfoMobHandler(handlerId, handler)) {
+                return getOrCreateFixedRecipeType(
+                        "MobsInfo - mobsinfo.mobhandler",
+                        "mobsinfo",
+                        "mobhandler",
+                        "MobsInfo",
+                        "Extreme Entity Crusher",
+                        "gregtech:gt.blockmachines:14201",
+                        1,
+                        1,
+                        8,
+                        8,
+                        0,
+                        0,
+                        1,
+                        1);
+            }
+            if (isMobsInfoInfernalHandler(handlerId, handler)) {
+                return getOrCreateFixedRecipeType(
+                        "MobsInfo - mobsinfo.mobhandlerinfernal",
+                        "mobsinfo",
+                        "mobhandlerinfernal",
+                        "MobsInfo",
+                        "Infernal Drops",
+                        "minecraft:diamond_sword:0",
+                        0,
+                        0,
+                        8,
+                        3,
+                        0,
+                        0,
+                        0,
+                        0);
+            }
+
             NeiHandlerMetadataEntry metadata = findHandlerMetadata(handlerId, handler);
 
             String modName = metadata != null && !isBlank(metadata.getModName())
@@ -373,6 +412,48 @@ public class NeiRecipeExportProcessor extends PluginHelper {
         }
     }
 
+    private RecipeType getOrCreateFixedRecipeType(
+            String cacheKey,
+            String modId,
+            String typeId,
+            String category,
+            String typeName,
+            String iconDescriptor,
+            int itemInputWidth,
+            int itemInputHeight,
+            int itemOutputWidth,
+            int itemOutputHeight,
+            int fluidInputWidth,
+            int fluidInputHeight,
+            int fluidOutputWidth,
+            int fluidOutputHeight) {
+        RecipeType cached = recipeTypeCache.get(cacheKey);
+        if (cached != null) {
+            return cached;
+        }
+
+        Item icon = resolveHandlerIcon(iconDescriptor);
+        if (icon == null) {
+            icon = getFallbackIcon();
+        }
+
+        RecipeType recipeType = recipeTypeFactory.newBuilder()
+                .setId(modId, typeId)
+                .setCategory(category)
+                .setType(typeName)
+                .setIcon(icon)
+                .setIconInfo(nullToEmpty(iconDescriptor))
+                .setShapeless(false)
+                .setItemInputDimension(itemInputWidth, itemInputHeight)
+                .setItemOutputDimension(itemOutputWidth, itemOutputHeight)
+                .setFluidInputDimension(fluidInputWidth, fluidInputHeight)
+                .setFluidOutputDimension(new Dimension(fluidOutputWidth, fluidOutputHeight))
+                .build();
+
+        recipeTypeCache.put(cacheKey, recipeType);
+        return recipeType;
+    }
+
     private String extractModName(String handlerClass) {
         // Extract mod name from package
         // e.g., "fox.spiteful.avaritia.compat.nei.ExtremeShapedRecipeHandler"
@@ -393,6 +474,8 @@ public class NeiRecipeExportProcessor extends PluginHelper {
                     if (lower.contains("gregtech")) return "GregTech";
                     if (lower.contains("bloodmagic")) return "Blood Magic";
                     if (lower.contains("awwayof")) return "Blood Magic";
+                    if (lower.contains("mobsinfo")) return "MobsInfo";
+                    if (lower.contains("kubatech")) return "KubaTech";
                 }
 
                 // Fallback to capitalized package name
@@ -564,6 +647,32 @@ public class NeiRecipeExportProcessor extends PluginHelper {
         return null;
     }
 
+    private boolean isMobsInfoMobHandler(String handlerId, Object handler) {
+        return isHandlerMatch(handlerId, handler, "mobsinfo.mobhandler")
+                && !isMobsInfoInfernalHandler(handlerId, handler);
+    }
+
+    private boolean isMobsInfoInfernalHandler(String handlerId, Object handler) {
+        return isHandlerMatch(handlerId, handler, "mobsinfo.mobhandlerinfernal");
+    }
+
+    private boolean isHandlerMatch(String handlerId, Object handler, String needle) {
+        String handlerClass = handler == null ? "" : handler.getClass().getName();
+        String handlerName = handler instanceof IRecipeHandler
+                ? ((IRecipeHandler) handler).getRecipeName()
+                : "";
+        String overlayId = asString(invokeNoArg(handler, "getOverlayIdentifier"), "");
+        String combined = (nullToEmpty(handlerId)
+                + " "
+                + nullToEmpty(handlerClass)
+                + " "
+                + nullToEmpty(handlerName)
+                + " "
+                + nullToEmpty(overlayId))
+                .toLowerCase();
+        return combined.contains(needle.toLowerCase());
+    }
+
     private Item resolveHandlerIcon(NeiHandlerMetadataEntry metadata) {
         if (metadata == null || isBlank(metadata.getItemName())) {
             return null;
@@ -576,6 +685,22 @@ public class NeiRecipeExportProcessor extends PluginHelper {
             return itemFactory.get(stack);
         } catch (Exception e) {
             logger.debug("Failed to resolve NEI handler icon: {}", metadata.getItemName(), e);
+            return null;
+        }
+    }
+
+    private Item resolveHandlerIcon(String itemDescriptor) {
+        if (isBlank(itemDescriptor)) {
+            return null;
+        }
+        ItemStack stack = resolveItemStack(itemDescriptor);
+        if (stack == null || stack.getItem() == null) {
+            return null;
+        }
+        try {
+            return itemFactory.get(stack);
+        } catch (Exception e) {
+            logger.debug("Failed to resolve explicit NEI handler icon: {}", itemDescriptor, e);
             return null;
         }
     }
@@ -617,24 +742,28 @@ public class NeiRecipeExportProcessor extends PluginHelper {
             Object handler,
             String handlerId,
             com.github.dcysteine.nesql.sql.base.recipe.Recipe builtRecipe) {
-        NeiHandlerMetadataEntry metadata = findHandlerMetadata(handlerId, handler);
-        if (metadata == null || builtRecipe == null) {
+        if (builtRecipe == null) {
             return;
         }
+        NeiHandlerMetadataEntry metadata = findHandlerMetadata(handlerId, handler);
 
         Map<String, Object> data = new HashMap<>();
-        data.put("handler", nullToEmpty(metadata.getHandler()));
+        data.put("handler", metadata != null ? nullToEmpty(metadata.getHandler()) : nullToEmpty(handlerId));
         data.put("handlerId", nullToEmpty(handlerId));
         data.put("handlerClass", handler == null ? "" : handler.getClass().getName());
-        data.put("modName", nullToEmpty(metadata.getModName()));
-        data.put("modId", nullToEmpty(metadata.getModId()));
-        data.put("handlerIcon", nullToEmpty(metadata.getItemName()));
-        data.put("handlerHeight", metadata.getHandlerHeightInt());
-        data.put("handlerWidth", metadata.getHandlerWidthInt());
-        data.put("maxRecipesPerPage", metadata.getMaxRecipesPerPageInt());
-        data.put("yShift", metadata.getYShiftInt());
-        data.put("imageResource", nullToEmpty(metadata.getImageResource()));
-        data.put("itemNotes", nullToEmpty(metadata.getItemNotes()));
+        data.put(
+                "modName",
+                metadata != null
+                        ? nullToEmpty(metadata.getModName())
+                        : extractModName(handler == null ? handlerId : handler.getClass().getName()));
+        data.put("modId", metadata != null ? nullToEmpty(metadata.getModId()) : "");
+        data.put("handlerIcon", metadata != null ? nullToEmpty(metadata.getItemName()) : "");
+        data.put("handlerHeight", metadata != null ? metadata.getHandlerHeightInt() : 0);
+        data.put("handlerWidth", metadata != null ? metadata.getHandlerWidthInt() : 0);
+        data.put("maxRecipesPerPage", metadata != null ? metadata.getMaxRecipesPerPageInt() : 0);
+        data.put("yShift", metadata != null ? metadata.getYShiftInt() : 0);
+        data.put("imageResource", metadata != null ? nullToEmpty(metadata.getImageResource()) : "");
+        data.put("itemNotes", metadata != null ? nullToEmpty(metadata.getItemNotes()) : "");
 
         com.github.dcysteine.nesql.exporter.util.SpecialRecipeMetadataRegistry.registerMetadata(
                 builtRecipe.getId(),
@@ -1527,6 +1656,373 @@ public class NeiRecipeExportProcessor extends PluginHelper {
         return null;
     }
 
+    private int exportMobsInfoMobHandler(String handlerId, ICraftingHandler handler) {
+        RecipeType recipeType = getOrCreateRecipeType(handlerId, handler.getRecipeName(), "crafting", handler);
+        Set<Object> seenRecipes = Collections.newSetFromMap(new IdentityHashMap<Object, Boolean>());
+        int exported = 0;
+
+        for (int i = 0; i < handler.numRecipes(); i++) {
+            Object recipe = getRecipeFromHandler(handler, i);
+            if (recipe == null || !seenRecipes.add(recipe)) {
+                continue;
+            }
+            try {
+                if (exportSingleMobsInfoMobRecipe(handlerId, handler, recipeType, recipe)) {
+                    exported++;
+                }
+            } catch (Exception e) {
+                logger.error("Error exporting MobsInfo/EEC recipe {} from handler {}", i, handlerId, e);
+            }
+        }
+
+        return exported;
+    }
+
+    private int exportMobsInfoInfernalHandler(String handlerId, ICraftingHandler handler) {
+        RecipeType recipeType = getOrCreateRecipeType(handlerId, handler.getRecipeName(), "crafting", handler);
+        Set<Object> seenRecipes = Collections.newSetFromMap(new IdentityHashMap<Object, Boolean>());
+        int exported = 0;
+
+        for (int i = 0; i < handler.numRecipes(); i++) {
+            Object recipe = getRecipeFromHandler(handler, i);
+            if (recipe == null || !seenRecipes.add(recipe)) {
+                continue;
+            }
+            try {
+                if (exportSingleMobsInfoInfernalRecipe(handlerId, handler, recipeType, recipe)) {
+                    exported++;
+                }
+            } catch (Exception e) {
+                logger.error("Error exporting MobsInfo infernal recipe {} from handler {}", i, handlerId, e);
+            }
+        }
+
+        return exported;
+    }
+
+    private boolean exportSingleMobsInfoMobRecipe(
+            String handlerId,
+            ICraftingHandler handler,
+            RecipeType recipeType,
+            Object recipe) {
+        String mobName = asString(readFieldValue(recipe, "mobname"), "");
+        Object eecRecipe = lookupKubaTechEecRecipe(mobName);
+        if (eecRecipe == null) {
+            return false;
+        }
+
+        RecipeBuilder builder = new RecipeBuilder(exporter, recipeType);
+
+        List<ItemStack> inputCandidates = readItemStackListField(recipe, "mInput");
+        if (!inputCandidates.isEmpty()) {
+            builder.addItemGroupInput(inputCandidates);
+        } else {
+            PositionedStack ingredient = readPositionedStack(recipe, "ingredient");
+            ItemStack ingredientStack = resolveRepresentativeStack(ingredient);
+            if (ingredientStack != null) {
+                builder.addItemInput(ingredientStack);
+            }
+        }
+
+        List<PositionedStack> outputs = readPositionedStacks(recipe, "getOutputs", "mOutputs");
+        int outputCount = 0;
+        for (PositionedStack output : outputs) {
+            ItemStack outputStack = resolveRepresentativeStack(output);
+            if (outputStack == null || outputStack.getItem() == null) {
+                continue;
+            }
+            builder.addItemOutput(outputStack, normalizeMobChance(readDoubleFieldValue(output, "chance")));
+            outputCount++;
+        }
+
+        if (outputCount == 0) {
+            return false;
+        }
+
+        net.minecraftforge.fluids.FluidStack xpJuice = FluidRegistry.getFluidStack("xpjuice", 120);
+        if (xpJuice != null) {
+            builder.addFluidOutput(xpJuice);
+        }
+
+        com.github.dcysteine.nesql.sql.base.recipe.Recipe builtRecipe = builder.build();
+        registerHandlerMetadata(handler, handlerId, builtRecipe);
+        registerMobsInfoMobMetadata(recipe, builtRecipe, eecRecipe, outputCount, !inputCandidates.isEmpty());
+        return true;
+    }
+
+    private boolean exportSingleMobsInfoInfernalRecipe(
+            String handlerId,
+            ICraftingHandler handler,
+            RecipeType recipeType,
+            Object recipe) {
+        RecipeBuilder builder = new RecipeBuilder(exporter, recipeType);
+
+        List<PositionedStack> outputs = readPositionedStacks(recipe, "getOutputs", "all");
+        int outputCount = 0;
+        for (PositionedStack output : outputs) {
+            ItemStack outputStack = resolveRepresentativeStack(output);
+            if (outputStack == null || outputStack.getItem() == null) {
+                continue;
+            }
+            builder.addItemOutput(outputStack, normalizeMobChance(readDoubleFieldValue(output, "chance")));
+            outputCount++;
+        }
+
+        if (outputCount == 0) {
+            return false;
+        }
+
+        com.github.dcysteine.nesql.sql.base.recipe.Recipe builtRecipe = builder.build();
+        registerHandlerMetadata(handler, handlerId, builtRecipe);
+        registerMobsInfoInfernalMetadata(recipe, builtRecipe, outputCount);
+        return true;
+    }
+
+    private void registerMobsInfoMobMetadata(
+            Object recipe,
+            com.github.dcysteine.nesql.sql.base.recipe.Recipe builtRecipe,
+            Object eecRecipe,
+            int outputCount,
+            boolean hasInputCandidates) {
+        Map<String, Object> metadata = new LinkedHashMap<>();
+        metadata.put("handlerDisplayName", "Mob Info");
+        metadata.put("mobName", asString(readFieldValue(recipe, "mobname"), ""));
+        metadata.put("localizedName", asString(readFieldValue(recipe, "localizedName"), ""));
+        metadata.put("mobMod", asString(readFieldValue(recipe, "mod"), ""));
+        putIfNonNull(metadata, "maxHealth", readFieldValue(recipe, "maxHealth"));
+        putIfNonNull(metadata, "isUsableInVial", readFieldValue(recipe, "isUsableInVial"));
+        putIfNonNull(metadata, "isPeacefulAllowed", readFieldValue(recipe, "isPeacefulAllowed"));
+        putIfNonNull(metadata, "infernalType", readFieldValue(recipe, "infernaltype"));
+
+        String bossLabel = asString(readFieldValue(recipe, "isBoss"), "");
+        if (!bossLabel.isEmpty()) {
+            metadata.put("bossLabel", bossLabel);
+        }
+
+        List<String> additionalInformation = readStringListField(recipe, "additionalInformation");
+        if (!additionalInformation.isEmpty()) {
+            metadata.put("additionalInformation", additionalInformation);
+        }
+
+        Collection<?> spawnList = readCollectionField(recipe, "spawnList");
+        if (spawnList != null) {
+            metadata.put("spawnInfoCount", spawnList.size());
+        }
+
+        putIfNonNull(metadata, "normalOutputsCount", readFieldValue(recipe, "normalOutputsCount"));
+        putIfNonNull(metadata, "rareOutputsCount", readFieldValue(recipe, "rareOutputsCount"));
+        putIfNonNull(metadata, "additionalOutputsCount", readFieldValue(recipe, "additionalOutputsCount"));
+        putIfNonNull(metadata, "infernalOutputsCount", readFieldValue(recipe, "infernalOutputsCount"));
+        metadata.put("outputCount", outputCount);
+        metadata.put("hasInputCandidates", hasInputCandidates);
+        metadata.put("eecSupported", true);
+        metadata.put("xpJuiceMb", 120);
+        putIfNonNull(metadata, "eecEuPerTick", readFieldValue(eecRecipe, "mEUt"));
+        putIfNonNull(metadata, "eecDurationTicks", readFieldValue(eecRecipe, "mDuration"));
+
+        Number durationTicks = (Number) metadata.get("eecDurationTicks");
+        if (durationTicks != null) {
+            metadata.put("eecDurationSeconds", durationTicks.doubleValue() / 20.0d);
+        }
+
+        com.github.dcysteine.nesql.exporter.util.SpecialRecipeMetadataRegistry.registerMetadata(
+                builtRecipe.getId(),
+                new com.github.dcysteine.nesql.exporter.util.SpecialRecipeMetadataRegistry.SpecialRecipeMetadata(
+                        "MobsInfoMob", metadata));
+    }
+
+    private void registerMobsInfoInfernalMetadata(
+            Object recipe,
+            com.github.dcysteine.nesql.sql.base.recipe.Recipe builtRecipe,
+            int outputCount) {
+        Map<String, Object> metadata = new LinkedHashMap<>();
+        metadata.put("handlerDisplayName", "Infernal Drops");
+        putIfNonNull(metadata, "eliteCount", readFieldValue(recipe, "eliteCount"));
+        putIfNonNull(metadata, "ultraCount", readFieldValue(recipe, "ultraCount"));
+        putIfNonNull(metadata, "infernoCount", readFieldValue(recipe, "infernoCount"));
+        putIfNonNull(metadata, "eliteChance", readFieldValue(recipe, "eliteChance"));
+        putIfNonNull(metadata, "ultraChance", readFieldValue(recipe, "ultraChance"));
+        putIfNonNull(metadata, "infernoChance", readFieldValue(recipe, "infernoChance"));
+        metadata.put("outputCount", outputCount);
+
+        com.github.dcysteine.nesql.exporter.util.SpecialRecipeMetadataRegistry.registerMetadata(
+                builtRecipe.getId(),
+                new com.github.dcysteine.nesql.exporter.util.SpecialRecipeMetadataRegistry.SpecialRecipeMetadata(
+                        "MobsInfoInfernal", metadata));
+    }
+
+    private Object lookupKubaTechEecRecipe(String mobName) {
+        if (isBlank(mobName)) {
+            return null;
+        }
+
+        try {
+            Class<?> loaderClass = Class.forName("kubatech.loaders.MobHandlerLoader");
+            java.lang.reflect.Field recipeMapField = findField(loaderClass, "recipeMap");
+            if (recipeMapField == null) {
+                return null;
+            }
+            recipeMapField.setAccessible(true);
+            Object value = recipeMapField.get(null);
+            if (value instanceof Map<?, ?>) {
+                return ((Map<?, ?>) value).get(mobName);
+            }
+        } catch (Exception e) {
+            logger.debug("Unable to read KubaTech EEC recipe map for {}", mobName, e);
+        }
+
+        return null;
+    }
+
+    private PositionedStack readPositionedStack(Object target, String fieldName) {
+        Object value = readFieldValue(target, fieldName);
+        return value instanceof PositionedStack ? (PositionedStack) value : null;
+    }
+
+    @SuppressWarnings("unchecked")
+    private List<PositionedStack> readPositionedStacks(Object target, String methodName, String fieldName) {
+        Object value = invokeNoArg(target, methodName);
+        if (!(value instanceof List<?>) || ((List<?>) value).isEmpty()) {
+            value = readFieldValue(target, fieldName);
+        }
+        if (!(value instanceof List<?>)) {
+            return Collections.emptyList();
+        }
+
+        List<PositionedStack> stacks = new ArrayList<>();
+        for (Object candidate : (List<Object>) value) {
+            if (candidate instanceof PositionedStack) {
+                stacks.add((PositionedStack) candidate);
+            }
+        }
+        return stacks;
+    }
+
+    @SuppressWarnings("unchecked")
+    private List<ItemStack> readItemStackListField(Object target, String fieldName) {
+        Object value = readFieldValue(target, fieldName);
+        if (!(value instanceof List<?>)) {
+            return Collections.emptyList();
+        }
+
+        List<ItemStack> items = new ArrayList<>();
+        for (Object candidate : (List<Object>) value) {
+            if (candidate instanceof ItemStack && ((ItemStack) candidate).getItem() != null) {
+                items.add(((ItemStack) candidate).copy());
+            }
+        }
+        return items;
+    }
+
+    @SuppressWarnings("unchecked")
+    private List<String> readStringListField(Object target, String fieldName) {
+        Object value = readFieldValue(target, fieldName);
+        if (!(value instanceof List<?>)) {
+            return Collections.emptyList();
+        }
+
+        List<String> strings = new ArrayList<>();
+        for (Object candidate : (List<Object>) value) {
+            if (candidate != null) {
+                strings.add(String.valueOf(candidate));
+            }
+        }
+        return strings;
+    }
+
+    @SuppressWarnings("unchecked")
+    private Collection<?> readCollectionField(Object target, String fieldName) {
+        Object value = readFieldValue(target, fieldName);
+        return value instanceof Collection<?> ? (Collection<Object>) value : null;
+    }
+
+    private ItemStack resolveRepresentativeStack(PositionedStack positionedStack) {
+        if (positionedStack == null) {
+            return null;
+        }
+        if (positionedStack.item != null && positionedStack.item.getItem() != null) {
+            return positionedStack.item.copy();
+        }
+        if (positionedStack.items != null) {
+            for (ItemStack candidate : positionedStack.items) {
+                if (candidate != null && candidate.getItem() != null) {
+                    return candidate.copy();
+                }
+            }
+        }
+        return null;
+    }
+
+    private double normalizeMobChance(Double rawChance) {
+        if (rawChance == null) {
+            return 1.0d;
+        }
+        double chance = rawChance;
+        if (chance > 1.0d) {
+            chance /= 10000.0d;
+        }
+        if (chance < 0.0d) {
+            return 0.0d;
+        }
+        if (chance > 1.0d) {
+            return 1.0d;
+        }
+        return chance;
+    }
+
+    private Object readFieldValue(Object target, String fieldName) {
+        if (target == null || isBlank(fieldName)) {
+            return null;
+        }
+
+        try {
+            java.lang.reflect.Field field = findField(target.getClass(), fieldName);
+            if (field == null) {
+                return null;
+            }
+            field.setAccessible(true);
+            return field.get(target);
+        } catch (Exception e) {
+            return null;
+        }
+    }
+
+    private Double readDoubleFieldValue(Object target, String fieldName) {
+        Object value = readFieldValue(target, fieldName);
+        if (value instanceof Number) {
+            return ((Number) value).doubleValue();
+        }
+        return null;
+    }
+
+    private Object invokeNoArg(Object target, String methodName) {
+        if (target == null || isBlank(methodName)) {
+            return null;
+        }
+
+        try {
+            java.lang.reflect.Method method = target.getClass().getMethod(methodName);
+            method.setAccessible(true);
+            return method.invoke(target);
+        } catch (Exception ignored) {
+            return null;
+        }
+    }
+
+    private void putIfNonNull(Map<String, Object> metadata, String key, Object value) {
+        if (value != null) {
+            metadata.put(key, value);
+        }
+    }
+
+    private String asString(Object value, String fallback) {
+        if (value == null) {
+            return fallback;
+        }
+        String stringValue = String.valueOf(value);
+        return stringValue == null ? fallback : stringValue;
+    }
+
     /**
      * Export recipes from a single crafting handler (for streaming mode).
      * This method is called by NeiRecipeBatchLoader for each handler individually.
@@ -1539,6 +2035,13 @@ public class NeiRecipeExportProcessor extends PluginHelper {
     public int exportSingleCraftingHandler(String handlerId, String handlerName,
                                              ICraftingHandler handler) {
         try {
+            if (isMobsInfoMobHandler(handlerId, handler)) {
+                return exportMobsInfoMobHandler(handlerId, handler);
+            }
+            if (isMobsInfoInfernalHandler(handlerId, handler)) {
+                return exportMobsInfoInfernalHandler(handlerId, handler);
+            }
+
             // Create or get RecipeType for this handler
             RecipeType recipeType = getOrCreateRecipeType(handlerId, handlerName, "crafting", handler);
 

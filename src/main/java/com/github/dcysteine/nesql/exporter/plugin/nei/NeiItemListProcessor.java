@@ -1,12 +1,13 @@
 package com.github.dcysteine.nesql.exporter.plugin.nei;
 
-import codechicken.nei.ItemList;
 import com.github.dcysteine.nesql.exporter.main.Logger;
 import com.github.dcysteine.nesql.exporter.plugin.PluginExporter;
 import com.github.dcysteine.nesql.exporter.plugin.PluginHelper;
 import com.github.dcysteine.nesql.exporter.plugin.base.factory.ItemFactory;
 import net.minecraft.item.ItemStack;
 import net.minecraft.util.EnumChatFormatting;
+
+import java.util.List;
 
 public class NeiItemListProcessor extends PluginHelper {
 
@@ -15,7 +16,8 @@ public class NeiItemListProcessor extends PluginHelper {
     }
 
     public void process() {
-        int total = ItemList.items.size();
+        List<ItemStack> exportItems = NeiItemUniverse.getItems();
+        int total = exportItems.size();
         logger.info("Processing {} NEI items...", total);
 
         if (total == 0) {
@@ -25,7 +27,7 @@ public class NeiItemListProcessor extends PluginHelper {
 
         ItemFactory itemFactory = new ItemFactory(exporter);
         int count = 0;
-        for (ItemStack itemStack : ItemList.items) {
+        for (ItemStack itemStack : exportItems) {
             count++;
             try {
                 itemFactory.get(itemStack);

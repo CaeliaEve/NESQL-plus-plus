@@ -4,6 +4,7 @@ import codechicken.lib.gui.GuiDraw;
 import codechicken.nei.guihook.GuiContainerManager;
 import com.github.dcysteine.nesql.exporter.main.Logger;
 import com.github.dcysteine.nesql.exporter.main.config.ConfigOptions;
+import cpw.mods.fml.client.FMLClientHandler;
 import cpw.mods.fml.common.eventhandler.EventPriority;
 import cpw.mods.fml.common.eventhandler.SubscribeEvent;
 import cpw.mods.fml.common.gameevent.TickEvent;
@@ -32,11 +33,10 @@ public enum Renderer {
     INSTANCE;
 
     private static final String IMAGE_FORMAT_PNG = "PNG";
-    private static final String IMAGE_FORMAT_GIF = "gif";
     public static final String IMAGE_FILE_EXTENSION = get_image_file_extension();
 
     public static String get_image_file_extension() {
-        return ConfigOptions.EXPORT_GIF.get() ? ".gif" : ".png";
+        return ".png";
     }
 
     private int imageDim;
@@ -85,7 +85,7 @@ public enum Renderer {
         }
 
         // 确保在游戏界面中渲染，不在菜单界面
-        if (net.minecraft.client.Minecraft.getMinecraft().theWorld == null) {
+        if (FMLClientHandler.instance().getWorldClient() == null) {
             return;
         }
         switch (RenderDispatcher.INSTANCE.getRendererState()) {
@@ -110,6 +110,8 @@ public enum Renderer {
                                 + RenderDispatcher.INSTANCE.getRendererState());
         }
 
+        RenderDispatcher.INSTANCE.beginClientTick();
+
         if (RenderDispatcher.INSTANCE.noJobsRemaining()) {
             RenderDispatcher.INSTANCE.notifyJobsCompleted();
             return;
@@ -131,7 +133,10 @@ public enum Renderer {
                 }
 
                 RenderJob job = jobOptional.get();
-                NativeSpriteMetadataExtractor.writeIfAvailable(job, imageDirectory);
+                RenderContractMetadataExtractor.writeIfAvailable(job, imageDirectory);
+                if (job.shouldWriteNativeSpriteMetadata()) {
+                    NativeSpriteMetadataExtractor.writeIfAvailable(job, imageDirectory);
+                }
                 clearBuffer();
                 render(job);
                 BufferedImage image = readImage(job);

@@ -8,6 +8,8 @@ import jakarta.persistence.EntityManager;
 import net.minecraft.util.EnumChatFormatting;
 
 import javax.imageio.ImageIO;
+import javax.imageio.ImageReader;
+import javax.imageio.stream.ImageInputStream;
 import java.awt.image.BufferedImage;
 import java.io.File;
 import java.io.FileInputStream;
@@ -18,6 +20,8 @@ import java.io.OutputStreamWriter;
 import java.nio.charset.StandardCharsets;
 import java.util.ArrayList;
 import java.util.Comparator;
+import java.util.HashMap;
+import java.util.Iterator;
 import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
@@ -35,6 +39,7 @@ public class CanonicalAnimatedAtlasPackWriter {
     private final EntityManager entityManager;
     private final File exportDirectory;
     private final List<CanonicalRenderAsset> precollectedAssets;
+    private final Map<String, List<BufferedImage>> gifFrameCache = new HashMap<>();
     private static final Gson GSON = new GsonBuilder().serializeNulls().create();
 
     public CanonicalAnimatedAtlasPackWriter(EntityManager entityManager, File exportDirectory) {
@@ -160,6 +165,7 @@ public class CanonicalAnimatedAtlasPackWriter {
                 assetPlacement.variantKey = placement.source.asset.variantKey;
                 assetPlacement.frameDurationMs = placement.source.asset.frameDurationMs;
                 assetPlacement.loopMode = placement.source.asset.loopMode;
+                assetPlacement.timeline = copyTimeline(placement.source.asset.timeline);
                 assetPlacement.frames = new ArrayList<>();
                 assetsById.put(assetId, assetPlacement);
                 groupManifest.assets.add(assetPlacement);
@@ -186,6 +192,30 @@ public class CanonicalAnimatedAtlasPackWriter {
         return groupManifest;
     }
 
+    private List<AnimatedAtlasTimelineEntry> copyTimeline(List<Map<String, Object>> sourceTimeline) {
+        if (sourceTimeline == null || sourceTimeline.isEmpty()) {
+            return null;
+        }
+
+        List<AnimatedAtlasTimelineEntry> copied = new ArrayList<AnimatedAtlasTimelineEntry>(sourceTimeline.size());
+        for (Map<String, Object> frame : sourceTimeline) {
+            if (frame == null) {
+                continue;
+            }
+
+            AnimatedAtlasTimelineEntry entry = new AnimatedAtlasTimelineEntry();
+            entry.timelineIndex = asInt(frame.get("timelineIndex"));
+            entry.frameIndex = frame.get("frameIndex") instanceof Number
+                    ? ((Number) frame.get("frameIndex")).intValue()
+                    : asInt(frame.get("index"));
+            entry.index = asInt(frame.get("index"));
+            entry.durationMs = asInt(frame.get("durationMs"));
+            copied.add(entry);
+        }
+
+        return copied.isEmpty() ? null : copied;
+    }
+
     private void addRenderedFrameSources(List<AtlasPackingSupport.AtlasSourceImage> sources, CanonicalRenderAsset asset)
             throws IOException {
         if (asset.timeline == null) {
@@ -201,12 +231,62 @@ public class CanonicalAnimatedAtlasPackWriter {
             if (!sourceFile.exists()) {
                 continue;
             }
-            BufferedImage image = ImageIO.read(sourceFile);
+            BufferedImage image = readRenderedFrameImage(sourceFile, ((Number) index).intValue());
             if (image == null) {
                 continue;
             }
             sources.add(new AtlasPackingSupport.AtlasSourceImage(asset, sourceFile, image, ((Number) index).intValue()));
         }
+    }
+
+    private BufferedImage readRenderedFrameImage(File sourceFile, int frameIndex) throws IOException {
+        if (sourceFile.getName().toLowerCase().endsWith(".gif")) {
+            List<BufferedImage> frames = loadGifFrames(sourceFile);
+            if (frameIndex < 0 || frameIndex >= frames.size()) {
+                return null;
+            }
+            return frames.get(frameIndex);
+        }
+        return ImageIO.read(sourceFile);
+    }
+
+    private List<BufferedImage> loadGifFrames(File sourceFile) throws IOException {
+        String cacheKey = sourceFile.getAbsolutePath();
+        List<BufferedImage> cached = gifFrameCache.get(cacheKey);
+        if (cached != null) {
+            return cached;
+        }
+
+        List<BufferedImage> frames = new ArrayList<>();
+        try (ImageInputStream stream = ImageIO.createImageInputStream(sourceFile)) {
+            if (stream == null) {
+                gifFrameCache.put(cacheKey, frames);
+                return frames;
+            }
+
+            Iterator<ImageReader> readers = ImageIO.getImageReaders(stream);
+            if (!readers.hasNext()) {
+                gifFrameCache.put(cacheKey, frames);
+                return frames;
+            }
+
+            ImageReader reader = readers.next();
+            try {
+                reader.setInput(stream, false, false);
+                int frameCount = reader.getNumImages(true);
+                for (int index = 0; index < frameCount; index++) {
+                    BufferedImage frame = reader.read(index);
+                    if (frame != null) {
+                        frames.add(frame);
+                    }
+                }
+            } finally {
+                reader.dispose();
+            }
+        }
+
+        gifFrameCache.put(cacheKey, frames);
+        return frames;
     }
 
     private void addNativeSpriteSources(List<AtlasPackingSupport.AtlasSourceImage> sources, CanonicalRenderAsset asset)
@@ -425,6 +505,7 @@ public class CanonicalAnimatedAtlasPackWriter {
         Integer frameDurationMs;
         String loopMode;
         int frameCount;
+        List<AnimatedAtlasTimelineEntry> timeline;
         List<AnimatedAtlasFramePlacement> frames = new ArrayList<>();
     }
 
@@ -435,5 +516,12 @@ public class CanonicalAnimatedAtlasPackWriter {
         int y;
         int width;
         int height;
+    }
+
+    private static final class AnimatedAtlasTimelineEntry {
+        int timelineIndex;
+        int frameIndex;
+        int index;
+        int durationMs;
     }
 }

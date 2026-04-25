@@ -4,6 +4,8 @@ import com.github.dcysteine.nesql.exporter.main.config.ConfigOptions;
 import com.github.dcysteine.nesql.exporter.util.IdUtil;
 import com.google.auto.value.AutoOneOf;
 import net.minecraft.item.ItemStack;
+import net.minecraftforge.client.IItemRenderer;
+import net.minecraftforge.client.MinecraftForgeClient;
 import net.minecraftforge.fluids.FluidStack;
 
 import java.lang.reflect.Method;
@@ -23,6 +25,9 @@ public abstract class RenderJob {
     private Integer totalFrames = null;
     private transient boolean nativeSpriteMetadataLoaded = false;
     private transient NativeSpriteMetadataExtractor.NativeSpriteMetadata nativeSpriteMetadata;
+    private transient Boolean hasCustomInventoryRenderer;
+    private transient String inventoryRendererClassName;
+    private transient String rawInventoryRendererClassName;
 
     public static RenderJob ofItem(ItemStack itemStack) {
         ItemStack newStack = itemStack.copy();
@@ -47,6 +52,37 @@ public abstract class RenderJob {
     }
 
     /**
+     * Whether this job should rely on extracted native atlas metadata instead of framebuffer capture.
+     *
+     * <p>This is only safe when the icon shown in-game is the atlas sprite itself. Items that use a custom
+     * inventory {@link IItemRenderer} can composite extra layers, shaders, or masks on top of the base sprite
+     * (for example Avaritia infinity armor), so native atlas playback would not match the real in-game result.
+     */
+    public boolean shouldPreferNativeSpriteAnimation() {
+        NativeSpriteMetadataExtractor.NativeSpriteMetadata nativeMetadata = getNativeSpriteMetadata();
+        if (nativeMetadata == null || !Boolean.TRUE.equals(nativeMetadata.animated)) {
+            return false;
+        }
+
+        if (getType() == JobType.ITEM && hasCustomInventoryRenderer()) {
+            return false;
+        }
+
+        return true;
+    }
+
+    /**
+     * Whether native sprite sidecar metadata should be emitted for this job.
+     *
+     * <p>For custom-rendered items the atlas sprite is only an input to the final appearance, so exporting
+     * sidecar metadata would cause NeoNEI to replay the wrong frames.
+     */
+    public boolean shouldWriteNativeSpriteMetadata() {
+        return getNativeSpriteMetadata() != null
+                && !(getType() == JobType.ITEM && hasCustomInventoryRenderer());
+    }
+
+    /**
      * Check if this render job needs multiple frames for GIF animation.
      * Uses multiple detection methods:
      * 0. Force mode: If FORCE_ALL_ITEMS_ANIMATED is enabled, ALL items and fluids are captured
@@ -59,8 +95,7 @@ public abstract class RenderJob {
             return false;
         }
 
-        NativeSpriteMetadataExtractor.NativeSpriteMetadata nativeMetadata = getNativeSpriteMetadata();
-        if (nativeMetadata != null && Boolean.TRUE.equals(nativeMetadata.animated)) {
+        if (shouldPreferNativeSpriteAnimation()) {
             return false;
         }
 
@@ -86,7 +121,17 @@ public abstract class RenderJob {
             return true;
         }
 
-        // Method 3: Generic animated texture detection
+        // Method 3: Check GT machine block / hatch / pipe overlays rendered in inventory
+        if (hasGregTechMachineAnimation(stack)) {
+            return true;
+        }
+
+        // Method 4: Known custom inventory renderers with time-based transforms/effects
+        if (hasAnimatedCustomRenderer(stack)) {
+            return true;
+        }
+
+        // Method 5: Generic animated texture detection
         if (hasAnimatedTexture(stack)) {
             return true;
         }
@@ -119,6 +164,8 @@ public abstract class RenderJob {
 
         return AnimatedItemRegistry.INSTANCE.isAnimatedItem(stack)
                 || hasGregTechAnimation(stack)
+                || hasGregTechMachineAnimation(stack)
+                || hasAnimatedCustomRenderer(stack)
                 || hasAnimatedTexture(stack);
     }
 
@@ -185,15 +232,149 @@ public abstract class RenderJob {
      * Check if an icon supports animation (implements IPatchedTextureAtlasSprite).
      */
     private boolean isAnimatedIcon(Object icon) {
-        if (icon == null) {
+        return TextureAnimationInspector.isAnimatedIcon(icon);
+    }
+
+    /**
+     * Check if a GregTech ItemMachines stack uses animated block/hatch/pipe textures in inventory.
+     */
+    private boolean hasGregTechMachineAnimation(ItemStack stack) {
+        return GregTechAnimationDetector.hasAnimatedMachineTexture(stack);
+    }
+
+    /**
+     * Detect known custom inventory renderers that animate over time instead of relying on sprite metadata.
+     *
+     * <p>These renderers commonly rotate, pulse, glitch, or draw procedural wireframes in inventory, so
+     * framebuffer multi-frame capture is required to match in-game appearance.
+     */
+    private boolean hasAnimatedCustomRenderer(ItemStack stack) {
+        if (stack == null || stack.getItem() == null) {
             return false;
         }
+
+        String rendererClassName = getInventoryRendererClassName();
+        if (rendererClassName == null || rendererClassName.isEmpty()) {
+            return false;
+        }
+
+        return isAnimatedCustomRendererClass(rendererClassName);
+    }
+
+    private boolean isAnimatedCustomRendererClass(String rendererClassName) {
+        String normalized = rendererClassName.toLowerCase();
+
+        if (normalized.contains("itemrenderertier") && normalized.contains("rocket")) {
+            return true;
+        }
+        if (normalized.contains("itemrenderershuttle")) {
+            return true;
+        }
+        if (normalized.contains("itemrendererrocket")) {
+            return true;
+        }
+
+        return normalized.contains("transcendentalmetaitemrenderer")
+                || normalized.contains("glitcheffectmetaitemrenderer")
+                || normalized.contains("wireframetesseractrenderer")
+                || normalized.contains("infinitymetaitemrenderer")
+                || normalized.contains("transcendentmetalrenderer")
+                || normalized.contains("infinityrenderer")
+                || normalized.contains("universiumrenderer")
+                || normalized.contains("cosmicneutroniumrenderer")
+                || normalized.contains("cosmicneutroniummetaitemrenderer")
+                || normalized.contains("rainbowoverlayrenderer")
+                || normalized.contains("rainbowoverlaymetaitemrenderer")
+                || normalized.contains("gaiaspiritrenderer");
+    }
+
+    private boolean hasCustomInventoryRenderer() {
+        if (getType() != JobType.ITEM) {
+            return false;
+        }
+
+        if (hasCustomInventoryRenderer == null) {
+            hasCustomInventoryRenderer = detectCustomInventoryRenderer(getItem());
+        }
+
+        return Boolean.TRUE.equals(hasCustomInventoryRenderer);
+    }
+
+    public boolean usesCustomInventoryRenderer() {
+        return hasCustomInventoryRenderer();
+    }
+
+    public String getInventoryRendererClassName() {
+        if (getType() != JobType.ITEM) {
+            return null;
+        }
+
+        if (inventoryRendererClassName != null) {
+            return inventoryRendererClassName;
+        }
+
+        ItemStack stack = getItem();
+        if (stack == null || stack.getItem() == null) {
+            return null;
+        }
+
         try {
-            Class<?> patchedSpriteClass = Class.forName("com.mitchej123.hodgepodge.textures.IPatchedTextureAtlasSprite");
-            return patchedSpriteClass.isInstance(icon);
-        } catch (ClassNotFoundException e) {
+            IItemRenderer renderer =
+                    MinecraftForgeClient.getItemRenderer(stack, IItemRenderer.ItemRenderType.INVENTORY);
+            if (renderer == null) {
+                return null;
+            }
+
+            rawInventoryRendererClassName = renderer.getClass().getName();
+            IItemRenderer effectiveRenderer = resolveEffectiveInventoryRenderer(stack, renderer);
+            inventoryRendererClassName =
+                    effectiveRenderer != null ? effectiveRenderer.getClass().getName() : rawInventoryRendererClassName;
+            return inventoryRendererClassName;
+        } catch (Throwable ignored) {
+            return null;
+        }
+    }
+
+    public String getRawInventoryRendererClassName() {
+        if (getType() != JobType.ITEM) {
+            return null;
+        }
+
+        if (rawInventoryRendererClassName == null) {
+            getInventoryRendererClassName();
+        }
+
+        return rawInventoryRendererClassName;
+    }
+
+    private boolean detectCustomInventoryRenderer(ItemStack stack) {
+        if (stack == null || stack.getItem() == null) {
             return false;
         }
+
+        try {
+            return MinecraftForgeClient.getItemRenderer(stack, IItemRenderer.ItemRenderType.INVENTORY) != null;
+        } catch (Throwable ignored) {
+            return false;
+        }
+    }
+
+    private IItemRenderer resolveEffectiveInventoryRenderer(ItemStack stack, IItemRenderer renderer) {
+        if (renderer == null) {
+            return null;
+        }
+
+        try {
+            Method delegateResolver = renderer.getClass().getDeclaredMethod("getRendererForItemStack", ItemStack.class);
+            delegateResolver.setAccessible(true);
+            Object delegate = delegateResolver.invoke(renderer, stack);
+            if (delegate instanceof IItemRenderer) {
+                return (IItemRenderer) delegate;
+            }
+        } catch (Throwable ignored) {
+        }
+
+        return renderer;
     }
 
     /**
@@ -247,6 +428,17 @@ public abstract class RenderJob {
             return basePath.substring(0, basePath.length() - 4) + ".sprite.json";
         }
         return basePath + ".sprite.json";
+    }
+
+    public String getRenderContractFilePath() {
+        String basePath = getImageFilePath();
+        if (basePath.endsWith(".png")) {
+            return basePath.substring(0, basePath.length() - 4) + ".render.json";
+        }
+        if (basePath.endsWith(".gif")) {
+            return basePath.substring(0, basePath.length() - 4) + ".render.json";
+        }
+        return basePath + ".render.json";
     }
 
     public String getNativeSpriteAtlasFilePath() {

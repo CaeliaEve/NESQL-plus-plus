@@ -53,10 +53,15 @@ public class CanonicalRenderIndexWriter {
             entry.assetId = asset.assetId;
             entry.variantKey = asset.variantKey;
             entry.mode = asset.mode;
+            entry.renderMode = asset.renderMode;
             entry.atlasGroup = asset.atlasGroup;
             entry.staticFile = asset.staticFile;
             entry.spriteMetadataFile = asset.spriteMetadataFile;
+            entry.renderContractFile = asset.contractFile;
             entry.atlasTexture = asset.atlasTexture;
+            entry.rendererFamily = asset.rendererFamily;
+            entry.captureSource = asset.captureSource;
+            entry.playbackHint = asset.playbackHint;
             entry.primaryArtifact = asset.primaryArtifact;
             entry.atlasRegistryPath = "canonical/atlas-registry.json";
             entry.renderAssetManifestPath = "canonical/render-assets.json";
@@ -71,7 +76,7 @@ public class CanonicalRenderIndexWriter {
                         "canonical/animation-manifests-by-group/"
                                 + safeName(asset.atlasGroup != null ? asset.atlasGroup : "ungrouped")
                                 + ".json";
-                entry.resolutionMode = "native_sprite_animation";
+                entry.resolutionMode = asset.renderMode != null ? asset.renderMode : "native_sprite_animation";
             } else if ("rendered_frames".equals(asset.mode)) {
                 entry.framePattern = asset.framePattern;
                 entry.frameCount = asset.frameCount;
@@ -85,21 +90,21 @@ public class CanonicalRenderIndexWriter {
                         "canonical/animated-atlas-manifests-by-group/"
                                 + safeName(asset.atlasGroup != null ? asset.atlasGroup : "ungrouped")
                                 + ".json";
-                entry.resolutionMode = "animated_frame_sequence";
+                entry.resolutionMode = asset.renderMode != null ? asset.renderMode : "animated_frame_sequence";
             } else if ("native_sprite_snapshot".equals(asset.mode)) {
                 entry.atlasManifestPath = "canonical/atlas-manifest.json";
                 entry.atlasGroupPath =
                         "canonical/atlas-manifests-by-group/"
                                 + safeName(asset.atlasGroup != null ? asset.atlasGroup : "ungrouped")
                                 + ".json";
-                entry.resolutionMode = "native_sprite_snapshot";
+                entry.resolutionMode = asset.renderMode != null ? asset.renderMode : "native_sprite_snapshot";
             } else {
                 entry.atlasManifestPath = "canonical/atlas-manifest.json";
                 entry.atlasGroupPath =
                         "canonical/atlas-manifests-by-group/"
                                 + safeName(asset.atlasGroup != null ? asset.atlasGroup : "ungrouped")
                                 + ".json";
-                entry.resolutionMode = "static_snapshot";
+                entry.resolutionMode = asset.renderMode != null ? asset.renderMode : "static_snapshot";
             }
 
             index.assets.add(entry);
@@ -126,7 +131,7 @@ public class CanonicalRenderIndexWriter {
     }
 
     private static final class RenderIndex {
-        String schemaVersion = "nesqlpp/render-index/v1-draft";
+        String schemaVersion = "nesqlpp/render-index/v2-draft";
         List<RenderIndexEntry> assets = new ArrayList<>();
     }
 
@@ -134,10 +139,15 @@ public class CanonicalRenderIndexWriter {
         String assetId;
         String variantKey;
         String mode;
+        String renderMode;
         String atlasGroup;
         String staticFile;
         String spriteMetadataFile;
+        String renderContractFile;
         String atlasTexture;
+        String rendererFamily;
+        String captureSource;
+        String playbackHint;
         String framePattern;
         Integer frameCount;
         String primaryArtifact;

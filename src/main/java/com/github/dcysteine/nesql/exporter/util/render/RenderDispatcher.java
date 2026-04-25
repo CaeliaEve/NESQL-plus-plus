@@ -85,6 +85,7 @@ public enum RenderDispatcher {
 
     // 多帧作业队列（动画物品，优先处理）
     private final ConcurrentLinkedQueue<RenderJob> multiFrameJobQueue = new ConcurrentLinkedQueue<>();
+    private final ConcurrentLinkedQueue<RenderJob> multiFrameDeferredQueue = new ConcurrentLinkedQueue<>();
 
     // Track active GIF animation captures by output file path
     private final ConcurrentHashMap<String, GifRenderer.AnimationCapture> activeCaptures = new ConcurrentHashMap<>();
@@ -110,17 +111,22 @@ public enum RenderDispatcher {
         }
 
         if ((newState == RendererState.UNINITIALIZED || newState == RendererState.INITIALIZING)
-                && (!singleFrameJobQueue.isEmpty() || !multiFrameJobQueue.isEmpty() || !activeCaptures.isEmpty())) {
+                && (!singleFrameJobQueue.isEmpty()
+                || !multiFrameJobQueue.isEmpty()
+                || !multiFrameDeferredQueue.isEmpty()
+                || !activeCaptures.isEmpty())) {
             Logger.chatMessage(String.format(
-                    EnumChatFormatting.RED + "Render dispatcher has %s single-frame jobs, %s multi-frame jobs and %s active captures!"
+                    EnumChatFormatting.RED + "Render dispatcher has %s single-frame jobs, %s multi-frame jobs, %s deferred multi-frame jobs and %s active captures!"
                             + "\nClearing and transitioning to state %s.",
-                    singleFrameJobQueue.size(), multiFrameJobQueue.size(), activeCaptures.size(), newState.name()));
+                    singleFrameJobQueue.size(), multiFrameJobQueue.size(), multiFrameDeferredQueue.size(), activeCaptures.size(), newState.name()));
             singleFrameJobQueue.clear();
             multiFrameJobQueue.clear();
+            multiFrameDeferredQueue.clear();
             activeCaptures.clear();
         } else if (newState == RendererState.ERROR) {
             singleFrameJobQueue.clear();
             multiFrameJobQueue.clear();
+            multiFrameDeferredQueue.clear();
             activeCaptures.clear();
         }
 
@@ -132,7 +138,10 @@ public enum RenderDispatcher {
     }
 
     public synchronized void waitUntilJobsComplete() throws InterruptedException {
-        while ((!singleFrameJobQueue.isEmpty() || !multiFrameJobQueue.isEmpty() || !activeCaptures.isEmpty()) && isActive()) {
+        while ((!singleFrameJobQueue.isEmpty()
+                || !multiFrameJobQueue.isEmpty()
+                || !multiFrameDeferredQueue.isEmpty()
+                || !activeCaptures.isEmpty()) && isActive()) {
             wait();
         }
     }
@@ -146,14 +155,14 @@ public enum RenderDispatcher {
     }
 
     public int getJobCount() {
-        return singleFrameJobQueue.size() + multiFrameJobQueue.size();
+        return singleFrameJobQueue.size() + multiFrameJobQueue.size() + multiFrameDeferredQueue.size();
     }
 
     /**
      * Get the total count of jobs including multi-frame captures.
      */
     public int getTotalJobCount() {
-        return singleFrameJobQueue.size() + multiFrameJobQueue.size() + activeCaptures.size();
+        return singleFrameJobQueue.size() + multiFrameJobQueue.size() + multiFrameDeferredQueue.size() + activeCaptures.size();
     }
 
     public void addJob(RenderJob job) {
@@ -173,7 +182,15 @@ public enum RenderDispatcher {
     public void clearJobs() {
         singleFrameJobQueue.clear();
         multiFrameJobQueue.clear();
+        multiFrameDeferredQueue.clear();
         activeCaptures.clear();
+    }
+
+    public void beginClientTick() {
+        RenderJob deferredJob;
+        while ((deferredJob = multiFrameDeferredQueue.poll()) != null) {
+            multiFrameJobQueue.add(deferredJob);
+        }
     }
 
     /**
@@ -181,7 +198,10 @@ public enum RenderDispatcher {
      * fast. This should be safe.
      */
     public boolean noJobsRemaining() {
-        return singleFrameJobQueue.isEmpty() && multiFrameJobQueue.isEmpty() && activeCaptures.isEmpty();
+        return singleFrameJobQueue.isEmpty()
+                && multiFrameJobQueue.isEmpty()
+                && multiFrameDeferredQueue.isEmpty()
+                && activeCaptures.isEmpty();
     }
 
     /**
@@ -292,7 +312,7 @@ public enum RenderDispatcher {
             } else {
                 // Re-queue the same job for next frame
                 job.incrementFrame();
-                multiFrameJobQueue.add(job); // 添加到多帧队列，保持优先处理
+                multiFrameDeferredQueue.add(job);
 
                 if (Logger.intermittentLog(0)) {
                     Logger.MOD.info("Captured frame {} of {} for {}",

@@ -1,6 +1,5 @@
 package com.github.dcysteine.nesql.exporter.plugin.nei;
 
-import codechicken.nei.ItemList;
 import codechicken.nei.recipe.GuiCraftingRecipe;
 import codechicken.nei.recipe.GuiUsageRecipe;
 import codechicken.nei.recipe.ICraftingHandler;
@@ -50,9 +49,11 @@ public class NeiRecipeBatchLoaderParallel {
         Stopwatch stopwatch = Stopwatch.createStarted();
         AtomicInteger totalRecipes = new AtomicInteger(0);
         AtomicInteger processedHandlers = new AtomicInteger(0);
+        List<ItemStack> itemUniverse = NeiItemUniverse.getItems();
 
         Logger.MOD.info("=== Starting Parallel Export of NEI Crafting Recipes ===");
         Logger.MOD.info("Loader threads: {}", LOADER_THREAD_POOL_SIZE);
+        Logger.MOD.info("Effective item scan universe size: {}", itemUniverse.size());
         Logger.chatMessage("=== Starting NEI Crafting Recipe Export (Parallel Mode) ===");
         Logger.chatMessage("Using " + LOADER_THREAD_POOL_SIZE + " threads for recipe loading");
 
@@ -69,7 +70,7 @@ public class NeiRecipeBatchLoaderParallel {
             final ICraftingHandler handler = handlers.get(i);
 
             Future<LoaderResult> future = loaderExecutor.submit(() -> {
-                return loadCraftingHandler(handler, handlerIndex, handlers.size());
+                return loadCraftingHandler(handler, handlerIndex, handlers.size(), itemUniverse);
             });
 
             loaderFutures.add(future);
@@ -149,7 +150,8 @@ public class NeiRecipeBatchLoaderParallel {
     private static LoaderResult loadCraftingHandler(
             ICraftingHandler baseHandler,
             int handlerIndex,
-            int totalHandlers) {
+            int totalHandlers,
+            List<ItemStack> itemUniverse) {
 
         LoaderResult result = new LoaderResult();
         result.handlerId = baseHandler.getHandlerId();
@@ -165,7 +167,8 @@ public class NeiRecipeBatchLoaderParallel {
             if (baseHandler instanceof TemplateRecipeHandler) {
                 workingHandler = ((TemplateRecipeHandler) baseHandler).newInstance();
             } else {
-                workingHandler = baseHandler.getRecipeHandler("item", ItemList.items.get(0));
+                ItemStack seedItem = itemUniverse.isEmpty() ? null : itemUniverse.get(0);
+                workingHandler = seedItem == null ? null : baseHandler.getRecipeHandler("item", seedItem);
             }
 
             if (workingHandler == null) {
@@ -175,7 +178,7 @@ public class NeiRecipeBatchLoaderParallel {
 
             // Load all recipes for this handler (CPU-intensive, thread-safe)
             int recipeCount = workingHandler instanceof TemplateRecipeHandler
-                    ? loadRecipesForHandler((TemplateRecipeHandler) workingHandler)
+                    ? loadRecipesForHandler((TemplateRecipeHandler) workingHandler, itemUniverse)
                     : workingHandler.numRecipes();
 
             if (recipeCount > 0) {
@@ -203,9 +206,11 @@ public class NeiRecipeBatchLoaderParallel {
         Stopwatch stopwatch = Stopwatch.createStarted();
         AtomicInteger totalRecipes = new AtomicInteger(0);
         AtomicInteger processedHandlers = new AtomicInteger(0);
+        List<ItemStack> itemUniverse = NeiItemUniverse.getItems();
 
         Logger.MOD.info("=== Starting Parallel Export of NEI Usage Recipes ===");
         Logger.MOD.info("Loader threads: {}", LOADER_THREAD_POOL_SIZE);
+        Logger.MOD.info("Effective usage scan universe size: {}", itemUniverse.size());
         Logger.chatMessage("=== Starting NEI Usage Recipe Export (Parallel Mode) ===");
 
         List<IUsageHandler> handlers = new ArrayList<>(GuiUsageRecipe.usagehandlers);
@@ -221,7 +226,7 @@ public class NeiRecipeBatchLoaderParallel {
             final IUsageHandler handler = handlers.get(i);
 
             Future<LoaderResult> future = loaderExecutor.submit(() -> {
-                return loadUsageHandler(handler, handlerIndex, handlers.size());
+                return loadUsageHandler(handler, handlerIndex, handlers.size(), itemUniverse);
             });
 
             loaderFutures.add(future);
@@ -294,7 +299,8 @@ public class NeiRecipeBatchLoaderParallel {
     private static LoaderResult loadUsageHandler(
             IUsageHandler baseHandler,
             int handlerIndex,
-            int totalHandlers) {
+            int totalHandlers,
+            List<ItemStack> itemUniverse) {
 
         LoaderResult result = new LoaderResult();
         result.handlerId = baseHandler.getHandlerId();
@@ -310,7 +316,8 @@ public class NeiRecipeBatchLoaderParallel {
             if (baseHandler instanceof TemplateRecipeHandler) {
                 workingHandler = ((TemplateRecipeHandler) baseHandler).newInstance();
             } else {
-                workingHandler = baseHandler.getUsageHandler("item", ItemList.items.get(0));
+                ItemStack seedItem = itemUniverse.isEmpty() ? null : itemUniverse.get(0);
+                workingHandler = seedItem == null ? null : baseHandler.getUsageHandler("item", seedItem);
             }
 
             if (workingHandler == null) {
@@ -320,7 +327,7 @@ public class NeiRecipeBatchLoaderParallel {
 
             // Load all usage recipes for this handler
             int recipeCount = workingHandler instanceof TemplateRecipeHandler
-                    ? loadUsageRecipesForHandler((TemplateRecipeHandler) workingHandler)
+                    ? loadUsageRecipesForHandler((TemplateRecipeHandler) workingHandler, itemUniverse)
                     : workingHandler.numRecipes();
 
             if (recipeCount > 0) {
@@ -345,13 +352,18 @@ public class NeiRecipeBatchLoaderParallel {
      * Load all crafting recipes for a single handler.
      * This method is thread-safe (no shared state).
      */
-    private static int loadRecipesForHandler(TemplateRecipeHandler handler) {
+    private static int loadRecipesForHandler(TemplateRecipeHandler handler, List<ItemStack> itemUniverse) {
         AtomicInteger loadedCount = new AtomicInteger(0);
 
         try {
+            Integer overlayRecipeCount = tryLoadOverlayRecipes(handler);
+            if (overlayRecipeCount != null && overlayRecipeCount > 0) {
+                return overlayRecipeCount;
+            }
+
             handler.arecipes.clear();
 
-            for (ItemStack item : ItemList.items) {
+            for (ItemStack item : itemUniverse) {
                 try {
                     int beforeSize = handler.arecipes.size();
                     handler.loadCraftingRecipes(item);
@@ -371,17 +383,56 @@ public class NeiRecipeBatchLoaderParallel {
         return loadedCount.get();
     }
 
+    private static Integer tryLoadOverlayRecipes(TemplateRecipeHandler handler) {
+        if (!isMobsInfoHandler(handler)) {
+            return null;
+        }
+
+        try {
+            handler.arecipes.clear();
+            String overlayId = handler.getOverlayIdentifier();
+            if (overlayId == null || overlayId.trim().isEmpty()) {
+                return 0;
+            }
+            handler.loadCraftingRecipes(overlayId, (Object) null);
+            return handler.numRecipes();
+        } catch (Exception e) {
+            Logger.MOD.warn("Failed overlay recipe load for handler: " + handler.getRecipeName(), e);
+            return 0;
+        }
+    }
+
+    private static boolean isMobsInfoHandler(TemplateRecipeHandler handler) {
+        if (handler == null) {
+            return false;
+        }
+
+        String handlerId = handler.getHandlerId() == null ? "" : handler.getHandlerId().toLowerCase();
+        String handlerName = handler.getRecipeName() == null ? "" : handler.getRecipeName().toLowerCase();
+        String handlerClass = handler.getClass().getName().toLowerCase();
+        String overlayId = "";
+        try {
+            overlayId = handler.getOverlayIdentifier() == null ? "" : handler.getOverlayIdentifier().toLowerCase();
+        } catch (Exception ignored) {
+        }
+
+        String combined = handlerId + " " + handlerName + " " + handlerClass + " " + overlayId;
+        return combined.contains("mobsinfo.mobhandler")
+            || combined.contains("mobsinfo.mobhandlerinfernal")
+            || combined.contains("com.kuba6000.mobsinfo");
+    }
+
     /**
      * Load all usage recipes for a single handler.
      * This method is thread-safe (no shared state).
      */
-    private static int loadUsageRecipesForHandler(TemplateRecipeHandler handler) {
+    private static int loadUsageRecipesForHandler(TemplateRecipeHandler handler, List<ItemStack> itemUniverse) {
         AtomicInteger loadedCount = new AtomicInteger(0);
 
         try {
             handler.arecipes.clear();
 
-            for (ItemStack item : ItemList.items) {
+            for (ItemStack item : itemUniverse) {
                 try {
                     int beforeSize = handler.arecipes.size();
                     handler.loadUsageRecipes(item);

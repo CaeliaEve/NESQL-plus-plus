@@ -85,14 +85,6 @@ public final class ConfigOptions {
                             + "\nRecommended: Allocate 6-8GB memory (-Xmx6G or -Xmx8G)")
                     .register();
 
-    public static final Option<Integer> GIF_FRAME_DELAY_MS =
-            new IntegerOption(
-                    Category.OPTIONS, "gif_frame_delay_ms", 50,
-                    "Delay between frames in milliseconds."
-                            + "\nLower values = faster animation."
-                            + "\nRecommended: 50ms (0.5tick) for smooth playback.")
-                    .register();
-
     public static final Option<Integer> GIF_LOOP_COUNT =
             new IntegerOption(
                     Category.OPTIONS, "gif_loop_count", 0,
