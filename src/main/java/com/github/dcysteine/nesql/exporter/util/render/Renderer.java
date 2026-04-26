@@ -8,8 +8,10 @@ import cpw.mods.fml.client.FMLClientHandler;
 import cpw.mods.fml.common.eventhandler.EventPriority;
 import cpw.mods.fml.common.eventhandler.SubscribeEvent;
 import cpw.mods.fml.common.gameevent.TickEvent;
+import net.minecraft.client.Minecraft;
 import net.minecraft.client.renderer.OpenGlHelper;
 import net.minecraft.client.renderer.RenderHelper;
+import net.minecraft.client.renderer.texture.ITextureObject;
 import net.minecraft.client.renderer.texture.TextureMap;
 import net.minecraft.client.shader.Framebuffer;
 import net.minecraft.util.IIcon;
@@ -143,6 +145,7 @@ public enum Renderer {
 
                 // Handle multi-frame GIF capture vs single-frame PNG
                 if (job.needsMultipleFrames()) {
+                    advanceTextureAnimations(job);
                     // Multi-frame: Handled by RenderDispatcher
                     RenderDispatcher.INSTANCE.completeJob(job, image);
                 } else {
@@ -181,6 +184,47 @@ public enum Renderer {
             }
         } finally {
             teardownRenderState();
+        }
+    }
+
+    private void advanceTextureAnimations(RenderJob job) {
+        if (job == null || !job.shouldAdvanceTextureAtlasBetweenFrames()) {
+            return;
+        }
+
+        job.markAnimatedTexturesForUpdate();
+
+        Minecraft minecraft = Minecraft.getMinecraft();
+        if (minecraft == null) {
+            return;
+        }
+
+        Object blocksAtlas = minecraft.getTextureMapBlocks();
+        updateTextureAnimations(blocksAtlas);
+
+        try {
+            ITextureObject itemsAtlasObject = minecraft.getTextureManager().getTexture(TextureMap.locationItemsTexture);
+            if (itemsAtlasObject != null && itemsAtlasObject != blocksAtlas) {
+                updateTextureAnimations(itemsAtlasObject);
+            }
+        } catch (Throwable ignored) {
+        }
+    }
+
+    private void updateTextureAnimations(Object textureObject) {
+        if (textureObject == null) {
+            return;
+        }
+
+        try {
+            if (textureObject instanceof TextureMap) {
+                ((TextureMap) textureObject).updateAnimations();
+                return;
+            }
+
+            java.lang.reflect.Method method = textureObject.getClass().getMethod("updateAnimations");
+            method.invoke(textureObject);
+        } catch (Throwable ignored) {
         }
     }
 

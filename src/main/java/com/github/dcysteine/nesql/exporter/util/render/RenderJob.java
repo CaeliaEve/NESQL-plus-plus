@@ -170,6 +170,71 @@ public abstract class RenderJob {
     }
 
     /**
+     * Whether framebuffer capture should manually advance atlas-backed animation frames between captures.
+     *
+     * <p>This is needed for custom inventory renderers that layer animated atlas sprites (for example
+     * Eternal Singularity items). Their render path is correct, but GTNH's visibility-based animation
+     * updates may not upload the next atlas frame during headless export unless we explicitly mark the
+     * participating sprites as active.
+     */
+    public boolean shouldAdvanceTextureAtlasBetweenFrames() {
+        if (!ConfigOptions.EXPORT_GIF.get() || !needsMultipleFrames() || getType() != JobType.ITEM) {
+            return false;
+        }
+
+        ItemStack stack = getItem();
+        if (stack == null || stack.getItem() == null) {
+            return false;
+        }
+
+        return hasAnimatedTexture(stack)
+                || hasAnimatedRenderPassTexture(stack)
+                || hasAnimatedAuxiliaryTexture(stack);
+    }
+
+    /**
+     * Mark atlas sprites referenced by this item so GTNH/Angelica uploads their next animation frame.
+     */
+    public void markAnimatedTexturesForUpdate() {
+        if (getType() != JobType.ITEM) {
+            return;
+        }
+
+        ItemStack stack = getItem();
+        if (stack == null || stack.getItem() == null) {
+            return;
+        }
+
+        net.minecraft.item.Item item = stack.getItem();
+        TextureAnimationInspector.markIconForAnimationUpdate(stack.getIconIndex());
+
+        int passes = 1;
+        try {
+            if (item.requiresMultipleRenderPasses()) {
+                passes = Math.max(passes, item.getRenderPasses(stack.getItemDamage()));
+            }
+        } catch (Throwable ignored) {
+        }
+
+        for (int pass = 0; pass < passes; pass++) {
+            try {
+                TextureAnimationInspector.markIconForAnimationUpdate(item.getIcon(stack, pass));
+            } catch (Throwable ignored) {
+            }
+            try {
+                TextureAnimationInspector.markIconForAnimationUpdate(
+                        item.getIconFromDamageForRenderPass(stack.getItemDamage(), pass));
+            } catch (Throwable ignored) {
+            }
+        }
+
+        markAuxiliaryAnimatedTexture(item, "getMaskTexture", new Class<?>[] { ItemStack.class, net.minecraft.entity.player.EntityPlayer.class },
+                new Object[] { stack, null });
+        markAuxiliaryAnimatedTexture(item, "getHaloTexture", new Class<?>[] { ItemStack.class }, new Object[] { stack });
+        markAuxiliaryAnimatedTexture(item, "getOverlayIcon", new Class<?>[] { ItemStack.class }, new Object[] { stack });
+    }
+
+    /**
      * Check if item has GT5 animation (implements IGT_ItemWithMaterialRenderer).
      */
     private boolean hasGregTechAnimation(ItemStack stack) {
@@ -228,11 +293,85 @@ public abstract class RenderJob {
         }
     }
 
+    private boolean hasAnimatedRenderPassTexture(ItemStack stack) {
+        if (stack == null || stack.getItem() == null) {
+            return false;
+        }
+
+        net.minecraft.item.Item item = stack.getItem();
+        int passes = 1;
+        try {
+            if (item.requiresMultipleRenderPasses()) {
+                passes = Math.max(passes, item.getRenderPasses(stack.getItemDamage()));
+            }
+        } catch (Throwable ignored) {
+        }
+
+        for (int pass = 0; pass < passes; pass++) {
+            try {
+                if (isAnimatedIcon(item.getIcon(stack, pass))) {
+                    return true;
+                }
+            } catch (Throwable ignored) {
+            }
+            try {
+                if (isAnimatedIcon(item.getIconFromDamageForRenderPass(stack.getItemDamage(), pass))) {
+                    return true;
+                }
+            } catch (Throwable ignored) {
+            }
+        }
+
+        return false;
+    }
+
+    private boolean hasAnimatedAuxiliaryTexture(ItemStack stack) {
+        if (stack == null || stack.getItem() == null) {
+            return false;
+        }
+
+        net.minecraft.item.Item item = stack.getItem();
+        return isAnimatedAuxiliaryTexture(item, "getMaskTexture",
+                        new Class<?>[] { ItemStack.class, net.minecraft.entity.player.EntityPlayer.class },
+                        new Object[] { stack, null })
+                || isAnimatedAuxiliaryTexture(item, "getHaloTexture",
+                        new Class<?>[] { ItemStack.class },
+                        new Object[] { stack })
+                || isAnimatedAuxiliaryTexture(item, "getOverlayIcon",
+                        new Class<?>[] { ItemStack.class },
+                        new Object[] { stack });
+    }
+
     /**
      * Check if an icon supports animation (implements IPatchedTextureAtlasSprite).
      */
     private boolean isAnimatedIcon(Object icon) {
         return TextureAnimationInspector.isAnimatedIcon(icon);
+    }
+
+    private boolean isAnimatedAuxiliaryTexture(
+            Object target,
+            String methodName,
+            Class<?>[] parameterTypes,
+            Object[] args) {
+        try {
+            Method method = target.getClass().getMethod(methodName, parameterTypes);
+            return isAnimatedIcon(method.invoke(target, args));
+        } catch (Throwable ignored) {
+            return false;
+        }
+    }
+
+    private void markAuxiliaryAnimatedTexture(
+            Object target,
+            String methodName,
+            Class<?>[] parameterTypes,
+            Object[] args) {
+        try {
+            Method method = target.getClass().getMethod(methodName, parameterTypes);
+            TextureAnimationInspector.markIconForAnimationUpdate(method.invoke(target, args));
+        } catch (Throwable ignored) {
+        }
     }
 
     /**

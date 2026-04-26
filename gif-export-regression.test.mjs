@@ -140,3 +140,33 @@ test('render jobs classify known time-based custom inventory renderers as animat
     'Known GTNH fancy item renderers should be classified as animated captures',
   );
 });
+
+test('atlas-backed custom renderer captures can explicitly tick sprite animations between frames', () => {
+  const renderJobSource = read('src/main/java/com/github/dcysteine/nesql/exporter/util/render/RenderJob.java');
+  const rendererSource = read('src/main/java/com/github/dcysteine/nesql/exporter/util/render/Renderer.java');
+  const inspectorSource = read('src/main/java/com/github/dcysteine/nesql/exporter/util/render/TextureAnimationInspector.java');
+
+  assert.equal(
+    renderJobSource.includes('shouldAdvanceTextureAtlasBetweenFrames'),
+    true,
+    'RenderJob should expose when atlas-backed animation frames need manual advancement during GIF capture',
+  );
+
+  assert.equal(
+    renderJobSource.includes('markAnimatedTexturesForUpdate'),
+    true,
+    'RenderJob should be able to mark layered custom-renderer sprite inputs as active before the next frame',
+  );
+
+  assert.equal(
+    rendererSource.includes('advanceTextureAnimations(job);'),
+    true,
+    'Renderer should advance animated texture atlases between framebuffer captures for qualifying jobs',
+  );
+
+  assert.equal(
+    inspectorSource.includes('markNeedsAnimationUpdate'),
+    true,
+    'TextureAnimationInspector should support marking patched atlas sprites as needing a real animation upload',
+  );
+});

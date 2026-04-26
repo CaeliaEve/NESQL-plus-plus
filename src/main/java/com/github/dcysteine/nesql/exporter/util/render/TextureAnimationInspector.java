@@ -14,6 +14,8 @@ import java.util.Set;
 
 final class TextureAnimationInspector {
     private static final Class<?> PATCHED_SPRITE_CLASS = resolvePatchedSpriteClass();
+    private static final java.lang.reflect.Method MARK_NEEDS_ANIMATION_UPDATE_METHOD =
+            resolvePatchedSpriteMethod("markNeedsAnimationUpdate");
 
     private TextureAnimationInspector() {}
 
@@ -37,6 +39,21 @@ final class TextureAnimationInspector {
     static boolean containsAnimatedIcon(Object root) {
         Set<Object> visited = Collections.newSetFromMap(new IdentityHashMap<Object, Boolean>());
         return containsAnimatedIcon(root, visited);
+    }
+
+    static void markIconForAnimationUpdate(Object icon) {
+        if (icon == null || PATCHED_SPRITE_CLASS == null || MARK_NEEDS_ANIMATION_UPDATE_METHOD == null) {
+            return;
+        }
+
+        if (!PATCHED_SPRITE_CLASS.isInstance(icon)) {
+            return;
+        }
+
+        try {
+            MARK_NEEDS_ANIMATION_UPDATE_METHOD.invoke(icon);
+        } catch (Exception ignored) {
+        }
     }
 
     private static boolean containsAnimatedIcon(Object root, Set<Object> visited) {
@@ -130,9 +147,27 @@ final class TextureAnimationInspector {
     }
 
     private static Class<?> resolvePatchedSpriteClass() {
+        String[] candidates = new String[] {
+                "com.gtnewhorizons.angelica.mixins.interfaces.IPatchedTextureAtlasSprite",
+                "com.mitchej123.hodgepodge.textures.IPatchedTextureAtlasSprite"
+        };
+        for (String candidate : candidates) {
+            try {
+                return Class.forName(candidate);
+            } catch (ClassNotFoundException ignored) {
+            }
+        }
+        return null;
+    }
+
+    private static java.lang.reflect.Method resolvePatchedSpriteMethod(String methodName) {
+        if (PATCHED_SPRITE_CLASS == null) {
+            return null;
+        }
+
         try {
-            return Class.forName("com.mitchej123.hodgepodge.textures.IPatchedTextureAtlasSprite");
-        } catch (ClassNotFoundException e) {
+            return PATCHED_SPRITE_CLASS.getMethod(methodName);
+        } catch (Exception ignored) {
             return null;
         }
     }
