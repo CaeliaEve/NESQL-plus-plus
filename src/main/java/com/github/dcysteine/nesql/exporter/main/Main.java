@@ -3,7 +3,6 @@ package com.github.dcysteine.nesql.exporter.main;
 import com.github.dcysteine.nesql.exporter.main.config.Config;
 import com.github.dcysteine.nesql.exporter.main.config.ConfigGuiFactory;
 import com.github.dcysteine.nesql.exporter.main.config.ConfigOptions;
-import com.github.dcysteine.nesql.exporter.util.render.Renderer;
 import cpw.mods.fml.common.FMLCommonHandler;
 import cpw.mods.fml.common.Mod;
 import cpw.mods.fml.common.Mod.EventHandler;
@@ -43,8 +42,10 @@ public final class Main {
         ConfigGuiFactory.checkClassName();
         Config.initialize();
         Config.updateConfig();
-        FMLCommonHandler.instance().bus().register(Renderer.INSTANCE);
-        FMLCommonHandler.instance().bus().register(this);
+        if (ConfigOptions.AUTO_EXPORT_ON_CONNECT.get()) {
+            FMLCommonHandler.instance().bus().register(this);
+            Logger.MOD.info("Auto-export on connect is enabled; connection listener registered.");
+        }
 
         Logger.MOD.info("Mod initialization complete!");
     }

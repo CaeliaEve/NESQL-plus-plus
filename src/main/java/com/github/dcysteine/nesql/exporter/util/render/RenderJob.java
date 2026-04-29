@@ -74,12 +74,13 @@ public abstract class RenderJob {
     /**
      * Whether native sprite sidecar metadata should be emitted for this job.
      *
-     * <p>For custom-rendered items the atlas sprite is only an input to the final appearance, so exporting
-     * sidecar metadata would cause NeoNEI to replay the wrong frames.
+     * <p>Custom-rendered items still need this sidecar as auxiliary metadata so downstream consumers can
+     * recover the native sprite timeline when framebuffer capture is unavailable or intentionally bypassed.
+     * The render contract remains responsible for choosing whether that timeline is primary or only a
+     * fallback.
      */
     public boolean shouldWriteNativeSpriteMetadata() {
-        return getNativeSpriteMetadata() != null
-                && !(getType() == JobType.ITEM && hasCustomInventoryRenderer());
+        return getNativeSpriteMetadata() != null;
     }
 
     /**

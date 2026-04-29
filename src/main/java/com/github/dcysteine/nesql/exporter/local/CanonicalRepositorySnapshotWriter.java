@@ -4,6 +4,7 @@ import com.github.dcysteine.nesql.exporter.canonical.CanonicalExportMapper;
 import com.github.dcysteine.nesql.exporter.canonical.CanonicalFluid;
 import com.github.dcysteine.nesql.exporter.canonical.CanonicalItem;
 import com.github.dcysteine.nesql.exporter.canonical.CanonicalRecipe;
+import com.github.dcysteine.nesql.exporter.canonical.CanonicalRenderAsset;
 import com.github.dcysteine.nesql.exporter.canonical.CanonicalRepositoryModel;
 import com.github.dcysteine.nesql.exporter.main.Logger;
 import com.github.dcysteine.nesql.sql.base.fluid.Fluid;
@@ -57,7 +58,7 @@ public class CanonicalRepositorySnapshotWriter {
         this.includeRenderAssets = includeRenderAssets;
     }
 
-    public void export() throws IOException {
+    public List<CanonicalRenderAsset> export() throws IOException {
         Logger.chatMessage(EnumChatFormatting.AQUA + "Exporting NESQL++ canonical snapshot...");
 
         CanonicalRepositoryModel model = new CanonicalRepositoryModel();
@@ -101,8 +102,12 @@ public class CanonicalRepositorySnapshotWriter {
             model.recipes.add(mapped);
         }
 
+        List<CanonicalRenderAsset> renderAssets = new java.util.ArrayList<>();
         if (includeRenderAssets) {
-            model.renderAssets.addAll(new CanonicalRenderAssetCollector(entityManager, exportDirectory).collectAll());
+            renderAssets.addAll(new CanonicalRenderAssetCollector(entityManager, exportDirectory).collectAll());
+            Logger.MOD.info(
+                    "Collected {} render assets for downstream manifests; skipping inline repository embedding.",
+                    renderAssets.size());
         }
 
         File canonicalDir = new File(exportDirectory, OUTPUT_DIRECTORY);
@@ -112,7 +117,6 @@ public class CanonicalRepositorySnapshotWriter {
 
         File out = new File(canonicalDir, OUTPUT_FILE);
         Gson gson = new GsonBuilder()
-                .setPrettyPrinting()
                 .serializeNulls()
                 .create();
 
@@ -123,5 +127,6 @@ public class CanonicalRepositorySnapshotWriter {
 
         Logger.chatMessage(EnumChatFormatting.GREEN + "NESQL++ canonical snapshot written:");
         Logger.chatMessage(EnumChatFormatting.YELLOW + "  " + out.getAbsolutePath());
+        return renderAssets;
     }
 }

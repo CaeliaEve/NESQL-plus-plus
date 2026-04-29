@@ -28,11 +28,15 @@ public final class ExportDatabaseSupport {
     public static ImmutableMap<String, String> optimizedLegacyProperties(String databaseUrl) {
         return ImmutableMap.<String, String>builder()
                 .put("hibernate.connection.url", databaseUrl)
-                .put("hibernate.jdbc.batch_size", "100")
+                .put("hibernate.jdbc.batch_size", "500")
                 .put("hibernate.order_inserts", "true")
                 .put("hibernate.order_updates", "true")
                 .put("hibernate.batch_versioned_data", "true")
-                .put("hibernate.jdbc.fetch_size", "100")
+                .put("hibernate.jdbc.fetch_size", "1000")
+                .put("hibernate.default_batch_fetch_size", "256")
+                .put("hibernate.connection.autocommit", "false")
+                .put("hibernate.cache.use_second_level_cache", "false")
+                .put("hibernate.cache.use_query_cache", "false")
                 .put("hibernate.dialect", "org.hibernate.dialect.HSQLDialect")
                 .build();
     }
@@ -50,7 +54,7 @@ public final class ExportDatabaseSupport {
 
     public static ExportRuntime createFileRuntime(File databaseFile) {
         String databaseUrl = fileDatabaseUrl(databaseFile);
-        return ExportRuntime.create(databaseUrl, defaultProperties(databaseUrl));
+        return ExportRuntime.create(databaseUrl, optimizedLegacyProperties(databaseUrl));
     }
 
     public static ExportRuntime createLegacyRuntime(File databaseFile) {

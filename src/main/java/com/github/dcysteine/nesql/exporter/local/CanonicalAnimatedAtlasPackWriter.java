@@ -80,7 +80,7 @@ public class CanonicalAnimatedAtlasPackWriter {
         manifest.groupCount = manifest.groups.size();
         manifest.assetCount = countAssets(manifest.groups);
 
-        Gson gson = new GsonBuilder().setPrettyPrinting().serializeNulls().create();
+        Gson gson = new GsonBuilder().serializeNulls().create();
         File manifestFile = new File(canonicalDir, OUTPUT_FILE);
         try (FileOutputStream fos = new FileOutputStream(manifestFile);
              OutputStreamWriter writer = new OutputStreamWriter(fos, StandardCharsets.UTF_8)) {

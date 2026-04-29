@@ -758,10 +758,10 @@ public class NeiRecipeExportProcessor extends PluginHelper {
                         : extractModName(handler == null ? handlerId : handler.getClass().getName()));
         data.put("modId", metadata != null ? nullToEmpty(metadata.getModId()) : "");
         data.put("handlerIcon", metadata != null ? nullToEmpty(metadata.getItemName()) : "");
-        data.put("handlerHeight", metadata != null ? metadata.getHandlerHeightInt() : 0);
-        data.put("handlerWidth", metadata != null ? metadata.getHandlerWidthInt() : 0);
-        data.put("maxRecipesPerPage", metadata != null ? metadata.getMaxRecipesPerPageInt() : 0);
-        data.put("yShift", metadata != null ? metadata.getYShiftInt() : 0);
+        data.put("handlerHeight", metadata != null ? nullToZero(metadata.getHandlerHeightInt()) : 0);
+        data.put("handlerWidth", metadata != null ? nullToZero(metadata.getHandlerWidthInt()) : 0);
+        data.put("maxRecipesPerPage", metadata != null ? nullToZero(metadata.getMaxRecipesPerPageInt()) : 0);
+        data.put("yShift", metadata != null ? nullToZero(metadata.getYShiftInt()) : 0);
         data.put("imageResource", metadata != null ? nullToEmpty(metadata.getImageResource()) : "");
         data.put("itemNotes", metadata != null ? nullToEmpty(metadata.getItemNotes()) : "");
 
@@ -779,6 +779,10 @@ public class NeiRecipeExportProcessor extends PluginHelper {
 
     private static String nullToEmpty(String value) {
         return value == null ? "" : value;
+    }
+
+    private static int nullToZero(Integer value) {
+        return value == null ? 0 : value;
     }
 
     private static String normalizeIdPart(String value) {

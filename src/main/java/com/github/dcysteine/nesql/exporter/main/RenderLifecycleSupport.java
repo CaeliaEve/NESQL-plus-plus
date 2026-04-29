@@ -2,6 +2,7 @@ package com.github.dcysteine.nesql.exporter.main;
 
 import com.github.dcysteine.nesql.exporter.util.render.RenderDispatcher;
 import com.github.dcysteine.nesql.exporter.util.render.Renderer;
+import cpw.mods.fml.common.FMLCommonHandler;
 import cpw.mods.fml.common.Loader;
 import net.minecraft.util.EnumChatFormatting;
 
@@ -11,6 +12,7 @@ import java.io.File;
  * Shared renderer lifecycle support for export profiles that produce images.
  */
 public final class RenderLifecycleSupport {
+    private static boolean rendererHookRegistered = false;
 
     private RenderLifecycleSupport() {}
 
@@ -24,6 +26,7 @@ public final class RenderLifecycleSupport {
             return false;
         }
 
+        ensureRendererHookRegistered();
         Renderer.INSTANCE.preinitialize(imageDirectory);
         RenderDispatcher.INSTANCE.setRendererState(RenderDispatcher.RendererState.INITIALIZING);
         warnBugTorch();
@@ -38,6 +41,7 @@ public final class RenderLifecycleSupport {
             throw new Exception("Failed to create image directory");
         }
 
+        ensureRendererHookRegistered();
         Renderer.INSTANCE.preinitialize(imageDirectory);
         RenderDispatcher.INSTANCE.setRendererState(RenderDispatcher.RendererState.INITIALIZING);
         warnBugTorch();
@@ -60,5 +64,14 @@ public final class RenderLifecycleSupport {
             Logger.chatMessage(EnumChatFormatting.RED + "BugTorch mod appears to be loaded;");
             Logger.chatMessage(EnumChatFormatting.RED + "enchanted items might not render correctly!");
         }
+    }
+
+    private static synchronized void ensureRendererHookRegistered() {
+        if (rendererHookRegistered) {
+            return;
+        }
+        FMLCommonHandler.instance().bus().register(Renderer.INSTANCE);
+        rendererHookRegistered = true;
+        Logger.MOD.info("Renderer tick hook registered lazily for export.");
     }
 }

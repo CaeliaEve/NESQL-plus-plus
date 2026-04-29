@@ -65,13 +65,14 @@ test('gif-backed item exports are treated as animated assets based on the actual
   );
 
   assert.equal(
-    collectorSource.includes('if (!directPng.exists() || inspectGifAnimation(directGif).animated)'),
+    collectorSource.includes('exactName.endsWith(".png") && alternateGif != null && inspectGifAnimation(alternateGif).animated'),
     true,
-    'Collector should prefer a real animated GIF over a sibling PNG fallback when both exist',
+    'Collector should prefer a real animated GIF sidecar over an exact PNG when the GIF carries the real timeline',
   );
 
   assert.equal(
-    collectorSource.includes('File alternateGif = replaceExtension(familyRoot, normalizedImagePath, ".gif");'),
+    collectorSource.includes('File alternateGif = replaceExtension(familyIndex, normalizedKey, ".gif");')
+      || collectorSource.includes('File alternateGif = replaceExtension(familyIndex, normalizedImagePath, ".gif");'),
     true,
     'Collector should swap a requested .png path over to a sibling .gif artifact when the png output is absent',
   );
@@ -114,6 +115,46 @@ test('native sprite metadata reads real mcmeta timing instead of collapsing ever
     metadataSource.includes('frame.put("durationMs", sourceFrame.timeTicks * 50);'),
     true,
     'Native sprite timeline should preserve per-frame tick durations from mcmeta',
+  );
+});
+
+test('custom inventory renderers still export native sprite sidecars as auxiliary timing metadata', () => {
+  const renderJobSource = read('src/main/java/com/github/dcysteine/nesql/exporter/util/render/RenderJob.java');
+  const collectorSource = read('src/main/java/com/github/dcysteine/nesql/exporter/local/CanonicalRenderAssetCollector.java');
+
+  assert.equal(
+    renderJobSource.includes('return getNativeSpriteMetadata() != null;'),
+    true,
+    'custom renderer items should still emit sprite sidecars so NeoNEI can recover native sprite timelines',
+  );
+
+  assert.equal(
+    collectorSource.indexOf('applyRenderContractMetadata(asset, renderContractFile);')
+      < collectorSource.indexOf('applyNativeSpriteMetadata(asset, baseFile);'),
+    true,
+    'render contract metadata should be loaded before sprite sidecars so auxiliary native timelines do not override primary renderer-family playback',
+  );
+
+  assert.equal(
+    collectorSource.includes('asset.animationMode = "native_sprite_aux";'),
+    true,
+    'collector should preserve auxiliary native sprite timelines without misclassifying custom renderers as primary native animations',
+  );
+});
+
+test('gregtech multiblock export discovers runtime controllers from the full GT registry', () => {
+  const exporterSource = read('src/main/java/com/github/dcysteine/nesql/exporter/main/GregTechMultiblockExporter.java');
+
+  assert.equal(
+    exporterSource.includes('GregTechAPI') && exporterSource.includes('METATILEENTITIES'),
+    true,
+    'GregTech multiblock export should inspect the runtime GregTech registry instead of only relying on a curated whitelist',
+  );
+
+  assert.equal(
+    exporterSource.includes('discoverRuntimeBlueprints'),
+    true,
+    'GregTech multiblock export should build a runtime blueprint catalog before merging curated overrides',
   );
 });
 

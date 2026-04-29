@@ -44,7 +44,7 @@ final class ForestryGeneticsWriter {
         }
 
         File output = new File(canonicalDir, "forestry-genetics.json");
-        Gson gson = new GsonBuilder().serializeNulls().setPrettyPrinting().create();
+        Gson gson = new GsonBuilder().serializeNulls().create();
         GeneticsDocument document = buildDocument();
 
         try (FileOutputStream fos = new FileOutputStream(output);

@@ -41,7 +41,7 @@ final class ExportStageActionRegistry {
         actions.put(ExportStage.WRITE_BLOCK_FACE_METADATA, () ->
                 ExportWriterSupport.writeBlockFaceMetadata(exportContext.paths.repositoryName));
         actions.put(ExportStage.WRITE_CANONICAL_SNAPSHOT, () ->
-                ExportWriterSupport.writeCanonicalSnapshot(
+                stageState.renderAssets = ExportWriterSupport.writeCanonicalSnapshot(
                         stageState.runtime.entityManager,
                         exportContext.paths.repositoryDirectory,
                         exportContext.profile.profileId,
@@ -54,48 +54,64 @@ final class ExportStageActionRegistry {
         actions.put(ExportStage.RENDER_IMAGES, () -> {
             if (stageState.renderingImages) {
                 RenderLifecycleSupport.awaitRenderCompletion();
+                if (stageState.renderAssets == null || stageState.renderAssets.isEmpty()) {
+                    stageState.renderAssets =
+                            ExportWriterSupport.collectRenderAssets(exportContext.paths.repositoryDirectory);
+                } else {
+                    Logger.chatMessage(
+                            EnumChatFormatting.GREEN
+                                    + "Reusing "
+                                    + stageState.renderAssets.size()
+                                    + " precollected render assets.");
+                }
             }
         });
         actions.put(ExportStage.WRITE_RENDER_ASSET_MANIFEST, () -> {
             if (stageState.renderingImages) {
                 ExportWriterSupport.writeRenderAssetManifest(
                         stageState.runtime.entityManager,
-                        exportContext.paths.repositoryDirectory);
+                        exportContext.paths.repositoryDirectory,
+                        stageState.renderAssets);
             }
         });
         actions.put(ExportStage.WRITE_ANIMATION_MANIFEST, () -> {
             if (stageState.renderingImages) {
                 ExportWriterSupport.writeAnimationManifest(
                         stageState.runtime.entityManager,
-                        exportContext.paths.repositoryDirectory);
+                        exportContext.paths.repositoryDirectory,
+                        stageState.renderAssets);
             }
         });
         actions.put(ExportStage.WRITE_ATLAS_PACKS, () -> {
             if (stageState.renderingImages) {
                 ExportWriterSupport.writeAtlasPacks(
                         stageState.runtime.entityManager,
-                        exportContext.paths.repositoryDirectory);
+                        exportContext.paths.repositoryDirectory,
+                        stageState.renderAssets);
             }
         });
         actions.put(ExportStage.WRITE_ANIMATED_ATLAS_PACKS, () -> {
             if (stageState.renderingImages) {
                 ExportWriterSupport.writeAnimatedAtlasPacks(
                         stageState.runtime.entityManager,
-                        exportContext.paths.repositoryDirectory);
+                        exportContext.paths.repositoryDirectory,
+                        stageState.renderAssets);
             }
         });
         actions.put(ExportStage.WRITE_ATLAS_REGISTRY, () -> {
             if (stageState.renderingImages) {
                 ExportWriterSupport.writeAtlasRegistry(
                         stageState.runtime.entityManager,
-                        exportContext.paths.repositoryDirectory);
+                        exportContext.paths.repositoryDirectory,
+                        stageState.renderAssets);
             }
         });
         actions.put(ExportStage.WRITE_RENDER_INDEX, () -> {
             if (stageState.renderingImages) {
                 ExportWriterSupport.writeRenderIndex(
                         stageState.runtime.entityManager,
-                        exportContext.paths.repositoryDirectory);
+                        exportContext.paths.repositoryDirectory,
+                        stageState.renderAssets);
             }
         });
         actions.put(ExportStage.COMPLETE, () -> {});

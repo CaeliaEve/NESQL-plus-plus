@@ -82,26 +82,15 @@ public class ModBasedItemExporter {
                     modDir.mkdirs();
                 }
 
-                File modItemsFile = new File(modDir, "items.json");
-                try (FileOutputStream fos = new FileOutputStream(modItemsFile);
-                     OutputStreamWriter writer = new OutputStreamWriter(fos, StandardCharsets.UTF_8)) {
-                    gson.toJson(modItems, writer);
-                }
+                File compressedFile = ModBasedRecipeFileSupport.jsonGzipFile(modDir, "items.json");
+                long compressedSize = ModBasedRecipeFileSupport.writeCompressedJson(gson, modItems, compressedFile);
 
-                File compressedFile = ModBasedRecipeFileSupport.compressFile(modItemsFile);
-                long originalSize = modItemsFile.length();
-                long compressedSize = compressedFile.length();
-                double ratio = (1.0 - (double) compressedSize / originalSize) * 100;
-
-                modItemsFile.delete();
-
-                Logger.chatMessage(EnumChatFormatting.GREEN +
-                        String.format("OK %s (%d items)", modId, modItems.size()));
-                Logger.chatMessage(EnumChatFormatting.YELLOW +
-                        String.format("  Compression: %.2f MB -> %.2f MB (saved %.1f%%)",
-                                originalSize / 1024.0 / 1024.0,
-                                compressedSize / 1024.0 / 1024.0,
-                                ratio));
+                Logger.chatMessage(EnumChatFormatting.GREEN
+                        + String.format("OK %s (%d items)", modId, modItems.size()));
+                Logger.chatMessage(EnumChatFormatting.YELLOW
+                        + "  Wrote "
+                        + ModBasedRecipeFileSupport.formatSize(compressedSize)
+                        + " compressed");
             }
 
             Logger.MOD.info("============================================================");

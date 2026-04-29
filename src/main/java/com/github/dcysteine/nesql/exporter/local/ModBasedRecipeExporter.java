@@ -114,32 +114,12 @@ public class ModBasedRecipeExporter {
                     modDir.mkdirs();
                 }
 
-                File modRecipesFile = new File(modDir, "recipes.json");
-                Logger.MOD.info("Writing JSON to: {}", modRecipesFile.getAbsolutePath());
-                try (FileOutputStream fos = new FileOutputStream(modRecipesFile);
-                     OutputStreamWriter writer = new OutputStreamWriter(fos, StandardCharsets.UTF_8)) {
-                    gson.toJson(modRecipes, writer);
-                }
-                Logger.MOD.info("JSON written successfully");
-
-                Logger.MOD.info("Compressing JSON file...");
-                File compressedFile = ModBasedRecipeFileSupport.compressFile(modRecipesFile);
-                long originalSize = modRecipesFile.length();
-                long compressedSize = compressedFile.length();
-                double ratio = (1.0 - (double) compressedSize / originalSize) * 100;
-
-                Logger.MOD.info("Compression complete: {} -> {} (saved {}%)",
-                        ModBasedRecipeFileSupport.formatSize(originalSize),
-                        ModBasedRecipeFileSupport.formatSize(compressedSize),
-                        String.format("%.1f", ratio));
-                Logger.chatMessage(String.format(
-                        "  %.2f MB -> %.2f MB (saved %.1f%%)",
-                        originalSize / 1024.0 / 1024.0,
-                        compressedSize / 1024.0 / 1024.0,
-                        ratio));
-
-                Logger.MOD.info("Deleting uncompressed JSON...");
-                modRecipesFile.delete();
+                File compressedFile = ModBasedRecipeFileSupport.jsonGzipFile(modDir, "recipes.json");
+                Logger.MOD.info("Writing compressed JSON to: {}", compressedFile.getAbsolutePath());
+                long compressedSize = ModBasedRecipeFileSupport.writeCompressedJson(gson, modRecipes, compressedFile);
+                Logger.MOD.info("Compressed JSON written successfully: {}",
+                        ModBasedRecipeFileSupport.formatSize(compressedSize));
+                Logger.chatMessage("  Wrote " + ModBasedRecipeFileSupport.formatSize(compressedSize) + " compressed");
 
                 if (modCount % 10 == 0) {
                     Logger.MOD.info("Progress: {}/{} mods completed", modCount, recipesByMod.size());

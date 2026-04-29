@@ -1,5 +1,6 @@
 package com.github.dcysteine.nesql.exporter.main;
 
+import com.github.dcysteine.nesql.exporter.canonical.CanonicalRenderAsset;
 import com.github.dcysteine.nesql.exporter.local.CanonicalRepositorySnapshotWriter;
 import com.github.dcysteine.nesql.exporter.local.CanonicalRenderAssetManifestWriter;
 import com.github.dcysteine.nesql.exporter.local.CanonicalAtlasPackWriter;
@@ -7,12 +8,14 @@ import com.github.dcysteine.nesql.exporter.local.CanonicalAnimationManifestWrite
 import com.github.dcysteine.nesql.exporter.local.CanonicalAnimatedAtlasPackWriter;
 import com.github.dcysteine.nesql.exporter.local.CanonicalRenderIndexWriter;
 import com.github.dcysteine.nesql.exporter.local.CanonicalAtlasRegistryWriter;
+import com.github.dcysteine.nesql.exporter.local.CanonicalRenderAssetCollector;
 import com.github.dcysteine.nesql.exporter.local.ModBasedItemExporter;
 import com.github.dcysteine.nesql.exporter.local.ModBasedRecipeExporter;
 import net.minecraft.util.EnumChatFormatting;
 
 import jakarta.persistence.EntityManager;
 import java.io.File;
+import java.util.List;
 
 /**
  * Shared writer dispatch support for NESQL export entrypoints.
@@ -71,7 +74,7 @@ public final class ExportWriterSupport {
         }
     }
 
-    public static void writeCanonicalSnapshot(
+    public static List<CanonicalRenderAsset> writeCanonicalSnapshot(
             EntityManager entityManager,
             File repositoryDirectory,
             String profileId,
@@ -79,11 +82,13 @@ public final class ExportWriterSupport {
             boolean failOnError) throws Exception {
         Logger.chatMessage(EnumChatFormatting.AQUA + "Exporting NESQL++ canonical snapshot...");
         try {
-            new CanonicalRepositorySnapshotWriter(entityManager, repositoryDirectory, profileId, includeRenderAssets)
-                    .export();
+            List<CanonicalRenderAsset> renderAssets =
+                    new CanonicalRepositorySnapshotWriter(entityManager, repositoryDirectory, profileId, includeRenderAssets)
+                            .export();
             new GregTechCircuitProgressionWriter(repositoryDirectory).export();
             new GregTechMaterialPartsWriter(repositoryDirectory).export();
             new ForestryGeneticsWriter(repositoryDirectory).export();
+            return renderAssets;
         } catch (Exception e) {
             Logger.MOD.error("Failed to export NESQL++ canonical snapshot", e);
             Logger.chatMessage(
@@ -92,6 +97,7 @@ public final class ExportWriterSupport {
                 throw e;
             }
         }
+        return java.util.Collections.emptyList();
     }
 
     public static void writeGregTechMultiblocks(String repositoryName) throws Exception {
@@ -118,10 +124,39 @@ public final class ExportWriterSupport {
         }
     }
 
+    public static List<CanonicalRenderAsset> collectRenderAssets(File repositoryDirectory) throws Exception {
+        Logger.chatMessage(EnumChatFormatting.AQUA + "Collecting NESQL++ render assets from exported files...");
+        try {
+            List<CanonicalRenderAsset> assets =
+                    new CanonicalRenderAssetCollector(null, repositoryDirectory).collectAll();
+            Logger.MOD.info(
+                    "Collected {} render assets from exported files for render-contract stages.",
+                    assets.size());
+            Logger.chatMessage(
+                    EnumChatFormatting.GREEN
+                            + "Collected "
+                            + assets.size()
+                            + " render assets for atlas/manifest stages.");
+            return assets;
+        } catch (Exception e) {
+            Logger.MOD.error("Failed to collect NESQL++ render assets from exported files", e);
+            Logger.chatMessage(
+                    EnumChatFormatting.RED + "Failed to collect NESQL++ render assets: " + e.getMessage());
+            throw e;
+        }
+    }
+
     public static void writeRenderAssetManifest(EntityManager entityManager, File repositoryDirectory) throws Exception {
+        writeRenderAssetManifest(entityManager, repositoryDirectory, null);
+    }
+
+    public static void writeRenderAssetManifest(
+            EntityManager entityManager,
+            File repositoryDirectory,
+            List<CanonicalRenderAsset> precollectedAssets) throws Exception {
         Logger.chatMessage(EnumChatFormatting.AQUA + "Exporting NESQL++ render asset manifest...");
         try {
-            new CanonicalRenderAssetManifestWriter(entityManager, repositoryDirectory).export();
+            new CanonicalRenderAssetManifestWriter(entityManager, repositoryDirectory, precollectedAssets).export();
         } catch (Exception e) {
             Logger.MOD.error("Failed to export NESQL++ render asset manifest", e);
             Logger.chatMessage(
@@ -131,9 +166,16 @@ public final class ExportWriterSupport {
     }
 
     public static void writeAtlasPacks(EntityManager entityManager, File repositoryDirectory) throws Exception {
+        writeAtlasPacks(entityManager, repositoryDirectory, null);
+    }
+
+    public static void writeAtlasPacks(
+            EntityManager entityManager,
+            File repositoryDirectory,
+            List<CanonicalRenderAsset> precollectedAssets) throws Exception {
         Logger.chatMessage(EnumChatFormatting.AQUA + "Packing NESQL++ static atlases...");
         try {
-            new CanonicalAtlasPackWriter(entityManager, repositoryDirectory).export();
+            new CanonicalAtlasPackWriter(entityManager, repositoryDirectory, precollectedAssets).export();
         } catch (Exception e) {
             Logger.MOD.error("Failed to write NESQL++ atlas packs", e);
             Logger.chatMessage(
@@ -143,9 +185,16 @@ public final class ExportWriterSupport {
     }
 
     public static void writeAnimationManifest(EntityManager entityManager, File repositoryDirectory) throws Exception {
+        writeAnimationManifest(entityManager, repositoryDirectory, null);
+    }
+
+    public static void writeAnimationManifest(
+            EntityManager entityManager,
+            File repositoryDirectory,
+            List<CanonicalRenderAsset> precollectedAssets) throws Exception {
         Logger.chatMessage(EnumChatFormatting.AQUA + "Exporting NESQL++ animation manifest...");
         try {
-            new CanonicalAnimationManifestWriter(entityManager, repositoryDirectory).export();
+            new CanonicalAnimationManifestWriter(entityManager, repositoryDirectory, precollectedAssets).export();
         } catch (Exception e) {
             Logger.MOD.error("Failed to write NESQL++ animation manifest", e);
             Logger.chatMessage(
@@ -155,9 +204,16 @@ public final class ExportWriterSupport {
     }
 
     public static void writeAnimatedAtlasPacks(EntityManager entityManager, File repositoryDirectory) throws Exception {
+        writeAnimatedAtlasPacks(entityManager, repositoryDirectory, null);
+    }
+
+    public static void writeAnimatedAtlasPacks(
+            EntityManager entityManager,
+            File repositoryDirectory,
+            List<CanonicalRenderAsset> precollectedAssets) throws Exception {
         Logger.chatMessage(EnumChatFormatting.AQUA + "Packing NESQL++ animated atlases...");
         try {
-            new CanonicalAnimatedAtlasPackWriter(entityManager, repositoryDirectory).export();
+            new CanonicalAnimatedAtlasPackWriter(entityManager, repositoryDirectory, precollectedAssets).export();
         } catch (Exception e) {
             Logger.MOD.error("Failed to write NESQL++ animated atlas packs", e);
             Logger.chatMessage(
@@ -167,9 +223,16 @@ public final class ExportWriterSupport {
     }
 
     public static void writeRenderIndex(EntityManager entityManager, File repositoryDirectory) throws Exception {
+        writeRenderIndex(entityManager, repositoryDirectory, null);
+    }
+
+    public static void writeRenderIndex(
+            EntityManager entityManager,
+            File repositoryDirectory,
+            List<CanonicalRenderAsset> precollectedAssets) throws Exception {
         Logger.chatMessage(EnumChatFormatting.AQUA + "Exporting NESQL++ unified render index...");
         try {
-            new CanonicalRenderIndexWriter(entityManager, repositoryDirectory).export();
+            new CanonicalRenderIndexWriter(entityManager, repositoryDirectory, precollectedAssets).export();
         } catch (Exception e) {
             Logger.MOD.error("Failed to write NESQL++ unified render index", e);
             Logger.chatMessage(
@@ -179,9 +242,16 @@ public final class ExportWriterSupport {
     }
 
     public static void writeAtlasRegistry(EntityManager entityManager, File repositoryDirectory) throws Exception {
+        writeAtlasRegistry(entityManager, repositoryDirectory, null);
+    }
+
+    public static void writeAtlasRegistry(
+            EntityManager entityManager,
+            File repositoryDirectory,
+            List<CanonicalRenderAsset> precollectedAssets) throws Exception {
         Logger.chatMessage(EnumChatFormatting.AQUA + "Exporting NESQL++ atlas registry...");
         try {
-            new CanonicalAtlasRegistryWriter(entityManager, repositoryDirectory).export();
+            new CanonicalAtlasRegistryWriter(entityManager, repositoryDirectory, precollectedAssets).export();
         } catch (Exception e) {
             Logger.MOD.error("Failed to write NESQL++ atlas registry", e);
             Logger.chatMessage(

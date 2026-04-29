@@ -112,7 +112,7 @@ final class GregTechMaterialPartsWriter {
         }
 
         File output = new File(canonicalDir, "gregtech-material-parts.json");
-        Gson gson = new GsonBuilder().serializeNulls().setPrettyPrinting().create();
+        Gson gson = new GsonBuilder().serializeNulls().create();
         MaterialPartsDocument document = buildDocument();
 
         try (FileOutputStream fos = new FileOutputStream(output);

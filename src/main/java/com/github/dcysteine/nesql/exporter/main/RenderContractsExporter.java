@@ -1,13 +1,6 @@
 package com.github.dcysteine.nesql.exporter.main;
 
 import com.github.dcysteine.nesql.exporter.canonical.CanonicalRenderAsset;
-import com.github.dcysteine.nesql.exporter.local.CanonicalAnimatedAtlasPackWriter;
-import com.github.dcysteine.nesql.exporter.local.CanonicalAnimationManifestWriter;
-import com.github.dcysteine.nesql.exporter.local.CanonicalAtlasPackWriter;
-import com.github.dcysteine.nesql.exporter.local.CanonicalAtlasRegistryWriter;
-import com.github.dcysteine.nesql.exporter.local.CanonicalRenderAssetCollector;
-import com.github.dcysteine.nesql.exporter.local.CanonicalRenderAssetManifestWriter;
-import com.github.dcysteine.nesql.exporter.local.CanonicalRenderIndexWriter;
 import net.minecraft.util.EnumChatFormatting;
 
 import java.util.List;
@@ -38,16 +31,15 @@ public final class RenderContractsExporter {
             throw new IllegalStateException("Repository does not exist: " + exportPaths.repositoryDirectory.getAbsolutePath());
         }
 
-        List<CanonicalRenderAsset> assets =
-                new CanonicalRenderAssetCollector(null, exportPaths.repositoryDirectory).collectAll();
+        List<CanonicalRenderAsset> assets = ExportWriterSupport.collectRenderAssets(exportPaths.repositoryDirectory);
         Logger.chatMessage(EnumChatFormatting.AQUA + "Collected " + assets.size() + " render assets for rebuild.");
 
-        new CanonicalRenderAssetManifestWriter(null, exportPaths.repositoryDirectory, assets).export();
-        new CanonicalAnimationManifestWriter(null, exportPaths.repositoryDirectory, assets).export();
-        new CanonicalAtlasPackWriter(null, exportPaths.repositoryDirectory, assets).export();
-        new CanonicalAnimatedAtlasPackWriter(null, exportPaths.repositoryDirectory, assets).export();
-        new CanonicalAtlasRegistryWriter(null, exportPaths.repositoryDirectory, assets).export();
-        new CanonicalRenderIndexWriter(null, exportPaths.repositoryDirectory, assets).export();
+        ExportWriterSupport.writeRenderAssetManifest(null, exportPaths.repositoryDirectory, assets);
+        ExportWriterSupport.writeAnimationManifest(null, exportPaths.repositoryDirectory, assets);
+        ExportWriterSupport.writeAtlasPacks(null, exportPaths.repositoryDirectory, assets);
+        ExportWriterSupport.writeAnimatedAtlasPacks(null, exportPaths.repositoryDirectory, assets);
+        ExportWriterSupport.writeAtlasRegistry(null, exportPaths.repositoryDirectory, assets);
+        ExportWriterSupport.writeRenderIndex(null, exportPaths.repositoryDirectory, assets);
 
         Logger.chatMessage(EnumChatFormatting.GREEN + "Render contract rebuild complete!");
         Logger.chatMessage(

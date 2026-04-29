@@ -35,7 +35,7 @@ final class GregTechCircuitProgressionWriter {
         }
 
         File output = new File(canonicalDir, "gregtech-circuit-progression.json");
-        Gson gson = new GsonBuilder().serializeNulls().setPrettyPrinting().create();
+        Gson gson = new GsonBuilder().serializeNulls().create();
         ProgressionDocument document = buildDocument();
 
         try (FileOutputStream fos = new FileOutputStream(output);

@@ -116,7 +116,7 @@ public class CanonicalRenderIndexWriter {
         }
 
         File outputFile = new File(canonicalDir, OUTPUT_FILE);
-        Gson gson = new GsonBuilder().setPrettyPrinting().serializeNulls().create();
+        Gson gson = new GsonBuilder().serializeNulls().create();
         try (FileOutputStream fos = new FileOutputStream(outputFile);
              OutputStreamWriter writer = new OutputStreamWriter(fos, StandardCharsets.UTF_8)) {
             gson.toJson(index, writer);

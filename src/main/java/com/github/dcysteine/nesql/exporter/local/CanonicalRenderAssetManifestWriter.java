@@ -59,7 +59,7 @@ public class CanonicalRenderAssetManifestWriter {
             canonicalDir.mkdirs();
         }
 
-        Gson gson = new GsonBuilder().setPrettyPrinting().serializeNulls().create();
+        Gson gson = new GsonBuilder().serializeNulls().create();
         File outputFile = new File(canonicalDir, OUTPUT_FILE);
         try (FileOutputStream fos = new FileOutputStream(outputFile);
              OutputStreamWriter writer = new OutputStreamWriter(fos, StandardCharsets.UTF_8)) {

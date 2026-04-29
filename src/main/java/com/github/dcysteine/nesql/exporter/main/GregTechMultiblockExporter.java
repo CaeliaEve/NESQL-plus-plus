@@ -11,12 +11,17 @@ import java.io.FileOutputStream;
 import java.io.OutputStreamWriter;
 import java.nio.charset.StandardCharsets;
 import java.lang.reflect.Constructor;
+import java.lang.reflect.Field;
 import java.lang.reflect.Method;
 import java.util.ArrayList;
 import java.util.Arrays;
+import java.util.Collections;
+import java.util.Comparator;
 import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
+import java.util.regex.Matcher;
+import java.util.regex.Pattern;
 import java.util.zip.GZIPOutputStream;
 
 /**
@@ -29,6 +34,9 @@ public final class GregTechMultiblockExporter {
     private static final String REPOSITORY_PATH_FORMAT_STRING = "nesql" + File.separator + "%s";
     private static final String OUTPUT_RELATIVE_PATH =
             "multiblocks" + File.separator + "gregtech-multiblocks.json.gz";
+    private static final Pattern XYZ_DIMENSION_PATTERN =
+            Pattern.compile("(\\d+)\\s*[xX]\\s*(\\d+)\\s*[xX]\\s*(\\d+)");
+    private static final String GREGTECH_BLOCK_MACHINES_ITEM_ID_PREFIX = "i~gregtech~gt.blockmachines~";
 
     private final String repositoryName;
     private final File repositoryDirectory;
@@ -72,21 +80,28 @@ public final class GregTechMultiblockExporter {
             throw new IllegalStateException("Failed to create multiblocks directory: " + multiblockDir);
         }
 
+        DiscoveryStats discoveryStats = new DiscoveryStats();
         ExportPayload payload = new ExportPayload();
         payload.generatedAtEpochMs = System.currentTimeMillis();
-        payload.blueprints.addAll(buildCuratedBlueprints());
-        payload.totalMetaTileEntitiesScanned = payload.blueprints.size();
+        payload.blueprints.addAll(buildBlueprintCatalog(discoveryStats));
+        payload.totalMetaTileEntitiesScanned = discoveryStats.totalMetaTileEntitiesScanned;
         payload.totalMultiblocksExported = payload.blueprints.size();
-        payload.failedControllers = 0;
+        payload.failedControllers = discoveryStats.failedControllers;
 
         File output = new File(repositoryDirectory, OUTPUT_RELATIVE_PATH);
         writeGzipJson(output, payload);
 
         Logger.MOD.info("GregTech multiblock export complete: {}", output.getAbsolutePath());
+        Logger.MOD.info("Scanned registered controllers: {}", payload.totalMetaTileEntitiesScanned);
         Logger.MOD.info("Exported blueprints: {}", payload.blueprints.size());
+        Logger.MOD.info("Failed controllers: {}", payload.failedControllers);
         Logger.chatMessage(EnumChatFormatting.GREEN + "GregTech multiblock export complete!");
         Logger.chatMessage(EnumChatFormatting.YELLOW + "Output: " + output.getAbsolutePath());
+        Logger.chatMessage(EnumChatFormatting.YELLOW + "Controllers scanned: " + payload.totalMetaTileEntitiesScanned);
         Logger.chatMessage(EnumChatFormatting.YELLOW + "Blueprints exported: " + payload.blueprints.size());
+        if (payload.failedControllers > 0) {
+            Logger.chatMessage(EnumChatFormatting.RED + "Failed controllers: " + payload.failedControllers);
+        }
     }
 
     private static void writeGzipJson(File output, ExportPayload payload) throws Exception {
@@ -96,6 +111,271 @@ public final class GregTechMultiblockExporter {
              OutputStreamWriter writer = new OutputStreamWriter(gzip, StandardCharsets.UTF_8)) {
             gson.toJson(payload, writer);
         }
+    }
+
+    private List<MultiblockBlueprint> buildBlueprintCatalog(DiscoveryStats discoveryStats) {
+        Map<Integer, MultiblockBlueprint> runtimeBlueprints = discoverRuntimeBlueprints(discoveryStats);
+        List<MultiblockBlueprint> curatedBlueprints = buildCuratedBlueprints();
+
+        for (MultiblockBlueprint curated : curatedBlueprints) {
+            MultiblockBlueprint runtime = runtimeBlueprints.get(curated.metaTileId);
+            if (runtime == null) {
+                runtimeBlueprints.put(curated.metaTileId, curated);
+            } else {
+                runtimeBlueprints.put(curated.metaTileId, mergeBlueprint(runtime, curated));
+            }
+        }
+
+        List<MultiblockBlueprint> merged = new ArrayList<>(runtimeBlueprints.values());
+        Collections.sort(
+                merged,
+                new Comparator<MultiblockBlueprint>() {
+                    @Override
+                    public int compare(MultiblockBlueprint left, MultiblockBlueprint right) {
+                        return Integer.compare(left.metaTileId, right.metaTileId);
+                    }
+                });
+        return merged;
+    }
+
+    private Map<Integer, MultiblockBlueprint> discoverRuntimeBlueprints(DiscoveryStats discoveryStats) {
+        Map<Integer, MultiblockBlueprint> discovered = new LinkedHashMap<>();
+        try {
+            Class<?> apiClass = Class.forName("gregtech.api.GregTechAPI");
+            Field metaTileEntitiesField = apiClass.getField("METATILEENTITIES");
+            Object rawRegistry = metaTileEntitiesField.get(null);
+            if (!(rawRegistry instanceof Object[])) {
+                Logger.MOD.warn("GregTechAPI.METATILEENTITIES is not an Object[]");
+                return discovered;
+            }
+
+            Object[] registry = (Object[]) rawRegistry;
+            for (int metaTileId = 1; metaTileId < registry.length; metaTileId++) {
+                Object machine = registry[metaTileId];
+                if (machine == null) {
+                    continue;
+                }
+
+                discoveryStats.totalMetaTileEntitiesScanned++;
+                if (!isRuntimeMultiblockCandidate(machine)) {
+                    continue;
+                }
+
+                try {
+                    MultiblockBlueprint blueprint = buildRuntimeBlueprint(metaTileId, machine);
+                    if (blueprint != null) {
+                        discovered.put(metaTileId, blueprint);
+                    }
+                } catch (Exception e) {
+                    discoveryStats.failedControllers++;
+                    Logger.MOD.warn(
+                            "Failed to export GregTech multiblock {} (id {}): {}",
+                            machine.getClass().getName(),
+                            metaTileId,
+                            e.getMessage());
+                }
+            }
+        } catch (Exception e) {
+            Logger.MOD.warn("Failed to enumerate GregTech multiblocks from runtime registry", e);
+        }
+
+        return discovered;
+    }
+
+    private boolean isRuntimeMultiblockCandidate(Object machine) {
+        if (machine == null) {
+            return false;
+        }
+
+        Class<?> machineClass = machine.getClass();
+        String className = machineClass.getName().toLowerCase();
+        if (className.contains(".hatch")
+                || className.contains(".pipe")
+                || className.contains("metapipe")
+                || className.contains("cable")) {
+            return false;
+        }
+
+        return findMethod(machineClass, "getStructureDefinition") != null
+                || findMethodWithParameterCount(machineClass, "construct", 2) != null;
+    }
+
+    private MultiblockBlueprint buildRuntimeBlueprint(int metaTileId, Object machine) {
+        String className = machine.getClass().getName();
+        MultiblockBlueprint blueprint =
+                baseBlueprint(
+                        metaTileId,
+                        className,
+                        resolveControllerItemId(metaTileId, machine),
+                        resolveControllerLocalizedName(metaTileId, machine));
+        blueprint.structureSource = "gregtech_runtime_registry";
+        enrichFromRuntimeTooltip(blueprint, machine);
+        enrichFromStructureDefinition(blueprint, machine);
+        enrichOptionalFeatures(blueprint, machine);
+        hydrateDimensionsFromTooltip(blueprint);
+        return blueprint;
+    }
+
+    private String resolveControllerItemId(int metaTileId, Object machine) {
+        try {
+            Method getStackForm = machine.getClass().getMethod("getStackForm", long.class);
+            Object value = getStackForm.invoke(machine, 1L);
+            if (value instanceof net.minecraft.item.ItemStack) {
+                net.minecraft.item.ItemStack stack = (net.minecraft.item.ItemStack) value;
+                if (stack.getItemDamage() >= 0) {
+                    return GREGTECH_BLOCK_MACHINES_ITEM_ID_PREFIX + stack.getItemDamage();
+                }
+            }
+        } catch (Exception ignored) {
+        }
+        return GREGTECH_BLOCK_MACHINES_ITEM_ID_PREFIX + metaTileId;
+    }
+
+    private String resolveControllerLocalizedName(int metaTileId, Object machine) {
+        try {
+            Method getLocalName = machine.getClass().getMethod("getLocalName");
+            Object value = getLocalName.invoke(machine);
+            if (value instanceof String && !((String) value).trim().isEmpty()) {
+                return (String) value;
+            }
+        } catch (Exception ignored) {
+        }
+
+        try {
+            Method getStackForm = machine.getClass().getMethod("getStackForm", long.class);
+            Object value = getStackForm.invoke(machine, 1L);
+            if (value instanceof net.minecraft.item.ItemStack) {
+                String displayName = ((net.minecraft.item.ItemStack) value).getDisplayName();
+                if (displayName != null && !displayName.trim().isEmpty()) {
+                    return displayName;
+                }
+            }
+        } catch (Exception ignored) {
+        }
+
+        return "GregTech Machine #" + metaTileId;
+    }
+
+    private MultiblockBlueprint mergeBlueprint(MultiblockBlueprint runtime, MultiblockBlueprint curated) {
+        MultiblockBlueprint merged =
+                baseBlueprint(
+                        runtime.metaTileId,
+                        runtime.className != null ? runtime.className : curated.className,
+                        runtime.controllerItemId != null ? runtime.controllerItemId : curated.controllerItemId,
+                        runtime.controllerLocalizedName != null
+                                ? runtime.controllerLocalizedName
+                                : curated.controllerLocalizedName);
+
+        merged.structureSource = mergeStructureSource(runtime.structureSource, curated.structureSource);
+        merged.supports = mergeOptionalFeatures(runtime.supports, curated.supports);
+        merged.dimensions = curated.dimensions != null ? curated.dimensions : runtime.dimensions;
+        merged.voxelBlueprint = curated.voxelBlueprint != null ? curated.voxelBlueprint : runtime.voxelBlueprint;
+        merged.segmentBlueprint = curated.segmentBlueprint != null ? curated.segmentBlueprint : runtime.segmentBlueprint;
+        merged.structurePieces = mergeStructurePieces(runtime.structurePieces, curated.structurePieces);
+
+        mergeLines(merged.information, runtime.information != null ? runtime.information.toArray(new String[0]) : null);
+        mergeLines(merged.information, curated.information != null ? curated.information.toArray(new String[0]) : null);
+        mergeLines(
+                merged.structureInformation,
+                runtime.structureInformation != null ? runtime.structureInformation.toArray(new String[0]) : null);
+        mergeLines(
+                merged.structureInformation,
+                curated.structureInformation != null ? curated.structureInformation.toArray(new String[0]) : null);
+        mergeLines(
+                merged.structureHints,
+                runtime.structureHints != null ? runtime.structureHints.toArray(new String[0]) : null);
+        mergeLines(
+                merged.structureHints,
+                curated.structureHints != null ? curated.structureHints.toArray(new String[0]) : null);
+
+        if (merged.dimensions == null) {
+            hydrateDimensionsFromTooltip(merged);
+        }
+        return merged;
+    }
+
+    private String mergeStructureSource(String runtimeSource, String curatedSource) {
+        if (runtimeSource == null || runtimeSource.trim().isEmpty()) {
+            return curatedSource;
+        }
+        if (curatedSource == null || curatedSource.trim().isEmpty()) {
+            return runtimeSource;
+        }
+        if (runtimeSource.contains(curatedSource)) {
+            return runtimeSource;
+        }
+        if (curatedSource.contains(runtimeSource)) {
+            return curatedSource;
+        }
+        return runtimeSource + "+" + curatedSource;
+    }
+
+    private OptionalFeatures mergeOptionalFeatures(OptionalFeatures runtime, OptionalFeatures curated) {
+        if (runtime == null) {
+            return curated;
+        }
+        if (curated == null) {
+            return runtime;
+        }
+        OptionalFeatures merged = new OptionalFeatures();
+        merged.inputSeparation = Boolean.TRUE.equals(runtime.inputSeparation) || Boolean.TRUE.equals(curated.inputSeparation);
+        merged.batchMode = Boolean.TRUE.equals(runtime.batchMode) || Boolean.TRUE.equals(curated.batchMode);
+        merged.recipeLocking = Boolean.TRUE.equals(runtime.recipeLocking) || Boolean.TRUE.equals(curated.recipeLocking);
+        merged.voidProtection = Boolean.TRUE.equals(runtime.voidProtection) || Boolean.TRUE.equals(curated.voidProtection);
+        return merged;
+    }
+
+    private Map<String, String> mergeStructurePieces(Map<String, String> runtime, Map<String, String> curated) {
+        if ((runtime == null || runtime.isEmpty()) && (curated == null || curated.isEmpty())) {
+            return null;
+        }
+        Map<String, String> merged = new LinkedHashMap<>();
+        if (runtime != null) {
+            merged.putAll(runtime);
+        }
+        if (curated != null) {
+            merged.putAll(curated);
+        }
+        return merged;
+    }
+
+    private void hydrateDimensionsFromTooltip(MultiblockBlueprint blueprint) {
+        if (blueprint == null || blueprint.dimensions != null) {
+            return;
+        }
+
+        Dimensions parsed =
+                parseDimensionsFromLines(
+                        blueprint.structureInformation != null ? blueprint.structureInformation : blueprint.information);
+        if (parsed == null && blueprint.information != null) {
+            parsed = parseDimensionsFromLines(blueprint.information);
+        }
+        blueprint.dimensions = parsed;
+    }
+
+    private Dimensions parseDimensionsFromLines(List<String> lines) {
+        if (lines == null) {
+            return null;
+        }
+
+        for (String line : lines) {
+            if (line == null || line.trim().isEmpty()) {
+                continue;
+            }
+
+            Matcher matcher = XYZ_DIMENSION_PATTERN.matcher(line);
+            if (!matcher.find()) {
+                continue;
+            }
+
+            return new Dimensions(
+                    Integer.parseInt(matcher.group(1)),
+                    Integer.parseInt(matcher.group(2)),
+                    Integer.parseInt(matcher.group(3)),
+                    line);
+        }
+
+        return null;
     }
 
     private List<MultiblockBlueprint> buildCuratedBlueprints() {
@@ -798,8 +1078,12 @@ public final class GregTechMultiblockExporter {
     }
 
     private void enrichFromRuntimeTooltip(MultiblockBlueprint blueprint) {
+        enrichFromRuntimeTooltip(blueprint, null);
+    }
+
+    private void enrichFromRuntimeTooltip(MultiblockBlueprint blueprint, Object runtimeMachine) {
         try {
-            Object machine = instantiateMachine(blueprint.className);
+            Object machine = runtimeMachine != null ? runtimeMachine : instantiateMachine(blueprint.className);
             if (machine == null) {
                 return;
             }
@@ -823,8 +1107,12 @@ public final class GregTechMultiblockExporter {
     }
 
     private void enrichFromStructureDefinition(MultiblockBlueprint blueprint) {
+        enrichFromStructureDefinition(blueprint, null);
+    }
+
+    private void enrichFromStructureDefinition(MultiblockBlueprint blueprint, Object runtimeMachine) {
         try {
-            Object machine = instantiateMachine(blueprint.className);
+            Object machine = runtimeMachine != null ? runtimeMachine : instantiateMachine(blueprint.className);
             if (machine == null) {
                 return;
             }
@@ -875,8 +1163,12 @@ public final class GregTechMultiblockExporter {
     }
 
     private void enrichOptionalFeatures(MultiblockBlueprint blueprint) {
+        enrichOptionalFeatures(blueprint, null);
+    }
+
+    private void enrichOptionalFeatures(MultiblockBlueprint blueprint, Object runtimeMachine) {
         try {
-            Object machine = instantiateMachine(blueprint.className);
+            Object machine = runtimeMachine != null ? runtimeMachine : instantiateMachine(blueprint.className);
             if (machine == null) {
                 return;
             }
@@ -925,6 +1217,19 @@ public final class GregTechMultiblockExporter {
             } catch (NoSuchMethodException ignored) {
                 cursor = cursor.getSuperclass();
             }
+        }
+        return null;
+    }
+
+    private Method findMethodWithParameterCount(Class<?> clazz, String methodName, int parameterCount) {
+        Class<?> cursor = clazz;
+        while (cursor != null) {
+            for (Method method : cursor.getDeclaredMethods()) {
+                if (method.getName().equals(methodName) && method.getParameterTypes().length == parameterCount) {
+                    return method;
+                }
+            }
+            cursor = cursor.getSuperclass();
         }
         return null;
     }
@@ -1001,6 +1306,11 @@ public final class GregTechMultiblockExporter {
         int totalMultiblocksExported;
         int failedControllers;
         List<MultiblockBlueprint> blueprints = new ArrayList<>();
+    }
+
+    private static final class DiscoveryStats {
+        int totalMetaTileEntitiesScanned;
+        int failedControllers;
     }
 
     private static final class MultiblockBlueprint {

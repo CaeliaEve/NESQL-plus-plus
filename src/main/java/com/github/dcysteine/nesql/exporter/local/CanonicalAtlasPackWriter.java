@@ -74,7 +74,7 @@ public class CanonicalAtlasPackWriter {
         manifest.assetCount = countAssets(manifest.groups);
 
         File manifestFile = new File(canonicalDir, OUTPUT_FILE);
-        Gson gson = new GsonBuilder().setPrettyPrinting().serializeNulls().create();
+        Gson gson = new GsonBuilder().serializeNulls().create();
         try (FileOutputStream fos = new FileOutputStream(manifestFile);
              OutputStreamWriter writer = new OutputStreamWriter(fos, StandardCharsets.UTF_8)) {
             gson.toJson(manifest, writer);

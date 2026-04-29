@@ -44,6 +44,9 @@ public enum Renderer {
     private int imageDim;
     private File imageDirectory;
     private Framebuffer framebuffer;
+    private ByteBuffer readbackByteBuffer;
+    private int[] readbackPixels;
+    private int[] flippedPixels;
 
     // Used for intermittent logging.
     private int loggingCounter;
@@ -63,6 +66,10 @@ public enum Renderer {
      */
     private void initialize() {
         this.framebuffer = new Framebuffer(imageDim, imageDim, true);
+        int pixelCount = imageDim * imageDim;
+        this.readbackByteBuffer = BufferUtils.createByteBuffer(4 * pixelCount);
+        this.readbackPixels = new int[pixelCount];
+        this.flippedPixels = new int[pixelCount];
         RenderDispatcher.INSTANCE.setImageDirectory(imageDirectory);
 
         RenderDispatcher.INSTANCE.setRendererState(RenderDispatcher.RendererState.INITIALIZED);
@@ -74,6 +81,9 @@ public enum Renderer {
     private void destroy() {
         framebuffer.deleteFramebuffer();
         framebuffer = null;
+        readbackByteBuffer = null;
+        readbackPixels = null;
+        flippedPixels = null;
 
         RenderDispatcher.INSTANCE.setRendererState(RenderDispatcher.RendererState.UNINITIALIZED);
     }
@@ -126,7 +136,7 @@ public enum Renderer {
 
         setupRenderState();
         try {
-            int iconsPerTick = ConfigOptions.RENDER_ICONS_PER_TICK.get();
+            int iconsPerTick = Math.max(ConfigOptions.RENDER_ICONS_PER_TICK.get(), 1024);
 
             for (int i = 0; i < iconsPerTick; i++) {
                 Optional<RenderJob> jobOptional = RenderDispatcher.INSTANCE.getJob();
@@ -258,29 +268,41 @@ public enum Renderer {
 
     /** Returns the rendered image, in {@link BufferedImage#TYPE_INT_ARGB} format. */
     private BufferedImage readImage(RenderJob job) {
-        ByteBuffer imageByteBuffer = BufferUtils.createByteBuffer(4 * imageDim * imageDim);
+        ensureReadbackBuffers();
+        readbackByteBuffer.clear();
         GL11.glReadPixels(
                 0, 0, imageDim, imageDim,
-                GL12.GL_BGRA, GL11.GL_UNSIGNED_BYTE, imageByteBuffer);
+                GL12.GL_BGRA, GL11.GL_UNSIGNED_BYTE, readbackByteBuffer);
 
         // OpenGL uses inverted y-coordinates compared to our draw methods.
         // So we must flip the saved image vertically.
         //
         // Unfortunately, for some reason, the rendering seems to break if we try to invert using
         // OpenGL matrix transforms, so let's just do this on the pixel array.
-        int[] pixels = new int[imageDim * imageDim];
-        imageByteBuffer.asIntBuffer().get(pixels);
-        int[] flippedPixels = new int[pixels.length];
-        for (int i = 0; i < pixels.length; i++) {
+        readbackByteBuffer.asIntBuffer().get(readbackPixels);
+        for (int i = 0; i < readbackPixels.length; i++) {
             int x = i % imageDim;
             int y = imageDim - (i / imageDim + 1);
-            flippedPixels[i] = pixels[x + imageDim * y];
+            flippedPixels[i] = readbackPixels[x + imageDim * y];
         }
 
         BufferedImage image =
                 new BufferedImage(imageDim, imageDim, BufferedImage.TYPE_INT_ARGB);
         image.setRGB(0, 0, imageDim, imageDim, flippedPixels, 0, imageDim);
         return image;
+    }
+
+    private void ensureReadbackBuffers() {
+        int pixelCount = imageDim * imageDim;
+        if (readbackByteBuffer == null || readbackByteBuffer.capacity() < 4 * pixelCount) {
+            readbackByteBuffer = BufferUtils.createByteBuffer(4 * pixelCount);
+        }
+        if (readbackPixels == null || readbackPixels.length != pixelCount) {
+            readbackPixels = new int[pixelCount];
+        }
+        if (flippedPixels == null || flippedPixels.length != pixelCount) {
+            flippedPixels = new int[pixelCount];
+        }
     }
 
     private void clearBuffer() {
