@@ -54,14 +54,20 @@ public final class GifRenderer {
         private final List<BufferedImage> frames = new ArrayList<BufferedImage>();
         private int currentFrame = 0;
         private final int totalFrames;
+        private final int frameDelayMs;
         private final boolean loop;
         private final long startTimeMs = System.currentTimeMillis();
         private boolean detectedAnimation = false;
         private boolean detectionComplete = false;
 
         public AnimationCapture(File outputFile) {
+            this(outputFile, ConfigOptions.GIF_FRAMES.get(), DEFAULT_CAPTURE_FRAME_DELAY_MS);
+        }
+
+        public AnimationCapture(File outputFile, int totalFrames, int frameDelayMs) {
             this.outputFile = outputFile;
-            this.totalFrames = ConfigOptions.GIF_FRAMES.get();
+            this.totalFrames = Math.max(1, totalFrames);
+            this.frameDelayMs = Math.max(16, frameDelayMs);
             this.loop = ConfigOptions.GIF_LOOP_COUNT.get() == 0;
         }
 
@@ -213,7 +219,7 @@ public final class GifRenderer {
                 return;
             }
 
-            writeAnimatedGif(outputFile, framesToWrite, DEFAULT_CAPTURE_FRAME_DELAY_MS, loop);
+            writeAnimatedGif(outputFile, framesToWrite, frameDelayMs, loop);
             Logger.MOD.info(
                     "Successfully wrote animated GIF with {} frames for {}",
                     framesToWrite.size(), outputFile.getName());

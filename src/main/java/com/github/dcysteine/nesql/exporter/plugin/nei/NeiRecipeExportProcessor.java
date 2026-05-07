@@ -60,7 +60,7 @@ public class NeiRecipeExportProcessor extends PluginHelper {
 
     public void process() {
         try {
-            Logger.chatMessage("=== NEI Recipe Export (V14 Optimized) ===");
+            Logger.chatMessage("=== NEI Recipe Export (streaming v1.04) ===");
             logger.info("Starting NEI recipe export in streaming mode...");
 
             // Use streaming export to avoid OutOfMemoryError
@@ -298,6 +298,14 @@ public class NeiRecipeExportProcessor extends PluginHelper {
 
                 // Extract mod-specific metadata (aspects, blood cost, etc.)
                 extractModSpecificMetadata(handler, i, builtRecipe, result);
+                registerHandlerMetadata(
+                        handler,
+                        handler.getHandlerId(),
+                        builtRecipe,
+                        effectiveRecipeType,
+                        result,
+                        ingredients,
+                        others);
 
                 exported++;
 
@@ -742,12 +750,23 @@ public class NeiRecipeExportProcessor extends PluginHelper {
             Object handler,
             String handlerId,
             com.github.dcysteine.nesql.sql.base.recipe.Recipe builtRecipe) {
+        registerHandlerMetadata(handler, handlerId, builtRecipe, null, null, null, null);
+    }
+
+    private void registerHandlerMetadata(
+            Object handler,
+            String handlerId,
+            com.github.dcysteine.nesql.sql.base.recipe.Recipe builtRecipe,
+            RecipeType recipeType,
+            PositionedStack result,
+            List<PositionedStack> ingredients,
+            List<PositionedStack> others) {
         if (builtRecipe == null) {
             return;
         }
         NeiHandlerMetadataEntry metadata = findHandlerMetadata(handlerId, handler);
 
-        Map<String, Object> data = new HashMap<>();
+        Map<String, Object> data = new LinkedHashMap<>();
         data.put("handler", metadata != null ? nullToEmpty(metadata.getHandler()) : nullToEmpty(handlerId));
         data.put("handlerId", nullToEmpty(handlerId));
         data.put("handlerClass", handler == null ? "" : handler.getClass().getName());
@@ -764,6 +783,9 @@ public class NeiRecipeExportProcessor extends PluginHelper {
         data.put("yShift", metadata != null ? nullToZero(metadata.getYShiftInt()) : 0);
         data.put("imageResource", metadata != null ? nullToEmpty(metadata.getImageResource()) : "");
         data.put("itemNotes", metadata != null ? nullToEmpty(metadata.getItemNotes()) : "");
+        addSlotLayout(data, "inputSlotLayout", buildPositionedSlotLayout(ingredients, recipeType, "input"));
+        addSlotLayout(data, "outputSlotLayout", buildPositionedSlotLayout(singletonPositionedStack(result), null, "output"));
+        addSlotLayout(data, "otherSlotLayout", buildPositionedSlotLayout(others, null, "other"));
 
         com.github.dcysteine.nesql.exporter.util.SpecialRecipeMetadataRegistry.registerMetadata(
                 builtRecipe.getId(),
@@ -930,6 +952,88 @@ public class NeiRecipeExportProcessor extends PluginHelper {
         return bySlot.isEmpty() ? null : bySlot;
     }
 
+    private Map<PositionedStack, Integer> buildStackIndexMap(
+            List<PositionedStack> ingredients, RecipeType recipeType) {
+        Map<Integer, PositionedStack> bySlot = buildSlotMapByPosition(ingredients, recipeType);
+        if (bySlot == null || bySlot.isEmpty()) {
+            return Collections.emptyMap();
+        }
+
+        Map<PositionedStack, Integer> byStack = new IdentityHashMap<>();
+        for (Map.Entry<Integer, PositionedStack> entry : bySlot.entrySet()) {
+            byStack.put(entry.getValue(), entry.getKey());
+        }
+        return byStack;
+    }
+
+    private List<Map<String, Object>> buildPositionedSlotLayout(
+            List<PositionedStack> stacks, RecipeType recipeType, String role) {
+        if (stacks == null || stacks.isEmpty()) {
+            return Collections.emptyList();
+        }
+
+        Map<PositionedStack, Integer> stackIndexes = buildStackIndexMap(stacks, recipeType);
+        List<Map<String, Object>> slots = new ArrayList<>();
+        int fallbackSlotIndex = 0;
+        int normalizedWidth = safeDimensionWidth(recipeType);
+
+        for (PositionedStack stack : stacks) {
+            if (!hasValidIngredient(stack)) {
+                continue;
+            }
+
+            Integer slotIndex = stackIndexes.get(stack);
+            if (slotIndex == null) {
+                slotIndex = fallbackSlotIndex;
+            }
+            fallbackSlotIndex = Math.max(fallbackSlotIndex, slotIndex + 1);
+
+            Map<String, Object> slot = new LinkedHashMap<>();
+            slot.put("role", role);
+            slot.put("slotIndex", slotIndex);
+            slot.put("w", 18);
+            slot.put("h", 18);
+            slot.put("coordinateSpace", "nei_pixels");
+            slot.put("source", "positioned_stack");
+
+            Integer x = readStackX(stack);
+            Integer y = readStackY(stack);
+            if (x != null) slot.put("x", x);
+            if (y != null) slot.put("y", y);
+
+            if (normalizedWidth > 0) {
+                slot.put("column", slotIndex % normalizedWidth);
+                slot.put("row", slotIndex / normalizedWidth);
+            }
+
+            ItemStack representative = resolveRepresentativeStack(stack);
+            if (representative != null && representative.getItem() != null) {
+                slot.put("itemId", itemFactory.get(representative).getId());
+            }
+
+            slots.add(slot);
+        }
+
+        return slots;
+    }
+
+    private List<PositionedStack> singletonPositionedStack(PositionedStack stack) {
+        if (stack == null) {
+            return Collections.emptyList();
+        }
+        List<PositionedStack> result = new ArrayList<>(1);
+        result.add(stack);
+        return result;
+    }
+
+    private void addSlotLayout(
+            Map<String, Object> metadata, String key, List<Map<String, Object>> layout) {
+        if (layout == null || layout.isEmpty()) {
+            return;
+        }
+        metadata.put(key, layout);
+    }
+
     private void addIngredientToBuilder(RecipeBuilder builder, PositionedStack ingredient, Integer slotIndex) {
         if (ingredient == null) {
             if (slotIndex != null) builder.skipItemInputAt(slotIndex);
@@ -996,7 +1100,15 @@ public class NeiRecipeExportProcessor extends PluginHelper {
                     // Store in additionalData for now
                 }
 
-                builder.build();
+                com.github.dcysteine.nesql.sql.base.recipe.Recipe builtRecipe = builder.build();
+                registerHandlerMetadata(
+                        handler,
+                        handler.getHandlerId(),
+                        builtRecipe,
+                        recipeType,
+                        result,
+                        ingredients,
+                        others);
                 exported++;
 
                 if (Logger.intermittentLog(exported)) {
@@ -2058,6 +2170,7 @@ public class NeiRecipeExportProcessor extends PluginHelper {
                 Object neiRecipe = null;
                 PositionedStack result = null;
                 List<PositionedStack> ingredients = null;
+                List<PositionedStack> others = null;
 
                 try {
                     neiRecipe = getRecipeFromHandler(handler, i);
@@ -2080,13 +2193,22 @@ public class NeiRecipeExportProcessor extends PluginHelper {
                         addIngredientInputs(builder, ingredients, effectiveRecipeType);
                     }
 
+                    others = handler.getOtherStacks(i);
+
                     // Build the recipe
                     com.github.dcysteine.nesql.sql.base.recipe.Recipe builtRecipe = builder.build();
 
                     // Streaming export is the active data path. Preserve the same
                     // handler-specific metadata that the older batch path attached.
                     extractModSpecificMetadata(handler, i, builtRecipe, result);
-                    registerHandlerMetadata(handler, handlerId, builtRecipe);
+                    registerHandlerMetadata(
+                            handler,
+                            handlerId,
+                            builtRecipe,
+                            effectiveRecipeType,
+                            result,
+                            ingredients,
+                            others);
                     exported++;
 
                 } catch (Exception e) {
@@ -2193,9 +2315,18 @@ public class NeiRecipeExportProcessor extends PluginHelper {
                         addIngredientInputs(builder, ingredients, recipeType);
                     }
 
+                    List<PositionedStack> others = handler.getOtherStacks(i);
+
                     // Build the recipe
                     com.github.dcysteine.nesql.sql.base.recipe.Recipe builtRecipe = builder.build();
-                    registerHandlerMetadata(handler, handlerId, builtRecipe);
+                    registerHandlerMetadata(
+                            handler,
+                            handlerId,
+                            builtRecipe,
+                            recipeType,
+                            result,
+                            ingredients,
+                            others);
                     exported++;
 
                 } catch (Exception e) {

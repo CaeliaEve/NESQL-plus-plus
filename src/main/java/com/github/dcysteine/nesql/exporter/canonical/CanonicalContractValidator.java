@@ -61,6 +61,7 @@ public final class CanonicalContractValidator {
         if (isBlank(recipe.recipeId)) issues.add("recipe.recipeId:missing");
         if (isBlank(recipe.family)) issues.add("recipe.family:missing");
         if (recipe.machine == null) issues.add("recipe.machine:missing");
+        if (recipe.layout == null) issues.add("recipe.layout:missing");
         if (recipe.itemInputs == null) issues.add("recipe.itemInputs:missing");
         if (recipe.itemOutputs == null) issues.add("recipe.itemOutputs:missing");
         return issues;

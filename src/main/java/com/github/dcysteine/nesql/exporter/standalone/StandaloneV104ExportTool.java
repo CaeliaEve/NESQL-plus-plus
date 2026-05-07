@@ -11,17 +11,17 @@ import java.util.HashMap;
 import java.util.Map;
 
 /**
- * V14 Export Tool - Standalone exporter without Minecraft
+ * NESQL++ Standalone v1.04 export tool (without Minecraft runtime)
  *
  * Usage:
  * java -cp NESQL-Exporter-0.5.0.jar;NESQL-Exporter-0.5.0-deps.jar;
- *      com.github.dcysteine.nesql.exporter.standalone.V14ExportTool
+ *      com.github.dcysteine.nesql.exporter.standalone.StandaloneV104ExportTool
  */
-public class V14ExportTool {
+public class StandaloneV104ExportTool {
 
     public static void main(String[] args) {
         System.out.println("============================================================");
-        System.out.println("V14 Export Tool - Standalone Exporter");
+        System.out.println("NESQL++ Standalone v1.04 Export Tool");
         System.out.println("============================================================");
         System.out.println();
 
@@ -29,7 +29,7 @@ public class V14ExportTool {
         String minecraftDir = "C:\\Users\\CaeliaEve\\AppData\\Roaming\\PrismLauncher\\instances\\GT_New_Horizons_2.8.4_Java_8\\.minecraft";
         File nesqlRepoDir = new File(new File(minecraftDir), "nesql/nesql-repository");
         File dbPropsFile = new File(nesqlRepoDir, "nesql-db.properties");
-        File exportDir = new File(new File(minecraftDir), "nesql/nesql-repository/v14-export");
+        File exportDir = new File(new File(minecraftDir), "nesql/nesql-repository/v1.04-export");
 
         // Check database exists (HSQLDB creates multiple files, check .properties)
         if (!dbPropsFile.exists()) {

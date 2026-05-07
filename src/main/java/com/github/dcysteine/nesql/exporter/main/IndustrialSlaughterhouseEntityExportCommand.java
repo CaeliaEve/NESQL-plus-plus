@@ -6,16 +6,16 @@ import net.minecraft.command.ICommandSender;
 
 import java.util.List;
 
-/** Command to export recipes and other data to a file. */
-final class ExportCommand implements ICommand {
+/** Command to export industrial slaughterhouse / EEC mob 3D model contracts plus preview fallbacks. */
+final class IndustrialSlaughterhouseEntityExportCommand implements ICommand {
     @Override
     public String getCommandName() {
-        return "nesql";
+        return "nesql-eec-models";
     }
 
     @Override
     public String getCommandUsage(ICommandSender unused) {
-        return "/nesql [filename suffix]";
+        return "/nesql-eec-models [repository suffix]";
     }
 
     @Override
@@ -31,31 +31,26 @@ final class ExportCommand implements ICommand {
             return;
         }
 
-        Exporter exporter;
-        if (args.length == 1) {
-            exporter = new Exporter(args[0]);
-        } else {
-            exporter = new Exporter();
-        }
+        IndustrialSlaughterhouseEntityExporter exporter =
+                args.length == 1
+                        ? new IndustrialSlaughterhouseEntityExporter(args[0])
+                        : new IndustrialSlaughterhouseEntityExporter();
 
-        // Show progress GUI before starting export
         ExportProgressGui gui = new ExportProgressGui();
         gui.clear();
         gui.setTitle("NESQL++ 1.04");
-        gui.setSubtitle("Full Export / v1.04 / " + (args.length == 1 ? args[0] : "default"));
-        gui.addMessage("Starting export...");
+        gui.setSubtitle("EEC Entity Model Export / " + (args.length == 1 ? args[0] : "default"));
+        gui.addMessage("Starting industrial slaughterhouse entity 3D model export...");
+        gui.addMessage("Export targets: canonical/entity-models.json + canonical/entity-previews.json");
 
-        // Open GUI on client side
         Minecraft.getMinecraft().displayGuiScreen(gui);
 
-        // Start export in background thread
         new Thread(() -> {
             try {
                 exporter.exportReportException();
             } finally {
-                // Close GUI when export is complete
                 try {
-                    Thread.sleep(3000); // Wait 3 seconds before closing so user can see completion
+                    Thread.sleep(3000);
                 } catch (InterruptedException e) {
                     Thread.currentThread().interrupt();
                 }
@@ -93,7 +88,6 @@ final class ExportCommand implements ICommand {
         if (other instanceof ICommand) {
             return compareTo((ICommand) other);
         }
-
         return 0;
     }
 }

@@ -18,7 +18,7 @@ import java.util.Map;
 import java.util.Set;
 
 /**
- * V14 mod-organized recipe exporter.
+ * Mod-organized recipe exporter for the NESQL++ v1.04 export chain.
  *
  * <p>Output structure: {@code recipes/{type}/{modId}/recipes.json.gz}</p>
  */
@@ -42,7 +42,7 @@ public class ModBasedRecipeExporter {
 
     public void exportRecipes() throws IOException {
         Logger.MOD.info("============================================================");
-        Logger.MOD.info("=== Starting V14 Recipe Export ===");
+        Logger.MOD.info("=== Starting v1.04 Recipe Export ===");
         Logger.MOD.info("============================================================");
         Logger.MOD.info("Export directory: {}", exportDirectory.getAbsolutePath());
         Logger.MOD.info("Organization: recipes/{type}/{modId}/recipes.json.gz");
@@ -51,10 +51,10 @@ public class ModBasedRecipeExporter {
             exportRecipesByType("crafting", "Crafting Recipes");
 
             Logger.MOD.info("============================================================");
-            Logger.MOD.info("=== V14 Recipe Export Complete ===");
+            Logger.MOD.info("=== v1.04 Recipe Export Complete ===");
             Logger.MOD.info("============================================================");
         } catch (Exception e) {
-            Logger.MOD.error("V14 recipe export failed", e);
+            Logger.MOD.error("v1.04 recipe export failed", e);
             throw e;
         }
     }
@@ -159,11 +159,13 @@ public class ModBasedRecipeExporter {
         public List<FluidGroupDTO> fluidInputs = new ArrayList<>();
         public List<FluidStackDTO> fluidOutputs = new ArrayList<>();
         public MachineInfoDTO machineInfo;
+        public java.util.Map<String, Object> layout;
         public java.util.Map<String, Object> additionalData;
         public RecipeMetadataDTO metadata;
     }
 
     public static class ItemStackDTO {
+        public Integer slotIndex;
         public ItemDTO item;
         public int stackSize;
         public double probability;
@@ -181,9 +183,20 @@ public class ModBasedRecipeExporter {
         public String category;
         public String machineType;
         public String iconInfo;
+        public String layoutClass;
         public boolean shapeless;
         public String parsedVoltageTier;
         public Integer parsedVoltage;
+        public Integer itemInputWidth;
+        public Integer itemInputHeight;
+        public Integer itemOutputWidth;
+        public Integer itemOutputHeight;
+        public Integer fluidInputWidth;
+        public Integer fluidInputHeight;
+        public Integer fluidOutputWidth;
+        public Integer fluidOutputHeight;
+        public Boolean supportsFluids;
+        public Boolean supportsSpecialItems;
         public ItemDTO machineIcon;
     }
 
@@ -205,6 +218,7 @@ public class ModBasedRecipeExporter {
     }
 
     public static class FluidStackDTO {
+        public Integer slotIndex;
         public FluidDTO fluid;
         public int amount;
         public double probability;

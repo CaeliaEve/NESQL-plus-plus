@@ -17,7 +17,7 @@ public final class Logger {
     }
 
     public static void chatMessage(String message) {
-        // ⭐ V14 FIX: 添加空检查，防止玩家不在世界时NPE导致线程静默终止
+        // ⭐ NESQL++ FIX: 添加空检查，防止玩家不在世界时NPE导致线程静默终止
         try {
             Minecraft mc = Minecraft.getMinecraft();
             if (mc.thePlayer != null) {

@@ -88,7 +88,7 @@ public class NeiRecipeBatchLoader {
                     continue;
                 }
 
-                // ⚡ V14 优化5: 检查handler是否需要物品扫描
+                // ⚡ v1.04 优化5: 检查handler是否需要物品扫描
                 boolean needsItemScan = needsItemScanning(handlerName);
 
                 // Load all recipes for this handler
@@ -333,7 +333,7 @@ public class NeiRecipeBatchLoader {
         AtomicInteger loadedCount = new AtomicInteger(0);
 
         try {
-            // ⚡ V14 优化1: 检查handler是否已经有配方
+            // ⚡ v1.04 优化1: 检查handler是否已经有配方
             int initialCount = handler.numRecipes();
             if (initialCount > 0) {
                 // Handler已经预加载了配方，直接返回
@@ -345,7 +345,7 @@ public class NeiRecipeBatchLoader {
             // Clear any existing recipes
             handler.arecipes.clear();
 
-            // ⚡ V14 修复: 移除不准确的优化，使用完整扫描
+            // ⚡ v1.04 修复: 移除不准确的优化，使用完整扫描
             // 之前的采样检测和mod过滤会跳过大量配方
             Logger.MOD.debug("Loading recipes for handler: {}", handler.getRecipeName());
             return loadRecipesFullScan(handler, itemUniverse, loadedCount);
@@ -487,7 +487,7 @@ public class NeiRecipeBatchLoader {
     }
 
     /**
-     * ⚡ V14 优化: 检查handler是否需要遍历所有物品来加载配方
+     * ⚡ v1.04 优化: 检查handler是否需要遍历所有物品来加载配方
      * 某些handler在初始化时已经加载了配方，不需要再扫描物品
      */
     private static boolean needsItemScanning(String handlerName) {

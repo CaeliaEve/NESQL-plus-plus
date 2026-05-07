@@ -11,6 +11,8 @@ import com.github.dcysteine.nesql.sql.base.recipe.Recipe;
 import jakarta.persistence.EntityManager;
 
 import java.util.ArrayList;
+import java.util.Comparator;
+import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
 
@@ -34,6 +36,9 @@ final class ModBasedRecipeDtoAssembler {
         dto.machineInfo = buildMachineInfo(recipe, canonicalRecipe);
         populateItemSlots(dto, recipe);
         populateFluidSlots(dto, recipe);
+        dto.layout = canonicalRecipe.layout == null || canonicalRecipe.layout.isEmpty()
+                ? null
+                : new LinkedHashMap<>(canonicalRecipe.layout);
         dto.additionalData = canonicalRecipe.metadata.isEmpty() ? null : new java.util.LinkedHashMap<>(canonicalRecipe.metadata);
         dto.metadata = buildMetadataFromCanonical(canonicalRecipe, null);
         return dto;
@@ -50,9 +55,20 @@ final class ModBasedRecipeDtoAssembler {
         dto.category = machine.category;
         dto.machineType = machine.machineType;
         dto.iconInfo = machine.iconInfoRaw;
+        dto.layoutClass = machine.layoutClass;
         dto.shapeless = Boolean.TRUE.equals(machine.shapeless);
         dto.parsedVoltageTier = machine.parsedVoltageTier;
         dto.parsedVoltage = machine.parsedVoltage;
+        dto.itemInputWidth = machine.itemInputWidth;
+        dto.itemInputHeight = machine.itemInputHeight;
+        dto.itemOutputWidth = machine.itemOutputWidth;
+        dto.itemOutputHeight = machine.itemOutputHeight;
+        dto.fluidInputWidth = machine.fluidInputWidth;
+        dto.fluidInputHeight = machine.fluidInputHeight;
+        dto.fluidOutputWidth = machine.fluidOutputWidth;
+        dto.fluidOutputHeight = machine.fluidOutputHeight;
+        dto.supportsFluids = machine.supportsFluids;
+        dto.supportsSpecialItems = machine.supportsSpecialItems;
 
         if (recipe.getRecipeType() != null && recipe.getRecipeType().getIcon() != null) {
             dto.machineIcon = convertItem(recipe.getRecipeType().getIcon());
@@ -63,13 +79,13 @@ final class ModBasedRecipeDtoAssembler {
 
     private void populateItemSlots(ModBasedRecipeExporter.RecipeDTO dto, Recipe recipe) {
         if (recipe.getItemOutputs() != null) {
-            for (Map.Entry<Integer, ItemStackWithProbability> entry : recipe.getItemOutputs().entrySet()) {
-                dto.outputs.add(convertItemStack(entry.getValue()));
+            for (Map.Entry<Integer, ItemStackWithProbability> entry : sortedEntries(recipe.getItemOutputs())) {
+                dto.outputs.add(convertItemStack(entry.getKey(), entry.getValue()));
             }
         }
 
         if (recipe.getItemInputs() != null) {
-            for (Map.Entry<Integer, com.github.dcysteine.nesql.sql.base.item.ItemGroup> entry : recipe.getItemInputs().entrySet()) {
+            for (Map.Entry<Integer, com.github.dcysteine.nesql.sql.base.item.ItemGroup> entry : sortedEntries(recipe.getItemInputs())) {
                 dto.inputs.add(convertItemGroup(entry.getKey(), entry.getValue()));
             }
         }
@@ -77,14 +93,14 @@ final class ModBasedRecipeDtoAssembler {
 
     private void populateFluidSlots(ModBasedRecipeExporter.RecipeDTO dto, Recipe recipe) {
         if (recipe.getFluidInputs() != null) {
-            for (Map.Entry<Integer, com.github.dcysteine.nesql.sql.base.fluid.FluidGroup> entry : recipe.getFluidInputs().entrySet()) {
+            for (Map.Entry<Integer, com.github.dcysteine.nesql.sql.base.fluid.FluidGroup> entry : sortedEntries(recipe.getFluidInputs())) {
                 dto.fluidInputs.add(convertFluidGroup(entry.getKey(), entry.getValue()));
             }
         }
 
         if (recipe.getFluidOutputs() != null) {
-            for (Map.Entry<Integer, com.github.dcysteine.nesql.sql.base.fluid.FluidStackWithProbability> entry : recipe.getFluidOutputs().entrySet()) {
-                dto.fluidOutputs.add(convertFluidStack(entry.getValue()));
+            for (Map.Entry<Integer, com.github.dcysteine.nesql.sql.base.fluid.FluidStackWithProbability> entry : sortedEntries(recipe.getFluidOutputs())) {
+                dto.fluidOutputs.add(convertFluidStack(entry.getKey(), entry.getValue()));
             }
         }
     }
@@ -153,8 +169,9 @@ final class ModBasedRecipeDtoAssembler {
         }
     }
 
-    private ModBasedRecipeExporter.ItemStackDTO convertItemStack(ItemStackWithProbability stack) {
+    private ModBasedRecipeExporter.ItemStackDTO convertItemStack(Integer slotIndex, ItemStackWithProbability stack) {
         ModBasedRecipeExporter.ItemStackDTO dto = new ModBasedRecipeExporter.ItemStackDTO();
+        dto.slotIndex = slotIndex;
         dto.item = convertItem(stack.getItem());
         dto.stackSize = stack.getStackSize();
         dto.probability = stack.getProbability();
@@ -205,8 +222,10 @@ final class ModBasedRecipeDtoAssembler {
     }
 
     private ModBasedRecipeExporter.FluidStackDTO convertFluidStack(
+            Integer slotIndex,
             com.github.dcysteine.nesql.sql.base.fluid.FluidStackWithProbability stack) {
         ModBasedRecipeExporter.FluidStackDTO dto = new ModBasedRecipeExporter.FluidStackDTO();
+        dto.slotIndex = slotIndex;
         dto.fluid = convertFluid(stack.getFluid());
         dto.amount = stack.getAmount();
         dto.probability = stack.getProbability();
@@ -284,5 +303,11 @@ final class ModBasedRecipeDtoAssembler {
             }
         }
         return converted.isEmpty() ? null : converted;
+    }
+
+    private <T> List<Map.Entry<Integer, T>> sortedEntries(Map<Integer, T> map) {
+        List<Map.Entry<Integer, T>> entries = new ArrayList<>(map.entrySet());
+        entries.sort(Comparator.comparingInt(Map.Entry::getKey));
+        return entries;
     }
 }

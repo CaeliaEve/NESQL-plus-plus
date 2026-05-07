@@ -14,14 +14,14 @@ public final class DataExporter {
     }
 
     public DataExporter(String repositoryName) {
-        this.exportContext = ExportContext.forProfile(ExportProfile.DATA_ONLY_V14, repositoryName);
+        this.exportContext = ExportContext.forProfile(ExportProfile.DATA_ONLY_V104, repositoryName);
         this.neiDebugMode = NeiExportDebugFilter.Mode.NONE;
     }
 
     private DataExporter(String repositoryName, NeiExportDebugFilter.Mode neiDebugMode) {
         this.neiDebugMode = neiDebugMode == null ? NeiExportDebugFilter.Mode.NONE : neiDebugMode;
         this.exportContext = ExportContext.forProfile(
-                ExportProfile.DATA_ONLY_V14,
+                ExportProfile.DATA_ONLY_V104,
                 repositoryName,
                 recipeModFilterFor(this.neiDebugMode));
     }

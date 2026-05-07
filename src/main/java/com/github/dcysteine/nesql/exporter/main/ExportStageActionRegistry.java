@@ -46,7 +46,7 @@ final class ExportStageActionRegistry {
                         exportContext.paths.repositoryDirectory,
                         exportContext.profile.profileId,
                         exportContext.profile.renderImages,
-                        exportContext.profile == ExportProfile.DATA_ONLY_V14));
+                        exportContext.profile == ExportProfile.DATA_ONLY_V104));
         actions.put(ExportStage.COMMIT_DATABASE,
                 () -> strategy.finishTransaction(exportContext, stageState.session.transaction));
         actions.put(ExportStage.ROLLBACK_DATABASE,

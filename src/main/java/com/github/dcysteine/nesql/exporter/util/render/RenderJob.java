@@ -17,7 +17,7 @@ import java.lang.reflect.Method;
 @AutoOneOf(RenderJob.JobType.class)
 public abstract class RenderJob {
     public enum JobType {
-        ITEM, FLUID
+        ITEM, FLUID, ENTITY
     }
 
     // Multi-frame capture state for GIF animation
@@ -39,9 +39,14 @@ public abstract class RenderJob {
         return AutoOneOf_RenderJob.fluid(fluidStack);
     }
 
+    public static RenderJob ofEntity(EntityPreviewRequest entityPreviewRequest) {
+        return AutoOneOf_RenderJob.entity(entityPreviewRequest);
+    }
+
     public abstract JobType getType();
     public abstract ItemStack getItem();
     public abstract FluidStack getFluid();
+    public abstract EntityPreviewRequest getEntity();
 
     public NativeSpriteMetadataExtractor.NativeSpriteMetadata getNativeSpriteMetadata() {
         if (!nativeSpriteMetadataLoaded) {
@@ -59,6 +64,10 @@ public abstract class RenderJob {
      * (for example Avaritia infinity armor), so native atlas playback would not match the real in-game result.
      */
     public boolean shouldPreferNativeSpriteAnimation() {
+        if (getType() == JobType.ENTITY) {
+            return false;
+        }
+
         NativeSpriteMetadataExtractor.NativeSpriteMetadata nativeMetadata = getNativeSpriteMetadata();
         if (nativeMetadata == null || !Boolean.TRUE.equals(nativeMetadata.animated)) {
             return false;
@@ -80,6 +89,9 @@ public abstract class RenderJob {
      * fallback.
      */
     public boolean shouldWriteNativeSpriteMetadata() {
+        if (getType() == JobType.ENTITY) {
+            return false;
+        }
         return getNativeSpriteMetadata() != null;
     }
 
@@ -92,6 +104,10 @@ public abstract class RenderJob {
      * 3. IPatchedTextureAtlasSprite animation detection
      */
     public boolean needsMultipleFrames() {
+        if (getType() == JobType.ENTITY) {
+            return true;
+        }
+
         if (!ConfigOptions.EXPORT_GIF.get()) {
             return false;
         }
@@ -148,6 +164,10 @@ public abstract class RenderJob {
      * static detector window.
      */
     public boolean shouldForceFullCapture() {
+        if (getType() == JobType.ENTITY) {
+            return true;
+        }
+
         if (!ConfigOptions.EXPORT_GIF.get() || !needsMultipleFrames()) {
             return false;
         }
@@ -179,6 +199,10 @@ public abstract class RenderJob {
      * participating sprites as active.
      */
     public boolean shouldAdvanceTextureAtlasBetweenFrames() {
+        if (getType() == JobType.ENTITY) {
+            return false;
+        }
+
         if (!ConfigOptions.EXPORT_GIF.get() || !needsMultipleFrames() || getType() != JobType.ITEM) {
             return false;
         }
@@ -441,6 +465,9 @@ public abstract class RenderJob {
     }
 
     public boolean usesCustomInventoryRenderer() {
+        if (getType() != JobType.ITEM) {
+            return false;
+        }
         return hasCustomInventoryRenderer();
     }
 
@@ -529,6 +556,9 @@ public abstract class RenderJob {
             case FLUID:
                 return IdUtil.imageFilePath(getFluid());
 
+            case ENTITY:
+                return getEntity() == null ? null : getEntity().getImageFilePath();
+
             default:
                 throw new IllegalStateException("Unhandled job type: " + this);
         }
@@ -540,6 +570,9 @@ public abstract class RenderJob {
      */
     public String getFrameFilePath() {
         String basePath = getImageFilePath();
+        if (basePath == null) {
+            return null;
+        }
         if (needsMultipleFrames()) {
             // Replace extension with _frame_N.png for temporary tracking
             return basePath.replace(".png", "_frame_" + frameIndex + ".png")
@@ -553,6 +586,9 @@ public abstract class RenderJob {
      */
     public String getOutputFilePath() {
         String path = getImageFilePath();
+        if (path == null) {
+            return null;
+        }
         if (needsMultipleFrames()) {
             return path.replace(".png", ".gif");
         }
@@ -561,6 +597,9 @@ public abstract class RenderJob {
 
     public String getSpriteMetadataFilePath() {
         String basePath = getImageFilePath();
+        if (basePath == null) {
+            return null;
+        }
         if (basePath.endsWith(".png")) {
             return basePath.substring(0, basePath.length() - 4) + ".sprite.json";
         }
@@ -572,6 +611,9 @@ public abstract class RenderJob {
 
     public String getRenderContractFilePath() {
         String basePath = getImageFilePath();
+        if (basePath == null) {
+            return null;
+        }
         if (basePath.endsWith(".png")) {
             return basePath.substring(0, basePath.length() - 4) + ".render.json";
         }
@@ -583,6 +625,9 @@ public abstract class RenderJob {
 
     public String getNativeSpriteAtlasFilePath() {
         String basePath = getImageFilePath();
+        if (basePath == null) {
+            return null;
+        }
         if (basePath.endsWith(".png")) {
             return basePath.substring(0, basePath.length() - 4) + ".sprite-atlas.png";
         }
@@ -622,5 +667,19 @@ public abstract class RenderJob {
     public void resetCapture() {
         frameIndex = 0;
         totalFrames = null;
+    }
+
+    public int getRequestedFrameCount() {
+        if (getType() == JobType.ENTITY && getEntity() != null) {
+            return getEntity().getFrameCount();
+        }
+        return ConfigOptions.GIF_FRAMES.get();
+    }
+
+    public int getRequestedFrameDelayMs() {
+        if (getType() == JobType.ENTITY && getEntity() != null) {
+            return getEntity().getFrameDelayMs();
+        }
+        return GifRenderer.DEFAULT_CAPTURE_FRAME_DELAY_MS;
     }
 }

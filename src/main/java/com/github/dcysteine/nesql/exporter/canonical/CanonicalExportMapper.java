@@ -16,6 +16,7 @@ import com.github.dcysteine.nesql.exporter.util.SpecialRecipeMetadataRegistry;
 
 import java.io.File;
 import java.util.ArrayList;
+import java.util.Comparator;
 import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
@@ -186,7 +187,11 @@ public final class CanonicalExportMapper {
     private static Map<String, Object> buildLayout(Recipe recipe) {
         Map<String, Object> layout = new LinkedHashMap<>();
         RecipeType recipeType = recipe.getRecipeType();
+        Map<String, Object> specialMetadata = readSpecialMetadata(recipe.getId());
+
+        layout.put("contractVersion", 1);
         if (recipeType != null) {
+            layout.put("layoutClass", inferLayoutClass(recipeType));
             if (recipeType.getItemInputDimension() != null) {
                 layout.put("itemInputWidth", recipeType.getItemInputDimension().getWidth());
                 layout.put("itemInputHeight", recipeType.getItemInputDimension().getHeight());
@@ -204,6 +209,38 @@ public final class CanonicalExportMapper {
                 layout.put("fluidOutputHeight", recipeType.getFluidOutputDimension().getHeight());
             }
             layout.put("shapeless", recipeType.isShapeless());
+
+            Map<String, Object> fallbackGrid = buildFallbackGrid(recipeType);
+            if (!fallbackGrid.isEmpty()) {
+                layout.put("fallbackGrid", fallbackGrid);
+            }
+        } else {
+            layout.put("shapeless", false);
+        }
+
+        Map<String, Object> canvas = buildCanvas(specialMetadata);
+        if (!canvas.isEmpty()) {
+            layout.put("canvas", canvas);
+        }
+
+        Map<String, Object> legacyHints = buildLegacyHints(specialMetadata);
+        if (!legacyHints.isEmpty()) {
+            layout.put("legacyHints", legacyHints);
+        }
+
+        List<Map<String, Object>> itemSlots = buildItemSlots(specialMetadata);
+        if (!itemSlots.isEmpty()) {
+            layout.put("itemSlots", itemSlots);
+        }
+
+        List<Map<String, Object>> fluidSlots = buildFluidSlots(recipe, recipeType);
+        if (!fluidSlots.isEmpty()) {
+            layout.put("fluidSlots", fluidSlots);
+        }
+
+        Map<String, Object> bindings = buildBindings(specialMetadata);
+        if (!bindings.isEmpty()) {
+            layout.put("bindings", bindings);
         }
         return layout;
     }
@@ -211,7 +248,7 @@ public final class CanonicalExportMapper {
     private static List<Map<String, Object>> mapItemInputs(Map<Integer, ItemGroup> itemInputs) {
         List<Map<String, Object>> result = new ArrayList<>();
         if (itemInputs == null) return result;
-        for (Map.Entry<Integer, ItemGroup> entry : itemInputs.entrySet()) {
+        for (Map.Entry<Integer, ItemGroup> entry : sortedEntries(itemInputs)) {
             Map<String, Object> group = new LinkedHashMap<>();
             group.put("slotIndex", entry.getKey());
             group.put("groupId", entry.getValue().getId());
@@ -232,7 +269,7 @@ public final class CanonicalExportMapper {
     private static List<Map<String, Object>> mapItemOutputs(Map<Integer, ItemStackWithProbability> itemOutputs) {
         List<Map<String, Object>> result = new ArrayList<>();
         if (itemOutputs == null) return result;
-        for (Map.Entry<Integer, ItemStackWithProbability> entry : itemOutputs.entrySet()) {
+        for (Map.Entry<Integer, ItemStackWithProbability> entry : sortedEntries(itemOutputs)) {
             Map<String, Object> output = new LinkedHashMap<>();
             output.put("slotIndex", entry.getKey());
             output.put("itemId", entry.getValue().getItem().getId());
@@ -246,7 +283,7 @@ public final class CanonicalExportMapper {
     private static List<Map<String, Object>> mapFluidInputs(Map<Integer, FluidGroup> fluidInputs) {
         List<Map<String, Object>> result = new ArrayList<>();
         if (fluidInputs == null) return result;
-        for (Map.Entry<Integer, FluidGroup> entry : fluidInputs.entrySet()) {
+        for (Map.Entry<Integer, FluidGroup> entry : sortedEntries(fluidInputs)) {
             Map<String, Object> group = new LinkedHashMap<>();
             group.put("slotIndex", entry.getKey());
             List<Map<String, Object>> variants = new ArrayList<>();
@@ -265,7 +302,7 @@ public final class CanonicalExportMapper {
     private static List<Map<String, Object>> mapFluidOutputs(Map<Integer, FluidStackWithProbability> fluidOutputs) {
         List<Map<String, Object>> result = new ArrayList<>();
         if (fluidOutputs == null) return result;
-        for (Map.Entry<Integer, FluidStackWithProbability> entry : fluidOutputs.entrySet()) {
+        for (Map.Entry<Integer, FluidStackWithProbability> entry : sortedEntries(fluidOutputs)) {
             Map<String, Object> output = new LinkedHashMap<>();
             output.put("slotIndex", entry.getKey());
             output.put("fluidId", entry.getValue().getFluid().getId());
@@ -337,6 +374,198 @@ public final class CanonicalExportMapper {
             extensions.put("gregtech", gregtech);
         }
         return extensions;
+    }
+
+    private static Map<String, Object> readSpecialMetadata(String recipeId) {
+        SpecialRecipeMetadataRegistry.SpecialRecipeMetadata specialMetadata =
+                SpecialRecipeMetadataRegistry.getMetadata(recipeId);
+        if (specialMetadata == null || specialMetadata.getData() == null) {
+            return new LinkedHashMap<>();
+        }
+        return new LinkedHashMap<>(specialMetadata.getData());
+    }
+
+    private static Map<String, Object> buildFallbackGrid(RecipeType recipeType) {
+        Map<String, Object> fallbackGrid = new LinkedHashMap<>();
+        putDimension(fallbackGrid, "itemInput", recipeType == null ? null : recipeType.getItemInputDimension());
+        putDimension(fallbackGrid, "itemOutput", recipeType == null ? null : recipeType.getItemOutputDimension());
+        putDimension(fallbackGrid, "fluidInput", recipeType == null ? null : recipeType.getFluidInputDimension());
+        putDimension(fallbackGrid, "fluidOutput", recipeType == null ? null : recipeType.getFluidOutputDimension());
+        if (recipeType != null) {
+            fallbackGrid.put("shapeless", recipeType.isShapeless());
+        }
+        return fallbackGrid;
+    }
+
+    private static void putDimension(Map<String, Object> target, String key, Dimension dimension) {
+        if (dimension == null) {
+            return;
+        }
+        Map<String, Object> data = new LinkedHashMap<>();
+        data.put("width", dimension.getWidth());
+        data.put("height", dimension.getHeight());
+        target.put(key, data);
+    }
+
+    private static Map<String, Object> buildCanvas(Map<String, Object> metadata) {
+        Map<String, Object> canvas = new LinkedHashMap<>();
+        Integer width = asPositiveInteger(metadata.get("handlerWidth"));
+        Integer height = asPositiveInteger(metadata.get("handlerHeight"));
+        Integer yShift = asInteger(metadata.get("yShift"));
+        String imageResource = asNonBlankString(metadata.get("imageResource"));
+
+        if (width != null) canvas.put("width", width);
+        if (height != null) canvas.put("height", height);
+        if (yShift != null) canvas.put("yShift", yShift);
+        if (imageResource != null) canvas.put("backgroundResource", imageResource);
+        if (!canvas.isEmpty()) {
+            canvas.put("coordinateSpace", "nei_pixels");
+            canvas.put("align", "top-left");
+        }
+        return canvas;
+    }
+
+    private static Map<String, Object> buildLegacyHints(Map<String, Object> metadata) {
+        Map<String, Object> legacyHints = new LinkedHashMap<>();
+        copyIfPresent(legacyHints, "handler", metadata.get("handler"));
+        copyIfPresent(legacyHints, "handlerId", metadata.get("handlerId"));
+        copyIfPresent(legacyHints, "handlerClass", metadata.get("handlerClass"));
+        copyIfPresent(legacyHints, "modName", metadata.get("modName"));
+        copyIfPresent(legacyHints, "modId", metadata.get("modId"));
+        copyIfPresent(legacyHints, "handlerIcon", metadata.get("handlerIcon"));
+        copyIfPresent(legacyHints, "handlerWidth", metadata.get("handlerWidth"));
+        copyIfPresent(legacyHints, "handlerHeight", metadata.get("handlerHeight"));
+        copyIfPresent(legacyHints, "maxRecipesPerPage", metadata.get("maxRecipesPerPage"));
+        copyIfPresent(legacyHints, "yShift", metadata.get("yShift"));
+        copyIfPresent(legacyHints, "imageResource", metadata.get("imageResource"));
+        copyIfPresent(legacyHints, "itemNotes", metadata.get("itemNotes"));
+        return legacyHints;
+    }
+
+    private static List<Map<String, Object>> buildItemSlots(Map<String, Object> metadata) {
+        List<Map<String, Object>> itemSlots = new ArrayList<>();
+        appendPositionedSlots(itemSlots, metadata.get("inputSlotLayout"), "input");
+        appendPositionedSlots(itemSlots, metadata.get("outputSlotLayout"), "output");
+        appendPositionedSlots(itemSlots, metadata.get("otherSlotLayout"), "other");
+        return itemSlots;
+    }
+
+    private static void appendPositionedSlots(
+            List<Map<String, Object>> target, Object rawValue, String defaultRole) {
+        if (!(rawValue instanceof List<?>)) {
+            return;
+        }
+        for (Object entry : (List<?>) rawValue) {
+            if (!(entry instanceof Map<?, ?>)) {
+                continue;
+            }
+            Map<String, Object> slot = new LinkedHashMap<>();
+            Map<?, ?> rawMap = (Map<?, ?>) entry;
+            slot.put("key", defaultRole + "-" + target.size());
+            slot.put("role", asNonBlankString(rawMap.get("role")) != null ? asNonBlankString(rawMap.get("role")) : defaultRole);
+            copyIfPresent(slot, "slotIndex", rawMap.get("slotIndex"));
+            copyIfPresent(slot, "x", rawMap.get("x"));
+            copyIfPresent(slot, "y", rawMap.get("y"));
+            copyIfPresent(slot, "w", rawMap.get("w"));
+            copyIfPresent(slot, "h", rawMap.get("h"));
+            copyIfPresent(slot, "column", rawMap.get("column"));
+            copyIfPresent(slot, "row", rawMap.get("row"));
+            copyIfPresent(slot, "itemId", rawMap.get("itemId"));
+            copyIfPresent(slot, "coordinateSpace", rawMap.get("coordinateSpace"));
+            copyIfPresent(slot, "source", rawMap.get("source"));
+            target.add(slot);
+        }
+    }
+
+    private static List<Map<String, Object>> buildFluidSlots(Recipe recipe, RecipeType recipeType) {
+        List<Map<String, Object>> fluidSlots = new ArrayList<>();
+        appendSyntheticFluidSlots(
+                fluidSlots,
+                recipe.getFluidInputs(),
+                "input",
+                recipeType == null ? null : recipeType.getFluidInputDimension());
+        appendSyntheticFluidSlots(
+                fluidSlots,
+                recipe.getFluidOutputs(),
+                "output",
+                recipeType == null ? null : recipeType.getFluidOutputDimension());
+        return fluidSlots;
+    }
+
+    private static void appendSyntheticFluidSlots(
+            List<Map<String, Object>> target,
+            Map<Integer, ?> entries,
+            String role,
+            Dimension dimension) {
+        if (entries == null || entries.isEmpty()) {
+            return;
+        }
+        int width = dimension != null && dimension.getWidth() > 0 ? dimension.getWidth() : entries.size();
+        for (Map.Entry<Integer, ?> entry : sortedEntries(entries)) {
+            int slotIndex = entry.getKey();
+            Map<String, Object> slot = new LinkedHashMap<>();
+            slot.put("key", "fluid-" + role + "-" + slotIndex);
+            slot.put("role", role);
+            slot.put("slotIndex", slotIndex);
+            slot.put("column", width > 0 ? slotIndex % width : slotIndex);
+            slot.put("row", width > 0 ? slotIndex / width : 0);
+            slot.put("coordinateSpace", "grid");
+            slot.put("source", "synthetic_grid");
+            target.add(slot);
+        }
+    }
+
+    private static Map<String, Object> buildBindings(Map<String, Object> metadata) {
+        Map<String, Object> bindings = new LinkedHashMap<>();
+        copyIfPresent(bindings, "aspects", metadata.get("aspects"));
+        copyIfPresent(bindings, "research", metadata.get("research"));
+        copyIfPresent(bindings, "instability", metadata.get("instability"));
+        copyIfPresent(bindings, "centralItemId", metadata.get("centralItemId"));
+        copyIfPresent(bindings, "centerInputSlotIndex", metadata.get("centerInputSlotIndex"));
+        copyIfPresent(bindings, "componentSlotOrder", metadata.get("componentSlotOrder"));
+        copyIfPresent(bindings, "manaCost", metadata.get("manaCost"));
+        copyIfPresent(bindings, "ticks", metadata.get("ticks"));
+        copyIfPresent(bindings, "bloodCost", metadata.get("bloodCost"));
+        copyIfPresent(bindings, "lpCost", metadata.get("lpCost"));
+        copyIfPresent(bindings, "consumptionRate", metadata.get("consumptionRate"));
+        copyIfPresent(bindings, "drainRate", metadata.get("drainRate"));
+        copyIfPresent(bindings, "tartaricCost", metadata.get("tartaricCost"));
+        copyIfPresent(bindings, "tier", metadata.get("tier"));
+        copyIfPresent(bindings, "isWeakActivation", metadata.get("isWeakActivation"));
+        return bindings;
+    }
+
+    private static void copyIfPresent(Map<String, Object> target, String key, Object value) {
+        if (value == null) {
+            return;
+        }
+        if (value instanceof String && ((String) value).trim().isEmpty()) {
+            return;
+        }
+        target.put(key, value);
+    }
+
+    private static Integer asInteger(Object value) {
+        return value instanceof Number ? ((Number) value).intValue() : null;
+    }
+
+    private static Integer asPositiveInteger(Object value) {
+        Integer converted = asInteger(value);
+        return converted != null && converted > 0 ? converted : null;
+    }
+
+    private static String asNonBlankString(Object value) {
+        if (!(value instanceof String)) {
+            return null;
+        }
+        String text = ((String) value).trim();
+        return text.isEmpty() ? null : text;
+    }
+
+    private static <T> List<Map.Entry<Integer, T>> sortedEntries(Map<Integer, T> map) {
+        List<Map.Entry<Integer, T>> entries = new ArrayList<>(map.entrySet());
+        entries.sort(Comparator.comparingInt(Map.Entry::getKey));
+        return entries;
     }
 
     private static VoltageInfo parseVoltageInfo(String text) {

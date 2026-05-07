@@ -223,7 +223,12 @@ public enum RenderDispatcher {
             File outputFile = new File(imageDirectory, outputPath);
 
             if (!activeCaptures.containsKey(outputPath)) {
-                activeCaptures.put(outputPath, new GifRenderer.AnimationCapture(outputFile));
+                activeCaptures.put(
+                        outputPath,
+                        new GifRenderer.AnimationCapture(
+                                outputFile,
+                                job.getRequestedFrameCount(),
+                                job.getRequestedFrameDelayMs()));
             }
         }
 
@@ -321,5 +326,16 @@ public enum RenderDispatcher {
             }
         }
         // Single-frame jobs are handled directly by Renderer
+    }
+
+    public void abandonJob(RenderJob job) {
+        if (job == null || !job.needsMultipleFrames()) {
+            return;
+        }
+
+        String outputPath = job.getOutputFilePath();
+        if (outputPath != null) {
+            activeCaptures.remove(outputPath);
+        }
     }
 }

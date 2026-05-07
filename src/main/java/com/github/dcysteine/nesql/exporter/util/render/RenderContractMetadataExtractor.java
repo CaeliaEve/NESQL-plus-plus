@@ -95,11 +95,11 @@ final class RenderContractMetadataExtractor {
             boolean hasCustomInventoryRenderer,
             LayerAnalysis layerAnalysis,
             boolean hasNativeSprite) {
-        if (rendererFamily != null && !rendererFamily.isEmpty()) {
-            return "renderer_family";
-        }
         if (hasCustomInventoryRenderer) {
             return "captured_final_atlas";
+        }
+        if (rendererFamily != null && !rendererFamily.isEmpty()) {
+            return "renderer_family";
         }
         if (layerAnalysis.layered) {
             return "layered_item";
@@ -116,8 +116,13 @@ final class RenderContractMetadataExtractor {
             boolean hasCustomInventoryRenderer,
             LayerAnalysis layerAnalysis,
             boolean hasNativeSprite) {
+        if (hasCustomInventoryRenderer) {
+            return rendererFamily != null && !rendererFamily.isEmpty()
+                    ? "inventory_renderer_family_capture"
+                    : "inventory_renderer_capture";
+        }
         if (rendererFamily != null && !rendererFamily.isEmpty()) {
-            return hasCustomInventoryRenderer ? "inventory_renderer_family" : "known_renderer_family";
+            return "known_renderer_family";
         }
         if (layerAnalysis.layered) {
             return "layer_analysis";
@@ -129,14 +134,14 @@ final class RenderContractMetadataExtractor {
     }
 
     private static String determinePlaybackHint(String renderMode) {
+        if ("captured_final_atlas".equals(renderMode)) {
+            return "atlas_timeline";
+        }
         if ("renderer_family".equals(renderMode)) {
             return "renderer_family_adapter";
         }
         if ("layered_item".equals(renderMode)) {
             return "layered_canvas";
-        }
-        if ("captured_final_atlas".equals(renderMode)) {
-            return "atlas_timeline";
         }
         return "native_sprite";
     }

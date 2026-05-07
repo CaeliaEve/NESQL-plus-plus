@@ -211,3 +211,110 @@ test('atlas-backed custom renderer captures can explicitly tick sprite animation
     'TextureAnimationInspector should support marking patched atlas sprites as needing a real animation upload',
   );
 });
+
+test('render contracts prefer captured atlas playback for custom inventory renderers even when a renderer family is known', () => {
+  const contractSource = read('src/main/java/com/github/dcysteine/nesql/exporter/util/render/RenderContractMetadataExtractor.java');
+
+  assert.equal(
+    contractSource.includes('if (hasCustomInventoryRenderer) {\n            return "captured_final_atlas";\n        }\n        if (rendererFamily != null && !rendererFamily.isEmpty()) {'),
+    true,
+    'Render contracts should make captured atlas playback primary for custom inventory renderers before renderer-family emulation',
+  );
+
+  assert.equal(
+    contractSource.includes('? "inventory_renderer_family_capture"')
+      && contractSource.includes(': "inventory_renderer_capture";'),
+    true,
+    'Capture source should distinguish inventory-renderer captures from pure family metadata playback',
+  );
+});
+
+test('data-only export profile is named for v1.04 instead of the removed v14 chain', () => {
+  const profileSource = read('src/main/java/com/github/dcysteine/nesql/exporter/main/ExportProfile.java');
+  const dataExporterSource = read('src/main/java/com/github/dcysteine/nesql/exporter/main/DataExporter.java');
+
+  assert.equal(
+    profileSource.includes('DATA_ONLY_V104'),
+    true,
+    'The data-only export profile should use the v1.04-era name in code as well as user-facing IDs',
+  );
+
+  assert.equal(
+    dataExporterSource.includes('ExportProfile.DATA_ONLY_V104'),
+    true,
+    'DataExporter should route through the renamed v1.04 data-only profile',
+  );
+});
+
+test('canonical recipe mapping emits a structured layout contract for downstream generic renderers', () => {
+  const mapperSource = read('src/main/java/com/github/dcysteine/nesql/exporter/canonical/CanonicalExportMapper.java');
+  const validatorSource = read('src/main/java/com/github/dcysteine/nesql/exporter/canonical/CanonicalContractValidator.java');
+
+  assert.equal(
+    mapperSource.includes('layout.put("contractVersion", 1);')
+      && mapperSource.includes('layout.put("fallbackGrid", fallbackGrid);')
+      && mapperSource.includes('layout.put("legacyHints", legacyHints);')
+      && mapperSource.includes('layout.put("itemSlots", itemSlots);')
+      && mapperSource.includes('layout.put("fluidSlots", fluidSlots);')
+      && mapperSource.includes('layout.put("bindings", bindings);'),
+    true,
+    'Canonical layout should now expose structured fallback grid, legacy hints, slot geometry, and bindings blocks',
+  );
+
+  assert.equal(
+    mapperSource.includes('private static Map<String, Object> buildCanvas(Map<String, Object> metadata)')
+      && mapperSource.includes('private static Map<String, Object> buildLegacyHints(Map<String, Object> metadata)')
+      && mapperSource.includes('private static List<Map<String, Object>> buildItemSlots(Map<String, Object> metadata)')
+      && mapperSource.includes('private static List<Map<String, Object>> buildFluidSlots(Recipe recipe, RecipeType recipeType)')
+      && mapperSource.includes('private static Map<String, Object> buildBindings(Map<String, Object> metadata)'),
+    true,
+    'Canonical mapper should keep the richer layout contract assembled from dedicated helpers',
+  );
+
+  assert.equal(
+    validatorSource.includes('if (recipe.layout == null) issues.add("recipe.layout:missing");'),
+    true,
+    'Canonical contract validation should fail fast when a recipe loses its layout contract',
+  );
+});
+
+test('split recipe export carries the layout contract and slot indexes through dto assembly', () => {
+  const exporterSource = read('src/main/java/com/github/dcysteine/nesql/exporter/local/ModBasedRecipeExporter.java');
+  const assemblerSource = read('src/main/java/com/github/dcysteine/nesql/exporter/local/ModBasedRecipeDtoAssembler.java');
+
+  assert.equal(
+    exporterSource.includes('public java.util.Map<String, Object> layout;')
+      && exporterSource.includes('public Integer slotIndex;'),
+    true,
+    'Split recipe DTOs should expose layout plus explicit output slot indexes',
+  );
+
+  assert.equal(
+    assemblerSource.includes('dto.layout = canonicalRecipe.layout == null || canonicalRecipe.layout.isEmpty()')
+      && assemblerSource.includes('dto.slotIndex = slotIndex;')
+      && assemblerSource.includes('for (Map.Entry<Integer, ItemStackWithProbability> entry : sortedEntries(recipe.getItemOutputs()))')
+      && assemblerSource.includes('for (Map.Entry<Integer, com.github.dcysteine.nesql.sql.base.fluid.FluidStackWithProbability> entry : sortedEntries(recipe.getFluidOutputs()))'),
+    true,
+    'DTO assembly should preserve deterministic slot ordering and carry the layout contract to split export files',
+  );
+});
+
+test('nei recipe export captures raw positioned slot geometry for the layout contract', () => {
+  const neiSource = read('src/main/java/com/github/dcysteine/nesql/exporter/plugin/nei/NeiRecipeExportProcessor.java');
+
+  assert.equal(
+    neiSource.includes('addSlotLayout(data, "inputSlotLayout", buildPositionedSlotLayout(ingredients, recipeType, "input"));')
+      && neiSource.includes('addSlotLayout(data, "outputSlotLayout", buildPositionedSlotLayout(singletonPositionedStack(result), null, "output"));')
+      && neiSource.includes('addSlotLayout(data, "otherSlotLayout", buildPositionedSlotLayout(others, null, "other"));'),
+    true,
+    'NEI export should persist input/output/other positioned stack geometry into recipe metadata',
+  );
+
+  assert.equal(
+    neiSource.includes('private List<Map<String, Object>> buildPositionedSlotLayout(')
+      && neiSource.includes('slot.put("coordinateSpace", "nei_pixels");')
+      && neiSource.includes('slot.put("source", "positioned_stack");'),
+    true,
+    'Positioned stack layout extraction should preserve raw NEI pixel-space slot geometry',
+  );
+});

@@ -31,7 +31,7 @@ interface ExportExecutionStrategy {
         switch (profile) {
             case FULL_V104:
                 return new FullV104ExecutionStrategy();
-            case DATA_ONLY_V14:
+            case DATA_ONLY_V104:
                 return new DataOnlyExecutionStrategy();
             case IMAGES_ONLY:
                 return new ImagesOnlyExecutionStrategy();

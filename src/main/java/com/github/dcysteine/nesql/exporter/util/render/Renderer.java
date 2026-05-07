@@ -9,12 +9,17 @@ import cpw.mods.fml.common.eventhandler.EventPriority;
 import cpw.mods.fml.common.eventhandler.SubscribeEvent;
 import cpw.mods.fml.common.gameevent.TickEvent;
 import net.minecraft.client.Minecraft;
+import net.minecraft.entity.Entity;
 import net.minecraft.client.renderer.OpenGlHelper;
 import net.minecraft.client.renderer.RenderHelper;
+import net.minecraft.client.renderer.entity.RenderManager;
 import net.minecraft.client.renderer.texture.ITextureObject;
 import net.minecraft.client.renderer.texture.TextureMap;
 import net.minecraft.client.shader.Framebuffer;
+import net.minecraft.entity.EntityLiving;
+import net.minecraft.entity.player.EntityPlayer;
 import net.minecraft.util.IIcon;
+import net.minecraft.world.World;
 import net.minecraftforge.fluids.FluidStack;
 import org.lwjgl.BufferUtils;
 import org.lwjgl.opengl.GL11;
@@ -145,51 +150,27 @@ public enum Renderer {
                 }
 
                 RenderJob job = jobOptional.get();
-                RenderContractMetadataExtractor.writeIfAvailable(job, imageDirectory);
-                if (job.shouldWriteNativeSpriteMetadata()) {
-                    NativeSpriteMetadataExtractor.writeIfAvailable(job, imageDirectory);
+                if (job.getType() == RenderJob.JobType.ITEM || job.getType() == RenderJob.JobType.FLUID) {
+                    RenderContractMetadataExtractor.writeIfAvailable(job, imageDirectory);
+                    if (job.shouldWriteNativeSpriteMetadata()) {
+                        NativeSpriteMetadataExtractor.writeIfAvailable(job, imageDirectory);
+                    }
                 }
-                clearBuffer();
-                render(job);
-                BufferedImage image = readImage(job);
+                try {
+                    clearBuffer();
+                    render(job);
+                    BufferedImage image = readImage(job);
 
-                // Handle multi-frame GIF capture vs single-frame PNG
-                if (job.needsMultipleFrames()) {
-                    advanceTextureAnimations(job);
-                    // Multi-frame: Handled by RenderDispatcher
-                    RenderDispatcher.INSTANCE.completeJob(job, image);
-                } else {
-                    // Single-frame: Write directly to file
-                    File outputFile = new File(imageDirectory, job.getImageFilePath());
-                    // Not sure why, but this check fails spuriously every now and then.
-                    // It complains that the file exists, but I checked and it didn't actually exist.
-                    // Let's just... ignore it for now XD
-                    // The failures might be due to Windows getting confused by '~' in filenames XS
-                    /*
-                    if (outputFile.exists()) {
-                        // If we cannot avoid queueing up duplicate render jobs, we can replace this
-                        // throw with a continue, and move this check to before we call readImage(job)
-                        throw new RuntimeException(
-                                "Render output file already exists: " + outputFile.getPath());
+                    // Handle multi-frame GIF capture vs single-frame PNG
+                    if (job.needsMultipleFrames()) {
+                        advanceTextureAnimations(job);
+                        // Multi-frame: Handled by RenderDispatcher
+                        RenderDispatcher.INSTANCE.completeJob(job, image);
+                    } else {
+                        writeSingleFrameImage(job, image);
                     }
-                     */
-
-                    File parentDir = outputFile.getParentFile();
-                    if (parentDir.exists() && !parentDir.isDirectory()) {
-                        throw new RuntimeException(
-                                "Render output file directory already exists as a file: "
-                                        + parentDir.getPath());
-                    } else if (!parentDir.exists() && !parentDir.mkdirs()) {
-                        throw new RuntimeException(
-                                "Could not create render output file directory: "
-                                        + parentDir.getPath());
-                    }
-
-                    try {
-                        ImageIO.write(image, IMAGE_FORMAT_PNG, outputFile);
-                    } catch (IOException e) {
-                        throw new RuntimeException(e);
-                    }
+                } catch (Throwable renderFailure) {
+                    handleFailedRenderJob(job, renderFailure);
                 }
             }
         } finally {
@@ -261,8 +242,96 @@ public enum Renderer {
                 GL11.glColor4f(1f, 1f, 1f, 1f);
                 break;
 
+            case ENTITY:
+                renderEntityPreview(job);
+                break;
+
             default:
                 throw new IllegalArgumentException("Unrecognized job type: " + job);
+        }
+    }
+
+    private void renderEntityPreview(RenderJob job) {
+        EntityPreviewRequest request = job.getEntity();
+        if (request == null) {
+            return;
+        }
+
+        EntityLiving entity = request.getEntity();
+        if (entity == null) {
+            return;
+        }
+
+        entity.ticksExisted += 1;
+        EntityPreviewRequest.Layout layout = request.resolveLayout();
+        int frameCount = Math.max(1, job.getRequestedFrameCount());
+        float turntableYaw = (360.0f * (job.getFrameIndex() % frameCount)) / (float) frameCount;
+        drawEntityPreview(layout.x, layout.y, layout.scale, turntableYaw, entity);
+    }
+
+    private void drawEntityPreview(int x, int y, int scale, float turntableYawDegrees, EntityLiving entity) {
+        GL11.glEnable(GL11.GL_COLOR_MATERIAL);
+        GL11.glPushMatrix();
+        GL11.glTranslatef((float) x, (float) y, 50.0f);
+        GL11.glScalef((float) (-scale), (float) scale, (float) scale);
+        GL11.glRotatef(180.0f, 0.0f, 0.0f, 1.0f);
+        World previousWorld = entity.worldObj;
+        double previousPosX = entity.posX;
+        double previousPosY = entity.posY;
+        double previousPosZ = entity.posZ;
+        double previousLastTickPosX = entity.lastTickPosX;
+        double previousLastTickPosY = entity.lastTickPosY;
+        double previousLastTickPosZ = entity.lastTickPosZ;
+        double previousPrevPosX = entity.prevPosX;
+        double previousPrevPosY = entity.prevPosY;
+        double previousPrevPosZ = entity.prevPosZ;
+        float previousRenderYawOffset = entity.renderYawOffset;
+        float previousRotationYaw = entity.rotationYaw;
+        float previousRotationPitch = entity.rotationPitch;
+        float previousPrevRotationYawHead = entity.prevRotationYawHead;
+        float previousRotationYawHead = entity.rotationYawHead;
+
+        GL11.glRotatef(135.0f, 0.0f, 1.0f, 0.0f);
+        RenderHelper.enableStandardItemLighting();
+        GL11.glRotatef(-135.0f, 0.0f, 1.0f, 0.0f);
+
+        entity.renderYawOffset = turntableYawDegrees;
+        entity.rotationYaw = turntableYawDegrees;
+        entity.rotationPitch = 0.0f;
+        entity.rotationYawHead = turntableYawDegrees;
+        entity.prevRotationYawHead = turntableYawDegrees;
+        applyPreviewWorldAnchor(entity);
+        synchronizeMultipartPreviewState(entity);
+
+        RenderManager renderManager = RenderManager.instance;
+        float previousPlayerViewY = renderManager.playerViewY;
+        renderManager.playerViewY = 180.0f;
+
+        try {
+            renderManager.renderEntityWithPosYaw(entity, 0.0d, 0.0d, 0.0d, 0.0f, 1.0f);
+        } finally {
+            renderManager.playerViewY = previousPlayerViewY;
+            entity.worldObj = previousWorld;
+            entity.posX = previousPosX;
+            entity.posY = previousPosY;
+            entity.posZ = previousPosZ;
+            entity.lastTickPosX = previousLastTickPosX;
+            entity.lastTickPosY = previousLastTickPosY;
+            entity.lastTickPosZ = previousLastTickPosZ;
+            entity.prevPosX = previousPrevPosX;
+            entity.prevPosY = previousPrevPosY;
+            entity.prevPosZ = previousPrevPosZ;
+            entity.renderYawOffset = previousRenderYawOffset;
+            entity.rotationYaw = previousRotationYaw;
+            entity.rotationPitch = previousRotationPitch;
+            entity.prevRotationYawHead = previousPrevRotationYawHead;
+            entity.rotationYawHead = previousRotationYawHead;
+            GL11.glPopMatrix();
+            RenderHelper.disableStandardItemLighting();
+            GL11.glDisable(GL12.GL_RESCALE_NORMAL);
+            OpenGlHelper.setActiveTexture(OpenGlHelper.lightmapTexUnit);
+            GL11.glDisable(GL11.GL_TEXTURE_2D);
+            OpenGlHelper.setActiveTexture(OpenGlHelper.defaultTexUnit);
         }
     }
 
@@ -310,6 +379,120 @@ public enum Renderer {
         GL11.glClearColor(0f, 0f, 0f, 0f);
         GL11.glClearDepth(1D);
         GL11.glClear(16384 | 256);
+    }
+
+    private void applyPreviewWorldAnchor(EntityLiving entity) {
+        Minecraft minecraft = Minecraft.getMinecraft();
+        if (minecraft == null) {
+            return;
+        }
+
+        World world = minecraft.theWorld;
+        EntityPlayer player = minecraft.thePlayer;
+        if (world == null || player == null) {
+            return;
+        }
+
+        entity.worldObj = world;
+        entity.setLocationAndAngles(player.posX, player.posY, player.posZ, player.rotationYaw, 0.0f);
+        entity.lastTickPosX = entity.posX;
+        entity.lastTickPosY = entity.posY;
+        entity.lastTickPosZ = entity.posZ;
+        entity.prevPosX = entity.posX;
+        entity.prevPosY = entity.posY;
+        entity.prevPosZ = entity.posZ;
+    }
+
+    private void synchronizeMultipartPreviewState(EntityLiving entity) {
+        if (entity == null) {
+            return;
+        }
+
+        synchronizeMultipartPartAnchors(entity);
+        refreshSpecialMultipartPreviewState(entity);
+        synchronizeMultipartPartAnchors(entity);
+    }
+
+    private void synchronizeMultipartPartAnchors(EntityLiving entity) {
+        Entity[] parts = entity.getParts();
+        if (parts == null || parts.length == 0) {
+            return;
+        }
+
+        for (Entity part : parts) {
+            if (part == null || part == entity) {
+                continue;
+            }
+
+            part.worldObj = entity.worldObj;
+            part.setLocationAndAngles(entity.posX, entity.posY, entity.posZ, entity.rotationYaw, entity.rotationPitch);
+            part.lastTickPosX = part.posX;
+            part.lastTickPosY = part.posY;
+            part.lastTickPosZ = part.posZ;
+            part.prevPosX = part.posX;
+            part.prevPosY = part.posY;
+            part.prevPosZ = part.posZ;
+        }
+    }
+
+    private void refreshSpecialMultipartPreviewState(EntityLiving entity) {
+        String className = entity.getClass().getName();
+        if ("twilightforest.entity.EntityTFBlockGoblin".equals(className)) {
+            try {
+                entity.onUpdate();
+            } catch (Throwable ignored) {
+            }
+        }
+    }
+
+    private void writeSingleFrameImage(RenderJob job, BufferedImage image) {
+        File outputFile = new File(imageDirectory, job.getImageFilePath());
+        ensureParentDirectory(outputFile);
+
+        try {
+            ImageIO.write(image, IMAGE_FORMAT_PNG, outputFile);
+        } catch (IOException e) {
+            throw new RuntimeException(e);
+        }
+    }
+
+    private void handleFailedRenderJob(RenderJob job, Throwable renderFailure) {
+        String jobPath = job == null ? "<null>" : job.getOutputFilePath();
+        Logger.MOD.error("Render job failed for {}", jobPath, renderFailure);
+
+        try {
+            BufferedImage placeholder = new BufferedImage(imageDim, imageDim, BufferedImage.TYPE_INT_ARGB);
+            if (job != null && job.needsMultipleFrames()) {
+                File outputFile = new File(imageDirectory, job.getOutputFilePath());
+                ensureParentDirectory(outputFile);
+                GifRenderer.AnimationCapture capture =
+                        new GifRenderer.AnimationCapture(outputFile, 1, job.getRequestedFrameDelayMs());
+                capture.addFrame(placeholder);
+                capture.writeGif();
+                RenderDispatcher.INSTANCE.abandonJob(job);
+            } else if (job != null) {
+                writeSingleFrameImage(job, placeholder);
+            }
+        } catch (Throwable placeholderFailure) {
+            Logger.MOD.error("Failed to write fallback render output for {}", jobPath, placeholderFailure);
+            if (job != null && job.needsMultipleFrames()) {
+                RenderDispatcher.INSTANCE.abandonJob(job);
+            }
+        }
+    }
+
+    private void ensureParentDirectory(File outputFile) {
+        File parentDir = outputFile.getParentFile();
+        if (parentDir == null) {
+            return;
+        }
+        if (parentDir.exists() && !parentDir.isDirectory()) {
+            throw new RuntimeException(
+                    "Render output file directory already exists as a file: " + parentDir.getPath());
+        } else if (!parentDir.exists() && !parentDir.mkdirs()) {
+            throw new RuntimeException(
+                    "Could not create render output file directory: " + parentDir.getPath());
+        }
     }
 
     private void setupRenderState() {

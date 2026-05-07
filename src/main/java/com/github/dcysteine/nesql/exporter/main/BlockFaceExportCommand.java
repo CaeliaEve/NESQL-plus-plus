@@ -74,10 +74,17 @@ final class BlockFaceExportCommand implements ICommand {
         return false;
     }
 
+    public int compareTo(ICommand other) {
+        if (other == null) {
+            return 1;
+        }
+        return this.getCommandName().compareTo(other.getCommandName());
+    }
+
     @Override
     public int compareTo(Object other) {
         if (other instanceof ICommand) {
-            return this.getCommandName().compareTo(((ICommand) other).getCommandName());
+            return compareTo((ICommand) other);
         }
         return 0;
     }

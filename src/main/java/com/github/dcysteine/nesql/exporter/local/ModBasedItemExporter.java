@@ -16,7 +16,7 @@ import java.util.List;
 import java.util.Map;
 
 /**
- * V14 mod-based item writer.
+ * Mod-split item writer for the NESQL++ v1.04 export chain.
  *
  * <p>This writer remains compatible with the existing mod-split output layout,
  * but item field mapping now flows through the NESQL++ canonical mapper.</p>
