@@ -114,6 +114,16 @@ final class ExportStageActionRegistry {
                         stageState.renderAssets);
             }
         });
+        actions.put(ExportStage.WRITE_BROWSER_LAYOUT_INDEX, () -> {
+            ExportWriterSupport.writeBrowserLayoutIndex(
+                    stageState.runtime.entityManager,
+                    exportContext.paths.repositoryDirectory);
+        });
+        actions.put(ExportStage.WRITE_BROWSER_ATLAS_INDEX, () -> {
+            if (stageState.renderingImages) {
+                ExportWriterSupport.writeBrowserAtlasIndex(exportContext.paths.repositoryDirectory);
+            }
+        });
         actions.put(ExportStage.COMPLETE, () -> {});
         return actions;
     }

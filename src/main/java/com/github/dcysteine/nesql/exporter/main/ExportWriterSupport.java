@@ -8,6 +8,8 @@ import com.github.dcysteine.nesql.exporter.local.CanonicalAnimationManifestWrite
 import com.github.dcysteine.nesql.exporter.local.CanonicalAnimatedAtlasPackWriter;
 import com.github.dcysteine.nesql.exporter.local.CanonicalRenderIndexWriter;
 import com.github.dcysteine.nesql.exporter.local.CanonicalAtlasRegistryWriter;
+import com.github.dcysteine.nesql.exporter.local.CanonicalBrowserAtlasIndexWriter;
+import com.github.dcysteine.nesql.exporter.local.CanonicalBrowserLayoutIndexWriter;
 import com.github.dcysteine.nesql.exporter.local.CanonicalRenderAssetCollector;
 import com.github.dcysteine.nesql.exporter.local.ModBasedItemExporter;
 import com.github.dcysteine.nesql.exporter.local.ModBasedRecipeExporter;
@@ -256,6 +258,30 @@ public final class ExportWriterSupport {
             Logger.MOD.error("Failed to write NESQL++ atlas registry", e);
             Logger.chatMessage(
                     EnumChatFormatting.RED + "Failed to write NESQL++ atlas registry: " + e.getMessage());
+            throw e;
+        }
+    }
+
+    public static void writeBrowserAtlasIndex(File repositoryDirectory) throws Exception {
+        Logger.chatMessage(EnumChatFormatting.AQUA + "Exporting NESQL++ browser atlas index...");
+        try {
+            new CanonicalBrowserAtlasIndexWriter(repositoryDirectory).export();
+        } catch (Exception e) {
+            Logger.MOD.error("Failed to write NESQL++ browser atlas index", e);
+            Logger.chatMessage(
+                    EnumChatFormatting.RED + "Failed to write NESQL++ browser atlas index: " + e.getMessage());
+            throw e;
+        }
+    }
+
+    public static void writeBrowserLayoutIndex(EntityManager entityManager, File repositoryDirectory) throws Exception {
+        Logger.chatMessage(EnumChatFormatting.AQUA + "Exporting NESQL++ browser layout index...");
+        try {
+            new CanonicalBrowserLayoutIndexWriter(entityManager, repositoryDirectory).export();
+        } catch (Exception e) {
+            Logger.MOD.error("Failed to write NESQL++ browser layout index", e);
+            Logger.chatMessage(
+                    EnumChatFormatting.RED + "Failed to write NESQL++ browser layout index: " + e.getMessage());
             throw e;
         }
     }

@@ -180,12 +180,26 @@ public class CanonicalAtlasPackWriter {
         if ("native_sprite_snapshot".equals(asset.mode)
                 && asset.nativeSpriteAtlasFile != null
                 && !asset.nativeSpriteAtlasFile.isEmpty()) {
-            return new File(exportDirectory, asset.nativeSpriteAtlasFile.replace('/', File.separatorChar));
+            return resolveExportFile(asset.nativeSpriteAtlasFile);
         }
         if (asset.staticFile == null || asset.staticFile.isEmpty()) {
             return null;
         }
-        return new File(exportDirectory, asset.staticFile.replace('/', File.separatorChar));
+        return resolveExportFile(asset.staticFile);
+    }
+
+    private File resolveExportFile(String relativePath) {
+        File direct = new File(exportDirectory, relativePath.replace('/', File.separatorChar));
+        if (direct.exists()) {
+            return direct;
+        }
+        if (!relativePath.startsWith("image/")) {
+            File underImage = new File(exportDirectory, ("image/" + relativePath).replace('/', File.separatorChar));
+            if (underImage.exists()) {
+                return underImage;
+            }
+        }
+        return direct;
     }
 
     private String relativizeFromExportDirectory(File file) {

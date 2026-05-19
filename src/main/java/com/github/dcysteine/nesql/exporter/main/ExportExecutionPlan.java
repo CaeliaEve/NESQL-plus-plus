@@ -36,6 +36,9 @@ public final class ExportExecutionPlan {
         if (profile.writeCanonicalSnapshot) {
             stages.add(ExportStage.WRITE_CANONICAL_SNAPSHOT);
         }
+        if (profile.writeModBasedItems) {
+            stages.add(ExportStage.WRITE_BROWSER_LAYOUT_INDEX);
+        }
 
         if (profile == ExportProfile.FULL_V104) {
             stages.add(ExportStage.WRITE_MULTIBLOCK_BLUEPRINTS);
@@ -50,6 +53,7 @@ public final class ExportExecutionPlan {
             stages.add(ExportStage.WRITE_ANIMATED_ATLAS_PACKS);
             stages.add(ExportStage.WRITE_ATLAS_REGISTRY);
             stages.add(ExportStage.WRITE_RENDER_INDEX);
+            stages.add(ExportStage.WRITE_BROWSER_ATLAS_INDEX);
         }
 
         if (profile.commitDatabase) {
