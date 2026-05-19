@@ -46,6 +46,7 @@ public final class Main {
         ConfigGuiFactory.checkClassName();
         Config.initialize();
         Config.updateConfig();
+        ClientGuiScheduler.initialize();
         if (ConfigOptions.AUTO_EXPORT_ON_CONNECT.get()) {
             FMLCommonHandler.instance().bus().register(this);
             Logger.MOD.info("Auto-export on connect is enabled; connection listener registered.");

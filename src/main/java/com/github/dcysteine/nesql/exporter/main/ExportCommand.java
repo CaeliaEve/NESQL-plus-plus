@@ -1,6 +1,5 @@
 package com.github.dcysteine.nesql.exporter.main;
 
-import net.minecraft.client.Minecraft;
 import net.minecraft.command.ICommand;
 import net.minecraft.command.ICommandSender;
 
@@ -31,38 +30,39 @@ final class ExportCommand implements ICommand {
             return;
         }
 
-        Exporter exporter;
-        if (args.length == 1) {
-            exporter = new Exporter(args[0]);
-        } else {
-            exporter = new Exporter();
-        }
+        String repositoryName = args.length == 1
+                ? args[0]
+                : com.github.dcysteine.nesql.exporter.main.config.ConfigOptions.REPOSITORY_NAME.get();
 
-        // Show progress GUI before starting export
+        ClientGuiScheduler.open(new ExportSelectionGui(repositoryName));
+        Logger.chatMessage("Opened NESQL++ export selection for repository: " + repositoryName);
+    }
+
+    static void startSelectedExport(String repositoryName, ExportSelection selection, ExportSelectionGui selectionGui) {
+        Exporter exporter = new Exporter(repositoryName, selection);
         ExportProgressGui gui = new ExportProgressGui();
         gui.clear();
         gui.setTitle("NESQL++ 1.04");
-        gui.setSubtitle("Full Export / v1.04 / " + (args.length == 1 ? args[0] : "default"));
-        gui.addMessage("Starting export...");
+        gui.setSubtitle("Selected Export / v1.04 / " + repositoryName);
+        gui.addMessage("Starting export with selection: " + selection.describe());
 
-        // Open GUI on client side
-        Minecraft.getMinecraft().displayGuiScreen(gui);
+        ClientGuiScheduler.open(gui);
 
-        // Start export in background thread
-        new Thread(() -> {
+        Thread thread = new Thread(() -> {
             try {
                 exporter.exportReportException();
             } finally {
-                // Close GUI when export is complete
                 try {
-                    Thread.sleep(3000); // Wait 3 seconds before closing so user can see completion
+                    Thread.sleep(3000);
                 } catch (InterruptedException e) {
                     Thread.currentThread().interrupt();
                 }
                 ExportProgressGui.clearActiveGui();
-                Minecraft.getMinecraft().displayGuiScreen(null);
+                ClientGuiScheduler.close(gui);
             }
-        }).start();
+        }, "NESQL++ Export");
+        thread.setDaemon(true);
+        thread.start();
     }
 
     @Override

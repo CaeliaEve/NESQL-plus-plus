@@ -69,6 +69,10 @@ interface ExportExecutionStrategy {
 
         @Override
         public boolean initializeRendering(ExportContext exportContext, File imageDirectory) {
+            if (!exportContext.selection.renderImages) {
+                Logger.chatMessage(EnumChatFormatting.YELLOW + "Image rendering disabled by export selection.");
+                return false;
+            }
             if (!ConfigOptions.RENDER_ICONS.get()) {
                 return false;
             }

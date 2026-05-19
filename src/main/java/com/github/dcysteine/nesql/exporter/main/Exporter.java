@@ -14,7 +14,11 @@ public final class Exporter {
     }
 
     public Exporter(String repositoryName) {
-        this.exportContext = ExportContext.forProfile(ExportProfile.FULL_V104, repositoryName);
+        this(repositoryName, ExportSelection.full());
+    }
+
+    public Exporter(String repositoryName, ExportSelection selection) {
+        this.exportContext = ExportContext.forProfile(ExportProfile.FULL_V104, selection, repositoryName);
     }
 
     /**
