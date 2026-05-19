@@ -187,6 +187,13 @@ public class CanonicalAnimatedAtlasPackWriter {
         }
 
         assets.sort(Comparator.comparing(asset -> asset.assetId));
+        String safeName = atlasGroup.replaceAll("[^a-zA-Z0-9_-]", "_");
+        File atlasFile = new File(atlasDir, safeName + ".png");
+        AnimatedAtlasGroupManifest reusable = readFreshGroupManifest(atlasDir, atlasGroup, assets, atlasFile, safeName);
+        if (reusable != null) {
+            return reusable;
+        }
+
         List<AtlasPackingSupport.AtlasSourceImage> sources = new ArrayList<>();
         for (CanonicalRenderAsset asset : assets) {
             if ("native_sprite_animation".equals(asset.mode)) {
@@ -201,8 +208,6 @@ public class CanonicalAnimatedAtlasPackWriter {
         }
 
         AtlasPackingSupport.PackLayout layout = AtlasPackingSupport.computeLayout(sources);
-        String safeName = atlasGroup.replaceAll("[^a-zA-Z0-9_-]", "_");
-        File atlasFile = new File(atlasDir, safeName + ".png");
         AtlasPackingSupport.writeAtlasImage(atlasFile, layout);
 
         AnimatedAtlasGroupManifest groupManifest = new AnimatedAtlasGroupManifest();
@@ -247,6 +252,79 @@ public class CanonicalAnimatedAtlasPackWriter {
         }
 
         return groupManifest;
+    }
+
+    private AnimatedAtlasGroupManifest readFreshGroupManifest(
+            File atlasDir,
+            String atlasGroup,
+            List<CanonicalRenderAsset> assets,
+            File atlasFile,
+            String safeName) {
+        File canonicalDir = atlasDir.getParentFile();
+        File shardFile = new File(new File(canonicalDir, GROUP_DIRECTORY), safeName + ".json");
+        if (!atlasFile.exists() || !shardFile.exists()) {
+            return null;
+        }
+
+        long newestSourceModified = newestSourceModified(assets);
+        long oldestOutputModified = Math.min(atlasFile.lastModified(), shardFile.lastModified());
+        if (newestSourceModified <= 0L || oldestOutputModified < newestSourceModified) {
+            return null;
+        }
+
+        try (FileInputStream fis = new FileInputStream(shardFile);
+             InputStreamReader reader = new InputStreamReader(fis, StandardCharsets.UTF_8)) {
+            AnimatedAtlasGroupManifest manifest = GSON.fromJson(reader, AnimatedAtlasGroupManifest.class);
+            if (manifest == null || manifest.assets == null || manifest.assets.isEmpty()) {
+                return null;
+            }
+            Logger.MOD.info("Reusing fresh animated atlas group {} from {}", atlasGroup, atlasFile.getName());
+            return manifest;
+        } catch (Exception e) {
+            Logger.MOD.warn("Failed to reuse animated atlas group {}", atlasGroup, e);
+            return null;
+        }
+    }
+
+    private long newestSourceModified(List<CanonicalRenderAsset> assets) {
+        long newest = 0L;
+        for (CanonicalRenderAsset asset : assets) {
+            List<File> sourceFiles = sourceFilesForFreshness(asset);
+            if (sourceFiles.isEmpty()) {
+                return -1L;
+            }
+            for (File sourceFile : sourceFiles) {
+                if (sourceFile == null || !sourceFile.exists()) {
+                    return -1L;
+                }
+                newest = Math.max(newest, sourceFile.lastModified());
+            }
+        }
+        return newest;
+    }
+
+    private List<File> sourceFilesForFreshness(CanonicalRenderAsset asset) {
+        List<File> files = new ArrayList<>();
+        if ("native_sprite_animation".equals(asset.mode)) {
+            if (asset.nativeSpriteAtlasFile != null && !asset.nativeSpriteAtlasFile.isEmpty()) {
+                files.add(resolveExportFile(asset.nativeSpriteAtlasFile));
+            }
+            if (asset.spriteMetadataFile != null && !asset.spriteMetadataFile.isEmpty()) {
+                files.add(resolveExportFile(asset.spriteMetadataFile));
+            }
+            return files;
+        }
+
+        if (asset.timeline == null) {
+            return files;
+        }
+        for (Map<String, Object> frame : asset.timeline) {
+            Object path = frame.get("path");
+            if (path instanceof String) {
+                files.add(resolveExportFile((String) path));
+            }
+        }
+        return files;
     }
 
     private List<AnimatedAtlasTimelineEntry> copyTimeline(List<Map<String, Object>> sourceTimeline) {

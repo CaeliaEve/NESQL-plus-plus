@@ -43,9 +43,28 @@ final class ExportValidationReportWriter {
                     readManifestCount(new File(canonicalDir, "atlas-manifest.json"), "assetCount");
             report.animatedAtlasManifestAssets =
                     readManifestCount(new File(canonicalDir, "animated-atlas-manifest.json"), "assetCount");
+            File reportFile = new File(canonicalDir, "export-validation-report.json");
+            ValidationReport previousReport = readPreviousReport(reportFile);
+            if (previousReport != null) {
+                report.previous = new PreviousSnapshot();
+                report.previous.itemsJsonGzFiles = previousReport.itemsJsonGzFiles;
+                report.previous.recipeJsonGzFiles = previousReport.recipeJsonGzFiles;
+                report.previous.imagePngFiles = previousReport.imagePngFiles;
+                report.previous.imageGifFiles = previousReport.imageGifFiles;
+                report.previous.staticAtlasManifestAssets = previousReport.staticAtlasManifestAssets;
+                report.previous.animatedAtlasManifestAssets = previousReport.animatedAtlasManifestAssets;
+                report.delta = new DeltaSnapshot();
+                report.delta.itemsJsonGzFiles = report.itemsJsonGzFiles - previousReport.itemsJsonGzFiles;
+                report.delta.recipeJsonGzFiles = report.recipeJsonGzFiles - previousReport.recipeJsonGzFiles;
+                report.delta.imagePngFiles = report.imagePngFiles - previousReport.imagePngFiles;
+                report.delta.imageGifFiles = report.imageGifFiles - previousReport.imageGifFiles;
+                report.delta.staticAtlasManifestAssets =
+                        report.staticAtlasManifestAssets - previousReport.staticAtlasManifestAssets;
+                report.delta.animatedAtlasManifestAssets =
+                        report.animatedAtlasManifestAssets - previousReport.animatedAtlasManifestAssets;
+            }
             collectWarnings(report);
 
-            File reportFile = new File(canonicalDir, "export-validation-report.json");
             try (FileOutputStream fos = new FileOutputStream(reportFile);
                  OutputStreamWriter writer = new OutputStreamWriter(fos, StandardCharsets.UTF_8)) {
                 new GsonBuilder().setPrettyPrinting().create().toJson(report, writer);
@@ -64,6 +83,19 @@ final class ExportValidationReportWriter {
             }
         } catch (Exception e) {
             Logger.MOD.warn("Failed to write NESQL++ validation report", e);
+        }
+    }
+
+    private static ValidationReport readPreviousReport(File reportFile) {
+        if (!reportFile.exists()) {
+            return null;
+        }
+        try (FileInputStream fis = new FileInputStream(reportFile);
+             InputStreamReader reader = new InputStreamReader(fis, StandardCharsets.UTF_8)) {
+            return new GsonBuilder().create().fromJson(reader, ValidationReport.class);
+        } catch (Exception e) {
+            Logger.MOD.warn("Failed to read previous NESQL++ validation report", e);
+            return null;
         }
     }
 
@@ -149,6 +181,19 @@ final class ExportValidationReportWriter {
         int animatedAtlasPngFiles;
         int staticAtlasManifestAssets;
         int animatedAtlasManifestAssets;
+        PreviousSnapshot previous;
+        DeltaSnapshot delta;
         List<String> warnings = new ArrayList<String>();
     }
+
+    private static class PreviousSnapshot {
+        int itemsJsonGzFiles;
+        int recipeJsonGzFiles;
+        int imagePngFiles;
+        int imageGifFiles;
+        int staticAtlasManifestAssets;
+        int animatedAtlasManifestAssets;
+    }
+
+    private static final class DeltaSnapshot extends PreviousSnapshot {}
 }

@@ -164,6 +164,13 @@ public class CanonicalAtlasPackWriter {
         }
 
         assets.sort(Comparator.comparing(asset -> asset.assetId));
+        String safeName = atlasGroup.replaceAll("[^a-zA-Z0-9_-]", "_");
+        File atlasFile = new File(atlasDir, safeName + ".png");
+        AtlasGroupManifest reusable = readFreshGroupManifest(atlasDir, atlasGroup, assets, atlasFile, safeName);
+        if (reusable != null) {
+            return reusable;
+        }
+
         List<AtlasPackingSupport.AtlasSourceImage> sources = new ArrayList<>();
         for (CanonicalRenderAsset asset : assets) {
             File sourceFile = resolveSourceFile(asset);
@@ -182,8 +189,6 @@ public class CanonicalAtlasPackWriter {
         }
 
         AtlasPackingSupport.PackLayout layout = AtlasPackingSupport.computeLayout(sources);
-        String safeName = atlasGroup.replaceAll("[^a-zA-Z0-9_-]", "_");
-        File atlasFile = new File(atlasDir, safeName + ".png");
         AtlasPackingSupport.writeAtlasImage(atlasFile, layout);
 
         AtlasGroupManifest groupManifest = new AtlasGroupManifest();
@@ -206,6 +211,51 @@ public class CanonicalAtlasPackWriter {
         }
 
         return groupManifest;
+    }
+
+    private AtlasGroupManifest readFreshGroupManifest(
+            File atlasDir,
+            String atlasGroup,
+            List<CanonicalRenderAsset> assets,
+            File atlasFile,
+            String safeName) {
+        File canonicalDir = atlasDir.getParentFile();
+        File shardFile = new File(new File(canonicalDir, GROUP_DIRECTORY), safeName + ".json");
+        if (!atlasFile.exists() || !shardFile.exists()) {
+            return null;
+        }
+
+        long newestSourceModified = newestSourceModified(assets);
+        long oldestOutputModified = Math.min(atlasFile.lastModified(), shardFile.lastModified());
+        if (newestSourceModified <= 0L || oldestOutputModified < newestSourceModified) {
+            return null;
+        }
+
+        try (java.io.FileInputStream fis = new java.io.FileInputStream(shardFile);
+             java.io.InputStreamReader reader =
+                     new java.io.InputStreamReader(fis, StandardCharsets.UTF_8)) {
+            AtlasGroupManifest manifest = new Gson().fromJson(reader, AtlasGroupManifest.class);
+            if (manifest == null || manifest.assets == null || manifest.assets.isEmpty()) {
+                return null;
+            }
+            Logger.MOD.info("Reusing fresh static atlas group {} from {}", atlasGroup, atlasFile.getName());
+            return manifest;
+        } catch (Exception e) {
+            Logger.MOD.warn("Failed to reuse static atlas group {}", atlasGroup, e);
+            return null;
+        }
+    }
+
+    private long newestSourceModified(List<CanonicalRenderAsset> assets) {
+        long newest = 0L;
+        for (CanonicalRenderAsset asset : assets) {
+            File sourceFile = resolveSourceFile(asset);
+            if (sourceFile == null || !sourceFile.exists()) {
+                return -1L;
+            }
+            newest = Math.max(newest, sourceFile.lastModified());
+        }
+        return newest;
     }
 
     private int countAssets(List<AtlasGroupManifest> groups) {
