@@ -86,6 +86,10 @@ public enum RenderDispatcher {
     // 多帧作业队列（动画物品，优先处理）
     private final ConcurrentLinkedQueue<RenderJob> multiFrameJobQueue = new ConcurrentLinkedQueue<>();
     private final ConcurrentLinkedQueue<RenderJob> multiFrameDeferredQueue = new ConcurrentLinkedQueue<>();
+    private final java.util.Set<String> queuedOutputPaths =
+            java.util.Collections.newSetFromMap(new ConcurrentHashMap<String, Boolean>());
+    private final java.util.concurrent.atomic.AtomicInteger duplicateJobSkipCount =
+            new java.util.concurrent.atomic.AtomicInteger();
 
     // Track active GIF animation captures by output file path
     private final ConcurrentHashMap<String, GifRenderer.AnimationCapture> activeCaptures = new ConcurrentHashMap<>();
@@ -122,11 +126,15 @@ public enum RenderDispatcher {
             singleFrameJobQueue.clear();
             multiFrameJobQueue.clear();
             multiFrameDeferredQueue.clear();
+            queuedOutputPaths.clear();
+            duplicateJobSkipCount.set(0);
             activeCaptures.clear();
         } else if (newState == RendererState.ERROR) {
             singleFrameJobQueue.clear();
             multiFrameJobQueue.clear();
             multiFrameDeferredQueue.clear();
+            queuedOutputPaths.clear();
+            duplicateJobSkipCount.set(0);
             activeCaptures.clear();
         }
 
@@ -165,7 +173,22 @@ public enum RenderDispatcher {
         return singleFrameJobQueue.size() + multiFrameJobQueue.size() + multiFrameDeferredQueue.size() + activeCaptures.size();
     }
 
+    public int getDuplicateJobSkipCount() {
+        return duplicateJobSkipCount.get();
+    }
+
     public void addJob(RenderJob job) {
+        if (job == null) {
+            return;
+        }
+        String outputPath = job.getOutputFilePath();
+        if (outputPath != null && !queuedOutputPaths.add(outputPath)) {
+            int skipped = duplicateJobSkipCount.incrementAndGet();
+            if (skipped == 1 || skipped % 1000 == 0) {
+                Logger.MOD.info("Skipped {} duplicate render jobs so far", skipped);
+            }
+            return;
+        }
         if (job.needsMultipleFrames()) {
             multiFrameJobQueue.add(job);
         } else {
@@ -183,6 +206,8 @@ public enum RenderDispatcher {
         singleFrameJobQueue.clear();
         multiFrameJobQueue.clear();
         multiFrameDeferredQueue.clear();
+        queuedOutputPaths.clear();
+        duplicateJobSkipCount.set(0);
         activeCaptures.clear();
     }
 

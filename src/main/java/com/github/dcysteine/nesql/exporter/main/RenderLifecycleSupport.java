@@ -57,6 +57,13 @@ public final class RenderLifecycleSupport {
         }
         RenderDispatcher.INSTANCE.setRendererState(RenderDispatcher.RendererState.DESTROYING);
         Logger.chatMessage(EnumChatFormatting.AQUA + "Rendering complete!");
+        int skippedDuplicates = RenderDispatcher.INSTANCE.getDuplicateJobSkipCount();
+        if (skippedDuplicates > 0) {
+            Logger.chatMessage(
+                    EnumChatFormatting.GREEN
+                            + "Skipped duplicate render jobs: "
+                            + skippedDuplicates);
+        }
     }
 
     private static void warnBugTorch() {

@@ -1,4 +1,4 @@
-﻿# NESQL++ 导出 GUI 与提速开发清单
+# NESQL++ 导出 GUI 与提速开发清单
 
 目标：修复 `/nesql [文件名]` 不弹 GUI 的问题，并把默认命令升级为“先选择导出模块，再启动导出”；同时在不改变现有 NeoNEI 输出结构的前提下，先加入可观测耗时与安全跳过能力，为后续增量/并行提速铺路。
 
@@ -19,8 +19,11 @@
 
 ## 后续提速路线
 - 增量渲染缓存：按 item/render contract/texture hash 跳过未变化图片。
+- [x] 渲染队列去重：同一轮导出内相同输出路径只渲染一次。
 - [x] Atlas 打包并行化第一轮：静态/动画 atlas 按 group 使用有界 IO worker 并行打包。
+- [x] 部分导出不再强制新目录：只有默认全量导出保持旧的“目录存在则停止”保护。
 - Atlas 增量写入：未变化 atlas page 复用旧输出。
 - 有界并行 IO：只并行文件读取、压缩、manifest/atlas 处理，不并行访问 MC/NEI 世界对象。
 - [x] 阶段耗时报告：导出 `canonical/export-stage-timings.json`。
-- 导出后校验报告：items/recipes/images/atlas/missing texture 计数对比。
+- [x] 导出后校验报告第一轮：items/recipes/images/atlas 基础计数与 warning。
+- 导出后校验报告深化：missing texture 计数与历史对比。

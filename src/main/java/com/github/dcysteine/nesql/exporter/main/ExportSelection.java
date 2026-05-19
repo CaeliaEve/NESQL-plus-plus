@@ -36,6 +36,20 @@ public final class ExportSelection {
         return new Builder();
     }
 
+    public boolean isFullExportCompatible() {
+        return writeItems
+                && writeRecipes
+                && writeCanonicalSnapshot
+                && writeMultiblocks
+                && writeBlockFaces
+                && renderImages
+                && writeRenderManifests
+                && writeAtlasPacks
+                && writeAnimatedAtlasPacks
+                && writeBrowserIndexes
+                && commitDatabase;
+    }
+
     public boolean includesStage(ExportStage stage, ExportProfile profile) {
         switch (stage) {
             case WRITE_MOD_BASED_ITEMS:

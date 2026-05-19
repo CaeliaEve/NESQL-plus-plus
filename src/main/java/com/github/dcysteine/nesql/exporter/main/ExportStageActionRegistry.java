@@ -15,7 +15,7 @@ final class ExportStageActionRegistry {
             ExportStageState stageState) {
         EnumMap<ExportStage, ExportStageAction> actions = new EnumMap<>(ExportStage.class);
         actions.put(ExportStage.INITIALIZE_REPOSITORY,
-                () -> prepareRepositoryOrStop(exportContext, strategy.requiresFreshRepository()));
+                () -> prepareRepositoryOrStop(exportContext, strategy.requiresFreshRepository(exportContext)));
         actions.put(ExportStage.INITIALIZE_DATABASE,
                 () -> stageState.runtime = strategy.createRuntime(exportContext));
         actions.put(ExportStage.INITIALIZE_PLUGINS, () -> {

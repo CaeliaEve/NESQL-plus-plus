@@ -13,7 +13,7 @@ interface ExportExecutionStrategy {
 
     void announceCompletion(ExportContext exportContext, File repositoryDirectory);
 
-    boolean requiresFreshRepository();
+    boolean requiresFreshRepository(ExportContext exportContext);
 
     boolean shouldLogEntityManagerClose();
 
@@ -53,8 +53,8 @@ interface ExportExecutionStrategy {
         }
 
         @Override
-        public boolean requiresFreshRepository() {
-            return true;
+        public boolean requiresFreshRepository(ExportContext exportContext) {
+            return exportContext.selection.isFullExportCompatible();
         }
 
         @Override
@@ -129,7 +129,7 @@ interface ExportExecutionStrategy {
         }
 
         @Override
-        public boolean requiresFreshRepository() {
+        public boolean requiresFreshRepository(ExportContext exportContext) {
             return false;
         }
 
@@ -191,7 +191,7 @@ interface ExportExecutionStrategy {
         }
 
         @Override
-        public boolean requiresFreshRepository() {
+        public boolean requiresFreshRepository(ExportContext exportContext) {
             return false;
         }
 

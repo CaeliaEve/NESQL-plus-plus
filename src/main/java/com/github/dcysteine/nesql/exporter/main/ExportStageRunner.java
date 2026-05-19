@@ -51,6 +51,7 @@ final class ExportStageRunner {
                             + "[NESQL] Export pipeline runtime: "
                             + formatDuration(System.currentTimeMillis() - exportStartedAt));
             writeTimingReport(exportContext, timings, System.currentTimeMillis() - exportStartedAt);
+            ExportValidationReportWriter.write(exportContext);
         } catch (RepositoryPreparationStoppedException ignored) {
             return;
         } catch (Exception e) {
