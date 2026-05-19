@@ -1,5 +1,7 @@
 package com.github.dcysteine.nesql.exporter.main;
 
+import com.github.dcysteine.nesql.exporter.canonical.CanonicalRenderAsset;
+import com.google.gson.Gson;
 import com.google.gson.GsonBuilder;
 import com.google.gson.JsonObject;
 import com.google.gson.JsonParser;
@@ -13,6 +15,7 @@ import java.io.OutputStreamWriter;
 import java.nio.charset.StandardCharsets;
 import java.util.ArrayList;
 import java.util.List;
+import java.util.Map;
 
 /** Writes a lightweight post-export integrity summary without changing exported data contracts. */
 final class ExportValidationReportWriter {
@@ -43,6 +46,7 @@ final class ExportValidationReportWriter {
                     readManifestCount(new File(canonicalDir, "atlas-manifest.json"), "assetCount");
             report.animatedAtlasManifestAssets =
                     readManifestCount(new File(canonicalDir, "animated-atlas-manifest.json"), "assetCount");
+            inspectRenderAssets(repositoryDirectory, canonicalDir, report);
             File reportFile = new File(canonicalDir, "export-validation-report.json");
             ValidationReport previousReport = readPreviousReport(reportFile);
             if (previousReport != null) {
@@ -115,6 +119,89 @@ final class ExportValidationReportWriter {
         if (report.animatedAtlasPngFiles == 0 && report.animatedAtlasManifestAssets > 0) {
             report.warnings.add("Animated atlas manifest has assets but no animated atlas PNG files were found.");
         }
+        if (report.renderAssetMissingPrimaryArtifacts > 0) {
+            report.warnings.add("Render assets with missing primary/static artifacts: "
+                    + report.renderAssetMissingPrimaryArtifacts);
+        }
+        if (report.renderAssetMissingTimelineFrames > 0) {
+            report.warnings.add("Render assets with missing timeline frame files: "
+                    + report.renderAssetMissingTimelineFrames);
+        }
+    }
+
+    private static void inspectRenderAssets(File repositoryDirectory, File canonicalDir, ValidationReport report) {
+        File manifestFile = new File(canonicalDir, "render-assets.json");
+        if (!manifestFile.exists()) {
+            return;
+        }
+
+        try (FileInputStream fis = new FileInputStream(manifestFile);
+             InputStreamReader reader = new InputStreamReader(fis, StandardCharsets.UTF_8)) {
+            RenderAssetManifest manifest = new Gson().fromJson(reader, RenderAssetManifest.class);
+            if (manifest == null || manifest.assets == null) {
+                return;
+            }
+            report.renderAssetManifestAssets = manifest.assets.size();
+            for (CanonicalRenderAsset asset : manifest.assets) {
+                inspectRenderAsset(repositoryDirectory, asset, report);
+            }
+        } catch (Exception e) {
+            Logger.MOD.warn("Failed to inspect render asset manifest for validation", e);
+        }
+    }
+
+    private static void inspectRenderAsset(
+            File repositoryDirectory,
+            CanonicalRenderAsset asset,
+            ValidationReport report) {
+        if (asset == null) {
+            return;
+        }
+        String primaryPath = firstNonEmpty(asset.primaryArtifact, asset.staticFile, asset.nativeSpriteAtlasFile);
+        if (primaryPath == null || !exportFileExists(repositoryDirectory, primaryPath)) {
+            report.renderAssetMissingPrimaryArtifacts++;
+        }
+
+        if (asset.timeline == null || asset.timeline.isEmpty()) {
+            return;
+        }
+        for (Map<String, Object> frame : asset.timeline) {
+            if (frame == null) {
+                continue;
+            }
+            Object path = frame.get("path");
+            if (path instanceof String && !exportFileExists(repositoryDirectory, (String) path)) {
+                report.renderAssetMissingTimelineFrames++;
+            }
+        }
+    }
+
+    private static String firstNonEmpty(String first, String second, String third) {
+        if (first != null && !first.isEmpty()) {
+            return first;
+        }
+        if (second != null && !second.isEmpty()) {
+            return second;
+        }
+        if (third != null && !third.isEmpty()) {
+            return third;
+        }
+        return null;
+    }
+
+    private static boolean exportFileExists(File repositoryDirectory, String relativePath) {
+        if (relativePath == null || relativePath.isEmpty()) {
+            return false;
+        }
+        File direct = new File(repositoryDirectory, relativePath.replace('/', File.separatorChar));
+        if (direct.exists() && direct.length() > 0L) {
+            return true;
+        }
+        if (!relativePath.startsWith("image/")) {
+            File underImage = new File(repositoryDirectory, ("image/" + relativePath).replace('/', File.separatorChar));
+            return underImage.exists() && underImage.length() > 0L;
+        }
+        return false;
     }
 
     private static int readManifestCount(File file, String memberName) {
@@ -181,9 +268,16 @@ final class ExportValidationReportWriter {
         int animatedAtlasPngFiles;
         int staticAtlasManifestAssets;
         int animatedAtlasManifestAssets;
+        int renderAssetManifestAssets;
+        int renderAssetMissingPrimaryArtifacts;
+        int renderAssetMissingTimelineFrames;
         PreviousSnapshot previous;
         DeltaSnapshot delta;
         List<String> warnings = new ArrayList<String>();
+    }
+
+    private static final class RenderAssetManifest {
+        List<CanonicalRenderAsset> assets;
     }
 
     private static class PreviousSnapshot {

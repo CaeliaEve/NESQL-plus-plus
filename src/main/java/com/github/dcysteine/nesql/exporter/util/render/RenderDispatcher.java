@@ -90,6 +90,8 @@ public enum RenderDispatcher {
             java.util.Collections.newSetFromMap(new ConcurrentHashMap<String, Boolean>());
     private final java.util.concurrent.atomic.AtomicInteger duplicateJobSkipCount =
             new java.util.concurrent.atomic.AtomicInteger();
+    private final java.util.concurrent.atomic.AtomicInteger existingOutputSkipCount =
+            new java.util.concurrent.atomic.AtomicInteger();
 
     // Track active GIF animation captures by output file path
     private final ConcurrentHashMap<String, GifRenderer.AnimationCapture> activeCaptures = new ConcurrentHashMap<>();
@@ -114,6 +116,12 @@ public enum RenderDispatcher {
                             rendererState, newState));
         }
 
+        if (newState == RendererState.INITIALIZING) {
+            queuedOutputPaths.clear();
+            duplicateJobSkipCount.set(0);
+            existingOutputSkipCount.set(0);
+        }
+
         if ((newState == RendererState.UNINITIALIZED || newState == RendererState.INITIALIZING)
                 && (!singleFrameJobQueue.isEmpty()
                 || !multiFrameJobQueue.isEmpty()
@@ -128,6 +136,7 @@ public enum RenderDispatcher {
             multiFrameDeferredQueue.clear();
             queuedOutputPaths.clear();
             duplicateJobSkipCount.set(0);
+            existingOutputSkipCount.set(0);
             activeCaptures.clear();
         } else if (newState == RendererState.ERROR) {
             singleFrameJobQueue.clear();
@@ -135,6 +144,7 @@ public enum RenderDispatcher {
             multiFrameDeferredQueue.clear();
             queuedOutputPaths.clear();
             duplicateJobSkipCount.set(0);
+            existingOutputSkipCount.set(0);
             activeCaptures.clear();
         }
 
@@ -177,11 +187,22 @@ public enum RenderDispatcher {
         return duplicateJobSkipCount.get();
     }
 
+    public int getExistingOutputSkipCount() {
+        return existingOutputSkipCount.get();
+    }
+
     public void addJob(RenderJob job) {
         if (job == null) {
             return;
         }
         String outputPath = job.getOutputFilePath();
+        if (shouldSkipExistingOutput(job, outputPath)) {
+            int skipped = existingOutputSkipCount.incrementAndGet();
+            if (skipped == 1 || skipped % 1000 == 0) {
+                Logger.MOD.info("Skipped {} existing render outputs so far", skipped);
+            }
+            return;
+        }
         if (outputPath != null && !queuedOutputPaths.add(outputPath)) {
             int skipped = duplicateJobSkipCount.incrementAndGet();
             if (skipped == 1 || skipped % 1000 == 0) {
@@ -209,6 +230,41 @@ public enum RenderDispatcher {
         queuedOutputPaths.clear();
         duplicateJobSkipCount.set(0);
         activeCaptures.clear();
+    }
+
+    private boolean shouldSkipExistingOutput(RenderJob job, String outputPath) {
+        if (imageDirectory == null || outputPath == null || outputPath.isEmpty()) {
+            return false;
+        }
+        if (job.getType() == RenderJob.JobType.ENTITY) {
+            return false;
+        }
+
+        File outputFile = new File(imageDirectory, outputPath);
+        if (!outputFile.exists() || outputFile.length() <= 0L) {
+            return false;
+        }
+
+        File renderContractFile = new File(imageDirectory, job.getRenderContractFilePath());
+        if (!renderContractFile.exists()) {
+            return false;
+        }
+
+        if (job.shouldWriteNativeSpriteMetadata()) {
+            File spriteMetadataFile = new File(imageDirectory, job.getSpriteMetadataFilePath());
+            if (!spriteMetadataFile.exists()) {
+                return false;
+            }
+        }
+
+        if (job.shouldPreferNativeSpriteAnimation()) {
+            File nativeSpriteAtlasFile = new File(imageDirectory, job.getNativeSpriteAtlasFilePath());
+            if (!nativeSpriteAtlasFile.exists() || nativeSpriteAtlasFile.length() <= 0L) {
+                return false;
+            }
+        }
+
+        return true;
     }
 
     public void beginClientTick() {

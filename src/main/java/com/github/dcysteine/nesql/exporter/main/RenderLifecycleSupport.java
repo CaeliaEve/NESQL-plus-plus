@@ -28,6 +28,7 @@ public final class RenderLifecycleSupport {
 
         ensureRendererHookRegistered();
         Renderer.INSTANCE.preinitialize(imageDirectory);
+        RenderDispatcher.INSTANCE.setImageDirectory(imageDirectory);
         RenderDispatcher.INSTANCE.setRendererState(RenderDispatcher.RendererState.INITIALIZING);
         warnBugTorch();
         return true;
@@ -43,6 +44,7 @@ public final class RenderLifecycleSupport {
 
         ensureRendererHookRegistered();
         Renderer.INSTANCE.preinitialize(imageDirectory);
+        RenderDispatcher.INSTANCE.setImageDirectory(imageDirectory);
         RenderDispatcher.INSTANCE.setRendererState(RenderDispatcher.RendererState.INITIALIZING);
         warnBugTorch();
     }
@@ -63,6 +65,13 @@ public final class RenderLifecycleSupport {
                     EnumChatFormatting.GREEN
                             + "Skipped duplicate render jobs: "
                             + skippedDuplicates);
+        }
+        int skippedExistingOutputs = RenderDispatcher.INSTANCE.getExistingOutputSkipCount();
+        if (skippedExistingOutputs > 0) {
+            Logger.chatMessage(
+                    EnumChatFormatting.GREEN
+                            + "Skipped unchanged render outputs: "
+                            + skippedExistingOutputs);
         }
     }
 

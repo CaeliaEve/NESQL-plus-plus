@@ -18,7 +18,7 @@
 - [x] 构建验证：`./gradlew.bat build -x test` 通过。
 
 ## 后续提速路线
-- 增量渲染缓存：按 item/render contract/texture hash 跳过未变化图片。
+- [x] 增量渲染缓存第一轮：已有 output + render contract + sprite sidecar 时跳过重新渲染。
 - [x] 渲染队列去重：同一轮导出内相同输出路径只渲染一次。
 - [x] Atlas 打包并行化第一轮：静态/动画 atlas 按 group 使用有界 IO worker 并行打包。
 - [x] 部分导出不再强制新目录：只有默认全量导出保持旧的“目录存在则停止”保护。
@@ -27,4 +27,5 @@
 - [x] 阶段耗时报告：导出 `canonical/export-stage-timings.json`。
 - [x] 导出后校验报告第一轮：items/recipes/images/atlas 基础计数与 warning。
 - [x] 导出后校验报告历史对比第一轮：记录 previous/delta 关键计数。
-- 导出后校验报告深化：missing texture 精准计数。
+- [x] 导出后校验报告 missing texture 第一轮：render-assets 主产物与 timeline frame 缺失计数。
+- 后续强化：用 content hash 判断纹理/renderer 变化，减少误复用。
