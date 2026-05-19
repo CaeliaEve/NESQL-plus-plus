@@ -11,7 +11,7 @@ import java.util.Queue;
 import java.util.concurrent.ConcurrentLinkedQueue;
 
 /** Client-tick GUI dispatcher for command handlers that may run off the render thread. */
-final class ClientGuiScheduler {
+public final class ClientGuiScheduler {
     private static final Queue<Runnable> TASKS = new ConcurrentLinkedQueue<>();
     private static boolean registered;
 
