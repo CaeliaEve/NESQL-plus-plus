@@ -19,7 +19,8 @@
 
 ## 后续提速路线
 - 增量渲染缓存：按 item/render contract/texture hash 跳过未变化图片。
+- [x] Atlas 打包并行化第一轮：静态/动画 atlas 按 group 使用有界 IO worker 并行打包。
 - Atlas 增量写入：未变化 atlas page 复用旧输出。
 - 有界并行 IO：只并行文件读取、压缩、manifest/atlas 处理，不并行访问 MC/NEI 世界对象。
+- [x] 阶段耗时报告：导出 `canonical/export-stage-timings.json`。
 - 导出后校验报告：items/recipes/images/atlas/missing texture 计数对比。
-

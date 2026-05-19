@@ -25,6 +25,11 @@ import java.util.Iterator;
 import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
+import java.util.concurrent.Callable;
+import java.util.concurrent.ExecutorService;
+import java.util.concurrent.Executors;
+import java.util.concurrent.Future;
+import java.util.concurrent.ConcurrentHashMap;
 
 /**
  * Atlas packer for animated assets, preferring native sprite atlases when available and
@@ -39,7 +44,7 @@ public class CanonicalAnimatedAtlasPackWriter {
     private final EntityManager entityManager;
     private final File exportDirectory;
     private final List<CanonicalRenderAsset> precollectedAssets;
-    private final Map<String, List<BufferedImage>> gifFrameCache = new HashMap<>();
+    private final Map<String, List<BufferedImage>> gifFrameCache = new ConcurrentHashMap<>();
     private static final Gson GSON = new GsonBuilder().serializeNulls().create();
 
     public CanonicalAnimatedAtlasPackWriter(EntityManager entityManager, File exportDirectory) {
@@ -71,12 +76,7 @@ public class CanonicalAnimatedAtlasPackWriter {
         }
 
         AnimatedAtlasManifest manifest = new AnimatedAtlasManifest();
-        for (Map.Entry<String, List<CanonicalRenderAsset>> entry : byGroup.entrySet()) {
-            AnimatedAtlasGroupManifest groupManifest = packGroup(atlasDir, entry.getKey(), entry.getValue());
-            if (groupManifest != null) {
-                manifest.groups.add(groupManifest);
-            }
-        }
+        manifest.groups.addAll(packGroups(atlasDir, byGroup));
         manifest.groupCount = manifest.groups.size();
         manifest.assetCount = countAssets(manifest.groups);
 
@@ -91,6 +91,63 @@ public class CanonicalAnimatedAtlasPackWriter {
 
         Logger.chatMessage(EnumChatFormatting.GREEN + "NESQL++ animated atlas manifest written:");
         Logger.chatMessage(EnumChatFormatting.YELLOW + "  " + manifestFile.getAbsolutePath());
+    }
+
+    private List<AnimatedAtlasGroupManifest> packGroups(
+            File atlasDir,
+            Map<String, List<CanonicalRenderAsset>> byGroup) throws IOException {
+        List<Map.Entry<String, List<CanonicalRenderAsset>>> entries = new ArrayList<>(byGroup.entrySet());
+        if (entries.isEmpty()) {
+            return new ArrayList<>();
+        }
+
+        int workers = Math.max(1, Math.min(Runtime.getRuntime().availableProcessors(), entries.size()));
+        if (workers == 1) {
+            List<AnimatedAtlasGroupManifest> groups = new ArrayList<>();
+            for (Map.Entry<String, List<CanonicalRenderAsset>> entry : entries) {
+                AnimatedAtlasGroupManifest groupManifest = packGroup(atlasDir, entry.getKey(), entry.getValue());
+                if (groupManifest != null) {
+                    groups.add(groupManifest);
+                }
+            }
+            return groups;
+        }
+
+        Logger.chatMessage(
+                EnumChatFormatting.AQUA
+                        + "Packing animated atlas groups with "
+                        + workers
+                        + " IO workers...");
+        ExecutorService executor = Executors.newFixedThreadPool(workers);
+        try {
+            List<Future<AnimatedAtlasGroupManifest>> futures = new ArrayList<>();
+            for (Map.Entry<String, List<CanonicalRenderAsset>> entry : entries) {
+                final String atlasGroup = entry.getKey();
+                final List<CanonicalRenderAsset> assets = new ArrayList<>(entry.getValue());
+                futures.add(executor.submit(new Callable<AnimatedAtlasGroupManifest>() {
+                    @Override
+                    public AnimatedAtlasGroupManifest call() throws Exception {
+                        return packGroup(atlasDir, atlasGroup, assets);
+                    }
+                }));
+            }
+
+            List<AnimatedAtlasGroupManifest> groups = new ArrayList<>();
+            for (Future<AnimatedAtlasGroupManifest> future : futures) {
+                try {
+                    AnimatedAtlasGroupManifest groupManifest = future.get();
+                    if (groupManifest != null) {
+                        groups.add(groupManifest);
+                    }
+                } catch (Exception e) {
+                    throw new IOException("Failed to pack animated atlas group", e);
+                }
+            }
+            groups.sort(Comparator.comparing(group -> group.atlasGroup));
+            return groups;
+        } finally {
+            executor.shutdownNow();
+        }
     }
 
     private List<CanonicalRenderAsset> loadRenderAssets() throws IOException {

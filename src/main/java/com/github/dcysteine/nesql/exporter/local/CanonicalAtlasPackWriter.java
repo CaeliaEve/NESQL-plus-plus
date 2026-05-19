@@ -20,6 +20,10 @@ import java.util.HashMap;
 import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
+import java.util.concurrent.Callable;
+import java.util.concurrent.ExecutorService;
+import java.util.concurrent.Executors;
+import java.util.concurrent.Future;
 
 /**
  * Atlas packer for static assets, preferring native sprite atlases when available and falling
@@ -64,12 +68,7 @@ public class CanonicalAtlasPackWriter {
         }
 
         AtlasManifest manifest = new AtlasManifest();
-        for (Map.Entry<String, List<CanonicalRenderAsset>> entry : byGroup.entrySet()) {
-            AtlasGroupManifest groupManifest = packGroup(atlasDir, entry.getKey(), entry.getValue());
-            if (groupManifest != null) {
-                manifest.groups.add(groupManifest);
-            }
-        }
+        manifest.groups.addAll(packGroups(atlasDir, byGroup));
         manifest.groupCount = manifest.groups.size();
         manifest.assetCount = countAssets(manifest.groups);
 
@@ -84,6 +83,63 @@ public class CanonicalAtlasPackWriter {
 
         Logger.chatMessage(EnumChatFormatting.GREEN + "NESQL++ atlas manifest written:");
         Logger.chatMessage(EnumChatFormatting.YELLOW + "  " + manifestFile.getAbsolutePath());
+    }
+
+    private List<AtlasGroupManifest> packGroups(
+            File atlasDir,
+            Map<String, List<CanonicalRenderAsset>> byGroup) throws IOException {
+        List<Map.Entry<String, List<CanonicalRenderAsset>>> entries = new ArrayList<>(byGroup.entrySet());
+        if (entries.isEmpty()) {
+            return new ArrayList<>();
+        }
+
+        int workers = Math.max(1, Math.min(Runtime.getRuntime().availableProcessors(), entries.size()));
+        if (workers == 1) {
+            List<AtlasGroupManifest> groups = new ArrayList<>();
+            for (Map.Entry<String, List<CanonicalRenderAsset>> entry : entries) {
+                AtlasGroupManifest groupManifest = packGroup(atlasDir, entry.getKey(), entry.getValue());
+                if (groupManifest != null) {
+                    groups.add(groupManifest);
+                }
+            }
+            return groups;
+        }
+
+        Logger.chatMessage(
+                EnumChatFormatting.AQUA
+                        + "Packing static atlas groups with "
+                        + workers
+                        + " IO workers...");
+        ExecutorService executor = Executors.newFixedThreadPool(workers);
+        try {
+            List<Future<AtlasGroupManifest>> futures = new ArrayList<>();
+            for (Map.Entry<String, List<CanonicalRenderAsset>> entry : entries) {
+                final String atlasGroup = entry.getKey();
+                final List<CanonicalRenderAsset> assets = new ArrayList<>(entry.getValue());
+                futures.add(executor.submit(new Callable<AtlasGroupManifest>() {
+                    @Override
+                    public AtlasGroupManifest call() throws Exception {
+                        return packGroup(atlasDir, atlasGroup, assets);
+                    }
+                }));
+            }
+
+            List<AtlasGroupManifest> groups = new ArrayList<>();
+            for (Future<AtlasGroupManifest> future : futures) {
+                try {
+                    AtlasGroupManifest groupManifest = future.get();
+                    if (groupManifest != null) {
+                        groups.add(groupManifest);
+                    }
+                } catch (Exception e) {
+                    throw new IOException("Failed to pack static atlas group", e);
+                }
+            }
+            groups.sort(Comparator.comparing(group -> group.atlasGroup));
+            return groups;
+        } finally {
+            executor.shutdownNow();
+        }
     }
 
     private Map<String, List<CanonicalRenderAsset>> groupStaticAtlasAssets(List<CanonicalRenderAsset> assets) {

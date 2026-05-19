@@ -3,7 +3,13 @@ package com.github.dcysteine.nesql.exporter.main;
 import net.minecraft.util.EnumChatFormatting;
 
 import java.io.File;
+import java.io.FileOutputStream;
+import java.io.OutputStreamWriter;
+import java.nio.charset.StandardCharsets;
+import java.util.ArrayList;
+import java.util.List;
 import java.util.Map;
+import com.google.gson.GsonBuilder;
 
 final class ExportStageRunner {
 
@@ -20,6 +26,7 @@ final class ExportStageRunner {
             int totalStages = exportContext.executionPlan.stages.size();
             int index = 0;
             long exportStartedAt = System.currentTimeMillis();
+            List<StageTiming> timings = new ArrayList<StageTiming>();
             for (ExportStage stage : exportContext.executionPlan.stages) {
                 index++;
                 stageState.currentStage = stage;
@@ -31,6 +38,7 @@ final class ExportStageRunner {
                 long stageStartedAt = System.currentTimeMillis();
                 action.run();
                 long stageElapsedMs = System.currentTimeMillis() - stageStartedAt;
+                timings.add(new StageTiming(index, totalStages, stage.name(), stageElapsedMs));
                 Logger.chatMessage(
                         EnumChatFormatting.GRAY
                                 + "[NESQL] Stage complete: "
@@ -42,6 +50,7 @@ final class ExportStageRunner {
                     EnumChatFormatting.GREEN
                             + "[NESQL] Export pipeline runtime: "
                             + formatDuration(System.currentTimeMillis() - exportStartedAt));
+            writeTimingReport(exportContext, timings, System.currentTimeMillis() - exportStartedAt);
         } catch (RepositoryPreparationStoppedException ignored) {
             return;
         } catch (Exception e) {
@@ -89,5 +98,60 @@ final class ExportStageRunner {
             return String.format("%dm %02ds", minutes, seconds);
         }
         return String.format("%ds", seconds);
+    }
+
+    private static void writeTimingReport(
+            ExportContext exportContext,
+            List<StageTiming> timings,
+            long totalElapsedMs) {
+        try {
+            File canonicalDir = new File(exportContext.paths.repositoryDirectory, "canonical");
+            if (!canonicalDir.exists()) {
+                canonicalDir.mkdirs();
+            }
+            File reportFile = new File(canonicalDir, "export-stage-timings.json");
+            TimingReport report = new TimingReport();
+            report.schemaVersion = "nesqlpp/export-stage-timings/v1";
+            report.profile = exportContext.profile.profileId;
+            report.selection = exportContext.selection.describe();
+            report.totalElapsedMs = totalElapsedMs;
+            report.totalElapsed = formatDuration(totalElapsedMs);
+            report.stages = timings;
+            try (FileOutputStream fos = new FileOutputStream(reportFile);
+                 OutputStreamWriter writer = new OutputStreamWriter(fos, StandardCharsets.UTF_8)) {
+                new GsonBuilder().setPrettyPrinting().create().toJson(report, writer);
+            }
+            Logger.chatMessage(
+                    EnumChatFormatting.GREEN
+                            + "[NESQL] Stage timing report written: "
+                            + reportFile.getAbsolutePath());
+        } catch (Exception e) {
+            Logger.MOD.warn("Failed to write NESQL++ stage timing report", e);
+        }
+    }
+
+    private static final class TimingReport {
+        String schemaVersion;
+        String profile;
+        String selection;
+        long totalElapsedMs;
+        String totalElapsed;
+        List<StageTiming> stages;
+    }
+
+    private static final class StageTiming {
+        int index;
+        int total;
+        String stage;
+        long elapsedMs;
+        String elapsed;
+
+        StageTiming(int index, int total, String stage, long elapsedMs) {
+            this.index = index;
+            this.total = total;
+            this.stage = stage;
+            this.elapsedMs = elapsedMs;
+            this.elapsed = formatDuration(elapsedMs);
+        }
     }
 }
