@@ -34,6 +34,8 @@ public class CanonicalAtlasPackWriter {
     private static final String ATLAS_DIRECTORY = "atlases";
     private static final String OUTPUT_FILE = "atlas-manifest.json";
     private static final String GROUP_DIRECTORY = "atlas-manifests-by-group";
+    private static final int WEBGL_SAFE_ATLAS_CHUNK_SIZE = 3000;
+    private static final int WEBGL_SAFE_MAX_ATLAS_HEIGHT = 8192;
 
     private final EntityManager entityManager;
     private final File exportDirectory;
@@ -97,10 +99,7 @@ public class CanonicalAtlasPackWriter {
         if (workers == 1) {
             List<AtlasGroupManifest> groups = new ArrayList<>();
             for (Map.Entry<String, List<CanonicalRenderAsset>> entry : entries) {
-                AtlasGroupManifest groupManifest = packGroup(atlasDir, entry.getKey(), entry.getValue());
-                if (groupManifest != null) {
-                    groups.add(groupManifest);
-                }
+                groups.addAll(packGroup(atlasDir, entry.getKey(), entry.getValue()));
             }
             return groups;
         }
@@ -112,25 +111,22 @@ public class CanonicalAtlasPackWriter {
                         + " IO workers...");
         ExecutorService executor = Executors.newFixedThreadPool(workers);
         try {
-            List<Future<AtlasGroupManifest>> futures = new ArrayList<>();
+            List<Future<List<AtlasGroupManifest>>> futures = new ArrayList<>();
             for (Map.Entry<String, List<CanonicalRenderAsset>> entry : entries) {
                 final String atlasGroup = entry.getKey();
                 final List<CanonicalRenderAsset> assets = new ArrayList<>(entry.getValue());
-                futures.add(executor.submit(new Callable<AtlasGroupManifest>() {
+                futures.add(executor.submit(new Callable<List<AtlasGroupManifest>>() {
                     @Override
-                    public AtlasGroupManifest call() throws Exception {
+                    public List<AtlasGroupManifest> call() throws Exception {
                         return packGroup(atlasDir, atlasGroup, assets);
                     }
                 }));
             }
 
             List<AtlasGroupManifest> groups = new ArrayList<>();
-            for (Future<AtlasGroupManifest> future : futures) {
+            for (Future<List<AtlasGroupManifest>> future : futures) {
                 try {
-                    AtlasGroupManifest groupManifest = future.get();
-                    if (groupManifest != null) {
-                        groups.add(groupManifest);
-                    }
+                    groups.addAll(future.get());
                 } catch (Exception e) {
                     throw new IOException("Failed to pack static atlas group", e);
                 }
@@ -158,18 +154,13 @@ public class CanonicalAtlasPackWriter {
         return byGroup;
     }
 
-    private AtlasGroupManifest packGroup(File atlasDir, String atlasGroup, List<CanonicalRenderAsset> assets) throws IOException {
+    private List<AtlasGroupManifest> packGroup(File atlasDir, String atlasGroup, List<CanonicalRenderAsset> assets) throws IOException {
         if (assets.isEmpty()) {
-            return null;
+            return new ArrayList<>();
         }
 
         assets.sort(Comparator.comparing(asset -> asset.assetId));
         String safeName = atlasGroup.replaceAll("[^a-zA-Z0-9_-]", "_");
-        File atlasFile = new File(atlasDir, safeName + ".png");
-        AtlasGroupManifest reusable = readFreshGroupManifest(atlasDir, atlasGroup, assets, atlasFile, safeName);
-        if (reusable != null) {
-            return reusable;
-        }
 
         List<AtlasPackingSupport.AtlasSourceImage> sources = new ArrayList<>();
         for (CanonicalRenderAsset asset : assets) {
@@ -185,32 +176,66 @@ public class CanonicalAtlasPackWriter {
         }
 
         if (sources.isEmpty()) {
-            return null;
+            return new ArrayList<>();
         }
 
+        List<List<AtlasPackingSupport.AtlasSourceImage>> chunks = splitWebglSafeChunks(sources);
+        List<AtlasGroupManifest> groupManifests = new ArrayList<>();
+        for (int chunkIndex = 0; chunkIndex < chunks.size(); chunkIndex++) {
+            String chunkSafeName = chunks.size() == 1 ? safeName : String.format("%s-%03d", safeName, chunkIndex);
+            String chunkAtlasGroup = chunks.size() == 1 ? atlasGroup : String.format("%s-%03d", atlasGroup, chunkIndex);
+            File atlasFile = new File(atlasDir, chunkSafeName + ".png");
+            AtlasPackingSupport.PackLayout layout = AtlasPackingSupport.computeLayout(chunks.get(chunkIndex));
+            AtlasPackingSupport.writeAtlasImage(atlasFile, layout);
+
+            AtlasGroupManifest groupManifest = new AtlasGroupManifest();
+            groupManifest.atlasGroup = chunkAtlasGroup;
+            groupManifest.atlasFile = relativizeFromExportDirectory(atlasFile);
+            groupManifest.width = layout.width;
+            groupManifest.height = layout.height;
+            groupManifest.assets = new ArrayList<>();
+
+            for (AtlasPackingSupport.AtlasPlacement placement : layout.placements) {
+                AtlasAssetPlacement assetPlacement = new AtlasAssetPlacement();
+                assetPlacement.assetId = placement.source.asset.assetId;
+                assetPlacement.variantKey = placement.source.asset.variantKey;
+                assetPlacement.x = placement.x;
+                assetPlacement.y = placement.y;
+                assetPlacement.width = placement.source.image.getWidth();
+                assetPlacement.height = placement.source.image.getHeight();
+                assetPlacement.sourcePath = placement.source.asset.staticFile;
+                groupManifest.assets.add(assetPlacement);
+            }
+            groupManifests.add(groupManifest);
+        }
+
+        return groupManifests;
+    }
+
+    private List<List<AtlasPackingSupport.AtlasSourceImage>> splitWebglSafeChunks(
+            List<AtlasPackingSupport.AtlasSourceImage> sources) {
+        List<List<AtlasPackingSupport.AtlasSourceImage>> chunks = new ArrayList<>();
+        for (int start = 0; start < sources.size(); start += WEBGL_SAFE_ATLAS_CHUNK_SIZE) {
+            int end = Math.min(sources.size(), start + WEBGL_SAFE_ATLAS_CHUNK_SIZE);
+            addWebglSafeChunk(chunks, new ArrayList<>(sources.subList(start, end)));
+        }
+        return chunks;
+    }
+
+    private void addWebglSafeChunk(
+            List<List<AtlasPackingSupport.AtlasSourceImage>> chunks,
+            List<AtlasPackingSupport.AtlasSourceImage> sources) {
+        if (sources.isEmpty()) {
+            return;
+        }
         AtlasPackingSupport.PackLayout layout = AtlasPackingSupport.computeLayout(sources);
-        AtlasPackingSupport.writeAtlasImage(atlasFile, layout);
-
-        AtlasGroupManifest groupManifest = new AtlasGroupManifest();
-        groupManifest.atlasGroup = atlasGroup;
-        groupManifest.atlasFile = relativizeFromExportDirectory(atlasFile);
-        groupManifest.width = layout.width;
-        groupManifest.height = layout.height;
-        groupManifest.assets = new ArrayList<>();
-
-        for (AtlasPackingSupport.AtlasPlacement placement : layout.placements) {
-            AtlasAssetPlacement assetPlacement = new AtlasAssetPlacement();
-            assetPlacement.assetId = placement.source.asset.assetId;
-            assetPlacement.variantKey = placement.source.asset.variantKey;
-            assetPlacement.x = placement.x;
-            assetPlacement.y = placement.y;
-            assetPlacement.width = placement.source.image.getWidth();
-            assetPlacement.height = placement.source.image.getHeight();
-            assetPlacement.sourcePath = placement.source.asset.staticFile;
-            groupManifest.assets.add(assetPlacement);
+        if (layout.height <= WEBGL_SAFE_MAX_ATLAS_HEIGHT || sources.size() == 1) {
+            chunks.add(sources);
+            return;
         }
-
-        return groupManifest;
+        int middle = sources.size() / 2;
+        addWebglSafeChunk(chunks, new ArrayList<>(sources.subList(0, middle)));
+        addWebglSafeChunk(chunks, new ArrayList<>(sources.subList(middle, sources.size())));
     }
 
     private AtlasGroupManifest readFreshGroupManifest(

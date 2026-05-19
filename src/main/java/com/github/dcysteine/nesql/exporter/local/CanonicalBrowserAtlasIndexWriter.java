@@ -1,6 +1,7 @@
 package com.github.dcysteine.nesql.exporter.local;
 
 import com.github.dcysteine.nesql.exporter.main.Logger;
+import com.github.dcysteine.nesql.exporter.canonical.CanonicalRenderAsset;
 import com.google.gson.Gson;
 import com.google.gson.GsonBuilder;
 import com.google.gson.JsonArray;
@@ -8,6 +9,8 @@ import com.google.gson.JsonElement;
 import com.google.gson.JsonObject;
 import net.minecraft.util.EnumChatFormatting;
 
+import javax.imageio.ImageIO;
+import java.awt.image.BufferedImage;
 import java.io.File;
 import java.io.FileInputStream;
 import java.io.FileOutputStream;
@@ -16,10 +19,12 @@ import java.io.InputStreamReader;
 import java.io.OutputStreamWriter;
 import java.nio.charset.StandardCharsets;
 import java.util.ArrayList;
+import java.util.HashSet;
 import java.util.Comparator;
 import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
+import java.util.Set;
 
 /**
  * Writes an itemId-centric atlas lookup for NeoNEI's browser fast path.
@@ -35,7 +40,10 @@ public class CanonicalBrowserAtlasIndexWriter {
     private static final String STATIC_ATLAS_MANIFEST = "atlas-manifest.json";
     private static final String ANIMATED_ATLAS_MANIFEST = "animated-atlas-manifest.json";
     private static final String RENDER_INDEX = "render-index.json";
+    private static final String BROWSER_LAYOUT_INDEX = "browser-layout-index.json";
+    private static final String FALLBACK_ATLAS_DIRECTORY = "browser-fallback-atlases";
     private static final String ITEM_ASSET_PREFIX = "nesqlpp:item/";
+    private static final int FALLBACK_ATLAS_CHUNK_SIZE = 3500;
 
     private final File exportDirectory;
 
@@ -64,6 +72,7 @@ public class CanonicalBrowserAtlasIndexWriter {
         index.animatedAtlasManifest = OUTPUT_DIRECTORY + "/" + ANIMATED_ATLAS_MANIFEST;
         index.renderIndex = OUTPUT_DIRECTORY + "/" + RENDER_INDEX;
 
+        Set<String> indexedItemIds = new HashSet<String>();
         for (RenderIndexEntry renderEntry : renderEntries) {
             if (renderEntry.assetId == null || !renderEntry.assetId.startsWith(ITEM_ASSET_PREFIX)) {
                 continue;
@@ -88,7 +97,14 @@ public class CanonicalBrowserAtlasIndexWriter {
                 index.missingAtlasCount += 1;
             }
             index.items.add(item);
+            indexedItemIds.add(item.itemId);
         }
+
+        int fallbackCount = appendFallbackRawImageAtlasEntries(
+                canonicalDir,
+                new File(canonicalDir, BROWSER_LAYOUT_INDEX),
+                indexedItemIds,
+                index);
 
         index.items.sort(Comparator.comparing(item -> item.itemId));
         index.itemCount = index.items.size();
@@ -109,7 +125,179 @@ public class CanonicalBrowserAtlasIndexWriter {
                         + ", animated="
                         + index.animatedItemCount
                         + ", missingAtlas="
-                        + index.missingAtlasCount);
+                        + index.missingAtlasCount
+                        + ", rawFallback="
+                        + fallbackCount);
+    }
+
+    private int appendFallbackRawImageAtlasEntries(
+            File canonicalDir,
+            File layoutIndexFile,
+            Set<String> indexedItemIds,
+            BrowserAtlasIndex index) throws IOException {
+        JsonObject layoutIndex = readJsonObject(layoutIndexFile);
+        if (layoutIndex == null) {
+            return 0;
+        }
+
+        List<CanonicalRenderAsset> fallbackAssets = new ArrayList<CanonicalRenderAsset>();
+        JsonArray items = asArray(layoutIndex.get("items"));
+        for (JsonElement itemElement : items) {
+            JsonObject itemObject = asObject(itemElement);
+            if (itemObject == null) {
+                continue;
+            }
+            String itemId = asString(itemObject.get("itemId"));
+            if (itemId == null || itemId.isEmpty() || indexedItemIds.contains(itemId)) {
+                continue;
+            }
+            File imageFile = resolveRawItemImageFile(itemId);
+            if (imageFile == null || !imageFile.exists()) {
+                continue;
+            }
+
+            CanonicalRenderAsset asset = new CanonicalRenderAsset();
+            asset.assetId = ITEM_ASSET_PREFIX + itemId;
+            asset.variantKey = itemId;
+            asset.sourceType = "item";
+            asset.family = "item";
+            asset.mode = "static_snapshot";
+            asset.renderMode = "raw_image_fallback";
+            asset.rendererFamily = "browser_raw_image";
+            asset.playbackHint = "static";
+            asset.atlasGroup = "browser-raw-fallback";
+            asset.atlasCandidate = Boolean.TRUE;
+            asset.staticFile = relativizeFromExportDirectory(imageFile);
+            fallbackAssets.add(asset);
+        }
+
+        if (fallbackAssets.isEmpty()) {
+            return 0;
+        }
+
+        fallbackAssets.sort(Comparator.comparing(asset -> asset.assetId));
+        File atlasDir = new File(canonicalDir, FALLBACK_ATLAS_DIRECTORY);
+        if (!atlasDir.exists()) {
+            atlasDir.mkdirs();
+        }
+
+        int emitted = 0;
+        int chunkIndex = 0;
+        for (int start = 0; start < fallbackAssets.size(); start += FALLBACK_ATLAS_CHUNK_SIZE) {
+            int end = Math.min(fallbackAssets.size(), start + FALLBACK_ATLAS_CHUNK_SIZE);
+            List<AtlasPackingSupport.AtlasSourceImage> sources = new ArrayList<AtlasPackingSupport.AtlasSourceImage>();
+            for (CanonicalRenderAsset asset : fallbackAssets.subList(start, end)) {
+                File imageFile = resolveExportFile(asset.staticFile);
+                if (imageFile == null || !imageFile.exists()) {
+                    continue;
+                }
+                BufferedImage image = ImageIO.read(imageFile);
+                if (image == null) {
+                    continue;
+                }
+                sources.add(new AtlasPackingSupport.AtlasSourceImage(asset, imageFile, image, null));
+            }
+            if (sources.isEmpty()) {
+                continue;
+            }
+
+            AtlasPackingSupport.PackLayout layout = AtlasPackingSupport.computeLayout(sources);
+            File atlasFile = new File(atlasDir, String.format("raw-fallback-%03d.png", chunkIndex));
+            AtlasPackingSupport.writeAtlasImage(atlasFile, layout);
+            String atlasFilePath = relativizeFromExportDirectory(atlasFile);
+
+            for (AtlasPackingSupport.AtlasPlacement placement : layout.placements) {
+                CanonicalRenderAsset asset = placement.source.asset;
+                String itemId = asset.assetId.substring(ITEM_ASSET_PREFIX.length());
+                StaticAtlasPlacement staticPlacement = new StaticAtlasPlacement();
+                staticPlacement.atlasGroup = "browser-raw-fallback";
+                staticPlacement.atlasFile = atlasFilePath;
+                staticPlacement.atlasWidth = layout.width;
+                staticPlacement.atlasHeight = layout.height;
+                staticPlacement.x = placement.x;
+                staticPlacement.y = placement.y;
+                staticPlacement.width = placement.source.image.getWidth();
+                staticPlacement.height = placement.source.image.getHeight();
+                staticPlacement.sourcePath = asset.staticFile;
+
+                BrowserAtlasItem browserItem = new BrowserAtlasItem();
+                browserItem.itemId = itemId;
+                browserItem.assetId = asset.assetId;
+                browserItem.variantKey = asset.variantKey;
+                browserItem.mode = asset.mode;
+                browserItem.renderMode = asset.renderMode;
+                browserItem.resolutionMode = "browser_layout_raw_image";
+                browserItem.rendererFamily = asset.rendererFamily;
+                browserItem.playbackHint = asset.playbackHint;
+                browserItem.staticAtlas = staticPlacement;
+                browserItem.animatedAtlas = null;
+                browserItem.hasStaticAtlas = true;
+                browserItem.hasAnimatedAtlas = false;
+                index.items.add(browserItem);
+                indexedItemIds.add(itemId);
+                emitted += 1;
+            }
+            chunkIndex += 1;
+        }
+        return emitted;
+    }
+
+    private File resolveRawItemImageFile(String itemId) {
+        List<String> candidates = rawItemImageCandidates(itemId);
+        for (String candidate : candidates) {
+            File file = resolveExportFile(candidate);
+            if (file.exists()) {
+                return file;
+            }
+        }
+        return null;
+    }
+
+    private List<String> rawItemImageCandidates(String itemId) {
+        List<String> candidates = new ArrayList<String>();
+        String[] parts = itemId.split("~");
+        if (parts.length < 4 || !"i".equals(parts[0])) {
+            return candidates;
+        }
+        String modId = parts[1];
+        String internalName = parts[2];
+        String meta = parts[3];
+        StringBuilder exact = new StringBuilder();
+        exact.append("image/item/").append(modId).append('/').append(internalName).append('~').append(meta);
+        for (int i = 4; i < parts.length; i++) {
+            exact.append('~').append(parts[i]);
+        }
+        exact.append(".png");
+        candidates.add(exact.toString());
+        candidates.add("image/item/" + modId + "/" + internalName + "~" + meta + ".png");
+        candidates.add("image/item/" + modId + "/" + internalName + "~0.png");
+        return candidates;
+    }
+
+    private File resolveExportFile(String relativePath) {
+        File direct = new File(exportDirectory, relativePath.replace('/', File.separatorChar));
+        if (direct.exists()) {
+            return direct;
+        }
+        if (!relativePath.startsWith("image/")) {
+            File underImage = new File(exportDirectory, ("image/" + relativePath).replace('/', File.separatorChar));
+            if (underImage.exists()) {
+                return underImage;
+            }
+        }
+        return direct;
+    }
+
+    private String relativizeFromExportDirectory(File file) {
+        String root = exportDirectory.getAbsolutePath();
+        String path = file.getAbsolutePath();
+        if (path.startsWith(root)) {
+            path = path.substring(root.length());
+        }
+        while (path.startsWith(File.separator)) {
+            path = path.substring(1);
+        }
+        return path.replace(File.separatorChar, '/');
     }
 
     private Map<String, StaticAtlasPlacement> loadStaticPlacements(File manifestFile) throws IOException {
