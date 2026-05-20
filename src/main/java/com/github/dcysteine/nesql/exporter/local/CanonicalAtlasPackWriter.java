@@ -162,19 +162,12 @@ public class CanonicalAtlasPackWriter {
         assets.sort(Comparator.comparing(asset -> asset.assetId));
         String safeName = atlasGroup.replaceAll("[^a-zA-Z0-9_-]", "_");
 
-        List<AtlasPackingSupport.AtlasSourceImage> sources = new ArrayList<>();
-        for (CanonicalRenderAsset asset : assets) {
-            File sourceFile = resolveSourceFile(asset);
-            if (sourceFile == null || !sourceFile.exists()) {
-                continue;
-            }
-            BufferedImage image = ImageIO.read(sourceFile);
-            if (image == null) {
-                continue;
-            }
-            sources.add(new AtlasPackingSupport.AtlasSourceImage(asset, sourceFile, image, null));
+        List<AtlasGroupManifest> reusableGroups = readFreshGroupManifests(atlasDir, atlasGroup, assets, safeName);
+        if (!reusableGroups.isEmpty()) {
+            return reusableGroups;
         }
 
+        List<AtlasPackingSupport.AtlasSourceImage> sources = loadSourceImages(assets);
         if (sources.isEmpty()) {
             return new ArrayList<>();
         }
@@ -210,6 +203,61 @@ public class CanonicalAtlasPackWriter {
         }
 
         return groupManifests;
+    }
+
+    private List<AtlasPackingSupport.AtlasSourceImage> loadSourceImages(List<CanonicalRenderAsset> assets) throws IOException {
+        if (assets.size() < 512) {
+            List<AtlasPackingSupport.AtlasSourceImage> sources = new ArrayList<>();
+            for (CanonicalRenderAsset asset : assets) {
+                AtlasPackingSupport.AtlasSourceImage source = loadSourceImage(asset);
+                if (source != null) {
+                    sources.add(source);
+                }
+            }
+            return sources;
+        }
+
+        int workers = Math.max(1, Math.min(Runtime.getRuntime().availableProcessors(), assets.size()));
+        Logger.MOD.info("Loading {} static atlas source images with {} workers...", assets.size(), workers);
+        ExecutorService executor = Executors.newFixedThreadPool(workers);
+        try {
+            List<Future<AtlasPackingSupport.AtlasSourceImage>> futures = new ArrayList<>(assets.size());
+            for (final CanonicalRenderAsset asset : assets) {
+                futures.add(executor.submit(new Callable<AtlasPackingSupport.AtlasSourceImage>() {
+                    @Override
+                    public AtlasPackingSupport.AtlasSourceImage call() throws Exception {
+                        return loadSourceImage(asset);
+                    }
+                }));
+            }
+
+            List<AtlasPackingSupport.AtlasSourceImage> sources = new ArrayList<>(assets.size());
+            for (Future<AtlasPackingSupport.AtlasSourceImage> future : futures) {
+                try {
+                    AtlasPackingSupport.AtlasSourceImage source = future.get();
+                    if (source != null) {
+                        sources.add(source);
+                    }
+                } catch (Exception e) {
+                    throw new IOException("Failed to load static atlas source image", e);
+                }
+            }
+            return sources;
+        } finally {
+            executor.shutdownNow();
+        }
+    }
+
+    private AtlasPackingSupport.AtlasSourceImage loadSourceImage(CanonicalRenderAsset asset) throws IOException {
+        File sourceFile = resolveSourceFile(asset);
+        if (sourceFile == null || !sourceFile.exists()) {
+            return null;
+        }
+        BufferedImage image = ImageIO.read(sourceFile);
+        if (image == null) {
+            return null;
+        }
+        return new AtlasPackingSupport.AtlasSourceImage(asset, sourceFile, image, null);
     }
 
     private List<List<AtlasPackingSupport.AtlasSourceImage>> splitWebglSafeChunks(
@@ -269,6 +317,77 @@ public class CanonicalAtlasPackWriter {
             Logger.MOD.warn("Failed to reuse static atlas group {}", atlasGroup, e);
             return null;
         }
+    }
+
+    private List<AtlasGroupManifest> readFreshGroupManifests(
+            File atlasDir,
+            String atlasGroup,
+            List<CanonicalRenderAsset> assets,
+            String safeName) {
+        File canonicalDir = atlasDir.getParentFile();
+        File groupDir = new File(canonicalDir, GROUP_DIRECTORY);
+        if (!groupDir.exists()) {
+            return new ArrayList<>();
+        }
+
+        File[] shardFiles = groupDir.listFiles((dir, name) ->
+                name.equals(safeName + ".json")
+                        || (name.startsWith(safeName + "-") && name.endsWith(".json")));
+        if (shardFiles == null || shardFiles.length == 0) {
+            return new ArrayList<>();
+        }
+
+        long newestSourceModified = newestSourceModified(assets);
+        if (newestSourceModified <= 0L) {
+            return new ArrayList<>();
+        }
+
+        java.util.Arrays.sort(shardFiles, Comparator.comparing(File::getName));
+        List<AtlasGroupManifest> groups = new ArrayList<>();
+        Map<String, Boolean> expectedAssetIds = new HashMap<>();
+        for (CanonicalRenderAsset asset : assets) {
+            expectedAssetIds.put(asset.assetId, Boolean.FALSE);
+        }
+
+        for (File shardFile : shardFiles) {
+            try (java.io.FileInputStream fis = new java.io.FileInputStream(shardFile);
+                 java.io.InputStreamReader reader =
+                         new java.io.InputStreamReader(fis, StandardCharsets.UTF_8)) {
+                AtlasGroupManifest manifest = new Gson().fromJson(reader, AtlasGroupManifest.class);
+                if (manifest == null || manifest.assets == null || manifest.assets.isEmpty()) {
+                    return new ArrayList<>();
+                }
+
+                File atlasFile = resolveExportFile(manifest.atlasFile);
+                if (!atlasFile.exists()) {
+                    return new ArrayList<>();
+                }
+                long oldestOutputModified = Math.min(atlasFile.lastModified(), shardFile.lastModified());
+                if (oldestOutputModified < newestSourceModified) {
+                    return new ArrayList<>();
+                }
+
+                for (AtlasAssetPlacement placement : manifest.assets) {
+                    if (!expectedAssetIds.containsKey(placement.assetId)) {
+                        return new ArrayList<>();
+                    }
+                    expectedAssetIds.put(placement.assetId, Boolean.TRUE);
+                }
+                groups.add(manifest);
+            } catch (Exception e) {
+                Logger.MOD.warn("Failed to reuse static atlas group shard {}", shardFile.getAbsolutePath(), e);
+                return new ArrayList<>();
+            }
+        }
+
+        for (Boolean seen : expectedAssetIds.values()) {
+            if (!Boolean.TRUE.equals(seen)) {
+                return new ArrayList<>();
+            }
+        }
+
+        Logger.MOD.info("Reusing {} fresh static atlas shard(s) for group {}", groups.size(), atlasGroup);
+        return groups;
     }
 
     private long newestSourceModified(List<CanonicalRenderAsset> assets) {

@@ -43,6 +43,7 @@ public final class CanonicalRenderAssetCollector {
     private final Map<String, List<File>> frameFilesCache = new HashMap<>();
     private final Map<String, FamilyImageIndex> familyIndexCache = new HashMap<>();
     private final Map<String, GifAnimationInfo> gifAnimationCache = new HashMap<>();
+    private final Map<String, Map<String, Object>> imageSizeCache = new HashMap<>();
 
     public CanonicalRenderAssetCollector(EntityManager entityManager, File exportDirectory) {
         this.entityManager = entityManager;
@@ -998,6 +999,49 @@ public final class CanonicalRenderAssetCollector {
     }
 
     private Map<String, Object> readBaseSize(File file) {
+        String cacheKey = file != null ? file.getAbsolutePath() : "<null>";
+        if (imageSizeCache.containsKey(cacheKey)) {
+            return imageSizeCache.get(cacheKey);
+        }
+        if (file == null || !file.exists()) {
+            imageSizeCache.put(cacheKey, null);
+            return null;
+        }
+
+        try (ImageInputStream stream = ImageIO.createImageInputStream(file)) {
+            if (stream == null) {
+                imageSizeCache.put(cacheKey, null);
+                return null;
+            }
+            Iterator<ImageReader> readers = ImageIO.getImageReaders(stream);
+            if (!readers.hasNext()) {
+                imageSizeCache.put(cacheKey, null);
+                return null;
+            }
+            ImageReader reader = readers.next();
+            try {
+                reader.setInput(stream, true, true);
+                Map<String, Object> size = new HashMap<>();
+                size.put("width", reader.getWidth(0));
+                size.put("height", reader.getHeight(0));
+                imageSizeCache.put(cacheKey, size);
+                return size;
+            } finally {
+                reader.dispose();
+            }
+        } catch (IOException e) {
+            Logger.MOD.warn("Failed to inspect render asset dimensions for {}", file.getAbsolutePath(), e);
+            imageSizeCache.put(cacheKey, null);
+            return null;
+        } catch (RuntimeException e) {
+            Logger.MOD.warn("Failed to inspect render asset dimensions for {}", file.getAbsolutePath(), e);
+            imageSizeCache.put(cacheKey, null);
+            return null;
+        }
+    }
+
+    @SuppressWarnings("unused")
+    private Map<String, Object> readBaseSizeByDecoding(File file) {
         try {
             BufferedImage image = ImageIO.read(file);
             if (image == null) {
