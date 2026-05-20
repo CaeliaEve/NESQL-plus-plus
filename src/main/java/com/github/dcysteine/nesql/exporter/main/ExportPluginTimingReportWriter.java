@@ -1,6 +1,7 @@
 package com.github.dcysteine.nesql.exporter.main;
 
 import com.google.gson.GsonBuilder;
+import com.github.dcysteine.nesql.exporter.plugin.nei.NeiExportTimingRegistry;
 import net.minecraft.util.EnumChatFormatting;
 
 import java.io.File;
@@ -31,6 +32,8 @@ final class ExportPluginTimingReportWriter {
             report.profile = exportContext.profile.profileId;
             report.selection = exportContext.selection.describe();
             report.timings = new ArrayList<ExportRuntime.PluginTiming>(exportRuntime.pluginTimings);
+            report.neiHandlerTimings = NeiExportTimingRegistry.snapshot();
+            report.slowestNeiHandlers = NeiExportTimingRegistry.slowestSnapshot(50);
             report.slowest = new ArrayList<ExportRuntime.PluginTiming>(exportRuntime.pluginTimings);
             report.slowest.sort(
                     new Comparator<ExportRuntime.PluginTiming>() {
@@ -64,5 +67,7 @@ final class ExportPluginTimingReportWriter {
         String selection;
         List<ExportRuntime.PluginTiming> timings;
         List<ExportRuntime.PluginTiming> slowest;
+        List<NeiExportTimingRegistry.HandlerTiming> neiHandlerTimings;
+        List<NeiExportTimingRegistry.HandlerTiming> slowestNeiHandlers;
     }
 }

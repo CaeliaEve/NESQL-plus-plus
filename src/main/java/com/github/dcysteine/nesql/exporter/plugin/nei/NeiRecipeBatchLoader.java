@@ -28,7 +28,7 @@ public class NeiRecipeBatchLoader {
 
     /**
      * Streaming export of all crafting recipes.
-     * Processes handlers one by one: load → export → discard.
+     * Processes handlers one by one: load 鈫?export 鈫?discard.
      *
      * @param exporter The export processor to handle the actual export
      * @return The total number of recipes exported
@@ -45,9 +45,16 @@ public class NeiRecipeBatchLoader {
         Logger.chatMessage("=== Starting NEI Crafting Recipe Export ===");
         Logger.chatMessage("Streaming mode: Processing handlers one by one to save memory");
         Logger.chatMessage(String.format("Total handlers to process: %d", GuiCraftingRecipe.craftinghandlers.size()));
+        NeiExportTimingRegistry.clear();
 
         int handlerIndex = 0;
         for (ICraftingHandler baseHandler : GuiCraftingRecipe.craftinghandlers) {
+            long handlerStartedAt = System.currentTimeMillis();
+            long loadElapsedMs = 0L;
+            long exportElapsedMs = 0L;
+            int recipeCount = 0;
+            int exportedForHandler = 0;
+            boolean itemScan = false;
             handlerIndex++;
             String handlerId = baseHandler.getHandlerId();
             String handlerName = baseHandler.getRecipeName();
@@ -69,14 +76,27 @@ public class NeiRecipeBatchLoader {
                         processedHandlers.incrementAndGet();
                         continue;
                     }
+                    long exportStartedAt = System.currentTimeMillis();
                     int exported = exportNonTemplateCraftingHandler(
                             exporter,
                             baseHandler,
                             itemUniverse,
                             handlerIndex,
                             GuiCraftingRecipe.craftinghandlers.size());
+                    exportElapsedMs = System.currentTimeMillis() - exportStartedAt;
+                    exportedForHandler = exported;
                     totalRecipes.addAndGet(exported);
                     processedHandlers.incrementAndGet();
+                    recordHandlerTiming(
+                            handlerIndex,
+                            baseHandler,
+                            false,
+                            itemScan,
+                            recipeCount,
+                            exportedForHandler,
+                            loadElapsedMs,
+                            exportElapsedMs,
+                            handlerStartedAt);
                     continue;
                 }
 
@@ -88,31 +108,36 @@ public class NeiRecipeBatchLoader {
                     continue;
                 }
 
-                // ⚡ v1.04 优化5: 检查handler是否需要物品扫描
+                // 鈿?v1.04 浼樺寲5: 妫€鏌andler鏄惁闇€瑕佺墿鍝佹壂鎻?
                 boolean needsItemScan = needsItemScanning(handlerName);
+                itemScan = needsItemScan;
 
                 // Load all recipes for this handler
-                int recipeCount;
+                long loadStartedAt = System.currentTimeMillis();
                 if (needsItemScan) {
                     Logger.chatMessage(String.format("[%d/%d] Loading recipes for: %s...",
                             handlerIndex, GuiCraftingRecipe.craftinghandlers.size(), handlerName));
                     recipeCount = loadRecipesForHandler((TemplateRecipeHandler) workingHandler, itemUniverse);
                 } else {
-                    // Handler不需要物品扫描，配方已经在arecipes中
+                    // Handler涓嶉渶瑕佺墿鍝佹壂鎻忥紝閰嶆柟宸茬粡鍦╝recipes涓?
                     Logger.MOD.debug("Handler {} doesn't need item scan, using pre-loaded recipes", handlerName);
                     recipeCount = workingHandler.numRecipes();
                 }
+                loadElapsedMs = System.currentTimeMillis() - loadStartedAt;
 
                 if (recipeCount > 0) {
                     Logger.chatMessage(String.format("[%d/%d] Exporting %d recipes from: %s",
                             handlerIndex, GuiCraftingRecipe.craftinghandlers.size(), recipeCount, handlerName));
 
                     // Export this handler immediately
+                    long exportStartedAt = System.currentTimeMillis();
                     int exported = exporter.exportSingleCraftingHandler(handlerId, handlerName, workingHandler);
+                    exportElapsedMs = System.currentTimeMillis() - exportStartedAt;
+                    exportedForHandler = exported;
                     totalRecipes.addAndGet(exported);
 
                     Logger.MOD.info("Exported {} recipes from handler: {}", exported, handlerName);
-                    Logger.chatMessage(String.format("[%d/%d] ✓ Completed: %s (%d recipes)",
+                    Logger.chatMessage(String.format("[%d/%d] 鉁?Completed: %s (%d recipes)",
                             handlerIndex, GuiCraftingRecipe.craftinghandlers.size(), handlerName, exported));
                 } else {
                     Logger.MOD.debug("No recipes found for handler: {}", handlerName);
@@ -123,6 +148,16 @@ public class NeiRecipeBatchLoader {
                     ((TemplateRecipeHandler) workingHandler).arecipes.clear();
                 }
                 processedHandlers.incrementAndGet();
+                recordHandlerTiming(
+                        handlerIndex,
+                        baseHandler,
+                        true,
+                        itemScan,
+                        recipeCount,
+                        exportedForHandler,
+                        loadElapsedMs,
+                        exportElapsedMs,
+                        handlerStartedAt);
 
                 // Progress every 10 handlers, and flush database to free memory
                 if (processedHandlers.get() % 10 == 0) {
@@ -139,8 +174,18 @@ public class NeiRecipeBatchLoader {
 
             } catch (Exception e) {
                 Logger.MOD.error("Error processing handler: " + handlerName, e);
-                Logger.chatMessage(String.format("[%d/%d] ⚠ Skipped: %s (error)",
+                Logger.chatMessage(String.format("[%d/%d] 鈿?Skipped: %s (error)",
                         handlerIndex, GuiCraftingRecipe.craftinghandlers.size(), handlerName));
+                recordHandlerTiming(
+                        handlerIndex,
+                        baseHandler,
+                        baseHandler instanceof TemplateRecipeHandler,
+                        itemScan,
+                        recipeCount,
+                        exportedForHandler,
+                        loadElapsedMs,
+                        exportElapsedMs,
+                        handlerStartedAt);
             }
         }
 
@@ -157,6 +202,33 @@ public class NeiRecipeBatchLoader {
         return totalRecipes.get();
     }
 
+    private static void recordHandlerTiming(
+            int handlerIndex,
+            ICraftingHandler handler,
+            boolean templateHandler,
+            boolean itemScan,
+            int loadedRecipes,
+            int exportedRecipes,
+            long loadElapsedMs,
+            long exportElapsedMs,
+            long handlerStartedAt) {
+        try {
+            NeiExportTimingRegistry.record(
+                    handlerIndex,
+                    GuiCraftingRecipe.craftinghandlers.size(),
+                    handler.getHandlerId(),
+                    handler.getRecipeName(),
+                    handler.getClass().getName(),
+                    templateHandler,
+                    itemScan,
+                    loadedRecipes,
+                    exportedRecipes,
+                    loadElapsedMs,
+                    exportElapsedMs,
+                    System.currentTimeMillis() - handlerStartedAt);
+        } catch (Throwable ignored) {
+        }
+    }
     private static boolean isCustomDiagramHandler(ICraftingHandler handler) {
         return handler != null
                 && handler.getClass().getName().startsWith("com.github.dcysteine.neicustomdiagram.");
@@ -178,7 +250,7 @@ public class NeiRecipeBatchLoader {
                         baseHandler.getHandlerId(),
                         handlerName,
                         baseHandler);
-                Logger.chatMessage(String.format("[%d/%d] ✓ Completed: %s (%d recipes)",
+                Logger.chatMessage(String.format("[%d/%d] 鉁?Completed: %s (%d recipes)",
                         handlerIndex, totalHandlers, handlerName, exported));
                 return exported;
             }
@@ -206,7 +278,7 @@ public class NeiRecipeBatchLoader {
             }
 
             if (exported > 0) {
-                Logger.chatMessage(String.format("[%d/%d] ✓ Completed: %s (%d recipes)",
+                Logger.chatMessage(String.format("[%d/%d] 鉁?Completed: %s (%d recipes)",
                         handlerIndex, totalHandlers, handlerName, exported));
             } else {
                 Logger.MOD.warn("No recipes resolved for non-template handler: {}", handlerName);
@@ -214,7 +286,7 @@ public class NeiRecipeBatchLoader {
             return exported;
         } catch (Exception e) {
             Logger.MOD.error("Error processing non-template crafting handler: " + handlerName, e);
-            Logger.chatMessage(String.format("[%d/%d] ⚠ Skipped: %s (error)",
+            Logger.chatMessage(String.format("[%d/%d] 鈿?Skipped: %s (error)",
                     handlerIndex, totalHandlers, handlerName));
             return 0;
         }
@@ -278,7 +350,7 @@ public class NeiRecipeBatchLoader {
                     totalRecipes.addAndGet(exported);
 
                     Logger.MOD.info("Exported {} usage recipes from handler: {}", exported, handlerName);
-                    Logger.chatMessage(String.format("[%d/%d] ✓ Completed: %s (%d recipes)",
+                    Logger.chatMessage(String.format("[%d/%d] 鉁?Completed: %s (%d recipes)",
                             handlerIndex, GuiUsageRecipe.usagehandlers.size(), handlerName, exported));
                 } else {
                     Logger.MOD.debug("No usage recipes found for handler: {}", handlerName);
@@ -305,7 +377,7 @@ public class NeiRecipeBatchLoader {
 
             } catch (Exception e) {
                 Logger.MOD.error("Error processing usage handler: " + handlerName, e);
-                Logger.chatMessage(String.format("[%d/%d] ⚠ Skipped: %s (error)",
+                Logger.chatMessage(String.format("[%d/%d] 鈿?Skipped: %s (error)",
                         handlerIndex, GuiUsageRecipe.usagehandlers.size(), handlerName));
             }
         }
@@ -333,10 +405,10 @@ public class NeiRecipeBatchLoader {
         AtomicInteger loadedCount = new AtomicInteger(0);
 
         try {
-            // ⚡ v1.04 优化1: 检查handler是否已经有配方
+            // 鈿?v1.04 浼樺寲1: 妫€鏌andler鏄惁宸茬粡鏈夐厤鏂?
             int initialCount = handler.numRecipes();
             if (initialCount > 0) {
-                // Handler已经预加载了配方，直接返回
+                // Handler宸茬粡棰勫姞杞戒簡閰嶆柟锛岀洿鎺ヨ繑鍥?
                 Logger.MOD.debug("Handler {} already has {} recipes, skipping item scan",
                     handler.getRecipeName(), initialCount);
                 return initialCount;
@@ -345,8 +417,8 @@ public class NeiRecipeBatchLoader {
             // Clear any existing recipes
             handler.arecipes.clear();
 
-            // ⚡ v1.04 修复: 移除不准确的优化，使用完整扫描
-            // 之前的采样检测和mod过滤会跳过大量配方
+            // 鈿?v1.04 淇: 绉婚櫎涓嶅噯纭殑浼樺寲锛屼娇鐢ㄥ畬鏁存壂鎻?
+            // 涔嬪墠鐨勯噰鏍锋娴嬪拰mod杩囨护浼氳烦杩囧ぇ閲忛厤鏂?
             Logger.MOD.debug("Loading recipes for handler: {}", handler.getRecipeName());
             return loadRecipesFullScan(handler, itemUniverse, loadedCount);
 
@@ -400,7 +472,7 @@ public class NeiRecipeBatchLoader {
     }
 
     /**
-     * ⚡ 完整物品扫描 - 用于处理所有物品的handler
+     * 鈿?瀹屾暣鐗╁搧鎵弿 - 鐢ㄤ簬澶勭悊鎵€鏈夌墿鍝佺殑handler
      */
     private static int loadRecipesFullScan(
             TemplateRecipeHandler handler, List<ItemStack> itemUniverse, AtomicInteger loadedCount) {
@@ -421,7 +493,7 @@ public class NeiRecipeBatchLoader {
     }
 
     /**
-     * ⚡ 过滤物品扫描 - 只扫描满足条件的物品
+     * 鈿?杩囨护鐗╁搧鎵弿 - 鍙壂鎻忔弧瓒虫潯浠剁殑鐗╁搧
      */
     private static int loadRecipesFiltered(TemplateRecipeHandler handler, AtomicInteger loadedCount,
                                           java.util.function.Predicate<ItemStack> filter) {
@@ -487,24 +559,24 @@ public class NeiRecipeBatchLoader {
     }
 
     /**
-     * ⚡ v1.04 优化: 检查handler是否需要遍历所有物品来加载配方
-     * 某些handler在初始化时已经加载了配方，不需要再扫描物品
+     * 鈿?v1.04 浼樺寲: 妫€鏌andler鏄惁闇€瑕侀亶鍘嗘墍鏈夌墿鍝佹潵鍔犺浇閰嶆柟
+     * 鏌愪簺handler鍦ㄥ垵濮嬪寲鏃跺凡缁忓姞杞戒簡閰嶆柟锛屼笉闇€瑕佸啀鎵弿鐗╁搧
      */
     private static boolean needsItemScanning(String handlerName) {
         String lower = handlerName.toLowerCase();
 
-        // 这些handler通常已经预加载了配方，不需要物品扫描
+        // 杩欎簺handler閫氬父宸茬粡棰勫姞杞戒簡閰嶆柟锛屼笉闇€瑕佺墿鍝佹壂鎻?
         if (lower.contains("gregtech") && (lower.contains("assembly") || lower.contains("line") || lower.contains("assemble"))) {
-            // GregTech装配线不需要物品扫描（配方已经预加载）
+            // GregTech瑁呴厤绾夸笉闇€瑕佺墿鍝佹壂鎻忥紙閰嶆柟宸茬粡棰勫姞杞斤級
             return false;
         }
 
-        // NEI内置handler通常需要物品扫描
+        // NEI鍐呯疆handler閫氬父闇€瑕佺墿鍝佹壂鎻?
         if (lower.startsWith("nei.")) {
             return true;
         }
 
-        // 默认需要物品扫描
+        // 榛樿闇€瑕佺墿鍝佹壂鎻?
         return true;
     }
 }

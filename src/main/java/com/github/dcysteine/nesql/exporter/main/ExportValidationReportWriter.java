@@ -238,7 +238,6 @@ final class ExportValidationReportWriter {
                 || contains(value, "universalsingularity")
                 || contains(value, "universal_singularity")
                 || contains(value, "avaritia")
-                || contains(value, "infinity")
                 || contains(value, "cosmicneutronium")
                 || contains(value, "transcendentmetal")
                 || contains(value, "universium");
