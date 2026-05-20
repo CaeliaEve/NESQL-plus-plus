@@ -36,6 +36,7 @@ public class CanonicalAtlasPackWriter {
     private static final String GROUP_DIRECTORY = "atlas-manifests-by-group";
     private static final int WEBGL_SAFE_ATLAS_CHUNK_SIZE = 3000;
     private static final int WEBGL_SAFE_MAX_ATLAS_HEIGHT = 8192;
+    private static final int PACKER_VERSION = 2;
 
     private final EntityManager entityManager;
     private final File exportDirectory;
@@ -182,6 +183,7 @@ public class CanonicalAtlasPackWriter {
             AtlasPackingSupport.writeAtlasImage(atlasFile, layout);
 
             AtlasGroupManifest groupManifest = new AtlasGroupManifest();
+            groupManifest.packerVersion = PACKER_VERSION;
             groupManifest.atlasGroup = chunkAtlasGroup;
             groupManifest.atlasFile = relativizeFromExportDirectory(atlasFile);
             groupManifest.width = layout.width;
@@ -196,7 +198,7 @@ public class CanonicalAtlasPackWriter {
                 assetPlacement.y = placement.y;
                 assetPlacement.width = placement.source.image.getWidth();
                 assetPlacement.height = placement.source.image.getHeight();
-                assetPlacement.sourcePath = placement.source.asset.staticFile;
+                assetPlacement.sourcePath = relativizeFromExportDirectory(placement.source.file);
                 groupManifest.assets.add(assetPlacement);
             }
             groupManifests.add(groupManifest);
@@ -307,12 +309,15 @@ public class CanonicalAtlasPackWriter {
         try (java.io.FileInputStream fis = new java.io.FileInputStream(shardFile);
              java.io.InputStreamReader reader =
                      new java.io.InputStreamReader(fis, StandardCharsets.UTF_8)) {
-            AtlasGroupManifest manifest = new Gson().fromJson(reader, AtlasGroupManifest.class);
-            if (manifest == null || manifest.assets == null || manifest.assets.isEmpty()) {
-                return null;
-            }
-            Logger.MOD.info("Reusing fresh static atlas group {} from {}", atlasGroup, atlasFile.getName());
-            return manifest;
+                AtlasGroupManifest manifest = new Gson().fromJson(reader, AtlasGroupManifest.class);
+                if (manifest == null || manifest.assets == null || manifest.assets.isEmpty()) {
+                    return null;
+                }
+                if (manifest.packerVersion != PACKER_VERSION) {
+                    return null;
+                }
+                Logger.MOD.info("Reusing fresh static atlas group {} from {}", atlasGroup, atlasFile.getName());
+                return manifest;
         } catch (Exception e) {
             Logger.MOD.warn("Failed to reuse static atlas group {}", atlasGroup, e);
             return null;
@@ -355,6 +360,9 @@ public class CanonicalAtlasPackWriter {
                          new java.io.InputStreamReader(fis, StandardCharsets.UTF_8)) {
                 AtlasGroupManifest manifest = new Gson().fromJson(reader, AtlasGroupManifest.class);
                 if (manifest == null || manifest.assets == null || manifest.assets.isEmpty()) {
+                    return new ArrayList<>();
+                }
+                if (manifest.packerVersion != PACKER_VERSION) {
                     return new ArrayList<>();
                 }
 
@@ -427,12 +435,18 @@ public class CanonicalAtlasPackWriter {
     }
 
     private File resolveSourceFile(CanonicalRenderAsset asset) {
-        if ("native_sprite_snapshot".equals(asset.mode)
-                && asset.nativeSpriteAtlasFile != null
-                && !asset.nativeSpriteAtlasFile.isEmpty()) {
-            return resolveExportFile(asset.nativeSpriteAtlasFile);
-        }
+        // The homepage browser atlas needs a directly drawable item snapshot. NESQL++ also stores
+        // native atlas metadata for animation/timeline reconstruction, but those atlas textures can
+        // contain transparent cells for some GTNH native sprites. Packing them as static browser
+        // tiles made NeoNEI believe coverage was complete while fast page flips rendered blank
+        // slots. Prefer the already-rendered static snapshot for all static atlas entries, and keep
+        // native atlas files for the animated atlas writer / metadata paths.
         if (asset.staticFile == null || asset.staticFile.isEmpty()) {
+            if ("native_sprite_snapshot".equals(asset.mode)
+                    && asset.nativeSpriteAtlasFile != null
+                    && !asset.nativeSpriteAtlasFile.isEmpty()) {
+                return resolveExportFile(asset.nativeSpriteAtlasFile);
+            }
             return null;
         }
         return resolveExportFile(asset.staticFile);
@@ -472,6 +486,7 @@ public class CanonicalAtlasPackWriter {
     }
 
     private static final class AtlasGroupManifest {
+        int packerVersion;
         String atlasGroup;
         String atlasFile;
         int width;

@@ -40,6 +40,7 @@ public final class RenderContractsExporter {
         ExportWriterSupport.writeAnimatedAtlasPacks(null, exportPaths.repositoryDirectory, assets);
         ExportWriterSupport.writeAtlasRegistry(null, exportPaths.repositoryDirectory, assets);
         ExportWriterSupport.writeRenderIndex(null, exportPaths.repositoryDirectory, assets);
+        ExportWriterSupport.writeBrowserAtlasIndex(exportPaths.repositoryDirectory);
 
         Logger.chatMessage(EnumChatFormatting.GREEN + "Render contract rebuild complete!");
         Logger.chatMessage(

@@ -19,6 +19,7 @@ import java.io.InputStreamReader;
 import java.io.OutputStreamWriter;
 import java.nio.charset.StandardCharsets;
 import java.util.ArrayList;
+import java.util.Collections;
 import java.util.HashSet;
 import java.util.Comparator;
 import java.util.LinkedHashMap;
@@ -46,6 +47,7 @@ public class CanonicalBrowserAtlasIndexWriter {
     private static final int FALLBACK_ATLAS_CHUNK_SIZE = 3500;
 
     private final File exportDirectory;
+    private final Map<String, List<File>> rawItemSiblingImageCache = new LinkedHashMap<String, List<File>>();
 
     public CanonicalBrowserAtlasIndexWriter(File exportDirectory) {
         this.exportDirectory = exportDirectory;
@@ -250,7 +252,48 @@ public class CanonicalBrowserAtlasIndexWriter {
                 return file;
             }
         }
+        File sibling = resolveRawItemSiblingImageFile(itemId);
+        if (sibling != null && sibling.exists()) {
+            return sibling;
+        }
         return null;
+    }
+
+    private File resolveRawItemSiblingImageFile(String itemId) {
+        String[] parts = itemId.split("~");
+        if (parts.length < 4 || !"i".equals(parts[0])) {
+            return null;
+        }
+        String modId = parts[1];
+        String internalName = parts[2];
+        String meta = parts[3];
+        File familyDirectory = resolveExportFile("image/item/" + modId);
+        if (!familyDirectory.exists() || !familyDirectory.isDirectory()) {
+            return null;
+        }
+
+        String prefix = internalName + "~" + meta + "~";
+        String cacheKey = familyDirectory.getAbsolutePath() + "|" + prefix;
+        List<File> candidates = rawItemSiblingImageCache.get(cacheKey);
+        if (candidates == null) {
+            candidates = new ArrayList<File>();
+            File[] children = familyDirectory.listFiles();
+            if (children != null) {
+                for (File child : children) {
+                    if (!child.isFile()) {
+                        continue;
+                    }
+                    String name = child.getName();
+                    if (name.startsWith(prefix) && name.endsWith(".png")) {
+                        candidates.add(child);
+                    }
+                }
+            }
+            Collections.sort(candidates, (left, right) -> left.getName().compareToIgnoreCase(right.getName()));
+            rawItemSiblingImageCache.put(cacheKey, candidates);
+        }
+
+        return candidates.isEmpty() ? null : candidates.get(0);
     }
 
     private List<String> rawItemImageCandidates(String itemId) {
