@@ -90,8 +90,12 @@ interface ExportExecutionStrategy {
 
         @Override
         public void runCollectionStage(ExportContext exportContext, ExportRuntime exportRuntime) {
-            exportRuntime.entityManager.persist(new Metadata(exportRuntime.activePlugins.keySet()));
-            exportRuntime.runPluginPipeline();
+            try {
+                exportRuntime.entityManager.persist(new Metadata(exportRuntime.activePlugins.keySet()));
+                exportRuntime.runPluginPipeline();
+            } finally {
+                ExportPluginTimingReportWriter.write(exportContext, exportRuntime);
+            }
         }
 
         @Override
@@ -159,10 +163,14 @@ interface ExportExecutionStrategy {
 
         @Override
         public void runCollectionStage(ExportContext exportContext, ExportRuntime exportRuntime) {
-            Logger.MOD.info("Step 1-3: exportRuntime.runPluginPipeline()...");
-            exportRuntime.runPluginPipeline();
-            Logger.MOD.info("Step 3 complete");
-            Logger.MOD.info("=== postProcessPlugins() completed, starting v1.04 file export ===");
+            try {
+                Logger.MOD.info("Step 1-3: exportRuntime.runPluginPipeline()...");
+                exportRuntime.runPluginPipeline();
+                Logger.MOD.info("Step 3 complete");
+                Logger.MOD.info("=== postProcessPlugins() completed, starting v1.04 file export ===");
+            } finally {
+                ExportPluginTimingReportWriter.write(exportContext, exportRuntime);
+            }
         }
 
         @Override
@@ -221,7 +229,11 @@ interface ExportExecutionStrategy {
 
         @Override
         public void runCollectionStage(ExportContext exportContext, ExportRuntime exportRuntime) {
-            exportRuntime.runPluginPipeline();
+            try {
+                exportRuntime.runPluginPipeline();
+            } finally {
+                ExportPluginTimingReportWriter.write(exportContext, exportRuntime);
+            }
         }
 
         @Override

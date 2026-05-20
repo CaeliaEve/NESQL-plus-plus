@@ -10,6 +10,8 @@ import org.hibernate.jpa.HibernatePersistenceProvider;
 import jakarta.persistence.EntityManager;
 import jakarta.persistence.EntityManagerFactory;
 import jakarta.persistence.EntityTransaction;
+import java.util.ArrayList;
+import java.util.List;
 import java.util.LinkedHashMap;
 import java.util.Map;
 
@@ -25,6 +27,7 @@ public final class ExportRuntime implements AutoCloseable {
     public final EntityManager entityManager;
     public final PluginRegistry registry;
     public final Map<Plugin, PluginExporter> activePlugins;
+    public final List<PluginTiming> pluginTimings = new ArrayList<PluginTiming>();
 
     private ExportRuntime(
             EntityManagerFactory entityManagerFactory,
@@ -66,14 +69,69 @@ public final class ExportRuntime implements AutoCloseable {
     }
 
     public void runPluginPipeline() {
-        registry.initializePlugins();
-        registry.processPlugins();
-        registry.postProcessPlugins();
+        pluginTimings.clear();
+        runPluginPhase("initialize");
+        runPluginPhase("process");
+        runPluginPhase("postProcess");
+    }
+
+    private void runPluginPhase(String phase) {
+        for (Map.Entry<Plugin, PluginExporter> entry : activePlugins.entrySet()) {
+            long startedAt = System.currentTimeMillis();
+            try {
+                if ("initialize".equals(phase)) {
+                    entry.getValue().initialize();
+                } else if ("process".equals(phase)) {
+                    entry.getValue().process();
+                } else if ("postProcess".equals(phase)) {
+                    entry.getValue().postProcess();
+                } else {
+                    throw new IllegalArgumentException("Unknown plugin phase: " + phase);
+                }
+            } finally {
+                pluginTimings.add(
+                        new PluginTiming(
+                                entry.getKey().name(),
+                                entry.getValue().getClass().getName(),
+                                phase,
+                                System.currentTimeMillis() - startedAt));
+            }
+        }
     }
 
     @Override
     public void close() {
         entityManager.close();
         entityManagerFactory.close();
+    }
+
+    public static final class PluginTiming {
+        public final String plugin;
+        public final String exporterClass;
+        public final String phase;
+        public final long elapsedMs;
+        public final String elapsed;
+
+        PluginTiming(String plugin, String exporterClass, String phase, long elapsedMs) {
+            this.plugin = plugin;
+            this.exporterClass = exporterClass;
+            this.phase = phase;
+            this.elapsedMs = elapsedMs;
+            this.elapsed = formatDuration(elapsedMs);
+        }
+
+        private static String formatDuration(long elapsedMs) {
+            long totalSeconds = Math.max(0L, elapsedMs / 1000L);
+            long hours = totalSeconds / 3600L;
+            long minutes = (totalSeconds % 3600L) / 60L;
+            long seconds = totalSeconds % 60L;
+            if (hours > 0L) {
+                return String.format("%dh %02dm %02ds", hours, minutes, seconds);
+            }
+            if (minutes > 0L) {
+                return String.format("%dm %02ds", minutes, seconds);
+            }
+            return String.format("%ds", seconds);
+        }
     }
 }

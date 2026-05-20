@@ -5,6 +5,7 @@ import net.minecraft.item.Item;
 import net.minecraft.item.ItemStack;
 
 import java.util.HashSet;
+import java.util.Locale;
 import java.util.Set;
 
 /**
@@ -16,6 +17,8 @@ public enum AnimatedItemRegistry {
 
     // Set of item IDs that are known to have animations
     private final Set<String> animatedItemIds = new HashSet<>();
+    private final Set<String> framebufferAnimatedModIds = new HashSet<>();
+    private final Set<String> singularityModIds = new HashSet<>();
 
     private AnimatedItemRegistry() {
         initializeAnimatedItems();
@@ -136,6 +139,20 @@ public enum AnimatedItemRegistry {
 
         // Add all Avaritia items by mod ID prefix
         animatedItemIds.add("Avaritia");
+
+        // GTNH singularity add-ons commonly render through custom item renderers,
+        // mask textures, or shader-like overlays. Treat these as framebuffer
+        // animation sources instead of trusting native sprite metadata alone.
+        framebufferAnimatedModIds.add("Avaritia");
+        framebufferAnimatedModIds.add("avaritia");
+        framebufferAnimatedModIds.add("eternalsingularity");
+        framebufferAnimatedModIds.add("universalsingularities");
+        framebufferAnimatedModIds.add("universal_singularities");
+        framebufferAnimatedModIds.add("avaritiaddons");
+        framebufferAnimatedModIds.add("avaritiaaddons");
+        framebufferAnimatedModIds.add("dreamcraft");
+
+        singularityModIds.addAll(framebufferAnimatedModIds);
     }
 
     /**
@@ -170,7 +187,74 @@ public enum AnimatedItemRegistry {
             return true;
         }
 
+        if (isSingularityLikeAnimatedItem(stack)) {
+            logAnimatedItem(itemId, stack.getItemDamage());
+            return true;
+        }
+
         return false;
+    }
+
+    /**
+     * Whether this item should be captured from the real inventory framebuffer even if native
+     * sprite metadata exists.
+     *
+     * <p>Native atlas playback is excellent for plain animated sprites, but singularity-style
+     * GTNH items frequently combine a base sprite with masks, halos, custom renderers, or
+     * time-based transforms. For those items the rendered GIF is the authoritative export.</p>
+     */
+    public boolean requiresFramebufferAnimationCapture(ItemStack stack) {
+        if (stack == null || stack.getItem() == null) {
+            return false;
+        }
+
+        String itemId = getItemId(stack.getItem());
+        String modId = getModId(itemId);
+        if (containsIgnoreCase(framebufferAnimatedModIds, modId)) {
+            return true;
+        }
+        return isSingularityLikeAnimatedItem(stack);
+    }
+
+    /**
+     * Broad but explicit classifier for singularity / infinity / cosmic material items.
+     */
+    public boolean isSingularityLikeAnimatedItem(ItemStack stack) {
+        if (stack == null || stack.getItem() == null) {
+            return false;
+        }
+
+        String itemId = getItemId(stack.getItem());
+        String modId = getModId(itemId);
+        String haystack = joinLower(
+                itemId,
+                modId,
+                safeUnlocalizedName(stack),
+                safeDisplayName(stack));
+
+        if (containsIgnoreCase(singularityModIds, modId)) {
+            return containsAny(haystack,
+                    "singular",
+                    "infinity",
+                    "infinite",
+                    "cosmic",
+                    "neutronium",
+                    "eternal",
+                    "universium",
+                    "transcendent");
+        }
+
+        return containsAny(haystack,
+                "singularity",
+                "singularitie",
+                "eternalsingularity",
+                "universal_singularity",
+                "universalsingularity",
+                "infinity_",
+                "infinity ",
+                "cosmicneutronium",
+                "transcendentmetal",
+                "universium");
     }
 
     private void logAnimatedItem(String itemId, int damage) {
@@ -202,6 +286,67 @@ public enum AnimatedItemRegistry {
         } catch (Exception e) {
             return "unknown";
         }
+    }
+
+    private String getModId(String itemId) {
+        if (itemId == null) {
+            return "";
+        }
+        int colon = itemId.indexOf(':');
+        if (colon <= 0) {
+            return itemId;
+        }
+        return itemId.substring(0, colon);
+    }
+
+    private boolean containsIgnoreCase(Set<String> values, String candidate) {
+        if (candidate == null) {
+            return false;
+        }
+        for (String value : values) {
+            if (candidate.equalsIgnoreCase(value)) {
+                return true;
+            }
+        }
+        return false;
+    }
+
+    private String safeUnlocalizedName(ItemStack stack) {
+        try {
+            return stack.getUnlocalizedName();
+        } catch (Throwable ignored) {
+            return "";
+        }
+    }
+
+    private String safeDisplayName(ItemStack stack) {
+        try {
+            return stack.getDisplayName();
+        } catch (Throwable ignored) {
+            return "";
+        }
+    }
+
+    private String joinLower(String... values) {
+        StringBuilder builder = new StringBuilder();
+        for (String value : values) {
+            if (value != null) {
+                builder.append(' ').append(value);
+            }
+        }
+        return builder.toString().toLowerCase(Locale.ROOT);
+    }
+
+    private boolean containsAny(String haystack, String... needles) {
+        if (haystack == null || haystack.isEmpty()) {
+            return false;
+        }
+        for (String needle : needles) {
+            if (needle != null && !needle.isEmpty() && haystack.contains(needle.toLowerCase(Locale.ROOT))) {
+                return true;
+            }
+        }
+        return false;
     }
 
     /**

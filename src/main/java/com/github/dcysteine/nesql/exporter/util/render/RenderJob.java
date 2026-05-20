@@ -73,6 +73,11 @@ public abstract class RenderJob {
             return false;
         }
 
+        if (getType() == JobType.ITEM
+                && AnimatedItemRegistry.INSTANCE.requiresFramebufferAnimationCapture(getItem())) {
+            return false;
+        }
+
         if (getType() == JobType.ITEM && hasCustomInventoryRenderer()) {
             return false;
         }
@@ -127,6 +132,13 @@ public abstract class RenderJob {
         }
 
         ItemStack stack = getItem();
+
+        // Method 0.5: Singularity / infinity-style items must use the in-game framebuffer path.
+        // Some of them expose native sprite metadata, but the final inventory icon is composed
+        // by custom renderers, masks, halos, or shader-like overlays.
+        if (AnimatedItemRegistry.INSTANCE.requiresFramebufferAnimationCapture(stack)) {
+            return true;
+        }
 
         // Method 1: Check AnimatedItemRegistry (most reliable for known items)
         if (AnimatedItemRegistry.INSTANCE.isAnimatedItem(stack)) {
@@ -184,6 +196,7 @@ public abstract class RenderJob {
         }
 
         return AnimatedItemRegistry.INSTANCE.isAnimatedItem(stack)
+                || AnimatedItemRegistry.INSTANCE.requiresFramebufferAnimationCapture(stack)
                 || hasGregTechAnimation(stack)
                 || hasGregTechMachineAnimation(stack)
                 || hasAnimatedCustomRenderer(stack)
@@ -212,7 +225,8 @@ public abstract class RenderJob {
             return false;
         }
 
-        return hasAnimatedTexture(stack)
+        return AnimatedItemRegistry.INSTANCE.requiresFramebufferAnimationCapture(stack)
+                || hasAnimatedTexture(stack)
                 || hasAnimatedRenderPassTexture(stack)
                 || hasAnimatedAuxiliaryTexture(stack);
     }
@@ -257,6 +271,14 @@ public abstract class RenderJob {
                 new Object[] { stack, null });
         markAuxiliaryAnimatedTexture(item, "getHaloTexture", new Class<?>[] { ItemStack.class }, new Object[] { stack });
         markAuxiliaryAnimatedTexture(item, "getOverlayIcon", new Class<?>[] { ItemStack.class }, new Object[] { stack });
+        markAuxiliaryAnimatedTexture(item, "getMaskIcon", new Class<?>[] { ItemStack.class }, new Object[] { stack });
+        markAuxiliaryAnimatedTexture(item, "getHaloIcon", new Class<?>[] { ItemStack.class }, new Object[] { stack });
+        markAuxiliaryAnimatedTexture(item, "getGlowIcon", new Class<?>[] { ItemStack.class }, new Object[] { stack });
+        markAuxiliaryAnimatedTexture(item, "getFrameIcon", new Class<?>[] { ItemStack.class }, new Object[] { stack });
+        markAuxiliaryAnimatedTexture(item, "getIconOverlay", new Class<?>[] { ItemStack.class }, new Object[] { stack });
+        markAuxiliaryAnimatedTexture(item, "getMaskTexture", new Class<?>[0], new Object[0]);
+        markAuxiliaryAnimatedTexture(item, "getHaloTexture", new Class<?>[0], new Object[0]);
+        markAuxiliaryAnimatedTexture(item, "getOverlayIcon", new Class<?>[0], new Object[0]);
     }
 
     /**
@@ -364,7 +386,31 @@ public abstract class RenderJob {
                         new Object[] { stack })
                 || isAnimatedAuxiliaryTexture(item, "getOverlayIcon",
                         new Class<?>[] { ItemStack.class },
-                        new Object[] { stack });
+                        new Object[] { stack })
+                || isAnimatedAuxiliaryTexture(item, "getMaskIcon",
+                        new Class<?>[] { ItemStack.class },
+                        new Object[] { stack })
+                || isAnimatedAuxiliaryTexture(item, "getHaloIcon",
+                        new Class<?>[] { ItemStack.class },
+                        new Object[] { stack })
+                || isAnimatedAuxiliaryTexture(item, "getGlowIcon",
+                        new Class<?>[] { ItemStack.class },
+                        new Object[] { stack })
+                || isAnimatedAuxiliaryTexture(item, "getFrameIcon",
+                        new Class<?>[] { ItemStack.class },
+                        new Object[] { stack })
+                || isAnimatedAuxiliaryTexture(item, "getIconOverlay",
+                        new Class<?>[] { ItemStack.class },
+                        new Object[] { stack })
+                || isAnimatedAuxiliaryTexture(item, "getMaskTexture",
+                        new Class<?>[0],
+                        new Object[0])
+                || isAnimatedAuxiliaryTexture(item, "getHaloTexture",
+                        new Class<?>[0],
+                        new Object[0])
+                || isAnimatedAuxiliaryTexture(item, "getOverlayIcon",
+                        new Class<?>[0],
+                        new Object[0]);
     }
 
     /**
@@ -441,6 +487,11 @@ public abstract class RenderJob {
         return normalized.contains("transcendentalmetaitemrenderer")
                 || normalized.contains("glitcheffectmetaitemrenderer")
                 || normalized.contains("wireframetesseractrenderer")
+                || normalized.contains("singularity")
+                || normalized.contains("singular")
+                || normalized.contains("avaritia")
+                || normalized.contains("eternal")
+                || normalized.contains("universal")
                 || normalized.contains("infinitymetaitemrenderer")
                 || normalized.contains("transcendentmetalrenderer")
                 || normalized.contains("infinityrenderer")

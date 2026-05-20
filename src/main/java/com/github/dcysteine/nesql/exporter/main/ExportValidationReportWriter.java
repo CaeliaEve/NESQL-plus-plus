@@ -15,6 +15,7 @@ import java.io.OutputStreamWriter;
 import java.nio.charset.StandardCharsets;
 import java.util.ArrayList;
 import java.util.List;
+import java.util.Locale;
 import java.util.Map;
 
 /** Writes a lightweight post-export integrity summary without changing exported data contracts. */
@@ -127,6 +128,10 @@ final class ExportValidationReportWriter {
             report.warnings.add("Render assets with missing timeline frame files: "
                     + report.renderAssetMissingTimelineFrames);
         }
+        if (report.suspiciousStaticSingularityAssets > 0) {
+            report.warnings.add("Singularity-like render assets exported without animation: "
+                    + report.suspiciousStaticSingularityAssets);
+        }
     }
 
     private static void inspectRenderAssets(File repositoryDirectory, File canonicalDir, ValidationReport report) {
@@ -162,6 +167,8 @@ final class ExportValidationReportWriter {
             report.renderAssetMissingPrimaryArtifacts++;
         }
 
+        inspectSingularityAnimation(asset, report);
+
         if (asset.timeline == null || asset.timeline.isEmpty()) {
             return;
         }
@@ -174,6 +181,71 @@ final class ExportValidationReportWriter {
                 report.renderAssetMissingTimelineFrames++;
             }
         }
+    }
+
+    private static void inspectSingularityAnimation(CanonicalRenderAsset asset, ValidationReport report) {
+        String haystack = joinLower(
+                asset.assetId,
+                asset.variantKey,
+                asset.family,
+                asset.sourceType,
+                asset.sourcePath,
+                asset.primaryArtifact,
+                asset.staticFile,
+                asset.rendererFamily,
+                asset.captureMethod,
+                asset.captureSource,
+                asset.animationMode,
+                asset.renderMode);
+        if (!isSingularityLike(haystack)) {
+            return;
+        }
+
+        report.singularityLikeRenderAssets++;
+        boolean animated =
+                contains(haystack, ".gif")
+                        || contains(haystack, "animated")
+                        || contains(haystack, "timeline")
+                        || (asset.timeline != null && asset.timeline.size() > 1)
+                        || (asset.frames != null && asset.frames.size() > 1)
+                        || (asset.frameCount != null && asset.frameCount > 1)
+                        || (asset.capturedFrameCount != null && asset.capturedFrameCount > 1);
+        if (animated) {
+            report.animatedSingularityLikeRenderAssets++;
+            return;
+        }
+
+        report.suspiciousStaticSingularityAssets++;
+        if (report.suspiciousStaticSingularitySamples.size() < 100) {
+            report.suspiciousStaticSingularitySamples.add(firstNonEmpty(asset.assetId, asset.sourcePath, asset.primaryArtifact));
+        }
+    }
+
+    private static String joinLower(String... values) {
+        StringBuilder builder = new StringBuilder();
+        for (String value : values) {
+            if (value != null && !value.isEmpty()) {
+                builder.append(' ').append(value);
+            }
+        }
+        return builder.toString().toLowerCase(Locale.ROOT);
+    }
+
+    private static boolean isSingularityLike(String value) {
+        return contains(value, "singularity")
+                || contains(value, "singularitie")
+                || contains(value, "eternalsingularity")
+                || contains(value, "universalsingularity")
+                || contains(value, "universal_singularity")
+                || contains(value, "avaritia")
+                || contains(value, "infinity")
+                || contains(value, "cosmicneutronium")
+                || contains(value, "transcendentmetal")
+                || contains(value, "universium");
+    }
+
+    private static boolean contains(String value, String needle) {
+        return value != null && needle != null && value.contains(needle);
     }
 
     private static String firstNonEmpty(String first, String second, String third) {
@@ -271,6 +343,10 @@ final class ExportValidationReportWriter {
         int renderAssetManifestAssets;
         int renderAssetMissingPrimaryArtifacts;
         int renderAssetMissingTimelineFrames;
+        int singularityLikeRenderAssets;
+        int animatedSingularityLikeRenderAssets;
+        int suspiciousStaticSingularityAssets;
+        List<String> suspiciousStaticSingularitySamples = new ArrayList<String>();
         PreviousSnapshot previous;
         DeltaSnapshot delta;
         List<String> warnings = new ArrayList<String>();
