@@ -84,6 +84,7 @@ final class ExportIntegrityManifestWriter {
     private static void addFile(List<ArtifactChecksum> artifacts, File root, File file, String stage) {
         ArtifactChecksum artifact = new ArtifactChecksum();
         artifact.stage = stage;
+        artifact.family = stage;
         artifact.path = relative(root, file);
         artifact.exists = file.exists() && file.isFile();
         if (artifact.exists) {
@@ -98,6 +99,7 @@ final class ExportIntegrityManifestWriter {
         collectDirectoryStats(dir, stats);
         ArtifactChecksum artifact = new ArtifactChecksum();
         artifact.stage = stage;
+        artifact.family = stage;
         artifact.path = relative(root, dir);
         artifact.exists = dir.exists() && dir.isDirectory();
         artifact.fileCount = stats.fileCount;
@@ -201,6 +203,7 @@ final class ExportIntegrityManifestWriter {
 
     private static final class ArtifactChecksum {
         String stage;
+        String family;
         String path;
         boolean exists;
         long bytes;

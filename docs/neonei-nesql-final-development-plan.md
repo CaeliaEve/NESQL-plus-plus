@@ -59,7 +59,7 @@
 
 ## P4：导出 / 编译增量化
 
-- [ ] NESQL++ 阶段拆分：data、images、animated-images、render-contracts、browser-layout、multiblocks、eec-models、recipe-layout-contracts、atlas-pack。
+- [x] NESQL++ 阶段拆分：data、images、animated-images、render-contracts、browser-layout、multiblocks、eec-models、recipe-layout-contracts、atlas-pack（stage timing/checksum 现在输出 stable family/skippable contract）。
 - [ ] 每阶段有 checksum，可跳过未变化输出。
 - [ ] 图片渲染按 item/render/texture signature 跳过。
 - [ ] Atlas packer 按 sprite hash / atlas page hash 跳过。

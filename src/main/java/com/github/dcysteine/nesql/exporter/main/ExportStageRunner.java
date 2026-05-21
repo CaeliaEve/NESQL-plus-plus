@@ -38,7 +38,7 @@ final class ExportStageRunner {
                 long stageStartedAt = System.currentTimeMillis();
                 action.run();
                 long stageElapsedMs = System.currentTimeMillis() - stageStartedAt;
-                timings.add(new StageTiming(index, totalStages, stage.name(), stageElapsedMs));
+                timings.add(new StageTiming(index, totalStages, stage, stageElapsedMs));
                 Logger.chatMessage(
                         EnumChatFormatting.GRAY
                                 + "[NESQL] Stage complete: "
@@ -145,13 +145,19 @@ final class ExportStageRunner {
         int index;
         int total;
         String stage;
+        String family;
+        String outputKind;
+        boolean skippableByChecksum;
         long elapsedMs;
         String elapsed;
 
-        StageTiming(int index, int total, String stage, long elapsedMs) {
+        StageTiming(int index, int total, ExportStage stage, long elapsedMs) {
             this.index = index;
             this.total = total;
-            this.stage = stage;
+            this.stage = stage.name();
+            this.family = ExportStageMetadata.family(stage);
+            this.outputKind = ExportStageMetadata.outputKind(stage);
+            this.skippableByChecksum = ExportStageMetadata.skippableByChecksum(stage);
             this.elapsedMs = elapsedMs;
             this.elapsed = formatDuration(elapsedMs);
         }
