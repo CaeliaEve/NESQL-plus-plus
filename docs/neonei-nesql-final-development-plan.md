@@ -47,7 +47,7 @@
 - [ ] 分组展开结果预计算，避免运行时大计算。
 - [x] 每页资源依赖预计算：当前页、前一页、后一页需要哪些 atlas/animated atlas。
 - [x] 快速翻页取消旧页资源请求，只保留当前目标页最高优先级。
-- [ ] atlas miss 不阻塞主线程，缺图异步补齐。
+- [x] atlas miss 不阻塞主线程，缺图异步补齐。
 
 ## P3：配方页秒开 Bundle
 
@@ -98,6 +98,7 @@
 4. P2 browser layout 与 atlas 资源依赖绑定。
 5. P3 item-centric recipe bundle。
 6. P4 增量导出与增量编译。
+
 
 
 
