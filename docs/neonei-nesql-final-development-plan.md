@@ -54,7 +54,7 @@
 - [x] 生成 `publish/item-recipe-bundles/shard-*.json`。
 - [x] 生成 `publish/recipe-ui-bundles/shard-*.json`。
 - [x] 每个 item bundle 包含 producedBy、usedIn、summaryGroups、machineGroups、firstPageRecipes、uiPayloadRefs、assetRefs。
-- [ ] 前端打开配方优先读取 bundle / IndexedDB / OPFS，后端 API 只作 fallback。
+- [x] 前端打开配方优先读取 static item bundle + IndexedDB runtime cache，后端 API 只作 fallback；OPFS 留给 P6 大资源层。
 - [ ] 常见物品配方摘要目标 <100ms，完整配方组目标 <300ms。
 
 ## P4：导出 / 编译增量化
