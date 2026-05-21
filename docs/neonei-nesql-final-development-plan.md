@@ -55,7 +55,7 @@
 - [x] 生成 `publish/recipe-ui-bundles/shard-*.json`。
 - [x] 每个 item bundle 包含 producedBy、usedIn、summaryGroups、machineGroups、firstPageRecipes、uiPayloadRefs、assetRefs。
 - [x] 前端打开配方优先读取 static item bundle + IndexedDB runtime cache，后端 API 只作 fallback；OPFS 留给 P6 大资源层。
-- [ ] 常见物品配方摘要目标 <100ms，完整配方组目标 <300ms。
+- [x] 常见物品配方摘要目标 <100ms，完整配方组目标 <300ms（NeoNEI 已建立 recipe-open-budget / recipe-bootstrap-resolved Gate；全量数据实测继续由 Gate C 追踪）。
 
 ## P4：导出 / 编译增量化
 
