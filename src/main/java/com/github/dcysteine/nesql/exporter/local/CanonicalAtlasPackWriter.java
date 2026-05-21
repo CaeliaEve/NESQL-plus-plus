@@ -96,7 +96,7 @@ public class CanonicalAtlasPackWriter {
             return new ArrayList<>();
         }
 
-        int workers = Math.max(1, Math.min(Runtime.getRuntime().availableProcessors(), entries.size()));
+        int workers = Math.max(1, Math.min(Runtime.getRuntime().availableProcessors() * 2, entries.size()));
         if (workers == 1) {
             List<AtlasGroupManifest> groups = new ArrayList<>();
             for (Map.Entry<String, List<CanonicalRenderAsset>> entry : entries) {
@@ -219,7 +219,7 @@ public class CanonicalAtlasPackWriter {
             return sources;
         }
 
-        int workers = Math.max(1, Math.min(Runtime.getRuntime().availableProcessors(), assets.size()));
+        int workers = Math.max(1, Math.min(Runtime.getRuntime().availableProcessors() * 2, assets.size()));
         Logger.MOD.info("Loading {} static atlas source images with {} workers...", assets.size(), workers);
         ExecutorService executor = Executors.newFixedThreadPool(workers);
         try {

@@ -2,13 +2,21 @@ package com.github.dcysteine.nesql.exporter.local;
 
 import com.github.dcysteine.nesql.exporter.canonical.CanonicalExportMapper;
 import com.github.dcysteine.nesql.exporter.canonical.CanonicalItem;
+import codechicken.nei.CollapsibleItems;
+import codechicken.nei.ItemList;
+import codechicken.nei.ItemPanels;
 import com.github.dcysteine.nesql.exporter.main.Logger;
+import com.github.dcysteine.nesql.exporter.util.IdUtil;
 import com.github.dcysteine.nesql.sql.base.item.Item;
 import com.github.dcysteine.nesql.sql.base.item.ItemGroup;
 import com.github.dcysteine.nesql.sql.base.item.ItemStack;
 import com.github.dcysteine.nesql.sql.forge.OreDictionary;
 import com.google.gson.Gson;
 import com.google.gson.GsonBuilder;
+import com.google.gson.JsonArray;
+import com.google.gson.JsonElement;
+import com.google.gson.JsonObject;
+import com.google.gson.JsonParser;
 import jakarta.persistence.EntityManager;
 import net.minecraft.util.EnumChatFormatting;
 
@@ -18,6 +26,8 @@ import java.io.FileOutputStream;
 import java.io.FileReader;
 import java.io.IOException;
 import java.io.OutputStreamWriter;
+import java.io.FileInputStream;
+import java.io.InputStreamReader;
 import java.nio.charset.StandardCharsets;
 import java.security.MessageDigest;
 import java.util.ArrayList;
@@ -30,6 +40,7 @@ import java.util.Locale;
 import java.util.Map;
 import java.util.Set;
 import java.util.regex.Pattern;
+import java.util.zip.GZIPInputStream;
 
 /**
  * Writes the NeoNEI item browser layout contract at export time.
@@ -55,25 +66,137 @@ public class CanonicalBrowserLayoutIndexWriter {
             canonicalDir.mkdirs();
         }
 
-        ModBasedItemDataset dataset = ModBasedItemDatasetLoader.load(entityManager);
-        Map<String, Set<String>> oreDictionaryNamesByItemId = loadOreDictionaryNamesByItemId();
-        List<BrowserItemCandidate> candidates = new ArrayList<>();
-        int sourceOrder = 0;
-        for (Item item : dataset.items) {
-            ModBasedItemExporter.ItemDTO dto = dtoAssembler.toDto(item);
-            BrowserItemCandidate candidate = new BrowserItemCandidate();
-            candidate.itemId = dto.itemId;
-            candidate.modId = dto.modId;
-            candidate.internalName = dto.internalName;
-            candidate.localizedName = dto.localizedName;
-            candidate.damage = dto.damage;
-            candidate.tooltip = dto.tooltip;
-            candidate.nbt = dto.nbt;
-            candidate.sourceOrder = sourceOrder++;
-            candidate.oreDictionaryNames = oreDictionaryNamesByItemId.getOrDefault(dto.itemId, new LinkedHashSet<String>());
-            candidates.add(candidate);
+        List<BrowserItemCandidate> candidates = loadCandidatesFromDatabase();
+        if (candidates.isEmpty()) {
+            Logger.chatMessage(EnumChatFormatting.YELLOW
+                    + "Database item list is empty; loading browser candidates from existing items/*.json.gz shards.");
+            candidates = loadCandidatesFromItemShards();
+        }
+        if (candidates.isEmpty()) {
+            throw new IOException("No item candidates available for browser layout export in "
+                    + exportDirectory.getAbsolutePath());
         }
 
+        BrowserLayoutIndex index = buildNeiRuntimeIndex(candidates);
+        if (index == null) {
+            Logger.chatMessage(EnumChatFormatting.YELLOW
+                    + "NEI runtime browser snapshot unavailable; using deterministic NESQL++ fallback ordering.");
+            index = buildFallbackIndex(candidates);
+        }
+
+        writeIndex(canonicalDir, index);
+    }
+
+
+    private List<BrowserItemCandidate> loadCandidatesFromDatabase() {
+        List<BrowserItemCandidate> candidates = new ArrayList<>();
+        if (entityManager == null) {
+            return candidates;
+        }
+        try {
+            ModBasedItemDataset dataset = ModBasedItemDatasetLoader.load(entityManager);
+            Map<String, Set<String>> oreDictionaryNamesByItemId = loadOreDictionaryNamesByItemId();
+            int sourceOrder = 0;
+            for (Item item : dataset.items) {
+                ModBasedItemExporter.ItemDTO dto = dtoAssembler.toDto(item);
+                BrowserItemCandidate candidate = new BrowserItemCandidate();
+                candidate.itemId = dto.itemId;
+                candidate.modId = dto.modId;
+                candidate.internalName = dto.internalName;
+                candidate.localizedName = dto.localizedName;
+                candidate.damage = dto.damage;
+                candidate.tooltip = dto.tooltip;
+                candidate.nbt = dto.nbt;
+                candidate.sourceOrder = sourceOrder++;
+                candidate.oreDictionaryNames = oreDictionaryNamesByItemId.getOrDefault(
+                        dto.itemId,
+                        new LinkedHashSet<String>());
+                candidates.add(candidate);
+            }
+        } catch (Exception e) {
+            Logger.MOD.warn("Failed to load browser candidates from database; falling back to item shards", e);
+        }
+        return candidates;
+    }
+
+    private List<BrowserItemCandidate> loadCandidatesFromItemShards() throws IOException {
+        List<BrowserItemCandidate> candidates = new ArrayList<>();
+        File itemsDir = new File(exportDirectory, "items");
+        if (!itemsDir.exists()) {
+            return candidates;
+        }
+        List<File> shards = new ArrayList<>();
+        collectItemShardFiles(itemsDir, shards);
+        shards.sort((left, right) -> left.getAbsolutePath().compareToIgnoreCase(right.getAbsolutePath()));
+
+        int sourceOrder = 0;
+        Set<String> seenItemIds = new HashSet<>();
+        for (File shard : shards) {
+            try (FileInputStream fis = new FileInputStream(shard);
+                 GZIPInputStream gzip = new GZIPInputStream(fis);
+                 InputStreamReader reader = new InputStreamReader(gzip, StandardCharsets.UTF_8)) {
+                JsonElement root = new JsonParser().parse(reader);
+                if (!root.isJsonArray()) {
+                    continue;
+                }
+                JsonArray array = root.getAsJsonArray();
+                for (JsonElement element : array) {
+                    if (!element.isJsonObject()) {
+                        continue;
+                    }
+                    JsonObject object = element.getAsJsonObject();
+                    String itemId = readString(object, "itemId");
+                    if (itemId.isEmpty() || !seenItemIds.add(itemId)) {
+                        continue;
+                    }
+                    BrowserItemCandidate candidate = new BrowserItemCandidate();
+                    candidate.itemId = itemId;
+                    candidate.modId = readString(object, "modId");
+                    candidate.internalName = readString(object, "internalName");
+                    candidate.localizedName = readString(object, "localizedName");
+                    candidate.damage = readInt(object, "damage", 0);
+                    candidate.tooltip = readString(object, "tooltip");
+                    candidate.nbt = readString(object, "nbt");
+                    candidate.sourceOrder = sourceOrder++;
+                    candidates.add(candidate);
+                }
+            } catch (Exception e) {
+                Logger.MOD.warn("Failed to read item shard for browser layout: " + shard.getAbsolutePath(), e);
+            }
+        }
+        Logger.chatMessage(EnumChatFormatting.GRAY + "Loaded " + candidates.size() + " browser candidates from item shards.");
+        return candidates;
+    }
+
+    private static void collectItemShardFiles(File directory, List<File> files) {
+        File[] children = directory.listFiles();
+        if (children == null) {
+            return;
+        }
+        for (File child : children) {
+            if (child.isDirectory()) {
+                collectItemShardFiles(child, files);
+            } else if (child.getName().equals("items.json.gz")) {
+                files.add(child);
+            }
+        }
+    }
+
+    private static String readString(JsonObject object, String key) {
+        JsonElement element = object.get(key);
+        return element == null || element.isJsonNull() ? "" : element.getAsString();
+    }
+
+    private static int readInt(JsonObject object, String key, int fallback) {
+        try {
+            JsonElement element = object.get(key);
+            return element == null || element.isJsonNull() ? fallback : element.getAsInt();
+        } catch (Exception ignored) {
+            return fallback;
+        }
+    }
+
+    private BrowserLayoutIndex buildFallbackIndex(List<BrowserItemCandidate> candidates) {
         candidates.sort(CanonicalBrowserLayoutIndexWriter::compareBrowserOrder);
         for (int i = 0; i < candidates.size(); i++) {
             candidates.get(i).browserOrder = i;
@@ -89,10 +212,251 @@ public class CanonicalBrowserLayoutIndexWriter {
         Map<String, SyntheticAssignment> syntheticAssignments = buildSyntheticAssignments(candidates, blockedItemIds);
         Map<String, BrowserAssignment> assignments = mergeAssignments(candidates, curatedAssignments, syntheticAssignments);
 
+        BrowserLayoutIndex index = buildIndexFromAssignments(
+                candidates,
+                assignments,
+                "nesqlpp-browser-order:v1",
+                "collapsibleitems+variant-fallback:v1");
+        index.neiRuntimeSnapshot = false;
+        return index;
+    }
+
+    private BrowserLayoutIndex buildNeiRuntimeIndex(List<BrowserItemCandidate> candidates) {
+        try {
+            List<net.minecraft.item.ItemStack> runtimeItems = collectNeiRuntimeItems();
+            if (runtimeItems.isEmpty()) {
+                return null;
+            }
+
+            Map<String, BrowserItemCandidate> candidateById = new LinkedHashMap<>();
+            for (BrowserItemCandidate candidate : candidates) {
+                candidateById.put(candidate.itemId, candidate);
+                candidateById.put(stripItemKindPrefix(candidate.itemId), candidate);
+            }
+
+            List<BrowserItemCandidate> orderedCandidates = new ArrayList<>();
+            Set<String> seenItemIds = new HashSet<>();
+            Map<String, BrowserAssignment> assignments = new LinkedHashMap<>();
+            Map<String, List<String>> groupMembers = new LinkedHashMap<>();
+            Map<String, String> groupLabels = new LinkedHashMap<>();
+            Map<String, Integer> groupSortOrders = new LinkedHashMap<>();
+            int browserOrder = 0;
+            int nextGroupSortOrder = 0;
+
+            for (net.minecraft.item.ItemStack stack : runtimeItems) {
+                if (stack == null || stack.getItem() == null) {
+                    continue;
+                }
+                String itemId;
+                try {
+                    itemId = IdUtil.itemId(stack);
+                } catch (Throwable ignored) {
+                    continue;
+                }
+                BrowserItemCandidate candidate = candidateById.get(itemId);
+                if (candidate == null) {
+                    candidate = candidateById.get("i~" + itemId);
+                }
+                if (candidate == null || !seenItemIds.add(candidate.itemId)) {
+                    continue;
+                }
+                candidate.browserOrder = browserOrder++;
+                orderedCandidates.add(candidate);
+
+                BrowserAssignment assignment = new BrowserAssignment();
+                assignment.itemId = candidate.itemId;
+                int groupIndex = safeNeiGroupIndex(stack);
+                if (groupIndex >= 0) {
+                    String groupKey = "nei:" + groupIndex;
+                    String groupLabel = safeNeiGroupLabel(groupIndex);
+                    assignment.groupKey = groupKey;
+                    assignment.groupLabel = groupLabel;
+                    if (!groupSortOrders.containsKey(groupKey)) {
+                        groupSortOrders.put(groupKey, nextGroupSortOrder++);
+                    }
+                    assignment.groupSortOrder = groupSortOrders.get(groupKey);
+                    groupLabels.putIfAbsent(groupKey, groupLabel);
+                    groupMembers.computeIfAbsent(groupKey, ignored -> new ArrayList<>()).add(candidate.itemId);
+                }
+                assignments.put(candidate.itemId, assignment);
+            }
+
+            // Keep augmented/export-only stacks available after the true NEI list so recipe-only variants
+            // (for example synthesized Thaumcraft wand combinations) do not disappear from NeoNEI.
+            List<BrowserItemCandidate> missingCandidates = new ArrayList<>();
+            for (BrowserItemCandidate candidate : candidates) {
+                if (!seenItemIds.contains(candidate.itemId)) {
+                    missingCandidates.add(candidate);
+                }
+            }
+            missingCandidates.sort(CanonicalBrowserLayoutIndexWriter::compareBrowserOrder);
+            Map<String, BrowserAssignment> fallbackAssignments = buildFallbackAssignments(missingCandidates);
+            for (BrowserItemCandidate candidate : missingCandidates) {
+                candidate.browserOrder = browserOrder++;
+                orderedCandidates.add(candidate);
+                BrowserAssignment assignment = fallbackAssignments.get(candidate.itemId);
+                if (assignment == null) {
+                    assignment = new BrowserAssignment();
+                    assignment.itemId = candidate.itemId;
+                    assignment.groupSize = 1;
+                    assignment.representativeItemId = candidate.itemId;
+                }
+                if (assignment.groupKey == null || assignment.groupSize <= 1) {
+                    assignment.groupSortOrder = nextGroupSortOrder++;
+                } else {
+                    String fallbackGroupKey = "fallback:" + assignment.groupKey;
+                    assignment.groupKey = fallbackGroupKey;
+                    if (!groupSortOrders.containsKey(fallbackGroupKey)) {
+                        groupSortOrders.put(fallbackGroupKey, nextGroupSortOrder++);
+                    }
+                    assignment.groupSortOrder = groupSortOrders.get(fallbackGroupKey);
+                }
+                assignments.put(candidate.itemId, assignment);
+            }
+
+            for (Map.Entry<String, List<String>> entry : groupMembers.entrySet()) {
+                String groupKey = entry.getKey();
+                List<String> members = entry.getValue();
+                String representative = members.isEmpty() ? null : members.get(0);
+                int groupSize = members.size();
+                for (String itemId : members) {
+                    BrowserAssignment assignment = assignments.get(itemId);
+                    if (assignment == null) {
+                        continue;
+                    }
+                    assignment.groupLabel = groupLabels.get(groupKey);
+                    assignment.groupSize = groupSize;
+                    assignment.representativeItemId = representative;
+                    assignment.groupSortOrder = groupSortOrders.getOrDefault(groupKey, assignment.groupSortOrder);
+                }
+            }
+
+            BrowserLayoutIndex index = buildIndexFromAssignments(
+                    orderedCandidates,
+                    assignments,
+                    "nei-runtime-itemlist:v1",
+                    "nei-collapsibleitems-runtime:v1");
+            index.neiRuntimeSnapshot = true;
+            index.neiRuntimeItemCount = runtimeItems.size();
+            index.exportOnlyItemCount = missingCandidates.size();
+            return index;
+        } catch (Throwable t) {
+            Logger.MOD.warn("Failed to build NEI runtime browser snapshot; falling back", t);
+            return null;
+        }
+    }
+
+    private static Map<String, BrowserAssignment> buildFallbackAssignments(List<BrowserItemCandidate> candidates) {
+        Map<String, BrowserAssignment> curatedAssignments = buildCollapsibleAssignments(candidates);
+        Set<String> blockedItemIds = new HashSet<>();
+        for (BrowserAssignment assignment : curatedAssignments.values()) {
+            if (assignment.groupKey != null && assignment.groupSize > 1) {
+                blockedItemIds.add(assignment.itemId);
+            }
+        }
+        Map<String, SyntheticAssignment> syntheticAssignments = buildSyntheticAssignments(candidates, blockedItemIds);
+        return mergeAssignments(candidates, curatedAssignments, syntheticAssignments);
+    }
+
+    private static String stripItemKindPrefix(String itemId) {
+        return itemId != null && itemId.startsWith("i~") ? itemId.substring(2) : itemId;
+    }
+
+    private static List<net.minecraft.item.ItemStack> collectNeiRuntimeItems() {
+        List<net.minecraft.item.ItemStack> panelItems = ItemPanels.itemPanel != null
+                ? ItemPanels.itemPanel.getItems()
+                : null;
+        if (panelItems != null && !panelItems.isEmpty()) {
+            return new ArrayList<>(panelItems);
+        }
+        if (ItemList.items != null && !ItemList.items.isEmpty()) {
+            return new ArrayList<>(ItemList.items);
+        }
+        return new ArrayList<>();
+    }
+
+    private static int safeNeiGroupIndex(net.minecraft.item.ItemStack stack) {
+        try {
+            java.lang.reflect.Method method = CollapsibleItems.class.getDeclaredMethod(
+                    "getGroupIndex",
+                    net.minecraft.item.ItemStack.class);
+            method.setAccessible(true);
+            Object value = method.invoke(null, stack);
+            int cachedIndex = value instanceof Number ? ((Number) value).intValue() : -1;
+            if (cachedIndex >= 0) {
+                return cachedIndex;
+            }
+        } catch (Throwable ignored) {
+        }
+        return matchNeiGroupIndex(stack);
+    }
+
+    private static int matchNeiGroupIndex(net.minecraft.item.ItemStack stack) {
+        try {
+            java.util.List<?> groups = getNeiGroups();
+            for (int i = 0; i < groups.size(); i++) {
+                Object group = groups.get(i);
+                if (group == null) {
+                    continue;
+                }
+                java.lang.reflect.Method matches = group.getClass().getDeclaredMethod(
+                        "matches",
+                        net.minecraft.item.ItemStack.class);
+                matches.setAccessible(true);
+                Object result = matches.invoke(group, stack);
+                if (Boolean.TRUE.equals(result)) {
+                    return i;
+                }
+            }
+        } catch (Throwable ignored) {
+        }
+        return -1;
+    }
+
+    private static String safeNeiGroupLabel(int groupIndex) {
+        try {
+            java.lang.reflect.Method method = CollapsibleItems.class.getDeclaredMethod("getDisplayName", int.class);
+            method.setAccessible(true);
+            Object value = method.invoke(null, groupIndex);
+            String label = value != null ? String.valueOf(value) : null;
+            if (label != null && !label.trim().isEmpty()) {
+                return label;
+            }
+        } catch (Throwable ignored) {
+        }
+        try {
+            java.util.List<?> groups = getNeiGroups();
+            if (groupIndex >= 0 && groupIndex < groups.size()) {
+                Object group = groups.get(groupIndex);
+                java.lang.reflect.Field field = group.getClass().getDeclaredField("displayName");
+                field.setAccessible(true);
+                Object value = field.get(group);
+                String label = value != null ? String.valueOf(value) : null;
+                if (label != null && !label.trim().isEmpty()) {
+                    return label;
+                }
+            }
+        } catch (Throwable ignored) {
+        }
+        return "Group " + (groupIndex + 1);
+    }
+
+    private static java.util.List<?> getNeiGroups() throws Exception {
+        java.lang.reflect.Field groupsField = CollapsibleItems.class.getDeclaredField("groups");
+        groupsField.setAccessible(true);
+        Object groups = groupsField.get(null);
+        return groups instanceof java.util.List ? (java.util.List<?>) groups : java.util.Collections.emptyList();
+    }
+
+    private BrowserLayoutIndex buildIndexFromAssignments(
+            List<BrowserItemCandidate> candidates,
+            Map<String, BrowserAssignment> assignments,
+            String orderSource,
+            String groupingSource) {
         BrowserLayoutIndex index = new BrowserLayoutIndex();
         index.generatedAt = System.currentTimeMillis();
-        index.source.order = "nesqlpp-browser-order:v1";
-        index.source.grouping = "collapsibleitems+variant-fallback:v1";
+        index.source.order = orderSource;
+        index.source.grouping = groupingSource;
 
         Map<String, BrowserGroup> groups = new LinkedHashMap<>();
         Set<String> seenDefaultGroups = new HashSet<>();
@@ -101,6 +465,12 @@ public class CanonicalBrowserLayoutIndexWriter {
             BrowserAssignment assignment = assignments.get(candidate.itemId);
             if (assignment == null) {
                 continue;
+            }
+            if (assignment.groupSize <= 0) {
+                assignment.groupSize = 1;
+            }
+            if (assignment.representativeItemId == null) {
+                assignment.representativeItemId = candidate.itemId;
             }
 
             BrowserLayoutItem item = new BrowserLayoutItem();
@@ -125,8 +495,7 @@ public class CanonicalBrowserLayoutIndexWriter {
                 created.groupLabel = assignment.groupLabel;
                 created.groupSize = assignment.groupSize;
                 created.groupSortOrder = assignment.groupSortOrder;
-                created.representativeItemId =
-                        assignment.representativeItemId != null ? assignment.representativeItemId : candidate.itemId;
+                created.representativeItemId = assignment.representativeItemId;
                 return created;
             });
             group.memberItemIds.add(candidate.itemId);
@@ -145,7 +514,10 @@ public class CanonicalBrowserLayoutIndexWriter {
         index.itemCount = index.items.size();
         index.groupCount = index.groups.size();
         index.defaultEntryCount = index.defaultEntries.size();
+        return index;
+    }
 
+    private void writeIndex(File canonicalDir, BrowserLayoutIndex index) throws IOException {
         File outputFile = new File(canonicalDir, OUTPUT_FILE);
         Gson gson = new GsonBuilder().serializeNulls().create();
         try (FileOutputStream fos = new FileOutputStream(outputFile);
@@ -158,7 +530,8 @@ public class CanonicalBrowserLayoutIndexWriter {
         Logger.chatMessage(EnumChatFormatting.GRAY
                 + "  items=" + index.itemCount
                 + ", groups=" + index.groupCount
-                + ", defaultEntries=" + index.defaultEntryCount);
+                + ", defaultEntries=" + index.defaultEntryCount
+                + ", source=" + index.source.order);
     }
 
     private Map<String, Set<String>> loadOreDictionaryNamesByItemId() {
@@ -710,6 +1083,9 @@ public class CanonicalBrowserLayoutIndexWriter {
         String schemaVersion = "nesqlpp/browser-layout-index/v1";
         long generatedAt;
         BrowserLayoutSource source = new BrowserLayoutSource();
+        boolean neiRuntimeSnapshot;
+        int neiRuntimeItemCount;
+        int exportOnlyItemCount;
         int itemCount;
         int groupCount;
         int defaultEntryCount;

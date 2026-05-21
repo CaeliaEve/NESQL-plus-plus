@@ -101,7 +101,7 @@ public class CanonicalAnimatedAtlasPackWriter {
             return new ArrayList<>();
         }
 
-        int workers = Math.max(1, Math.min(Runtime.getRuntime().availableProcessors(), entries.size()));
+        int workers = Math.max(1, Math.min(Runtime.getRuntime().availableProcessors() * 2, entries.size()));
         if (workers == 1) {
             List<AnimatedAtlasGroupManifest> groups = new ArrayList<>();
             for (Map.Entry<String, List<CanonicalRenderAsset>> entry : entries) {

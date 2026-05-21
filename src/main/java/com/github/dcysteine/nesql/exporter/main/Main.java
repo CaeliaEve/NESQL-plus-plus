@@ -74,6 +74,7 @@ public final class Main {
         registerServerCommand(event, new GregTechMultiblockExportCommand(), "/nesql-multiblocks");
         registerServerCommand(event, new BlockFaceExportCommand(), "/nesql-blockfaces");
         registerServerCommand(event, new IndustrialSlaughterhouseEntityExportCommand(), "/nesql-eec-models");
+        registerServerCommand(event, new BrowserLayoutExportCommand(), "/nesql-browser-layout");
         event.registerServerCommand(new ThaumcraftUnlockAspectsCommand()); // Unlock scanned item aspects
         Logger.MOD.info("Server-side command registered: /nesql-tc-unlock-aspects");
         Logger.MOD.info("  /nesql-tc-unlock-aspects - Unlock scanned Thaumcraft item aspects for a player");
@@ -90,6 +91,7 @@ public final class Main {
         registerOptionalClientCommand(new GregTechMultiblockExportCommand(), "/nesql-multiblocks"); // GregTech multiblock voxel blueprints
         registerOptionalClientCommand(new BlockFaceExportCommand(), "/nesql-blockfaces"); // 3D block faces only
         registerOptionalClientCommand(new IndustrialSlaughterhouseEntityExportCommand(), "/nesql-eec-models"); // EEC mob preview models
+        registerOptionalClientCommand(new BrowserLayoutExportCommand(), "/nesql-browser-layout"); // NEI browser order + collapsible groups only
 
         Logger.MOD.info("Client export command registration finished.");
         Logger.MOD.info("  /nesql - Complete export (data + images) [profile={}]", ExportProfile.FULL_V104.profileId);
@@ -102,6 +104,7 @@ public final class Main {
         Logger.MOD.info("  /nesql-multiblocks - GregTech multiblock voxel blueprints");
         Logger.MOD.info("  /nesql-blockfaces - 3D block face metadata + per-face textures + UV");
         Logger.MOD.info("  /nesql-eec-models - Industrial slaughterhouse / EEC 3D entity models + preview fallbacks");
+        Logger.MOD.info("  /nesql-browser-layout - Rebuild NEI browser order + collapsible groups only");
     }
 
     private void registerServerCommand(FMLServerStartingEvent event, ICommand command, String label) {
@@ -159,3 +162,5 @@ public final class Main {
         }
     }
 }
+
+

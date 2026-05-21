@@ -617,8 +617,14 @@ public final class CanonicalRenderAssetCollector {
         File alternateGif = replaceExtension(familyIndex, normalizedKey, ".gif");
         if (exactPath != null) {
             String exactName = exactPath.getName().toLowerCase();
-            if (exactName.endsWith(".png") && alternateGif != null && inspectGifAnimation(alternateGif).animated) {
-                return alternateGif;
+            if (exactName.endsWith(".png")) {
+                if (alternateGif != null && inspectGifAnimation(alternateGif).animated) {
+                    return alternateGif;
+                }
+                File animatedSibling = findAnimatedSiblingVariantArtifact(familyIndex, normalizedKey);
+                if (animatedSibling != null) {
+                    return animatedSibling;
+                }
             }
             return exactPath;
         }
@@ -659,6 +665,32 @@ public final class CanonicalRenderAssetCollector {
         }
         String swappedPath = normalizedImagePath.substring(0, dot) + extension;
         return familyIndex.exactArtifacts.get(swappedPath);
+    }
+
+    private File findAnimatedSiblingVariantArtifact(FamilyImageIndex familyIndex, String normalizedImagePath) {
+        String requestedStem = stripImageExtension(normalizedImagePath);
+        List<File> candidates = familyIndex.siblingVariantCandidatesByStem.get(requestedStem);
+        if ((candidates == null || candidates.isEmpty())) {
+            String siblingKey = siblingVariantStemKey(normalizedImagePath);
+            if (siblingKey != null) {
+                candidates = familyIndex.siblingVariantCandidatesByStem.get(siblingKey);
+            }
+        }
+        if (candidates == null || candidates.isEmpty()) {
+            return null;
+        }
+
+        File best = null;
+        for (File candidate : candidates) {
+            String name = candidate.getName().toLowerCase();
+            if (!name.endsWith(".gif") || !inspectGifAnimation(candidate).animated) {
+                continue;
+            }
+            if (best == null || candidate.getName().compareToIgnoreCase(best.getName()) < 0) {
+                best = candidate;
+            }
+        }
+        return best;
     }
 
     private File findSiblingVariantArtifact(FamilyImageIndex familyIndex, String normalizedImagePath) {

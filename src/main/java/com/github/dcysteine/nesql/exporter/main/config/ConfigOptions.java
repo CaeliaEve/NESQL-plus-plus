@@ -55,9 +55,10 @@ public final class ConfigOptions {
 
     public static final Option<Integer> RENDER_ICONS_PER_TICK =
             new IntegerOption(
-                    Category.OPTIONS, "render_icons_per_tick", 256,
+                    Category.OPTIONS, "render_icons_per_tick", 512,
                     "The number of icons to render per tick. Lower this if your computer"
-                            + " can't handle the default.")
+                            + " can't handle the default. NeoNEI export defaults to a high-throughput"
+                            + " value so full data+image exports finish faster on GTNH-sized packs.")
                     .register();
 
     public static final Option<Integer> LOGGING_FREQUENCY =

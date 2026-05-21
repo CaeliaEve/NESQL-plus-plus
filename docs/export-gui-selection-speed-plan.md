@@ -1,4 +1,4 @@
-﻿# NESQL++ 导出 GUI 与提速开发清单
+# NESQL++ 导出 GUI 与提速开发清单
 
 目标：修复 `/nesql [文件名]` 不弹 GUI 的问题，并把默认命令升级为“先选择导出模块，再启动导出”；同时在不改变现有 NeoNEI 输出结构的前提下，先加入可观测耗时与安全跳过能力，为后续增量/并行提速铺路。
 
@@ -29,3 +29,7 @@
 - [x] 导出后校验报告历史对比第一轮：记录 previous/delta 关键计数。
 - [x] 导出后校验报告 missing texture 第一轮：render-assets 主产物与 timeline frame 缺失计数。
 - 后续强化：用 content hash 判断纹理/renderer 变化，减少误复用。
+## Browser layout-only export
+- [x] Added `/nesql-browser-layout [repository suffix]` to rebuild only `canonical/browser-layout-index.json`.
+- [x] Reuses the existing `nesql-db`; skips recipe collection, image rendering, atlas writes, snapshots, multiblocks, and entity models.
+- [x] Intended for fast NEI item order / collapsible group refresh after a previous full export.
