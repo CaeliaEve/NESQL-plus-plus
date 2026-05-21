@@ -51,9 +51,9 @@
 
 ## P3：配方页秒开 Bundle
 
-- [ ] 生成 `publish/item-recipe-bundles/shard-*.json`。
-- [ ] 生成 `publish/recipe-ui-bundles/shard-*.json`。
-- [ ] 每个 item bundle 包含 producedBy、usedIn、summaryGroups、machineGroups、firstPageRecipes、uiPayloadRefs、assetRefs。
+- [x] 生成 `publish/item-recipe-bundles/shard-*.json`。
+- [x] 生成 `publish/recipe-ui-bundles/shard-*.json`。
+- [x] 每个 item bundle 包含 producedBy、usedIn、summaryGroups、machineGroups、firstPageRecipes、uiPayloadRefs、assetRefs。
 - [ ] 前端打开配方优先读取 bundle / IndexedDB / OPFS，后端 API 只作 fallback。
 - [ ] 常见物品配方摘要目标 <100ms，完整配方组目标 <300ms。
 
