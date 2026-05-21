@@ -617,10 +617,10 @@ public final class CanonicalRenderAssetCollector {
         File alternateGif = replaceExtension(familyIndex, normalizedKey, ".gif");
         if (exactPath != null) {
             String exactName = exactPath.getName().toLowerCase();
+            if (exactName.endsWith(".png") && alternateGif != null && inspectGifAnimation(alternateGif).animated) {
+                return alternateGif;
+            }
             if (exactName.endsWith(".png")) {
-                if (alternateGif != null && inspectGifAnimation(alternateGif).animated) {
-                    return alternateGif;
-                }
                 File animatedSibling = findAnimatedSiblingVariantArtifact(familyIndex, normalizedKey);
                 if (animatedSibling != null) {
                     return animatedSibling;

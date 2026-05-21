@@ -3,6 +3,7 @@ package com.github.dcysteine.nesql.exporter.main;
 import com.github.dcysteine.nesql.exporter.canonical.CanonicalRenderAsset;
 import com.google.gson.Gson;
 import com.google.gson.GsonBuilder;
+import com.google.gson.JsonElement;
 import com.google.gson.JsonObject;
 import com.google.gson.JsonParser;
 import net.minecraft.util.EnumChatFormatting;
@@ -47,8 +48,19 @@ final class ExportValidationReportWriter {
                     readManifestCount(new File(canonicalDir, "atlas-manifest.json"), "assetCount");
             report.animatedAtlasManifestAssets =
                     readManifestCount(new File(canonicalDir, "animated-atlas-manifest.json"), "assetCount");
+            report.totalAtlasManifestAssets = report.staticAtlasManifestAssets + report.animatedAtlasManifestAssets;
+            report.browserLayoutEntries =
+                    readArrayCount(new File(canonicalDir, "browser-layout-index.json"), "entries", "items", "groups");
+            report.multiblockBlueprints =
+                    readArrayCount(new File(canonicalDir, "multiblock-blueprints.json"), "blueprints", "entries");
+            report.entityPreviewEntries =
+                    readArrayCount(new File(canonicalDir, "entity-previews.json"), "entries");
+            report.entityModelEntries =
+                    readArrayCount(new File(canonicalDir, "entity-models.json"), "entries");
             inspectRenderAssets(repositoryDirectory, canonicalDir, report);
+            report.atlasManifestCoverageRatio = ratio(report.totalAtlasManifestAssets, report.renderAssetManifestAssets);
             File reportFile = new File(canonicalDir, "export-validation-report.json");
+            File healthReportFile = new File(canonicalDir, "export-health-report.json");
             ValidationReport previousReport = readPreviousReport(reportFile);
             if (previousReport != null) {
                 report.previous = new PreviousSnapshot();
@@ -71,6 +83,10 @@ final class ExportValidationReportWriter {
             collectWarnings(report);
 
             try (FileOutputStream fos = new FileOutputStream(reportFile);
+                 OutputStreamWriter writer = new OutputStreamWriter(fos, StandardCharsets.UTF_8)) {
+                new GsonBuilder().setPrettyPrinting().create().toJson(report, writer);
+            }
+            try (FileOutputStream fos = new FileOutputStream(healthReportFile);
                  OutputStreamWriter writer = new OutputStreamWriter(fos, StandardCharsets.UTF_8)) {
                 new GsonBuilder().setPrettyPrinting().create().toJson(report, writer);
             }
@@ -132,6 +148,9 @@ final class ExportValidationReportWriter {
             report.warnings.add("Singularity-like render assets exported without animation: "
                     + report.suspiciousStaticSingularityAssets);
         }
+        if (report.renderAssetManifestAssets > 0 && report.totalAtlasManifestAssets == 0) {
+            report.warnings.add("Render assets exist but no atlas manifest assets were found.");
+        }
     }
 
     private static void inspectRenderAssets(File repositoryDirectory, File canonicalDir, ValidationReport report) {
@@ -165,6 +184,7 @@ final class ExportValidationReportWriter {
         String primaryPath = firstNonEmpty(asset.primaryArtifact, asset.staticFile, asset.nativeSpriteAtlasFile);
         if (primaryPath == null || !exportFileExists(repositoryDirectory, primaryPath)) {
             report.renderAssetMissingPrimaryArtifacts++;
+            addSample(report.renderAssetMissingPrimaryArtifactSamples, firstNonEmpty(asset.assetId, asset.sourcePath, primaryPath));
         }
 
         inspectSingularityAnimation(asset, report);
@@ -179,6 +199,7 @@ final class ExportValidationReportWriter {
             Object path = frame.get("path");
             if (path instanceof String && !exportFileExists(repositoryDirectory, (String) path)) {
                 report.renderAssetMissingTimelineFrames++;
+                addSample(report.renderAssetMissingTimelineFrameSamples, firstNonEmpty(asset.assetId, asset.sourcePath, (String) path));
             }
         }
     }
@@ -218,6 +239,12 @@ final class ExportValidationReportWriter {
         report.suspiciousStaticSingularityAssets++;
         if (report.suspiciousStaticSingularitySamples.size() < 100) {
             report.suspiciousStaticSingularitySamples.add(firstNonEmpty(asset.assetId, asset.sourcePath, asset.primaryArtifact));
+        }
+    }
+
+    private static void addSample(List<String> samples, String value) {
+        if (value != null && !value.isEmpty() && samples.size() < 100 && !samples.contains(value)) {
+            samples.add(value);
         }
     }
 
@@ -291,6 +318,39 @@ final class ExportValidationReportWriter {
         return 0;
     }
 
+    private static int readArrayCount(File file, String... memberNames) {
+        if (!file.exists()) {
+            return 0;
+        }
+        try (FileInputStream fis = new FileInputStream(file);
+             InputStreamReader reader = new InputStreamReader(fis, StandardCharsets.UTF_8)) {
+            JsonObject object = new JsonParser().parse(reader).getAsJsonObject();
+            int total = 0;
+            for (String memberName : memberNames) {
+                if (!object.has(memberName)) {
+                    continue;
+                }
+                JsonElement element = object.get(memberName);
+                if (element.isJsonArray()) {
+                    total += element.getAsJsonArray().size();
+                } else if (element.isJsonPrimitive() && element.getAsJsonPrimitive().isNumber()) {
+                    total += element.getAsInt();
+                }
+            }
+            return total;
+        } catch (Exception e) {
+            Logger.MOD.warn("Failed to read array count from {}", file.getAbsolutePath(), e);
+        }
+        return 0;
+    }
+
+    private static Double ratio(int numerator, int denominator) {
+        if (denominator <= 0) {
+            return null;
+        }
+        return Math.round((numerator / (double) denominator) * 10000.0) / 10000.0;
+    }
+
     private static int countFiles(File root, String suffix) {
         if (root == null || !root.exists()) {
             return 0;
@@ -339,9 +399,17 @@ final class ExportValidationReportWriter {
         int animatedAtlasPngFiles;
         int staticAtlasManifestAssets;
         int animatedAtlasManifestAssets;
+        int totalAtlasManifestAssets;
+        Double atlasManifestCoverageRatio;
         int renderAssetManifestAssets;
         int renderAssetMissingPrimaryArtifacts;
+        List<String> renderAssetMissingPrimaryArtifactSamples = new ArrayList<String>();
         int renderAssetMissingTimelineFrames;
+        List<String> renderAssetMissingTimelineFrameSamples = new ArrayList<String>();
+        int browserLayoutEntries;
+        int multiblockBlueprints;
+        int entityPreviewEntries;
+        int entityModelEntries;
         int singularityLikeRenderAssets;
         int animatedSingularityLikeRenderAssets;
         int suspiciousStaticSingularityAssets;
