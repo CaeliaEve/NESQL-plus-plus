@@ -49,8 +49,10 @@ final class ExportValidationReportWriter {
             report.animatedAtlasManifestAssets =
                     readManifestCount(new File(canonicalDir, "animated-atlas-manifest.json"), "assetCount");
             report.totalAtlasManifestAssets = report.staticAtlasManifestAssets + report.animatedAtlasManifestAssets;
+            File browserLayoutFile = new File(canonicalDir, "browser-layout-index.json");
+            report.browserLayoutPresent = browserLayoutFile.exists();
             report.browserLayoutEntries =
-                    readArrayCount(new File(canonicalDir, "browser-layout-index.json"), "entries", "items", "groups");
+                    readArrayCount(browserLayoutFile, "entries", "items", "groups");
             report.multiblockBlueprints =
                     readArrayCount(new File(canonicalDir, "multiblock-blueprints.json"), "blueprints", "entries");
             report.entityPreviewEntries =
@@ -121,6 +123,12 @@ final class ExportValidationReportWriter {
     }
 
     private static void collectWarnings(ValidationReport report) {
+        if (!report.renderAssetManifestPresent) {
+            report.warnings.add("Missing canonical/render-assets.json.");
+        }
+        if (!report.browserLayoutPresent) {
+            report.warnings.add("Missing canonical/browser-layout-index.json.");
+        }
         if (report.itemsJsonGzFiles == 0) {
             report.warnings.add("No item json.gz shards found under items/.");
         }
@@ -155,6 +163,7 @@ final class ExportValidationReportWriter {
 
     private static void inspectRenderAssets(File repositoryDirectory, File canonicalDir, ValidationReport report) {
         File manifestFile = new File(canonicalDir, "render-assets.json");
+        report.renderAssetManifestPresent = manifestFile.exists();
         if (!manifestFile.exists()) {
             return;
         }
@@ -319,6 +328,8 @@ final class ExportValidationReportWriter {
     }
 
     private static int readArrayCount(File file, String... memberNames) {
+        // Presence checks for key optional contracts are tracked separately so
+        // the report can distinguish "empty" from "not produced".
         if (!file.exists()) {
             return 0;
         }
@@ -402,6 +413,8 @@ final class ExportValidationReportWriter {
         int totalAtlasManifestAssets;
         Double atlasManifestCoverageRatio;
         int renderAssetManifestAssets;
+        boolean renderAssetManifestPresent;
+        boolean browserLayoutPresent;
         int renderAssetMissingPrimaryArtifacts;
         List<String> renderAssetMissingPrimaryArtifactSamples = new ArrayList<String>();
         int renderAssetMissingTimelineFrames;
