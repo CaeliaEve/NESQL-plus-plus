@@ -318,3 +318,56 @@ test('nei recipe export captures raw positioned slot geometry for the layout con
     'Positioned stack layout extraction should preserve raw NEI pixel-space slot geometry',
   );
 });
+
+// P0 export integrity/report contract guardrails.
+test('export pipeline writes manifest, checksums, and health report aliases', () => {
+  const runnerSource = read('src/main/java/com/github/dcysteine/nesql/exporter/main/ExportStageRunner.java');
+  const validationSource = read('src/main/java/com/github/dcysteine/nesql/exporter/main/ExportValidationReportWriter.java');
+  const manifestSource = read('src/main/java/com/github/dcysteine/nesql/exporter/main/ExportIntegrityManifestWriter.java');
+
+  assert.equal(
+    runnerSource.includes('ExportIntegrityManifestWriter.write(exportContext);'),
+    true,
+    'Export runner should write export-manifest/stage-checksums after validation',
+  );
+  assert.equal(
+    validationSource.includes('export-health-report.json'),
+    true,
+    'Validation writer should emit the canonical export-health-report alias',
+  );
+  assert.equal(
+    manifestSource.includes('export-manifest.json'),
+    true,
+    'Integrity writer should emit export-manifest.json',
+  );
+  assert.equal(
+    manifestSource.includes('stage-checksums.json'),
+    true,
+    'Integrity writer should emit stage-checksums.json',
+  );
+});
+
+test('export health report surfaces missing contracts and samples', () => {
+  const validationSource = read('src/main/java/com/github/dcysteine/nesql/exporter/main/ExportValidationReportWriter.java');
+
+  assert.equal(
+    validationSource.includes('Missing canonical/render-assets.json.'),
+    true,
+    'Health report should warn when render-assets is absent',
+  );
+  assert.equal(
+    validationSource.includes('Missing canonical/browser-layout-index.json.'),
+    true,
+    'Health report should warn when browser layout is absent',
+  );
+  assert.equal(
+    validationSource.includes('renderAssetMissingPrimaryArtifactSamples'),
+    true,
+    'Health report should include missing primary artifact samples',
+  );
+  assert.equal(
+    validationSource.includes('renderAssetMissingTimelineFrameSamples'),
+    true,
+    'Health report should include missing timeline frame samples',
+  );
+});
