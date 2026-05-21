@@ -44,7 +44,7 @@
 - [x] NESQL++ 导出 NEI 浏览排序与折叠分组。
 - [x] NeoNEI 前端消费 browser layout 并显示分组。
 - [x] browser layout 与 atlas index 强绑定。
-- [ ] 分组展开结果预计算，避免运行时大计算。
+- [x] 分组展开结果预计算，避免运行时大计算。
 - [x] 每页资源依赖预计算：当前页、前一页、后一页需要哪些 atlas/animated atlas。
 - [x] 快速翻页取消旧页资源请求，只保留当前目标页最高优先级。
 - [x] atlas miss 不阻塞主线程，缺图异步补齐。
