@@ -73,9 +73,9 @@
 
 ## P6：前端大资源缓存升级
 
-- [ ] IndexedDB 存 manifest、search pack、browser layout、item bundle、小 JSON。
-- [ ] OPFS 试点存大 atlas、animated atlas、大 recipe bundle、entity preview、multiblock preview。
-- [ ] 缓存层级：Memory LRU → IndexedDB metadata → OPFS blob → HTTP/CDN → backend fallback。
+- [x] IndexedDB 存 manifest、search pack、browser layout、item bundle、小 JSON。
+- [x] OPFS 试点存大 atlas、animated atlas、大 recipe bundle、entity preview、multiblock preview。
+- [x] 缓存层级：Memory LRU → IndexedDB metadata → OPFS blob → HTTP/CDN → backend fallback。
 
 ## P7：Worker / OffscreenCanvas 渲染增强
 
