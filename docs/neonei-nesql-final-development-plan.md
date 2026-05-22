@@ -1,4 +1,4 @@
-﻿# NeoNEI / NESQL++ 最终开发清单
+# NeoNEI / NESQL++ 最终开发清单
 
 > 目标：把 NeoNEI 从“运行时拼数据的网站”推进成“网页形式的 NEI 本地索引器”：NESQL++ 在游戏内导出完整契约，NeoNEI 编译成内容寻址发布包，前端基于 Manifest / Atlas / Bundle 秒开，并支持未来公共网站 CDN 分发。
 
@@ -11,11 +11,11 @@
 
 ## 暂不作为主线
 
-- [ ] 不全面迁移 NestJS / Fastify。
-- [ ] 不用 GraphQL 替代当前 REST + 静态 publish bundle。
-- [ ] 不引入 Redis 作为当前主缓存层。
-- [ ] 不把主页右侧浏览区回退成 DOM 虚拟列表。
-- [ ] 不把 WebGPU 放入近期主线。
+- [x] 不全面迁移 NestJS / Fastify（已确认为非主线）。
+- [x] 不用 GraphQL 替代当前 REST + 静态 publish bundle（已确认为非主线）。
+- [x] 不引入 Redis 作为当前主缓存层（已确认为非主线）。
+- [x] 不把主页右侧浏览区回退成 DOM 虚拟列表（已确认为非主线）。
+- [x] 不把 WebGPU 放入近期主线（已确认为非主线）。
 
 ## P0：完整性报告与版本契约
 
@@ -60,9 +60,9 @@
 ## P4：导出 / 编译增量化
 
 - [x] NESQL++ 阶段拆分：data、images、animated-images、render-contracts、browser-layout、multiblocks、eec-models、recipe-layout-contracts、atlas-pack（stage timing/checksum 现在输出 stable family/skippable contract）。
-- [ ] 每阶段有 checksum，可跳过未变化输出。
-- [ ] 图片渲染按 item/render/texture signature 跳过。
-- [ ] Atlas packer 按 sprite hash / atlas page hash 跳过。
+- [x] 每阶段有 checksum，可跳过未变化输出（stage-checksums 现在记录 content sha256 / previousSha256 / changed / unchanged / skippableByChecksum，目录摘要改为内容哈希而非 mtime）。
+- [x] 图片渲染按 item/render/texture signature 跳过（RenderJob 输出 render-signature sidecar，已有 PNG/GIF 只有签名匹配时才复用）。
+- [x] Atlas packer 按 sprite hash / atlas page hash 跳过（static atlas shard 记录 sourceSignature、sourceSha256/sourceBytes、atlasPageSha256，复用时按 hash 校验）。
 - [x] NeoNEI 编译按 item shard、recipe shard、search shard、atlas page、recipe bundle shard 增量跳过（NeoNEI 静态 bundle 已改为 write-if-changed，build report 输出 written/skipped 计数；atlas page 增量继续沿用内容 hash/manifest 校验）。
 
 ## P5：搜索体系升级
@@ -98,9 +98,3 @@
 4. P2 browser layout 与 atlas 资源依赖绑定。
 5. P3 item-centric recipe bundle。
 6. P4 增量导出与增量编译。
-
-
-
-
-
-

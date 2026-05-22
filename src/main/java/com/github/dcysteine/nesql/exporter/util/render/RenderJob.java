@@ -688,6 +688,61 @@ public abstract class RenderJob {
         return basePath + ".sprite-atlas.png";
     }
 
+    public String getRenderSignature() {
+        StringBuilder builder = new StringBuilder();
+        builder.append("nesqlpp/render-signature/v1|");
+        builder.append("type=").append(getType().name()).append('|');
+        builder.append("output=").append(getOutputFilePath()).append('|');
+        builder.append("multi=").append(needsMultipleFrames()).append('|');
+        builder.append("frames=").append(getRequestedFrameCount()).append('|');
+        builder.append("delay=").append(getRequestedFrameDelayMs()).append('|');
+        builder.append("native=").append(shouldPreferNativeSpriteAnimation()).append('|');
+        if (getType() == JobType.ITEM) {
+            ItemStack stack = getItem();
+            if (stack != null && stack.getItem() != null) {
+                builder.append("item=")
+                        .append(net.minecraft.item.Item.itemRegistry.getNameForObject(stack.getItem()))
+                        .append('|');
+                builder.append("damage=").append(stack.getItemDamage()).append('|');
+                builder.append("itemClass=").append(stack.getItem().getClass().getName()).append('|');
+                builder.append("renderer=").append(getInventoryRendererClassName()).append('|');
+                builder.append("rawRenderer=").append(getRawInventoryRendererClassName()).append('|');
+                try {
+                    builder.append("icon=")
+                            .append(stack.getIconIndex() == null ? "" : stack.getIconIndex().getIconName())
+                            .append('|');
+                } catch (Throwable ignored) {
+                }
+            }
+        } else if (getType() == JobType.FLUID) {
+            FluidStack fluidStack = getFluid();
+            if (fluidStack != null && fluidStack.getFluid() != null) {
+                builder.append("fluid=").append(fluidStack.getFluid().getName()).append('|');
+                builder.append("fluidClass=").append(fluidStack.getFluid().getClass().getName()).append('|');
+            }
+        } else if (getType() == JobType.ENTITY && getEntity() != null) {
+            builder.append("entity=").append(getEntity().getMobName()).append('|');
+        }
+        NativeSpriteMetadataExtractor.NativeSpriteMetadata nativeMetadata = getNativeSpriteMetadata();
+        if (nativeMetadata != null) {
+            builder.append("nativeIcon=").append(nativeMetadata.iconName).append('|');
+            builder.append("nativeFrames=").append(nativeMetadata.frameCount).append('|');
+            builder.append("nativeAtlas=").append(nativeMetadata.atlasTexture).append('|');
+        }
+        return builder.toString();
+    }
+
+    public String getRenderSignatureFilePath() {
+        String outputPath = getOutputFilePath();
+        if (outputPath == null) {
+            return null;
+        }
+        if (outputPath.endsWith(".png") || outputPath.endsWith(".gif")) {
+            return outputPath.substring(0, outputPath.length() - 4) + ".render-signature.json";
+        }
+        return outputPath + ".render-signature.json";
+    }
+
     /**
      * Increment the frame index for multi-frame capture.
      */

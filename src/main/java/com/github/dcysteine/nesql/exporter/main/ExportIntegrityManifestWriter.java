@@ -1,16 +1,20 @@
 package com.github.dcysteine.nesql.exporter.main;
 
+import com.google.gson.Gson;
 import com.google.gson.GsonBuilder;
 import net.minecraft.util.EnumChatFormatting;
 
 import java.io.File;
 import java.io.FileInputStream;
 import java.io.FileOutputStream;
+import java.io.InputStreamReader;
 import java.io.OutputStreamWriter;
 import java.nio.charset.StandardCharsets;
 import java.security.MessageDigest;
 import java.util.ArrayList;
+import java.util.HashMap;
 import java.util.List;
+import java.util.Map;
 
 /** Writes stable export identity/checksum artifacts for NeoNEI import and cache invalidation. */
 final class ExportIntegrityManifestWriter {
@@ -24,7 +28,10 @@ final class ExportIntegrityManifestWriter {
                 canonicalDir.mkdirs();
             }
 
+            File checksumFile = new File(canonicalDir, "stage-checksums.json");
+            Map<String, ArtifactChecksum> previousArtifacts = readPreviousArtifacts(checksumFile);
             List<ArtifactChecksum> artifacts = collectArtifacts(repositoryDirectory, canonicalDir);
+            annotateChanges(artifacts, previousArtifacts);
             ExportManifest manifest = new ExportManifest();
             manifest.schemaVersion = "nesqlpp/export-manifest/v1";
             manifest.generatedAtEpochMs = System.currentTimeMillis();
@@ -46,7 +53,7 @@ final class ExportIntegrityManifestWriter {
             checksumReport.artifacts = artifacts;
 
             writeJson(new File(canonicalDir, "export-manifest.json"), manifest);
-            writeJson(new File(canonicalDir, "stage-checksums.json"), checksumReport);
+            writeJson(checksumFile, checksumReport);
 
             Logger.chatMessage(
                     EnumChatFormatting.GREEN
@@ -109,13 +116,17 @@ final class ExportIntegrityManifestWriter {
     }
 
     private static void collectDirectoryStats(File file, DirectoryStats stats) {
+        collectDirectoryStats(file, file, stats);
+    }
+
+    private static void collectDirectoryStats(File root, File file, DirectoryStats stats) {
         if (file == null || !file.exists()) {
             return;
         }
         if (file.isFile()) {
             stats.fileCount++;
             stats.bytes += file.length();
-            stats.update(file.getName(), file.length(), file.lastModified());
+            stats.update(relative(root, file), file.length(), sha256(file));
             return;
         }
         File[] children = file.listFiles();
@@ -123,8 +134,56 @@ final class ExportIntegrityManifestWriter {
             return;
         }
         for (File child : children) {
-            collectDirectoryStats(child, stats);
+            collectDirectoryStats(root, child, stats);
         }
+    }
+
+    private static Map<String, ArtifactChecksum> readPreviousArtifacts(File checksumFile) {
+        Map<String, ArtifactChecksum> previous = new HashMap<String, ArtifactChecksum>();
+        if (checksumFile == null || !checksumFile.exists()) {
+            return previous;
+        }
+        try (InputStreamReader reader =
+                     new InputStreamReader(new FileInputStream(checksumFile), StandardCharsets.UTF_8)) {
+            ChecksumReport report = new Gson().fromJson(reader, ChecksumReport.class);
+            if (report == null || report.artifacts == null) {
+                return previous;
+            }
+            for (ArtifactChecksum artifact : report.artifacts) {
+                previous.put(artifactKey(artifact), artifact);
+            }
+        } catch (Exception e) {
+            Logger.MOD.warn("Failed to read previous NESQL++ stage checksums", e);
+        }
+        return previous;
+    }
+
+    private static void annotateChanges(
+            List<ArtifactChecksum> artifacts,
+            Map<String, ArtifactChecksum> previousArtifacts) {
+        for (ArtifactChecksum artifact : artifacts) {
+            ArtifactChecksum previous = previousArtifacts.get(artifactKey(artifact));
+            artifact.previousSha256 = previous == null ? null : previous.sha256;
+            artifact.changed =
+                    previous == null
+                            || artifact.exists != previous.exists
+                            || artifact.bytes != previous.bytes
+                            || artifact.fileCount != previous.fileCount
+                            || !safeEquals(artifact.sha256, previous.sha256);
+            artifact.unchanged = !artifact.changed;
+            artifact.skippableByChecksum = artifact.exists && artifact.sha256 != null;
+        }
+    }
+
+    private static String artifactKey(ArtifactChecksum artifact) {
+        if (artifact == null) {
+            return "";
+        }
+        return String.valueOf(artifact.stage) + "|" + String.valueOf(artifact.path);
+    }
+
+    private static boolean safeEquals(String left, String right) {
+        return left == null ? right == null : left.equals(right);
     }
 
     private static String sha256(File file) {
@@ -209,6 +268,10 @@ final class ExportIntegrityManifestWriter {
         long bytes;
         int fileCount;
         String sha256;
+        String previousSha256;
+        boolean changed;
+        boolean unchanged;
+        boolean skippableByChecksum;
     }
 
     private static final class DirectoryStats {
@@ -224,8 +287,8 @@ final class ExportIntegrityManifestWriter {
             }
         }
 
-        void update(String name, long bytes, long modifiedAt) {
-            String value = name + ":" + bytes + ":" + modifiedAt + "\n";
+        void update(String name, long bytes, String sha256) {
+            String value = name + ":" + bytes + ":" + sha256 + "\n";
             digest.update(value.getBytes(StandardCharsets.UTF_8));
         }
 

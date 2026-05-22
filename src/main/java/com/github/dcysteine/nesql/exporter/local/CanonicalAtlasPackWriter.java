@@ -10,10 +10,12 @@ import net.minecraft.util.EnumChatFormatting;
 import javax.imageio.ImageIO;
 import java.awt.image.BufferedImage;
 import java.io.File;
+import java.io.FileInputStream;
 import java.io.FileOutputStream;
 import java.io.IOException;
 import java.io.OutputStreamWriter;
 import java.nio.charset.StandardCharsets;
+import java.security.MessageDigest;
 import java.util.ArrayList;
 import java.util.Comparator;
 import java.util.HashMap;
@@ -188,6 +190,8 @@ public class CanonicalAtlasPackWriter {
             groupManifest.atlasFile = relativizeFromExportDirectory(atlasFile);
             groupManifest.width = layout.width;
             groupManifest.height = layout.height;
+            groupManifest.sourceSignature = sourceSignature(chunks.get(chunkIndex));
+            groupManifest.atlasPageSha256 = sha256(atlasFile);
             groupManifest.assets = new ArrayList<>();
 
             for (AtlasPackingSupport.AtlasPlacement placement : layout.placements) {
@@ -199,6 +203,8 @@ public class CanonicalAtlasPackWriter {
                 assetPlacement.width = placement.source.image.getWidth();
                 assetPlacement.height = placement.source.image.getHeight();
                 assetPlacement.sourcePath = relativizeFromExportDirectory(placement.source.file);
+                assetPlacement.sourceBytes = placement.source.file.length();
+                assetPlacement.sourceSha256 = sha256(placement.source.file);
                 groupManifest.assets.add(assetPlacement);
             }
             groupManifests.add(groupManifest);
@@ -288,42 +294,6 @@ public class CanonicalAtlasPackWriter {
         addWebglSafeChunk(chunks, new ArrayList<>(sources.subList(middle, sources.size())));
     }
 
-    private AtlasGroupManifest readFreshGroupManifest(
-            File atlasDir,
-            String atlasGroup,
-            List<CanonicalRenderAsset> assets,
-            File atlasFile,
-            String safeName) {
-        File canonicalDir = atlasDir.getParentFile();
-        File shardFile = new File(new File(canonicalDir, GROUP_DIRECTORY), safeName + ".json");
-        if (!atlasFile.exists() || !shardFile.exists()) {
-            return null;
-        }
-
-        long newestSourceModified = newestSourceModified(assets);
-        long oldestOutputModified = Math.min(atlasFile.lastModified(), shardFile.lastModified());
-        if (newestSourceModified <= 0L || oldestOutputModified < newestSourceModified) {
-            return null;
-        }
-
-        try (java.io.FileInputStream fis = new java.io.FileInputStream(shardFile);
-             java.io.InputStreamReader reader =
-                     new java.io.InputStreamReader(fis, StandardCharsets.UTF_8)) {
-                AtlasGroupManifest manifest = new Gson().fromJson(reader, AtlasGroupManifest.class);
-                if (manifest == null || manifest.assets == null || manifest.assets.isEmpty()) {
-                    return null;
-                }
-                if (manifest.packerVersion != PACKER_VERSION) {
-                    return null;
-                }
-                Logger.MOD.info("Reusing fresh static atlas group {} from {}", atlasGroup, atlasFile.getName());
-                return manifest;
-        } catch (Exception e) {
-            Logger.MOD.warn("Failed to reuse static atlas group {}", atlasGroup, e);
-            return null;
-        }
-    }
-
     private List<AtlasGroupManifest> readFreshGroupManifests(
             File atlasDir,
             String atlasGroup,
@@ -339,11 +309,6 @@ public class CanonicalAtlasPackWriter {
                 name.equals(safeName + ".json")
                         || (name.startsWith(safeName + "-") && name.endsWith(".json")));
         if (shardFiles == null || shardFiles.length == 0) {
-            return new ArrayList<>();
-        }
-
-        long newestSourceModified = newestSourceModified(assets);
-        if (newestSourceModified <= 0L) {
             return new ArrayList<>();
         }
 
@@ -370,11 +335,15 @@ public class CanonicalAtlasPackWriter {
                 if (!atlasFile.exists()) {
                     return new ArrayList<>();
                 }
-                long oldestOutputModified = Math.min(atlasFile.lastModified(), shardFile.lastModified());
-                if (oldestOutputModified < newestSourceModified) {
+                if (manifest.atlasPageSha256 == null
+                        || !manifest.atlasPageSha256.equals(sha256(atlasFile))) {
                     return new ArrayList<>();
                 }
 
+                String actualSignature = sourceSignatureForPlacements(manifest.assets);
+                if (manifest.sourceSignature == null || !manifest.sourceSignature.equals(actualSignature)) {
+                    return new ArrayList<>();
+                }
                 for (AtlasAssetPlacement placement : manifest.assets) {
                     if (!expectedAssetIds.containsKey(placement.assetId)) {
                         return new ArrayList<>();
@@ -398,16 +367,81 @@ public class CanonicalAtlasPackWriter {
         return groups;
     }
 
-    private long newestSourceModified(List<CanonicalRenderAsset> assets) {
-        long newest = 0L;
-        for (CanonicalRenderAsset asset : assets) {
-            File sourceFile = resolveSourceFile(asset);
-            if (sourceFile == null || !sourceFile.exists()) {
-                return -1L;
-            }
-            newest = Math.max(newest, sourceFile.lastModified());
+    private String sourceSignature(List<AtlasPackingSupport.AtlasSourceImage> sources) {
+        List<String> parts = new ArrayList<>();
+        for (AtlasPackingSupport.AtlasSourceImage source : sources) {
+            parts.add(source.asset.assetId
+                    + "|"
+                    + relativizeFromExportDirectory(source.file)
+                    + "|"
+                    + source.file.length()
+                    + "|"
+                    + sha256(source.file));
         }
-        return newest;
+        parts.sort(String::compareTo);
+        return sha256(String.join("\n", parts));
+    }
+
+    private String sourceSignatureForPlacements(List<AtlasAssetPlacement> placements) {
+        List<String> parts = new ArrayList<>();
+        for (AtlasAssetPlacement placement : placements) {
+            File sourceFile = resolveExportFile(placement.sourcePath);
+            if (!sourceFile.exists()) {
+                return null;
+            }
+            String sourceSha256 = sha256(sourceFile);
+            if (placement.sourceSha256 != null && !placement.sourceSha256.equals(sourceSha256)) {
+                return null;
+            }
+            if (placement.sourceBytes > 0L && placement.sourceBytes != sourceFile.length()) {
+                return null;
+            }
+            parts.add(placement.assetId
+                    + "|"
+                    + placement.sourcePath
+                    + "|"
+                    + sourceFile.length()
+                    + "|"
+                    + sourceSha256);
+        }
+        parts.sort(String::compareTo);
+        return sha256(String.join("\n", parts));
+    }
+
+    private String sha256(File file) {
+        try {
+            MessageDigest digest = MessageDigest.getInstance("SHA-256");
+            byte[] buffer = new byte[1024 * 1024];
+            try (FileInputStream inputStream = new FileInputStream(file)) {
+                int read;
+                while ((read = inputStream.read(buffer)) >= 0) {
+                    if (read > 0) {
+                        digest.update(buffer, 0, read);
+                    }
+                }
+            }
+            return toHex(digest.digest());
+        } catch (Exception e) {
+            throw new RuntimeException("Failed to hash atlas file " + file.getAbsolutePath(), e);
+        }
+    }
+
+    private String sha256(String value) {
+        try {
+            MessageDigest digest = MessageDigest.getInstance("SHA-256");
+            digest.update((value == null ? "" : value).getBytes(StandardCharsets.UTF_8));
+            return toHex(digest.digest());
+        } catch (Exception e) {
+            throw new RuntimeException("Failed to hash atlas signature", e);
+        }
+    }
+
+    private String toHex(byte[] bytes) {
+        StringBuilder builder = new StringBuilder(bytes.length * 2);
+        for (byte value : bytes) {
+            builder.append(String.format("%02x", value & 0xff));
+        }
+        return builder.toString();
     }
 
     private int countAssets(List<AtlasGroupManifest> groups) {
@@ -489,6 +523,8 @@ public class CanonicalAtlasPackWriter {
         int packerVersion;
         String atlasGroup;
         String atlasFile;
+        String sourceSignature;
+        String atlasPageSha256;
         int width;
         int height;
         List<AtlasAssetPlacement> assets = new ArrayList<>();
@@ -498,6 +534,8 @@ public class CanonicalAtlasPackWriter {
         String assetId;
         String variantKey;
         String sourcePath;
+        long sourceBytes;
+        String sourceSha256;
         int x;
         int y;
         int width;

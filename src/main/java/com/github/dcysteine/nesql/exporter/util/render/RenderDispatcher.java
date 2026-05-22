@@ -244,6 +244,9 @@ public enum RenderDispatcher {
         if (!outputFile.exists() || outputFile.length() <= 0L) {
             return false;
         }
+        if (!RenderSignatureSupport.matches(imageDirectory, job)) {
+            return false;
+        }
 
         File renderContractFile = new File(imageDirectory, job.getRenderContractFilePath());
         if (!renderContractFile.exists()) {
@@ -371,6 +374,7 @@ public enum RenderDispatcher {
                 // Static item detected, write only the first frame
                 try {
                     capture.writeGif();
+                    RenderSignatureSupport.write(imageDirectory, job);
                     activeCaptures.remove(outputPath);
 
                     Logger.MOD.info("Static item export complete: {} (captured {} frames)",
@@ -387,6 +391,7 @@ public enum RenderDispatcher {
                 // Write the GIF file
                 try {
                     capture.writeGif();
+                    RenderSignatureSupport.write(imageDirectory, job);
                     activeCaptures.remove(outputPath);
 
                     Logger.MOD.info("Animated item export complete: {} (captured {} frames)",

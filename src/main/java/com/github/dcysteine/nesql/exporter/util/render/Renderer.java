@@ -451,6 +451,7 @@ public enum Renderer {
 
         try {
             ImageIO.write(image, IMAGE_FORMAT_PNG, outputFile);
+            RenderSignatureSupport.write(imageDirectory, job);
         } catch (IOException e) {
             throw new RuntimeException(e);
         }
@@ -469,6 +470,7 @@ public enum Renderer {
                         new GifRenderer.AnimationCapture(outputFile, 1, job.getRequestedFrameDelayMs());
                 capture.addFrame(placeholder);
                 capture.writeGif();
+                RenderSignatureSupport.write(imageDirectory, job);
                 RenderDispatcher.INSTANCE.abandonJob(job);
             } else if (job != null) {
                 writeSingleFrameImage(job, placeholder);
