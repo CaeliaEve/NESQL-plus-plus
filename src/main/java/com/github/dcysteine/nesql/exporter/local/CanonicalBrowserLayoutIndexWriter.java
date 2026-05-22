@@ -610,7 +610,14 @@ public class CanonicalBrowserLayoutIndexWriter {
             Set<String> blockedItemIds) {
         Map<String, List<BrowserItemCandidate>> internalFamilies = new LinkedHashMap<>();
         Map<String, List<BrowserItemCandidate>> exactFamilies = new LinkedHashMap<>();
+        Map<String, SpecialFamily> specialFamilies = new LinkedHashMap<>();
         for (BrowserItemCandidate candidate : candidates) {
+            SpecialFamily specialFamily = buildSpecialVariantFamily(candidate);
+            if (specialFamily != null) {
+                specialFamilies.computeIfAbsent(specialFamily.key, ignored -> specialFamily).family.add(candidate);
+                continue;
+            }
+
             String internalKey = normalize(candidate.modId) + "::" + normalize(candidate.internalName);
             String exactKey = internalKey + "::" + normalize(candidate.localizedName);
             if (!internalKey.equals("::")) {
@@ -622,6 +629,16 @@ public class CanonicalBrowserLayoutIndexWriter {
         }
 
         Map<String, SyntheticAssignment> assignments = new HashMap<>();
+        for (SpecialFamily specialFamily : specialFamilies.values()) {
+            List<BrowserItemCandidate> remaining = new ArrayList<>();
+            for (BrowserItemCandidate candidate : specialFamily.family) {
+                if (!assignments.containsKey(candidate.itemId)) {
+                    remaining.add(candidate);
+                }
+            }
+            assignSyntheticFamily(assignments, "special::" + specialFamily.key, remaining, specialFamily.label);
+        }
+
         for (Map.Entry<String, List<BrowserItemCandidate>> entry : internalFamilies.entrySet()) {
             List<BrowserItemCandidate> family = entry.getValue();
             if (!canGroupFamily(family, blockedItemIds)) {
@@ -676,6 +693,20 @@ public class CanonicalBrowserLayoutIndexWriter {
             assignSyntheticFamily(assignments, "exact::" + entry.getKey(), remaining, null);
         }
         return assignments;
+    }
+
+    private static SpecialFamily buildSpecialVariantFamily(BrowserItemCandidate candidate) {
+        String modId = normalize(candidate.modId);
+        String internalName = normalize(candidate.internalName);
+
+        // Thaumcraft creates thousands of generated wand / sceptre / staff NBT combinations.
+        // GTNH NEI treats the generated WandCasting family as one collapsible browser group;
+        // the fallback localized-name grouping would otherwise leave one entry per cap/core combo.
+        if ("thaumcraft".equals(modId) && "wandcasting".equals(internalName)) {
+            return new SpecialFamily(modId + "::" + internalName + "::generated-wands", "法杖 / 权杖");
+        }
+
+        return null;
     }
 
     private static boolean canGroupFamily(List<BrowserItemCandidate> family, Set<String> blockedItemIds) {
@@ -1176,6 +1207,18 @@ public class CanonicalBrowserLayoutIndexWriter {
         String groupLabel;
         int groupSize;
         String representativeItemId;
+    }
+
+
+    private static final class SpecialFamily {
+        final String key;
+        final String label;
+        final List<BrowserItemCandidate> family = new ArrayList<>();
+
+        SpecialFamily(String key, String label) {
+            this.key = key;
+            this.label = label;
+        }
     }
 
     private static final class GroupRule {
