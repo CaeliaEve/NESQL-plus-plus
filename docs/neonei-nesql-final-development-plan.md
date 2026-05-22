@@ -1,103 +1,104 @@
-﻿# NeoNEI / NESQL++ 鏈€缁堝紑鍙戞竻鍗?
+﻿# NeoNEI / NESQL++ 最终开发清单
 
-> 鐩爣锛氭妸 NeoNEI 浠庘€滆繍琛屾椂鎷兼暟鎹殑缃戠珯鈥濇帹杩涙垚鈥滅綉椤靛舰寮忕殑 NEI 鏈湴绱㈠紩鍣ㄢ€濓細NESQL++ 鍦ㄦ父鎴忓唴瀵煎嚭瀹屾暣濂戠害锛孨eoNEI 缂栬瘧鎴愬唴瀹瑰鍧€鍙戝竷鍖咃紝鍓嶇鍩轰簬 Manifest / Atlas / Bundle 绉掑紑锛屽苟鏀寔鏈潵鍏叡缃戠珯 CDN 鍒嗗彂銆?
+> 目标：把 NeoNEI 从“运行时拼数据的网站”推进成“网页形式的 NEI 本地索引器”：NESQL++ 在游戏内导出完整契约，NeoNEI 编译成内容寻址发布包，前端基于 Manifest / Atlas / Bundle 秒开，并支持未来公共网站 CDN 分发。
 
-## 鎬讳綋鍘熷垯
+## 总体原则
 
-- 涓嶄负鈥滄妧鏈珮绾ф劅鈥濊縼绉诲ぇ妗嗘灦锛涗紭鍏堣В鍐崇湡瀹炵摱棰堬細瀵煎嚭鎱€佺紦瀛橀敊涔便€佽创鍥?鍔ㄥ浘缂哄け銆侀厤鏂逛涪澶便€佸揩閫熺炕椤靛崱椤裤€?
-- 淇濈暀 Express銆丼QLite銆乂ue銆丆anvas/WebGL 涓荤嚎锛涜ˉ寮哄绾︺€佹姤鍛娿€佸唴瀹瑰鍧€銆佸閲忔瀯寤恒€佸墠绔祫婧愯皟搴︺€?
-- NESQL++ 鑳借В鍐崇殑鏁版嵁/瀵煎嚭闂浼樺厛鍦?NESQL++ 瑙ｅ喅锛汵eoNEI 鍙秷璐圭ǔ瀹氬绾﹀苟鍋氬彂甯冨寘浼樺寲銆?
-- 姣忎釜闃舵蹇呴』鏈夊彲楠岃瘉浜х墿锛屼笉鑳介潬浜哄伐缈婚〉闈㈢寽娴嬫垚鍔熴€?
+- 不为“技术高级感”迁移大框架；优先解决真实瓶颈：导出慢、缓存错乱、贴图/动图缺失、配方丢失、快速翻页卡顿。
+- 保留 Express、SQLite、Vue、Canvas/WebGL 主线；补强契约、报告、内容寻址、增量构建、前端资源调度。
+- NESQL++ 能解决的数据/导出问题优先在 NESQL++ 解决；NeoNEI 只消费稳定契约并做发布包优化。
+- 每个阶段必须有可验证产物，不能靠人工翻页面猜测成功。
 
-## 鏆備笉浣滀负涓荤嚎
+## 暂不作为主线
 
-- [ ] 涓嶅叏闈㈣縼绉?NestJS / Fastify銆?
-- [ ] 涓嶇敤 GraphQL 鏇夸唬褰撳墠 REST + 闈欐€?publish bundle銆?
-- [ ] 涓嶅紩鍏?Redis 浣滀负褰撳墠涓荤紦瀛樺眰銆?
-- [ ] 涓嶆妸涓婚〉鍙充晶娴忚鍖哄洖閫€鎴?DOM 铏氭嫙鍒楄〃銆?
-- [ ] 涓嶆妸 WebGPU 鏀惧叆杩戞湡涓荤嚎銆?
+- [ ] 不全面迁移 NestJS / Fastify。
+- [ ] 不用 GraphQL 替代当前 REST + 静态 publish bundle。
+- [ ] 不引入 Redis 作为当前主缓存层。
+- [ ] 不把主页右侧浏览区回退成 DOM 虚拟列表。
+- [ ] 不把 WebGPU 放入近期主线。
 
-## P0锛氬畬鏁存€ф姤鍛婁笌鐗堟湰濂戠害
+## P0：完整性报告与版本契约
 
 ### NESQL++
-- [x] 杈撳嚭 `canonical/export-manifest.json`锛氳褰曚粨搴撳悕銆乸rofile銆乻election銆丯ESQL++鐗堟湰銆佺敓鎴愭椂闂淬€佸叧閿骇鐗╄矾寰勩€?
-- [x] 杈撳嚭 `canonical/export-health-report.json`锛氬吋瀹?鍗囩骇鐜版湁 validation report锛屽寘鍚己鍥俱€佸姩鍥俱€丄tlas銆佸鐐瑰姩鍥惧彲鐤戦」銆佸疄浣撴ā鍨嬨€佸鏂瑰潡绛夌粺璁°€?
-- [x] 杈撳嚭 `canonical/export-stage-timings.json`锛氳褰曟瘡涓鍑洪樁娈佃€楁椂銆?
-- [x] 杈撳嚭 `canonical/stage-checksums.json`锛氳褰曞叧閿骇鐗╁ぇ灏忎笌 SHA-256锛岀敤浜庝簩娆″鍑?缂栬瘧璺宠繃銆?
-- [x] 杈撳嚭缂哄け璧勬簮鏍锋湰锛氳创鍥剧己澶便€佸姩鐢荤己澶便€乼imeline frame 缂哄け銆佺┖ manifest銆?
+- [x] 输出 `canonical/export-manifest.json`：记录仓库名、profile、selection、NESQL++版本、生成时间、关键产物路径。
+- [x] 输出 `canonical/export-health-report.json`：兼容/升级现有 validation report，包含缺图、动图、Atlas、奇点动图可疑项、实体模型、多方块等统计。
+- [x] 输出 `canonical/export-stage-timings.json`：记录每个导出阶段耗时。
+- [x] 输出 `canonical/stage-checksums.json`：记录关键产物大小与 SHA-256，用于二次导出/编译跳过。
+- [x] 输出缺失资源样本：贴图缺失、动画缺失、timeline frame 缺失、空 manifest。
 
 ### NeoNEI
-- [x] 杈撳嚭 `publish/build-report.json` 鍜屽彲璇?`publish/build-report.html`銆?
-- [ ] 妫€鏌?source manifest銆乥rowser layout銆乤tlas銆乤nimated atlas銆乺ecipe bundle銆乻earch pack 鏄惁鍖归厤銆?
-- [x] 鎶ュ憡鍩虹鍙戝竷鍖呰鐩栫巼銆佷骇鐗╂暟閲忋€佸帇缂╃巼涓?warnings锛涚己鍥剧巼/闂彿鐜?绌洪厤鏂圭巼鍚庣画缁х画缁嗗寲銆?
+- [x] 输出 `publish/build-report.json` 和可读 `publish/build-report.html`。
+- [ ] 检查 source manifest、browser layout、atlas、animated atlas、recipe bundle、search pack 是否匹配。
+- [x] 报告基础发布包覆盖率、产物数量、压缩率与 warnings；缺图率/问号率/空配方率后续继续细化。
 
-## P1锛氬唴瀹瑰鍧€鍙戝竷绯荤粺 CAS
+## P1：内容寻址发布系统 CAS
 
-- [ ] 鎵€鏈夋牳蹇?publish 浜х墿鎸夊唴瀹?hash 鍛藉悕銆?
-- [x] `publish/manifest.json` 璁板綍 datasetVersion銆乻ourceSignature銆乮temsHash銆乺ecipesHash銆乥rowserLayoutHash銆乤tlasHash銆乤nimatedAtlasHash銆?
-- [x] 鍓嶇 runtime cache key 瀹屽叏缁戝畾 manifest identity銆?
-- [ ] CDN 闈欐€佽祫婧愪娇鐢?immutable hash URL銆?
-- [x] 鏃х紦瀛樻薄鏌撴椂鑳藉鑷姩澶辨晥銆?
+- [ ] 所有核心 publish 产物按内容 hash 命名。
+- [x] `publish/manifest.json` 记录 datasetVersion、sourceSignature、itemsHash、recipesHash、browserLayoutHash、atlasHash、animatedAtlasHash。
+- [x] 前端 runtime cache key 完全绑定 manifest identity。
+- [ ] CDN 静态资源使用 immutable hash URL。
+- [x] 旧缓存污染时能够自动失效。
 
-## P2锛氭祻瑙堝尯 NEI 鍘熺敓浣撴劅
+## P2：浏览区 NEI 原生体感
 
-- [x] NESQL++ 瀵煎嚭 NEI 娴忚鎺掑簭涓庢姌鍙犲垎缁勩€?
-- [x] NeoNEI 鍓嶇娑堣垂 browser layout 骞舵樉绀哄垎缁勩€?
-- [x] browser layout 涓?atlas index 寮虹粦瀹氥€?
-- [x] 鍒嗙粍灞曞紑缁撴灉棰勮绠楋紝閬垮厤杩愯鏃跺ぇ璁＄畻銆?
-- [x] 姣忛〉璧勬簮渚濊禆棰勮绠楋細褰撳墠椤点€佸墠涓€椤点€佸悗涓€椤甸渶瑕佸摢浜?atlas/animated atlas銆?
-- [x] 蹇€熺炕椤靛彇娑堟棫椤佃祫婧愯姹傦紝鍙繚鐣欏綋鍓嶇洰鏍囬〉鏈€楂樹紭鍏堢骇銆?
-- [x] atlas miss 涓嶉樆濉炰富绾跨▼锛岀己鍥惧紓姝ヨˉ榻愩€?
+- [x] NESQL++ 导出 NEI 浏览排序与折叠分组。
+- [x] NeoNEI 前端消费 browser layout 并显示分组。
+- [x] browser layout 与 atlas index 强绑定。
+- [x] 分组展开结果预计算，避免运行时大计算。
+- [x] 每页资源依赖预计算：当前页、前一页、后一页需要哪些 atlas/animated atlas。
+- [x] 快速翻页取消旧页资源请求，只保留当前目标页最高优先级。
+- [x] atlas miss 不阻塞主线程，缺图异步补齐。
 
-## P3锛氶厤鏂归〉绉掑紑 Bundle
+## P3：配方页秒开 Bundle
 
-- [x] 鐢熸垚 `publish/item-recipe-bundles/shard-*.json`銆?
-- [x] 鐢熸垚 `publish/recipe-ui-bundles/shard-*.json`銆?
-- [x] 姣忎釜 item bundle 鍖呭惈 producedBy銆乽sedIn銆乻ummaryGroups銆乵achineGroups銆乫irstPageRecipes銆乽iPayloadRefs銆乤ssetRefs銆?
-- [x] 鍓嶇鎵撳紑閰嶆柟浼樺厛璇诲彇 static item bundle + IndexedDB runtime cache锛屽悗绔?API 鍙綔 fallback锛汷PFS 鐣欑粰 P6 澶ц祫婧愬眰銆?
-- [x] 甯歌鐗╁搧閰嶆柟鎽樿鐩爣 <100ms锛屽畬鏁撮厤鏂圭粍鐩爣 <300ms锛圢eoNEI 宸插缓绔?recipe-open-budget / recipe-bootstrap-resolved Gate锛涘叏閲忔暟鎹疄娴嬬户缁敱 Gate C 杩借釜锛夈€?
+- [x] 生成 `publish/item-recipe-bundles/shard-*.json`。
+- [x] 生成 `publish/recipe-ui-bundles/shard-*.json`。
+- [x] 每个 item bundle 包含 producedBy、usedIn、summaryGroups、machineGroups、firstPageRecipes、uiPayloadRefs、assetRefs。
+- [x] 前端打开配方优先读取 static item bundle + IndexedDB runtime cache，后端 API 只作 fallback；OPFS 留给 P6 大资源层。
+- [x] 常见物品配方摘要目标 <100ms，完整配方组目标 <300ms（NeoNEI 已建立 recipe-open-budget / recipe-bootstrap-resolved Gate；全量数据实测继续由 Gate C 追踪）。
 
-## P4锛氬鍑?/ 缂栬瘧澧為噺鍖?
+## P4：导出 / 编译增量化
 
-- [x] NESQL++ 闃舵鎷嗗垎锛歞ata銆乮mages銆乤nimated-images銆乺ender-contracts銆乥rowser-layout銆乵ultiblocks銆乪ec-models銆乺ecipe-layout-contracts銆乤tlas-pack锛坰tage timing/checksum 鐜板湪杈撳嚭 stable family/skippable contract锛夈€?
-- [ ] 姣忛樁娈垫湁 checksum锛屽彲璺宠繃鏈彉鍖栬緭鍑恒€?
-- [ ] 鍥剧墖娓叉煋鎸?item/render/texture signature 璺宠繃銆?
-- [ ] Atlas packer 鎸?sprite hash / atlas page hash 璺宠繃銆?
-- [x] NeoNEI 缂栬瘧鎸?item shard銆乺ecipe shard銆乻earch shard銆乤tlas page銆乺ecipe bundle shard 澧為噺璺宠繃锛圢eoNEI 闈欐€?bundle 宸叉敼涓?write-if-changed锛宐uild report 杈撳嚭 written/skipped 璁℃暟锛沘tlas page 澧為噺缁х画娌跨敤鍐呭 hash/manifest 鏍￠獙锛夈€?
+- [x] NESQL++ 阶段拆分：data、images、animated-images、render-contracts、browser-layout、multiblocks、eec-models、recipe-layout-contracts、atlas-pack（stage timing/checksum 现在输出 stable family/skippable contract）。
+- [ ] 每阶段有 checksum，可跳过未变化输出。
+- [ ] 图片渲染按 item/render/texture signature 跳过。
+- [ ] Atlas packer 按 sprite hash / atlas page hash 跳过。
+- [x] NeoNEI 编译按 item shard、recipe shard、search shard、atlas page、recipe bundle shard 增量跳过（NeoNEI 静态 bundle 已改为 write-if-changed，build report 输出 written/skipped 计数；atlas page 增量继续沿用内容 hash/manifest 校验）。
 
-## P5锛氭悳绱綋绯诲崌绾?
+## P5：搜索体系升级
 
-- [x] NeoNEI 缂栬瘧闃舵寮曞叆 SQLite FTS5 浣滀负鎼滅储鍖呮瀯寤?鍚庣鍏滃簳绱㈠紩銆?
-- [x] 瀛楁瑕嗙洊涓枃鍚嶃€佽嫳鏂囧悕銆佹嫾闊炽€侀瀛楁瘝銆佹ā缁勫悕銆乮tem id銆乼ooltip 鍏抽敭璇嶃€?
-- [x] 鍓嶇缁х画浣跨敤 browserSearchWorker + hot/full shard锛屼笉鍥為€€瀹炴椂 SQL 鎼滅储銆?
+- [x] NeoNEI 编译阶段引入 SQLite FTS5 作为搜索包构建/后端兜底索引。
+- [x] 字段覆盖中文名、英文名、拼音、首字母、模组名、item id、tooltip 关键词。
+- [x] 前端继续使用 browserSearchWorker + hot/full shard，不回退实时 SQL 搜索。
 
-## P6锛氬墠绔ぇ璧勬簮缂撳瓨鍗囩骇
+## P6：前端大资源缓存升级
 
-- [x] IndexedDB 瀛?manifest銆乻earch pack銆乥rowser layout銆乮tem bundle銆佸皬 JSON銆?
-- [x] OPFS 璇曠偣瀛樺ぇ atlas銆乤nimated atlas銆佸ぇ recipe bundle銆乪ntity preview銆乵ultiblock preview銆?
-- [x] 缂撳瓨灞傜骇锛歁emory LRU 鈫?IndexedDB metadata 鈫?OPFS blob 鈫?HTTP/CDN 鈫?backend fallback銆?
+- [x] IndexedDB 存 manifest、search pack、browser layout、item bundle、小 JSON。
+- [x] OPFS 试点存大 atlas、animated atlas、大 recipe bundle、entity preview、multiblock preview。
+- [x] 缓存层级：Memory LRU → IndexedDB metadata → OPFS blob → HTTP/CDN → backend fallback。
 
-## P7锛歐orker / OffscreenCanvas 娓叉煋澧炲己
+## P7：Worker / OffscreenCanvas 渲染增强
 
-- [ ] Worker 璁＄畻娴忚鍖?layout銆乨raw commands銆佽祫婧愪緷璧栥€?
-- [ ] 涓荤嚎绋嬪彧璐熻矗浜や簰鍜屾渶缁堢粯鍒躲€?
-- [ ] OffscreenCanvas 浣滀负澧炲己璺緞锛屽繀椤讳繚鐣?fallback銆?
+- [x] Worker 计算浏览区 layout、draw commands、资源依赖。
+- [x] 主线程只负责交互和最终绘制。
+- [x] OffscreenCanvas 作为增强路径，必须保留 fallback。
 
-## P8锛氬叕鍏辩綉绔欏伐绋嬪寲
+## P8：公共网站工程化
 
-- [ ] publish 闈欐€佽祫婧?CDN 鍖栵紝hash 鏂囦欢闀挎湡 immutable 缂撳瓨銆?
-- [ ] manifest 鐭紦瀛?/ no-cache銆?
-- [ ] 鍚庣鍙礋璐?fallback API銆乭ealth report銆乤dmin rebuild銆佹暟鎹増鏈垏鎹€佽瘖鏂帴鍙ｃ€?
-- [ ] 绠＄悊鎺ュ彛澧炲姞 token銆乺ate limit銆佽姹傛牎楠屻€佺粨鏋勫寲鏃ュ織銆丱penAPI銆?
+- [x] publish 静态资源 CDN 化，hash 文件长期 immutable 缓存。
+- [x] manifest 短缓存 / no-cache。
+- [x] 后端只负责 fallback API、health report、admin rebuild、数据版本切换、诊断接口。
+- [x] 管理接口增加 token、rate limit、请求校验、结构化日志、OpenAPI。
 
-## 褰撳墠鎺ㄨ繘椤哄簭
+## 当前推进顺序
 
-1. P0 NESQL++ 鎶ュ憡涓?checksum 灏忛棴鐜€?
-2. P0 NeoNEI build report 灏忛棴鐜€?
-3. P1 manifest identity / cache key 寮虹粦瀹氥€?
-4. P2 browser layout 涓?atlas 璧勬簮渚濊禆缁戝畾銆?
-5. P3 item-centric recipe bundle銆?
-6. P4 澧為噺瀵煎嚭涓庡閲忕紪璇戙€?
+1. P0 NESQL++ 报告与 checksum 小闭环。
+2. P0 NeoNEI build report 小闭环。
+3. P1 manifest identity / cache key 强绑定。
+4. P2 browser layout 与 atlas 资源依赖绑定。
+5. P3 item-centric recipe bundle。
+6. P4 增量导出与增量编译。
+
 
 
 
