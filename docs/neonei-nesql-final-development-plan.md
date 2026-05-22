@@ -1,4 +1,4 @@
-﻿# NeoNEI / NESQL++ 最终开发清单
+# NeoNEI / NESQL++ 最终开发清单
 
 > 目标：把 NeoNEI 从“运行时拼数据的网站”推进成“网页形式的 NEI 本地索引器”：NESQL++ 在游戏内导出完整契约，NeoNEI 编译成内容寻址发布包，前端基于 Manifest / Atlas / Bundle 秒开，并支持未来公共网站 CDN 分发。
 
@@ -67,9 +67,9 @@
 
 ## P5：搜索体系升级
 
-- [ ] NeoNEI 编译阶段引入 SQLite FTS5 作为搜索包构建/后端兜底索引。
-- [ ] 字段覆盖中文名、英文名、拼音、首字母、模组名、item id、tooltip 关键词。
-- [ ] 前端继续使用 browserSearchWorker + hot/full shard，不回退实时 SQL 搜索。
+- [x] NeoNEI 编译阶段引入 SQLite FTS5 作为搜索包构建/后端兜底索引。
+- [x] 字段覆盖中文名、英文名、拼音、首字母、模组名、item id、tooltip 关键词。
+- [x] 前端继续使用 browserSearchWorker + hot/full shard，不回退实时 SQL 搜索。
 
 ## P6：前端大资源缓存升级
 
