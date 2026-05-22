@@ -28,15 +28,15 @@
 
 ### NeoNEI
 - [x] 输出 `publish/build-report.json` 和可读 `publish/build-report.html`。
-- [ ] 检查 source manifest、browser layout、atlas、animated atlas、recipe bundle、search pack 是否匹配。
+- [x] 检查 source manifest、browser layout、atlas、animated atlas、recipe bundle、search pack 是否匹配。
 - [x] 报告基础发布包覆盖率、产物数量、压缩率与 warnings；缺图率/问号率/空配方率后续继续细化。
 
 ## P1：内容寻址发布系统 CAS
 
-- [ ] 所有核心 publish 产物按内容 hash 命名。
+- [x] 所有核心 publish 产物按内容 hash 命名。
 - [x] `publish/manifest.json` 记录 datasetVersion、sourceSignature、itemsHash、recipesHash、browserLayoutHash、atlasHash、animatedAtlasHash。
 - [x] 前端 runtime cache key 完全绑定 manifest identity。
-- [ ] CDN 静态资源使用 immutable hash URL。
+- [x] CDN 静态资源使用 immutable hash URL。
 - [x] 旧缓存污染时能够自动失效。
 
 ## P2：浏览区 NEI 原生体感
@@ -98,6 +98,7 @@
 4. P2 browser layout 与 atlas 资源依赖绑定。
 5. P3 item-centric recipe bundle。
 6. P4 增量导出与增量编译。
+
 
 
 
