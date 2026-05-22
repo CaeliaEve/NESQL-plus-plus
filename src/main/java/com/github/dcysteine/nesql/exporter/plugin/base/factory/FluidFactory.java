@@ -30,9 +30,12 @@ public class FluidFactory extends EntityFactory<Fluid, String> {
         }
 
         String uniqueName = FluidRegistry.getDefaultFluidName(fluidStack.getFluid());
-        int separator = uniqueName.indexOf(':');
-        String modId = uniqueName.substring(0, separator);
-        String internalName = uniqueName.substring(separator + 1);
+        int separator = uniqueName == null ? -1 : uniqueName.indexOf(':');
+        String modId = separator > 0 ? uniqueName.substring(0, separator) : "unregistered";
+        String internalName =
+                separator > 0
+                        ? uniqueName.substring(separator + 1)
+                        : fluidStack.getFluid().getClass().getName() + "~" + fluidStack.getFluid().getID();
 
         String nbt = "";
         if (fluidStack.tag != null) {
@@ -57,7 +60,7 @@ public class FluidFactory extends EntityFactory<Fluid, String> {
                 fluidStack.getFluid().isGaseous(fluidStack));
 
         if (fluidStack.getFluid().getIcon() == null) {
-            logger.error("Found fluid with null icon: {}", fluid.getLocalizedName());
+            logger.warn("Skipping fluid render because icon is null: {}", fluid.getLocalizedName());
         } else {
             if (ConfigOptions.RENDER_ICONS.get()) {
                 // Check test mod filter

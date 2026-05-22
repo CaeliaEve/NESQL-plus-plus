@@ -34,13 +34,14 @@ test('export stages expose stable incremental families', () => {
   assert.equal(integrity.includes('String family;'), true);
 });
 
-test('export checksums are content based and carry previous-run reuse signals', () => {
+test('export checksums carry previous-run reuse signals without mtime dependence', () => {
   assert.equal(integrity.includes('readPreviousArtifacts'), true);
   assert.equal(integrity.includes('previousSha256'), true);
   assert.equal(integrity.includes('boolean unchanged;'), true);
   assert.equal(integrity.includes('boolean skippableByChecksum;'), true);
   assert.equal(integrity.includes('sha256(file)'), true);
   assert.equal(integrity.includes('file.lastModified()'), false);
+  assert.equal(integrity.includes('stats.update(relative(root, file), file.length())'), true);
 });
 
 test('render outputs are skipped only when item/render/texture signature matches', () => {

@@ -32,6 +32,11 @@ public final class IdUtil {
 
     public static String itemId(Item item) {
         GameRegistry.UniqueIdentifier uniqueId = GameRegistry.findUniqueIdentifierFor(item);
+        if (uniqueId == null) {
+            String fallbackName =
+                    item == null ? "null" : item.getClass().getName() + ID_SEPARATOR + Item.getIdFromItem(item);
+            return sanitize("unregistered" + ID_SEPARATOR + fallbackName);
+        }
         return sanitize(uniqueId.modId + ID_SEPARATOR + uniqueId.name);
     }
 
@@ -58,6 +63,11 @@ public final class IdUtil {
 
     public static String fluidId(Fluid fluid) {
         String uniqueName = FluidRegistry.getDefaultFluidName(fluid);
+        if (uniqueName == null || !uniqueName.contains(":")) {
+            String fallbackName =
+                    fluid == null ? "null" : fluid.getClass().getName() + ID_SEPARATOR + fluid.getID();
+            return sanitize("unregistered" + ID_SEPARATOR + fallbackName);
+        }
         int separator = uniqueName.indexOf(':');
         return sanitize(
                 uniqueName.substring(0, separator)

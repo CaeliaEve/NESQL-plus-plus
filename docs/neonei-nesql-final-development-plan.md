@@ -1,4 +1,4 @@
-# NeoNEI / NESQL++ 最终开发清单
+﻿# NeoNEI / NESQL++ 最终开发清单
 
 > 目标：把 NeoNEI 从“运行时拼数据的网站”推进成“网页形式的 NEI 本地索引器”：NESQL++ 在游戏内导出完整契约，NeoNEI 编译成内容寻址发布包，前端基于 Manifest / Atlas / Bundle 秒开，并支持未来公共网站 CDN 分发。
 
@@ -60,7 +60,7 @@
 ## P4：导出 / 编译增量化
 
 - [x] NESQL++ 阶段拆分：data、images、animated-images、render-contracts、browser-layout、multiblocks、eec-models、recipe-layout-contracts、atlas-pack（stage timing/checksum 现在输出 stable family/skippable contract）。
-- [x] 每阶段有 checksum，可跳过未变化输出（stage-checksums 现在记录 content sha256 / previousSha256 / changed / unchanged / skippableByChecksum，目录摘要改为内容哈希而非 mtime）。
+- [x] 每阶段有 checksum，可跳过未变化输出（stage-checksums 现在记录 sha256 / previousSha256 / changed / unchanged / skippableByChecksum；大目录摘要使用路径+大小结构签名，避免为数十万贴图重复全量读盘）。
 - [x] 图片渲染按 item/render/texture signature 跳过（RenderJob 输出 render-signature sidecar，已有 PNG/GIF 只有签名匹配时才复用）。
 - [x] Atlas packer 按 sprite hash / atlas page hash 跳过（static atlas shard 记录 sourceSignature、sourceSha256/sourceBytes、atlasPageSha256，复用时按 hash 校验）。
 - [x] NeoNEI 编译按 item shard、recipe shard、search shard、atlas page、recipe bundle shard 增量跳过（NeoNEI 静态 bundle 已改为 write-if-changed，build report 输出 written/skipped 计数；atlas page 增量继续沿用内容 hash/manifest 校验）。
@@ -98,3 +98,4 @@
 4. P2 browser layout 与 atlas 资源依赖绑定。
 5. P3 item-centric recipe bundle。
 6. P4 增量导出与增量编译。
+

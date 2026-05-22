@@ -126,7 +126,7 @@ final class ExportIntegrityManifestWriter {
         if (file.isFile()) {
             stats.fileCount++;
             stats.bytes += file.length();
-            stats.update(relative(root, file), file.length(), sha256(file));
+            stats.update(relative(root, file), file.length());
             return;
         }
         File[] children = file.listFiles();
@@ -287,8 +287,8 @@ final class ExportIntegrityManifestWriter {
             }
         }
 
-        void update(String name, long bytes, String sha256) {
-            String value = name + ":" + bytes + ":" + sha256 + "\n";
+        void update(String name, long bytes) {
+            String value = name + ":" + bytes + "\n";
             digest.update(value.getBytes(StandardCharsets.UTF_8));
         }
 

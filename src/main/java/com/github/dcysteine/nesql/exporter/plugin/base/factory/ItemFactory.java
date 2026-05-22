@@ -40,8 +40,13 @@ public class ItemFactory extends EntityFactory<Item, String> {
 
         GameRegistry.UniqueIdentifier uniqueId =
                 GameRegistry.findUniqueIdentifierFor(itemStack.getItem());
-        String modId = uniqueId.modId;
-        String internalName = uniqueId.name;
+        String modId = uniqueId == null ? "unregistered" : uniqueId.modId;
+        String internalName =
+                uniqueId == null
+                        ? itemStack.getItem().getClass().getName()
+                                + "~"
+                                + net.minecraft.item.Item.getIdFromItem(itemStack.getItem())
+                        : uniqueId.name;
 
         // We can't just call itemStack.getItemDamage(), because that may have been overridden
         // to return something other than the raw ItemStack.itemDamage field.
@@ -95,8 +100,7 @@ public class ItemFactory extends EntityFactory<Item, String> {
                     itemStack.getMaxStackSize(),
                     itemStack.getMaxDamage(),
                     new HashMap<>());
-            logger.error("Caught exception while trying to persist item: {}", item.getId());
-            e.printStackTrace();
+            logger.warn("Persisting fallback item metadata after display/tooltip failure: {}", item.getId(), e);
         }
 
         if (ConfigOptions.RENDER_ICONS.get()) {
