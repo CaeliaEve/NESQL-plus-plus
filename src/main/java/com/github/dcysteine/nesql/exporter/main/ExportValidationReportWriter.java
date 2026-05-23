@@ -15,9 +15,11 @@ import java.io.InputStreamReader;
 import java.io.OutputStreamWriter;
 import java.nio.charset.StandardCharsets;
 import java.util.ArrayList;
+import java.util.HashSet;
 import java.util.List;
 import java.util.Locale;
 import java.util.Map;
+import java.util.Set;
 
 /** Writes a lightweight post-export integrity summary without changing exported data contracts. */
 final class ExportValidationReportWriter {
@@ -53,6 +55,10 @@ final class ExportValidationReportWriter {
             report.browserLayoutPresent = browserLayoutFile.exists();
             report.browserLayoutEntries =
                     readArrayCount(browserLayoutFile, "entries", "items", "groups");
+            report.browserLayoutItemCount = readArrayCount(browserLayoutFile, "items");
+            report.browserLayoutGroupCount = readArrayCount(browserLayoutFile, "groups");
+            report.browserLayoutDefaultEntryCount = readArrayCount(browserLayoutFile, "defaultEntries");
+            inspectBrowserAtlasCoverage(canonicalDir, report);
             report.multiblockBlueprints =
                     readArrayCount(new File(canonicalDir, "multiblock-blueprints.json"), "blueprints", "entries");
             report.entityPreviewEntries =
@@ -159,6 +165,148 @@ final class ExportValidationReportWriter {
         if (report.renderAssetManifestAssets > 0 && report.totalAtlasManifestAssets == 0) {
             report.warnings.add("Render assets exist but no atlas manifest assets were found.");
         }
+        if (report.browserAtlasPresent && report.browserLayoutPresent && report.browserAtlasLayoutMissingItems > 0) {
+            report.warnings.add("Browser layout items missing atlas coverage: "
+                    + report.browserAtlasLayoutMissingItems);
+        }
+    }
+
+    private static void inspectBrowserAtlasCoverage(File canonicalDir, ValidationReport report) {
+        File browserAtlasFile = new File(canonicalDir, "browser-atlas-index.json");
+        File browserLayoutFile = new File(canonicalDir, "browser-layout-index.json");
+        report.browserAtlasPresent = browserAtlasFile.exists();
+        if (!browserAtlasFile.exists()) {
+            return;
+        }
+
+        try (FileInputStream atlasFis = new FileInputStream(browserAtlasFile);
+             InputStreamReader atlasReader = new InputStreamReader(atlasFis, StandardCharsets.UTF_8)) {
+            JsonObject atlasObject = new JsonParser().parse(atlasReader).getAsJsonObject();
+            report.browserAtlasItems = readIntMember(atlasObject, "itemCount");
+            report.browserAtlasAnimatedItems = readIntMember(atlasObject, "animatedItemCount");
+            report.browserAtlasMissingAtlasCount = readIntMember(atlasObject, "missingAtlasCount");
+
+            Set<String> drawableAtlasItemIds = new HashSet<String>();
+            if (atlasObject.has("items") && atlasObject.get("items").isJsonArray()) {
+                if (report.browserAtlasItems == 0) {
+                    report.browserAtlasItems = atlasObject.get("items").getAsJsonArray().size();
+                }
+                for (JsonElement element : atlasObject.get("items").getAsJsonArray()) {
+                    if (!element.isJsonObject()) {
+                        continue;
+                    }
+                    JsonObject item = element.getAsJsonObject();
+                    String itemId = readStringMember(item, "itemId");
+                    if (itemId != null && hasDrawableAtlas(item)) {
+                        drawableAtlasItemIds.add(itemId);
+                    }
+                }
+            }
+            report.browserAtlasDrawableItems = drawableAtlasItemIds.size();
+
+            if (!browserLayoutFile.exists()) {
+                return;
+            }
+            inspectBrowserLayoutCoverage(browserLayoutFile, drawableAtlasItemIds, report);
+        } catch (Exception e) {
+            Logger.MOD.warn("Failed to inspect browser atlas coverage", e);
+        }
+    }
+
+    private static void inspectBrowserLayoutCoverage(
+            File browserLayoutFile,
+            Set<String> drawableAtlasItemIds,
+            ValidationReport report) {
+        try (FileInputStream layoutFis = new FileInputStream(browserLayoutFile);
+             InputStreamReader layoutReader = new InputStreamReader(layoutFis, StandardCharsets.UTF_8)) {
+            JsonObject layoutObject = new JsonParser().parse(layoutReader).getAsJsonObject();
+            Set<String> layoutItemIds = new HashSet<String>();
+            collectLayoutItemIds(layoutObject, "items", false, layoutItemIds);
+            collectLayoutItemIds(layoutObject, "defaultEntries", true, layoutItemIds);
+
+            report.browserAtlasLayoutItemCount = layoutItemIds.size();
+            for (String itemId : layoutItemIds) {
+                if (hasDrawableAtlasForItem(drawableAtlasItemIds, itemId)) {
+                    report.browserAtlasLayoutCoveredItems++;
+                } else {
+                    report.browserAtlasLayoutMissingItems++;
+                    addSample(report.browserAtlasLayoutMissingSamples, itemId);
+                }
+            }
+            report.browserAtlasLayoutCoverageRatio =
+                    ratio(report.browserAtlasLayoutCoveredItems, report.browserAtlasLayoutItemCount);
+        } catch (Exception e) {
+            Logger.MOD.warn("Failed to inspect browser layout atlas coverage", e);
+        }
+    }
+
+    private static void collectLayoutItemIds(
+            JsonObject layoutObject,
+            String memberName,
+            boolean preferRepresentative,
+            Set<String> layoutItemIds) {
+        if (!layoutObject.has(memberName) || !layoutObject.get(memberName).isJsonArray()) {
+            return;
+        }
+        for (JsonElement element : layoutObject.get(memberName).getAsJsonArray()) {
+            if (!element.isJsonObject()) {
+                continue;
+            }
+            JsonObject item = element.getAsJsonObject();
+            String itemId = preferRepresentative
+                    ? firstNonEmpty(readStringMember(item, "representativeItemId"), readStringMember(item, "itemId"), null)
+                    : readStringMember(item, "itemId");
+            if (itemId != null && !itemId.isEmpty()) {
+                layoutItemIds.add(itemId);
+            }
+        }
+    }
+
+    private static boolean hasDrawableAtlas(JsonObject item) {
+        return hasAtlasFile(item, "staticAtlas") || hasAtlasFile(item, "animatedAtlas");
+    }
+
+    private static boolean hasAtlasFile(JsonObject item, String memberName) {
+        if (!item.has(memberName) || !item.get(memberName).isJsonObject()) {
+            return false;
+        }
+        String atlasFile = readStringMember(item.get(memberName).getAsJsonObject(), "atlasFile");
+        return atlasFile != null && !atlasFile.isEmpty();
+    }
+
+    private static boolean hasDrawableAtlasForItem(Set<String> drawableAtlasItemIds, String itemId) {
+        if (drawableAtlasItemIds.contains(itemId)) {
+            return true;
+        }
+        for (String alias : getItemIdAliases(itemId)) {
+            if (drawableAtlasItemIds.contains(alias)) {
+                return true;
+            }
+        }
+        return false;
+    }
+
+    private static List<String> getItemIdAliases(String itemId) {
+        List<String> aliases = new ArrayList<String>();
+        if (itemId == null) {
+            return aliases;
+        }
+        String normalized = itemId.trim();
+        if (normalized.isEmpty()) {
+            return aliases;
+        }
+        String[] parts = normalized.split("~");
+        if (parts.length >= 4 && "i".equals(parts[0])) {
+            String compact = parts[0] + "~" + parts[1] + "~" + parts[2] + "~" + parts[3];
+            String metaZero = parts[0] + "~" + parts[1] + "~" + parts[2] + "~0";
+            if (!compact.equals(normalized)) {
+                aliases.add(compact);
+            }
+            if (!metaZero.equals(normalized) && !aliases.contains(metaZero)) {
+                aliases.add(metaZero);
+            }
+        }
+        return aliases;
     }
 
     private static void inspectRenderAssets(File repositoryDirectory, File canonicalDir, ValidationReport report) {
@@ -355,6 +503,26 @@ final class ExportValidationReportWriter {
         return 0;
     }
 
+    private static int readIntMember(JsonObject object, String memberName) {
+        if (object != null
+                && object.has(memberName)
+                && object.get(memberName).isJsonPrimitive()
+                && object.get(memberName).getAsJsonPrimitive().isNumber()) {
+            return object.get(memberName).getAsInt();
+        }
+        return 0;
+    }
+
+    private static String readStringMember(JsonObject object, String memberName) {
+        if (object != null
+                && object.has(memberName)
+                && object.get(memberName).isJsonPrimitive()) {
+            String value = object.get(memberName).getAsString();
+            return value == null ? null : value.trim();
+        }
+        return null;
+    }
+
     private static Double ratio(int numerator, int denominator) {
         if (denominator <= 0) {
             return null;
@@ -420,6 +588,19 @@ final class ExportValidationReportWriter {
         int renderAssetMissingTimelineFrames;
         List<String> renderAssetMissingTimelineFrameSamples = new ArrayList<String>();
         int browserLayoutEntries;
+        int browserLayoutItemCount;
+        int browserLayoutGroupCount;
+        int browserLayoutDefaultEntryCount;
+        boolean browserAtlasPresent;
+        int browserAtlasItems;
+        int browserAtlasDrawableItems;
+        int browserAtlasAnimatedItems;
+        int browserAtlasMissingAtlasCount;
+        int browserAtlasLayoutItemCount;
+        int browserAtlasLayoutCoveredItems;
+        int browserAtlasLayoutMissingItems;
+        Double browserAtlasLayoutCoverageRatio;
+        List<String> browserAtlasLayoutMissingSamples = new ArrayList<String>();
         int multiblockBlueprints;
         int entityPreviewEntries;
         int entityModelEntries;

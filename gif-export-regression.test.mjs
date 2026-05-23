@@ -371,3 +371,28 @@ test('export health report surfaces missing contracts and samples', () => {
     'Health report should include missing timeline frame samples',
   );
 });
+
+test('export health report audits browser layout atlas residency', () => {
+  const validationSource = read('src/main/java/com/github/dcysteine/nesql/exporter/main/ExportValidationReportWriter.java');
+
+  assert.equal(
+    validationSource.includes('inspectBrowserAtlasCoverage(canonicalDir, report);'),
+    true,
+    'Validation writer should compare browser-layout-index.json against browser-atlas-index.json',
+  );
+  assert.equal(
+    validationSource.includes('browserAtlasLayoutCoverageRatio'),
+    true,
+    'Health report should include atlas coverage ratio for layout-visible browser items',
+  );
+  assert.equal(
+    validationSource.includes('browserAtlasLayoutMissingSamples'),
+    true,
+    'Health report should include bounded missing atlas samples for export repair',
+  );
+  assert.equal(
+    validationSource.includes('Browser layout items missing atlas coverage'),
+    true,
+    'Health report should warn when layout-visible items cannot draw from the atlas',
+  );
+});
