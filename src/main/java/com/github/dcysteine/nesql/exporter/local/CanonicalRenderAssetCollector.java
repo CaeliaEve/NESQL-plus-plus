@@ -620,12 +620,13 @@ public final class CanonicalRenderAssetCollector {
             if (exactName.endsWith(".png") && alternateGif != null && inspectGifAnimation(alternateGif).animated) {
                 return alternateGif;
             }
-            if (exactName.endsWith(".png")) {
-                File animatedSibling = findAnimatedSiblingVariantArtifact(familyIndex, normalizedKey);
-                if (animatedSibling != null) {
-                    return animatedSibling;
-                }
-            }
+            // Keep exact metadata/damage variants isolated.  Some GTNH items expose
+            // one animated sibling next to many static damage variants (for example
+            // AE2 ItemMultiMaterial~47 singularity).  Promoting every exact PNG to
+            // the first animated sibling makes unrelated variants share that sprite
+            // atlas in browser-atlas-index.json, causing whole NEI pages to render
+            // as the same animated item.  Only the same-stem alternate GIF above is
+            // allowed to override an exact PNG.
             return exactPath;
         }
 
