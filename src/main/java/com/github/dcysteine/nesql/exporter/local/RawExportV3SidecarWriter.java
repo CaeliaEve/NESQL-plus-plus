@@ -13,6 +13,7 @@ import jakarta.persistence.EntityManager;
 import net.minecraft.util.EnumChatFormatting;
 
 import java.io.File;
+import java.io.FileInputStream;
 import java.io.FileOutputStream;
 import java.io.IOException;
 import java.io.OutputStreamWriter;
@@ -76,6 +77,20 @@ public final class RawExportV3SidecarWriter {
 
         Logger.chatMessage(EnumChatFormatting.GREEN + "Raw-export v3 sidecar written:");
         Logger.chatMessage(EnumChatFormatting.YELLOW + "  " + rawDir.getAbsolutePath());
+    }
+
+    public static void syncFinalReports(File repositoryDirectory) throws IOException {
+        File rawDir = new File(repositoryDirectory, OUTPUT_DIRECTORY);
+        ensureDirectory(rawDir);
+        copyIfPresent(
+                new File(repositoryDirectory, "canonical/export-stage-timings.json"),
+                new File(rawDir, "export_stage_timings.json"));
+        copyIfPresent(
+                new File(repositoryDirectory, "canonical/stage-checksums.json"),
+                new File(rawDir, "stage_checksums.json"));
+        copyIfPresent(
+                new File(repositoryDirectory, "canonical/export-validation-report.json"),
+                new File(rawDir, "validation_report.json"));
     }
 
     private RawExportManifest buildManifest(RawExportReport report) {
@@ -348,6 +363,26 @@ public final class RawExportV3SidecarWriter {
     private static void ensureDirectory(File directory) throws IOException {
         if (!directory.exists() && !directory.mkdirs()) {
             throw new IOException("Failed to create directory: " + directory.getAbsolutePath());
+        }
+    }
+
+    private static void copyIfPresent(File source, File target) throws IOException {
+        if (source == null || !source.exists() || !source.isFile()) {
+            return;
+        }
+        File parent = target.getParentFile();
+        if (parent != null) {
+            ensureDirectory(parent);
+        }
+        byte[] buffer = new byte[1024 * 1024];
+        try (FileInputStream in = new FileInputStream(source);
+             FileOutputStream out = new FileOutputStream(target)) {
+            int read;
+            while ((read = in.read(buffer)) >= 0) {
+                if (read > 0) {
+                    out.write(buffer, 0, read);
+                }
+            }
         }
     }
 

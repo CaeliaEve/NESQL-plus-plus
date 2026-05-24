@@ -302,4 +302,12 @@ public final class ExportWriterSupport {
             throw e;
         }
     }
+
+    public static void syncRawExportV3FinalReports(File repositoryDirectory) {
+        try {
+            RawExportV3SidecarWriter.syncFinalReports(repositoryDirectory);
+        } catch (Exception e) {
+            Logger.MOD.warn("Failed to sync raw-export v3 final reports", e);
+        }
+    }
 }
