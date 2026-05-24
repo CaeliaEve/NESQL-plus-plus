@@ -110,6 +110,7 @@ public final class RawExportV3SidecarWriter {
         manifest.files.add(fileRef("nei-order", "nei_order.jsonl", "placeholder-jsonl"));
         manifest.files.add(fileRef("textures", "textures.jsonl", "placeholder-jsonl"));
         manifest.files.add(fileRef("animations", "animations.jsonl", "placeholder-jsonl"));
+        manifest.files.add(fileRef("browser-atlas-index", "browser_atlas_index.json", "canonical-report"));
         manifest.files.add(fileRef("nei-handlers", "nei_handlers.jsonl", "placeholder-jsonl"));
         manifest.files.add(fileRef("multiblocks", "multiblocks.jsonl", "placeholder-jsonl"));
         manifest.files.add(fileRef("entities", "entities.jsonl", "placeholder-jsonl"));
@@ -199,6 +200,10 @@ public final class RawExportV3SidecarWriter {
             counts.textures = writeArrayAsJsonl(textureRows, new File(rawDir, "textures.jsonl"));
             counts.animations = writeArrayAsJsonl(animationRows, new File(rawDir, "animations.jsonl"));
         }
+
+        copyIfPresent(
+                new File(repositoryDirectory, "canonical/browser-atlas-index.json"),
+                new File(rawDir, "browser_atlas_index.json"));
 
         createEmptyJsonl(new File(rawDir, "nei_handlers.jsonl"));
         createEmptyJsonl(new File(rawDir, "multiblocks.jsonl"));
