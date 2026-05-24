@@ -5,6 +5,10 @@ import com.github.dcysteine.nesql.exporter.main.ExportContext;
 import com.github.dcysteine.nesql.exporter.main.Logger;
 import com.google.gson.Gson;
 import com.google.gson.GsonBuilder;
+import com.google.gson.JsonArray;
+import com.google.gson.JsonElement;
+import com.google.gson.JsonObject;
+import com.google.gson.JsonParser;
 import jakarta.persistence.EntityManager;
 import net.minecraft.util.EnumChatFormatting;
 
@@ -54,9 +58,16 @@ public final class RawExportV3SidecarWriter {
         File rawDir = new File(repositoryDirectory, OUTPUT_DIRECTORY);
         ensureDirectory(rawDir);
 
-        createJsonlPlaceholders(rawDir);
+        RawFactCounts factCounts = writeRawFactStreams(rawDir);
 
         RawExportReport report = buildReport();
+        report.counts.rawItems = factCounts.items;
+        report.counts.rawFluids = factCounts.fluids;
+        report.counts.rawRecipes = factCounts.recipes;
+        report.counts.rawGroups = factCounts.groups;
+        report.counts.rawNeiOrderEntries = factCounts.neiOrderEntries;
+        report.counts.rawTextures = factCounts.textures;
+        report.counts.rawAnimations = factCounts.animations;
         RawExportManifest manifest = buildManifest(report);
 
         Gson gson = new GsonBuilder().setPrettyPrinting().serializeNulls().create();
@@ -121,6 +132,108 @@ public final class RawExportV3SidecarWriter {
         return report;
     }
 
+    private RawFactCounts writeRawFactStreams(File rawDir) throws IOException {
+        RawFactCounts counts = new RawFactCounts();
+        JsonObject repository = readObject(new File(repositoryDirectory, "canonical/repository.json"));
+        if (repository != null) {
+            counts.items = writeArrayAsJsonl(repository.getAsJsonArray("items"), new File(rawDir, "items.jsonl"));
+            counts.fluids = writeArrayAsJsonl(repository.getAsJsonArray("fluids"), new File(rawDir, "fluids.jsonl"));
+            counts.recipes = writeArrayAsJsonl(repository.getAsJsonArray("recipes"), new File(rawDir, "recipes.jsonl"));
+        } else {
+            createEmptyJsonl(new File(rawDir, "items.jsonl"));
+            createEmptyJsonl(new File(rawDir, "fluids.jsonl"));
+            createEmptyJsonl(new File(rawDir, "recipes.jsonl"));
+        }
+
+        JsonObject browserLayout = readObject(new File(repositoryDirectory, "canonical/browser-layout-index.json"));
+        if (browserLayout != null) {
+            counts.groups = writeArrayAsJsonl(browserLayout.getAsJsonArray("groups"), new File(rawDir, "groups.jsonl"));
+            counts.neiOrderEntries =
+                    writeArrayAsJsonl(browserLayout.getAsJsonArray("defaultEntries"), new File(rawDir, "nei_order.jsonl"));
+        } else {
+            createEmptyJsonl(new File(rawDir, "groups.jsonl"));
+            createEmptyJsonl(new File(rawDir, "nei_order.jsonl"));
+        }
+
+        JsonArray textureRows = new JsonArray();
+        JsonArray animationRows = new JsonArray();
+        for (CanonicalRenderAsset asset : renderAssets) {
+            JsonObject row = toRenderAssetRow(asset);
+            textureRows.add(row);
+            if (isAnimated(asset)) {
+                animationRows.add(row);
+            }
+        }
+        if (textureRows.size() == 0) {
+            JsonObject renderManifest = readObject(new File(repositoryDirectory, "canonical/render-assets.json"));
+            if (renderManifest != null && renderManifest.has("assets") && renderManifest.get("assets").isJsonArray()) {
+                JsonArray assets = renderManifest.getAsJsonArray("assets");
+                counts.textures = writeArrayAsJsonl(assets, new File(rawDir, "textures.jsonl"));
+                JsonArray animated = new JsonArray();
+                for (JsonElement element : assets) {
+                    if (element.isJsonObject() && isAnimated(element.getAsJsonObject())) {
+                        animated.add(element);
+                    }
+                }
+                counts.animations = writeArrayAsJsonl(animated, new File(rawDir, "animations.jsonl"));
+            } else {
+                createEmptyJsonl(new File(rawDir, "textures.jsonl"));
+                createEmptyJsonl(new File(rawDir, "animations.jsonl"));
+            }
+        } else {
+            counts.textures = writeArrayAsJsonl(textureRows, new File(rawDir, "textures.jsonl"));
+            counts.animations = writeArrayAsJsonl(animationRows, new File(rawDir, "animations.jsonl"));
+        }
+
+        createEmptyJsonl(new File(rawDir, "nei_handlers.jsonl"));
+        createEmptyJsonl(new File(rawDir, "multiblocks.jsonl"));
+        createEmptyJsonl(new File(rawDir, "entities.jsonl"));
+        return counts;
+    }
+
+    private static JsonObject toRenderAssetRow(CanonicalRenderAsset asset) {
+        JsonObject row = new JsonObject();
+        add(row, "assetId", asset.assetId);
+        add(row, "variantKey", asset.variantKey);
+        add(row, "family", asset.family);
+        add(row, "sourceType", asset.sourceType);
+        add(row, "contentHash", asset.contentHash);
+        add(row, "mode", asset.mode);
+        add(row, "renderMode", asset.renderMode);
+        add(row, "animationMode", asset.animationMode);
+        add(row, "playbackHint", asset.playbackHint);
+        add(row, "primaryArtifact", asset.primaryArtifact);
+        add(row, "staticFile", asset.staticFile);
+        add(row, "framePattern", asset.framePattern);
+        add(row, "frameCount", asset.frameCount);
+        add(row, "frameDurationMs", asset.frameDurationMs);
+        add(row, "atlasGroup", asset.atlasGroup);
+        add(row, "atlasFile", asset.atlasFile);
+        add(row, "atlasTexture", asset.atlasTexture);
+        add(row, "atlasExportFile", asset.atlasExportFile);
+        add(row, "spriteMetadataFile", asset.spriteMetadataFile);
+        add(row, "nativeSpriteAtlasFile", asset.nativeSpriteAtlasFile);
+        return row;
+    }
+
+    private static boolean isAnimated(CanonicalRenderAsset asset) {
+        return (asset.frameCount != null && asset.frameCount > 1)
+                || (asset.capturedFrameCount != null && asset.capturedFrameCount > 1)
+                || (asset.configuredFrameCount != null && asset.configuredFrameCount > 1)
+                || containsIgnoreCase(asset.mode, "animated")
+                || containsIgnoreCase(asset.animationMode, "animated")
+                || asset.framePattern != null;
+    }
+
+    private static boolean isAnimated(JsonObject asset) {
+        return intValue(asset, "frameCount") > 1
+                || intValue(asset, "capturedFrameCount") > 1
+                || intValue(asset, "configuredFrameCount") > 1
+                || containsIgnoreCase(stringValue(asset, "mode"), "animated")
+                || containsIgnoreCase(stringValue(asset, "animationMode"), "animated")
+                || stringValue(asset, "framePattern") != null;
+    }
+
     private long countQuery(String query) {
         if (entityManager == null) {
             return -1L;
@@ -144,26 +257,73 @@ public final class RawExportV3SidecarWriter {
         return ref;
     }
 
-    private static void createJsonlPlaceholders(File rawDir) throws IOException {
-        String[] names = new String[] {
-                "items.jsonl",
-                "fluids.jsonl",
-                "recipes.jsonl",
-                "groups.jsonl",
-                "nei_order.jsonl",
-                "textures.jsonl",
-                "animations.jsonl",
-                "nei_handlers.jsonl",
-                "multiblocks.jsonl",
-                "entities.jsonl"
-        };
-        for (String name : names) {
-            File file = new File(rawDir, name);
-            if (!file.exists()) {
-                try (FileOutputStream ignored = new FileOutputStream(file)) {
-                    // Empty JSONL is a valid placeholder for alpha sidecars.
+    private static long writeArrayAsJsonl(JsonArray array, File out) throws IOException {
+        long count = 0L;
+        Gson gson = new GsonBuilder().serializeNulls().create();
+        try (FileOutputStream fos = new FileOutputStream(out);
+             OutputStreamWriter writer = new OutputStreamWriter(fos, StandardCharsets.UTF_8)) {
+            if (array != null) {
+                for (JsonElement element : array) {
+                    gson.toJson(element, writer);
+                    writer.write('\n');
+                    count++;
                 }
             }
+        }
+        return count;
+    }
+
+    private static void createEmptyJsonl(File out) throws IOException {
+        try (FileOutputStream ignored = new FileOutputStream(out)) {
+            // Empty JSONL remains valid when a source is unavailable for this run.
+        }
+    }
+
+    private static JsonObject readObject(File file) {
+        if (file == null || !file.exists()) {
+            return null;
+        }
+        try (java.io.FileInputStream fis = new java.io.FileInputStream(file);
+             java.io.InputStreamReader reader = new java.io.InputStreamReader(fis, StandardCharsets.UTF_8)) {
+            JsonElement element = new JsonParser().parse(reader);
+            return element != null && element.isJsonObject() ? element.getAsJsonObject() : null;
+        } catch (Exception e) {
+            Logger.MOD.warn("Failed to read raw-export source file: " + file.getAbsolutePath(), e);
+            return null;
+        }
+    }
+
+    private static void add(JsonObject object, String key, String value) {
+        if (value != null) {
+            object.addProperty(key, value);
+        }
+    }
+
+    private static void add(JsonObject object, String key, Number value) {
+        if (value != null) {
+            object.addProperty(key, value);
+        }
+    }
+
+    private static boolean containsIgnoreCase(String value, String token) {
+        return value != null && token != null && value.toLowerCase(java.util.Locale.ROOT).contains(token.toLowerCase(java.util.Locale.ROOT));
+    }
+
+    private static int intValue(JsonObject object, String key) {
+        try {
+            JsonElement element = object.get(key);
+            return element == null || element.isJsonNull() ? 0 : element.getAsInt();
+        } catch (Exception ignored) {
+            return 0;
+        }
+    }
+
+    private static String stringValue(JsonObject object, String key) {
+        try {
+            JsonElement element = object.get(key);
+            return element == null || element.isJsonNull() ? null : element.getAsString();
+        } catch (Exception ignored) {
+            return null;
         }
     }
 
@@ -234,6 +394,23 @@ public final class RawExportV3SidecarWriter {
         long itemModFiles;
         long recipeModFiles;
         long canonicalFiles;
+        long rawItems;
+        long rawFluids;
+        long rawRecipes;
+        long rawGroups;
+        long rawNeiOrderEntries;
+        long rawTextures;
+        long rawAnimations;
+    }
+
+    private static final class RawFactCounts {
+        long items;
+        long fluids;
+        long recipes;
+        long groups;
+        long neiOrderEntries;
+        long textures;
+        long animations;
     }
 
     private static final class RawExportValidation {
