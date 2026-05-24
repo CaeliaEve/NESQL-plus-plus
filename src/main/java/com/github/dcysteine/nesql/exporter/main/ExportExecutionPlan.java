@@ -65,8 +65,10 @@ public final class ExportExecutionPlan {
         }
 
         if (selection.includesStage(ExportStage.COMMIT_DATABASE, profile)) {
+            stages.add(ExportStage.WRITE_RAW_EXPORT_V3_SIDECAR);
             stages.add(ExportStage.COMMIT_DATABASE);
         } else {
+            stages.add(ExportStage.WRITE_RAW_EXPORT_V3_SIDECAR);
             stages.add(ExportStage.ROLLBACK_DATABASE);
         }
 

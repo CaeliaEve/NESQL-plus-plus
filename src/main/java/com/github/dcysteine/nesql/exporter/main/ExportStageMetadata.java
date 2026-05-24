@@ -17,7 +17,8 @@ final class ExportStageMetadata {
             "multiblocks",
             "eec-models",
             "recipe-layout-contracts",
-            "atlas-pack"
+            "atlas-pack",
+            "raw-export-v3"
     };
 
     private ExportStageMetadata() {}
@@ -56,6 +57,8 @@ final class ExportStageMetadata {
             case WRITE_MULTIBLOCK_BLUEPRINTS:
             case WRITE_BLOCK_FACE_METADATA:
                 return "multiblocks";
+            case WRITE_RAW_EXPORT_V3_SIDECAR:
+                return "raw-export-v3";
             default:
                 return "unknown";
         }

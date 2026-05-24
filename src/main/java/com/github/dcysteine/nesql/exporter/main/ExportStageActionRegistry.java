@@ -124,6 +124,13 @@ final class ExportStageActionRegistry {
                 ExportWriterSupport.writeBrowserAtlasIndex(exportContext.paths.repositoryDirectory);
             }
         });
+        actions.put(ExportStage.WRITE_RAW_EXPORT_V3_SIDECAR, () -> {
+            ExportWriterSupport.writeRawExportV3Sidecar(
+                    stageState.runtime == null ? null : stageState.runtime.entityManager,
+                    exportContext.paths.repositoryDirectory,
+                    exportContext,
+                    stageState.renderAssets);
+        });
         actions.put(ExportStage.COMPLETE, () -> {});
         return actions;
     }

@@ -11,6 +11,7 @@ import com.github.dcysteine.nesql.exporter.local.CanonicalAtlasRegistryWriter;
 import com.github.dcysteine.nesql.exporter.local.CanonicalBrowserAtlasIndexWriter;
 import com.github.dcysteine.nesql.exporter.local.CanonicalBrowserLayoutIndexWriter;
 import com.github.dcysteine.nesql.exporter.local.CanonicalRenderAssetCollector;
+import com.github.dcysteine.nesql.exporter.local.RawExportV3SidecarWriter;
 import com.github.dcysteine.nesql.exporter.local.ModBasedItemExporter;
 import com.github.dcysteine.nesql.exporter.local.ModBasedRecipeExporter;
 import net.minecraft.util.EnumChatFormatting;
@@ -282,6 +283,22 @@ public final class ExportWriterSupport {
             Logger.MOD.error("Failed to write NESQL++ browser layout index", e);
             Logger.chatMessage(
                     EnumChatFormatting.RED + "Failed to write NESQL++ browser layout index: " + e.getMessage());
+            throw e;
+        }
+    }
+
+    public static void writeRawExportV3Sidecar(
+            EntityManager entityManager,
+            File repositoryDirectory,
+            ExportContext exportContext,
+            List<CanonicalRenderAsset> precollectedAssets) throws Exception {
+        Logger.chatMessage(EnumChatFormatting.AQUA + "Writing NESQL++ raw-export v3 sidecar...");
+        try {
+            new RawExportV3SidecarWriter(entityManager, repositoryDirectory, exportContext, precollectedAssets).export();
+        } catch (Exception e) {
+            Logger.MOD.error("Failed to write NESQL++ raw-export v3 sidecar", e);
+            Logger.chatMessage(
+                    EnumChatFormatting.RED + "Failed to write raw-export v3 sidecar: " + e.getMessage());
             throw e;
         }
     }
