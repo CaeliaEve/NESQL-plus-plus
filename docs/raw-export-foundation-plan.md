@@ -1,4 +1,4 @@
-﻿# Raw Export 成熟化地基开发计划
+# Raw Export 成熟化地基开发计划
 
 日期：2026-05-26
 状态：已批准，开始推进
@@ -100,7 +100,7 @@ NESQL++ 只负责游戏内真实数据采集和原始事实导出；NeoNEI Compi
 ### P1：Manifest 驱动
 - [x] NESQL++ `raw-export/manifest.json` 增加 `files` map，所有核心路径由 manifest 声明。
 - [x] NeoNEI Compiler 优先读取 `raw-export/manifest.json`，旧路径仅作为兼容。
-- [ ] 增加 manifest schema 校验：缺文件、空文件、未知 capability 直接进入 validation 报告。
+- [x] 增加 manifest schema 校验：缺文件、空文件、未知 capability 直接进入 validation 报告。
 
 ### P2：目录分域
 - [x] NESQL++ 将首批 flat JSONL 双写到 `facts/`、`assets/`、`models/`、`validation/`。
@@ -109,9 +109,9 @@ NESQL++ 只负责游戏内真实数据采集和原始事实导出；NeoNEI Compi
 
 ### P3：配方按 handler 分片
 - [x] 输出 `facts/recipes/index.json`。
-- [ ] 输出 `facts/recipes/by-handler/*.jsonl`。
-- [ ] NeoNEI Compiler 支持按 handler 增量读取和校验。
-- [ ] 输出重复分类/分裂分类报告，避免熔炉、工作台、工业屠宰场等重复分裂。
+- [x] 输出 `facts/recipes/by-handler/*.jsonl`。
+- [x] NeoNEI Compiler 支持按 handler 增量读取和校验。
+- [x] 输出重复分类/分裂分类报告，避免熔炉、工作台、工业屠宰场等重复分裂。
 
 ### P4：资源与动画契约
 - [x] 输出 `assets/textures/index.jsonl`。

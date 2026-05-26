@@ -22,8 +22,10 @@ import java.text.SimpleDateFormat;
 import java.util.ArrayList;
 import java.util.Date;
 import java.util.LinkedHashMap;
+import java.util.LinkedHashSet;
 import java.util.List;
 import java.util.Map;
+import java.util.Set;
 import java.util.TimeZone;
 
 /**
@@ -265,18 +267,113 @@ public final class RawExportSidecarWriter {
     }
 
     private static void writeRecipeIndex(File rawDir, JsonArray recipes) throws IOException {
+        Map<String, JsonArray> byHandler = new LinkedHashMap<String, JsonArray>();
+        if (recipes != null) {
+            for (JsonElement element : recipes) {
+                String handlerId = inferRecipeHandlerId(element);
+                JsonArray bucket = byHandler.get(handlerId);
+                if (bucket == null) {
+                    bucket = new JsonArray();
+                    byHandler.put(handlerId, bucket);
+                }
+                bucket.add(element);
+            }
+        }
+
+        File shardDir = new File(rawDir, "facts/recipes/by-handler");
+        ensureDirectory(shardDir);
+        JsonArray shards = new JsonArray();
+        Set<String> usedFileNames = new LinkedHashSet<String>();
+        for (Map.Entry<String, JsonArray> entry : byHandler.entrySet()) {
+            String handlerId = entry.getKey();
+            String fileName = uniqueShardFileName(handlerId, usedFileNames);
+            String path = "facts/recipes/by-handler/" + fileName;
+            writeArrayAsJsonl(entry.getValue(), new File(rawDir, path));
+
+            JsonObject shard = new JsonObject();
+            shard.addProperty("handlerId", handlerId);
+            shard.addProperty("path", path);
+            shard.addProperty("recipeCount", entry.getValue().size());
+            shards.add(shard);
+        }
+
+        JsonObject allShard = new JsonObject();
+        allShard.addProperty("handlerId", "all");
+        allShard.addProperty("path", "facts/recipes/all.jsonl");
+        allShard.addProperty("recipeCount", recipes == null ? 0 : recipes.size());
+
         JsonObject index = new JsonObject();
         index.addProperty("schemaVersion", SCHEMA_VERSION + "/recipe-index");
-        index.addProperty("strategy", "single-shard-compat");
+        index.addProperty("strategy", "by-handler");
         index.addProperty("recipeCount", recipes == null ? 0 : recipes.size());
-        JsonArray shards = new JsonArray();
-        JsonObject shard = new JsonObject();
-        shard.addProperty("handlerId", "all");
-        shard.addProperty("path", "facts/recipes/all.jsonl");
-        shard.addProperty("recipeCount", recipes == null ? 0 : recipes.size());
-        shards.add(shard);
+        index.addProperty("shardCount", shards.size());
         index.add("shards", shards);
+        index.add("compatibilityShard", allShard);
         writeJson(new GsonBuilder().setPrettyPrinting().serializeNulls().create(), new File(rawDir, "facts/recipes/index.json"), index);
+    }
+
+    private static String inferRecipeHandlerId(JsonElement element) {
+        if (element == null || !element.isJsonObject()) {
+            return "unknown";
+        }
+        JsonObject recipe = element.getAsJsonObject();
+        String value = firstNonBlank(
+                stringAt(recipe, "metadata.handlerId"),
+                stringAt(recipe, "metadata.handlerName"),
+                stringAt(recipe, "additionalData.handlerId"),
+                stringAt(recipe, "additionalData.handlerName"),
+                stringAt(recipe, "machine.machineId"),
+                stringAt(recipe, "machine.displayName"),
+                stringAt(recipe, "family"),
+                stringAt(recipe, "sourcePlugin"),
+                stringAt(recipe, "recipeType"),
+                stringAt(recipe, "displayName"));
+        return value == null ? "unknown" : value;
+    }
+
+    private static String stringAt(JsonObject object, String dottedPath) {
+        JsonElement current = object;
+        for (String part : dottedPath.split("\\.")) {
+            if (current == null || !current.isJsonObject()) {
+                return null;
+            }
+            current = current.getAsJsonObject().get(part);
+        }
+        if (current == null || current.isJsonNull()) {
+            return null;
+        }
+        try {
+            return current.isJsonPrimitive() ? current.getAsString() : null;
+        } catch (Exception ignored) {
+            return null;
+        }
+    }
+
+    private static String firstNonBlank(String... values) {
+        for (String value : values) {
+            if (value != null && value.trim().length() > 0) {
+                return value.trim();
+            }
+        }
+        return null;
+    }
+
+    private static String uniqueShardFileName(String handlerId, Set<String> usedFileNames) {
+        String base = safeShardFileName(handlerId);
+        String candidate = base + ".jsonl";
+        int suffix = 2;
+        while (usedFileNames.contains(candidate)) {
+            candidate = base + "-" + suffix + ".jsonl";
+            suffix++;
+        }
+        usedFileNames.add(candidate);
+        return candidate;
+    }
+
+    private static String safeShardFileName(String handlerId) {
+        String normalized = handlerId == null ? "unknown" : handlerId.trim().toLowerCase(java.util.Locale.ROOT);
+        normalized = normalized.replaceAll("[^a-z0-9._-]+", "-").replaceAll("^-+|-+$", "");
+        return normalized.length() == 0 ? "unknown" : normalized;
     }
 
     private static JsonObject toRenderAssetRow(CanonicalRenderAsset asset) {
@@ -549,3 +646,4 @@ public final class RawExportSidecarWriter {
         String kind;
     }
 }
+
