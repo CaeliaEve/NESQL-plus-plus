@@ -76,6 +76,7 @@ public final class RawExportSidecarWriter {
         report.counts.rawTextures = factCounts.textures;
         report.counts.rawAnimations = factCounts.animations;
         report.counts.rawEntities = factCounts.entities;
+        applyRawValidation(report);
         RawExportManifest manifest = buildManifest(report);
 
         Gson gson = new GsonBuilder().setPrettyPrinting().serializeNulls().create();
@@ -182,6 +183,31 @@ public final class RawExportSidecarWriter {
         report.validation.failedStages = new ArrayList<String>();
         report.validation.status = "not-yet-enforced";
         return report;
+    }
+
+    private static void applyRawValidation(RawExportReport report) {
+        if (report == null || report.counts == null || report.validation == null) {
+            return;
+        }
+        RawExportCounts counts = report.counts;
+        List<String> issues = new ArrayList<String>();
+        addCountMismatch(issues, "items", counts.items, counts.rawItems);
+        addCountMismatch(issues, "fluids", counts.fluids, counts.rawFluids);
+        addCountMismatch(issues, "recipes", counts.recipes, counts.rawRecipes);
+        if (counts.renderAssets > 0) {
+            addCountMismatch(issues, "renderAssets/textures", counts.renderAssets, counts.rawTextures);
+        }
+        report.validation.missingTextureCount = counts.rawItems > 0 && counts.rawTextures == 0 ? counts.rawItems : 0;
+        report.validation.missingAnimationMetadataCount = counts.rawAnimations > 0 ? 0 : report.validation.missingAnimationMetadataCount;
+        report.validation.missingGroupOrOrderCount = (counts.rawGroups == 0 || counts.rawNeiOrderEntries == 0) ? 1 : 0;
+        report.validation.failedStages = issues;
+        report.validation.status = issues.isEmpty() ? "ok" : "warning";
+    }
+
+    private static void addCountMismatch(List<String> issues, String label, long expected, long actual) {
+        if (expected != actual) {
+            issues.add("count-mismatch:" + label + ":expected=" + expected + ":actual=" + actual);
+        }
     }
 
     private RawFactCounts writeRawFactStreams(File rawDir) throws IOException {
