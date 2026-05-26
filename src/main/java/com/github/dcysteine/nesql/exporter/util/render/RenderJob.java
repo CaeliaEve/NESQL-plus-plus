@@ -125,6 +125,10 @@ public abstract class RenderJob {
             return false;
         }
 
+        if (!ConfigOptions.EXPORT_FRAMEBUFFER_GIF.get()) {
+            return false;
+        }
+
         // Method 0: Force-capture mode (capture ALL items and fluids)
         if (ConfigOptions.FORCE_ALL_ITEMS_ANIMATED.get()) {
             return true;
@@ -184,7 +188,7 @@ public abstract class RenderJob {
             return true;
         }
 
-        if (!ConfigOptions.EXPORT_GIF.get() || !needsMultipleFrames()) {
+        if (!ConfigOptions.EXPORT_GIF.get() || !ConfigOptions.EXPORT_FRAMEBUFFER_GIF.get() || !needsMultipleFrames()) {
             return false;
         }
         if (ConfigOptions.FORCE_ALL_ITEMS_ANIMATED.get()) {
@@ -220,7 +224,10 @@ public abstract class RenderJob {
             return false;
         }
 
-        if (!ConfigOptions.EXPORT_GIF.get() || !needsMultipleFrames() || getType() != JobType.ITEM) {
+        if (!ConfigOptions.EXPORT_GIF.get()
+                || !ConfigOptions.EXPORT_FRAMEBUFFER_GIF.get()
+                || !needsMultipleFrames()
+                || getType() != JobType.ITEM) {
             return false;
         }
 

@@ -77,6 +77,16 @@ public final class ConfigOptions {
                             + "\nOnly enable if you need to capture animated item textures.")
                     .register();
 
+    public static final Option<Boolean> EXPORT_FRAMEBUFFER_GIF =
+            new BooleanOption(
+                    Category.OPTIONS, "export_framebuffer_gif", false,
+                    "Whether the main export may capture multi-frame GIFs by repeatedly rendering"
+                            + " inventory items through the client OpenGL framebuffer."
+                            + "\nDefault is false for GTNH-sized packs: native sprite animation"
+                            + " metadata is still exported, while expensive custom framebuffer"
+                            + " animations should be captured by a dedicated follow-up export.")
+                    .register();
+
     public static final Option<Integer> GIF_FRAMES =
             new IntegerOption(
                     Category.OPTIONS, "gif_frames", 8,
