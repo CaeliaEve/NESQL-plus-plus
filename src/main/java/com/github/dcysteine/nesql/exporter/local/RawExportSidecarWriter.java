@@ -120,6 +120,7 @@ public final class RawExportSidecarWriter {
         manifest.capabilities.add("facts");
         manifest.capabilities.add("assets");
         manifest.capabilities.add("validation");
+        manifest.capabilities.add("special");
         manifest.files.put("items", "facts/items.jsonl");
         manifest.files.put("fluids", "facts/fluids.jsonl");
         manifest.files.put("recipes", "facts/recipes/all.jsonl");
@@ -134,6 +135,7 @@ public final class RawExportSidecarWriter {
         manifest.files.put("neiHandlers", "facts/nei/handlers.jsonl");
         manifest.files.put("multiblocks", "models/multiblocks/index.jsonl");
         manifest.files.put("entities", "models/entities/index.jsonl");
+        manifest.files.put("specialIndex", "special/index.json");
         manifest.files.put("exportReport", "validation/export_report.json");
         manifest.files.put("stageTimings", "validation/export_stage_timings.json");
         manifest.files.put("stageChecksums", "validation/stage_checksums.json");
@@ -192,6 +194,7 @@ public final class RawExportSidecarWriter {
             writeArrayAsJsonl(fluids, new File(rawDir, "fluids.jsonl"));
             writeArrayAsJsonl(recipes, new File(rawDir, "recipes.jsonl"));
             writeRecipeIndex(rawDir, recipes);
+            writeSpecialIndexes(rawDir, recipes);
         } else {
             createEmptyJsonl(new File(rawDir, "items.jsonl"));
             createEmptyJsonl(new File(rawDir, "fluids.jsonl"));
@@ -200,6 +203,7 @@ public final class RawExportSidecarWriter {
             createEmptyJsonl(new File(rawDir, "facts/fluids.jsonl"));
             createEmptyJsonl(new File(rawDir, "facts/recipes/all.jsonl"));
             writeRecipeIndex(rawDir, new JsonArray());
+            writeSpecialIndexes(rawDir, new JsonArray());
         }
 
         JsonObject browserLayout = readObject(new File(repositoryDirectory, "canonical/browser-layout-index.json"));
@@ -342,6 +346,101 @@ public final class RawExportSidecarWriter {
         writeJson(new GsonBuilder().setPrettyPrinting().serializeNulls().create(), new File(rawDir, "facts/recipes/index.json"), index);
     }
 
+
+    private static void writeSpecialIndexes(File rawDir, JsonArray recipes) throws IOException {
+        String[][] domains = new String[][] {
+                {"gregtech", "gregtech|gt_|gt |assembler|assembly line|chemical reactor|blast furnace|macerator|fluid solidifier|alloy smelter|research station"},
+                {"thaumcraft", "thaumcraft|thaumic|arcane|infusion|crucible|aspect|research"},
+                {"botania", "botania|mana pool|rune altar|runic altar|terra plate|pure daisy|elven trade|petal apothecary"},
+                {"bloodmagic", "bloodmagic|blood magic|blood altar|alchemy array|binding ritual|blood orb|lp"},
+                {"forestry", "forestry|bee|alveary|centrifuge|squeezer|carpenter"},
+                {"eec", "extreme entity crusher|industrial slaughter|infernal drops|mobsinfo|kubatech|entity crusher"}
+        };
+
+        Map<String, JsonArray> buckets = new LinkedHashMap<String, JsonArray>();
+        for (String[] domain : domains) {
+            buckets.put(domain[0], new JsonArray());
+        }
+
+        if (recipes != null) {
+            for (JsonElement element : recipes) {
+                String descriptor = recipeDescriptor(element);
+                for (String[] domain : domains) {
+                    if (matchesAny(descriptor, domain[1])) {
+                        buckets.get(domain[0]).add(element);
+                    }
+                }
+            }
+        }
+
+        Gson gson = new GsonBuilder().setPrettyPrinting().serializeNulls().create();
+        JsonArray domainIndex = new JsonArray();
+        for (String[] domain : domains) {
+            String domainId = domain[0];
+            JsonArray bucket = buckets.get(domainId);
+            File domainDir = new File(rawDir, "special/" + domainId);
+            ensureDirectory(domainDir);
+            writeArrayAsJsonl(bucket, new File(domainDir, "recipes.jsonl"));
+
+            JsonObject index = new JsonObject();
+            index.addProperty("schemaVersion", SCHEMA_VERSION + "/special-domain");
+            index.addProperty("domain", domainId);
+            index.addProperty("recipeCount", bucket.size());
+            index.addProperty("recipes", "special/" + domainId + "/recipes.jsonl");
+            writeJson(gson, new File(domainDir, "index.json"), index);
+
+            JsonObject entry = new JsonObject();
+            entry.addProperty("domain", domainId);
+            entry.addProperty("recipeCount", bucket.size());
+            entry.addProperty("index", "special/" + domainId + "/index.json");
+            entry.addProperty("recipes", "special/" + domainId + "/recipes.jsonl");
+            domainIndex.add(entry);
+        }
+
+        JsonObject root = new JsonObject();
+        root.addProperty("schemaVersion", SCHEMA_VERSION + "/special-index");
+        root.add("domains", domainIndex);
+        writeJson(gson, new File(rawDir, "special/index.json"), root);
+    }
+
+    private static String recipeDescriptor(JsonElement element) {
+        if (element == null || !element.isJsonObject()) {
+            return "";
+        }
+        JsonObject recipe = element.getAsJsonObject();
+        StringBuilder builder = new StringBuilder();
+        appendDescriptor(builder, stringAt(recipe, "metadata.handlerId"));
+        appendDescriptor(builder, stringAt(recipe, "metadata.handlerName"));
+        appendDescriptor(builder, stringAt(recipe, "additionalData.handlerId"));
+        appendDescriptor(builder, stringAt(recipe, "additionalData.handlerName"));
+        appendDescriptor(builder, stringAt(recipe, "machine.machineId"));
+        appendDescriptor(builder, stringAt(recipe, "machine.displayName"));
+        appendDescriptor(builder, stringAt(recipe, "family"));
+        appendDescriptor(builder, stringAt(recipe, "sourcePlugin"));
+        appendDescriptor(builder, stringAt(recipe, "recipeType"));
+        appendDescriptor(builder, stringAt(recipe, "displayName"));
+        appendDescriptor(builder, stringAt(recipe, "category"));
+        return builder.toString().toLowerCase(java.util.Locale.ROOT);
+    }
+
+    private static void appendDescriptor(StringBuilder builder, String value) {
+        if (value != null && value.trim().length() > 0) {
+            builder.append(' ').append(value.trim());
+        }
+    }
+
+    private static boolean matchesAny(String descriptor, String pipeSeparatedNeedles) {
+        if (descriptor == null || descriptor.length() == 0) {
+            return false;
+        }
+        for (String needle : pipeSeparatedNeedles.split("\\|")) {
+            String normalized = needle.trim().toLowerCase(java.util.Locale.ROOT);
+            if (normalized.length() > 0 && descriptor.contains(normalized)) {
+                return true;
+            }
+        }
+        return false;
+    }
     private static String inferRecipeHandlerId(JsonElement element) {
         if (element == null || !element.isJsonObject()) {
             return "unknown";

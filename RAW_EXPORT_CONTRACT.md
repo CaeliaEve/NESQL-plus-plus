@@ -104,7 +104,7 @@ Minimum manifest fields:
   "repositoryName": "example",
   "profile": "full-v104",
   "generatedAt": "2026-05-26T00:00:00Z",
-  "capabilities": ["facts", "assets", "validation"],
+  "capabilities": ["facts", "assets", "validation", "special"],
   "files": {
     "items": "facts/items.jsonl",
     "fluids": "facts/fluids.jsonl",
@@ -114,6 +114,7 @@ Minimum manifest fields:
     "animationIndex": "assets/animations/index.jsonl",
     "nativeSprites": "assets/animations/native-sprites.jsonl",
     "renderedGifs": "assets/animations/rendered-gifs.jsonl",
+    "specialIndex": "special/index.json",
     "validationReport": "validation/export-health-report.json"
   }
 }
