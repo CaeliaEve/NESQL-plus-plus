@@ -20,6 +20,8 @@ import java.io.OutputStreamWriter;
 import java.nio.charset.StandardCharsets;
 import java.text.SimpleDateFormat;
 import java.util.ArrayList;
+import java.util.Collections;
+import java.util.Comparator;
 import java.util.Date;
 import java.util.LinkedHashMap;
 import java.util.LinkedHashSet;
@@ -382,18 +384,24 @@ public final class RawExportSidecarWriter {
             ensureDirectory(domainDir);
             writeArrayAsJsonl(bucket, new File(domainDir, "recipes.jsonl"));
 
+            JsonObject summary = buildSpecialDomainSummary(domainId, bucket);
             JsonObject index = new JsonObject();
             index.addProperty("schemaVersion", SCHEMA_VERSION + "/special-domain");
             index.addProperty("domain", domainId);
             index.addProperty("recipeCount", bucket.size());
             index.addProperty("recipes", "special/" + domainId + "/recipes.jsonl");
+            index.addProperty("summary", "special/" + domainId + "/summary.json");
+            index.add("stats", summary);
             writeJson(gson, new File(domainDir, "index.json"), index);
+            writeJson(gson, new File(domainDir, "summary.json"), summary);
 
             JsonObject entry = new JsonObject();
             entry.addProperty("domain", domainId);
             entry.addProperty("recipeCount", bucket.size());
             entry.addProperty("index", "special/" + domainId + "/index.json");
             entry.addProperty("recipes", "special/" + domainId + "/recipes.jsonl");
+            entry.addProperty("summary", "special/" + domainId + "/summary.json");
+            entry.add("stats", summary);
             domainIndex.add(entry);
         }
 
@@ -403,6 +411,77 @@ public final class RawExportSidecarWriter {
         writeJson(gson, new File(rawDir, "special/index.json"), root);
     }
 
+
+    private static JsonObject buildSpecialDomainSummary(String domainId, JsonArray recipes) {
+        JsonObject summary = new JsonObject();
+        summary.addProperty("domain", domainId);
+        summary.addProperty("recipeCount", recipes == null ? 0 : recipes.size());
+        summary.add("families", topStrings(recipes, "family", 50));
+        summary.add("recipeTypes", topStrings(recipes, "recipeType", 50));
+        summary.add("sourcePlugins", topStrings(recipes, "sourcePlugin", 50));
+        summary.add("machineIds", topStrings(recipes, "machine.machineId", 80));
+        summary.add("machineNames", topStrings(recipes, "machine.displayName", 80));
+        summary.add("sampleRecipeIds", sampleStrings(recipes, "recipeId", 50));
+        return summary;
+    }
+
+    private static JsonArray topStrings(JsonArray rows, String dottedPath, int limit) {
+        Map<String, Integer> counts = new LinkedHashMap<String, Integer>();
+        if (rows != null) {
+            for (JsonElement row : rows) {
+                if (row == null || !row.isJsonObject()) {
+                    continue;
+                }
+                String value = stringAt(row.getAsJsonObject(), dottedPath);
+                if (value == null || value.trim().length() == 0) {
+                    continue;
+                }
+                String normalized = value.trim();
+                Integer current = counts.get(normalized);
+                counts.put(normalized, current == null ? 1 : current + 1);
+            }
+        }
+        List<Map.Entry<String, Integer>> entries = new ArrayList<Map.Entry<String, Integer>>(counts.entrySet());
+        Collections.sort(entries, new Comparator<Map.Entry<String, Integer>>() {
+            @Override
+            public int compare(Map.Entry<String, Integer> left, Map.Entry<String, Integer> right) {
+                int byCount = right.getValue().compareTo(left.getValue());
+                return byCount != 0 ? byCount : left.getKey().compareTo(right.getKey());
+            }
+        });
+        JsonArray out = new JsonArray();
+        int count = 0;
+        for (Map.Entry<String, Integer> entry : entries) {
+            if (count >= limit) {
+                break;
+            }
+            JsonObject object = new JsonObject();
+            object.addProperty("value", entry.getKey());
+            object.addProperty("count", entry.getValue());
+            out.add(object);
+            count++;
+        }
+        return out;
+    }
+
+    private static JsonArray sampleStrings(JsonArray rows, String dottedPath, int limit) {
+        JsonArray out = new JsonArray();
+        Set<String> seen = new LinkedHashSet<String>();
+        if (rows != null) {
+            for (JsonElement row : rows) {
+                if (out.size() >= limit || row == null || !row.isJsonObject()) {
+                    continue;
+                }
+                String value = stringAt(row.getAsJsonObject(), dottedPath);
+                if (value == null || value.trim().length() == 0 || seen.contains(value.trim())) {
+                    continue;
+                }
+                seen.add(value.trim());
+                out.add(new com.google.gson.JsonPrimitive(value.trim()));
+            }
+        }
+        return out;
+    }
     private static String recipeDescriptor(JsonElement element) {
         if (element == null || !element.isJsonObject()) {
             return "";

@@ -6,11 +6,11 @@
 
 ## 当前进度
 
-粗略完成度：约 60%。
+粗略完成度：约 64%。
 
 - P0-P3：已完成。
 - P4：已完成。NeoNEI Compiler 现在会基于 Raw Export 资源索引补全/修复浏览 Atlas，并输出权威校验。
-- P5：已开始。NESQL++ 已输出 `special/index.json` 与各领域 `special/*/recipes.jsonl`，NeoNEI Compiler 已保留 special 索引进入 dist-data。
+- P5：已开始。NESQL++ 已输出 `special/index.json`、各领域 recipes 与 summary，NeoNEI Compiler 已把 special recipes/summary 编入 dist-data。
 - P6：新旧导出/编译对比与 canonical 降级尚未展开。
 
 ## 目标
