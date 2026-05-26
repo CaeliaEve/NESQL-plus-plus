@@ -53,7 +53,7 @@ final class ExportStageRunner {
             writeTimingReport(exportContext, timings, System.currentTimeMillis() - exportStartedAt);
             ExportValidationReportWriter.write(exportContext);
             ExportIntegrityManifestWriter.write(exportContext);
-            ExportWriterSupport.syncRawExportV3FinalReports(exportContext.paths.repositoryDirectory);
+            ExportWriterSupport.syncRawExportFinalReports(exportContext.paths.repositoryDirectory);
         } catch (RepositoryPreparationStoppedException ignored) {
             return;
         } catch (Exception e) {

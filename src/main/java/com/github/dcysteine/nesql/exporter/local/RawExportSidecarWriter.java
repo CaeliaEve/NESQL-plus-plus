@@ -21,11 +21,13 @@ import java.nio.charset.StandardCharsets;
 import java.text.SimpleDateFormat;
 import java.util.ArrayList;
 import java.util.Date;
+import java.util.LinkedHashMap;
 import java.util.List;
+import java.util.Map;
 import java.util.TimeZone;
 
 /**
- * Writes the first raw-export v3 sidecar without replacing the current canonical
+ * Writes the first raw-export sidecar without replacing the current canonical
  * export structure.
  *
  * <p>This is intentionally conservative: the sidecar records counts, source
@@ -33,16 +35,16 @@ import java.util.TimeZone;
  * Later rebuild phases can replace each placeholder JSONL file with true raw
  * fact streams while NeoNEI continues to consume the current export layout.</p>
  */
-public final class RawExportV3SidecarWriter {
+public final class RawExportSidecarWriter {
     private static final String OUTPUT_DIRECTORY = "raw-export";
-    private static final String SCHEMA_VERSION = "nesqlpp/raw-export/v3-alpha1";
+    private static final String SCHEMA_VERSION = "nesqlpp/raw-export/alpha1";
 
     private final EntityManager entityManager;
     private final File repositoryDirectory;
     private final ExportContext exportContext;
     private final List<CanonicalRenderAsset> renderAssets;
 
-    public RawExportV3SidecarWriter(
+    public RawExportSidecarWriter(
             EntityManager entityManager,
             File repositoryDirectory,
             ExportContext exportContext,
@@ -74,8 +76,9 @@ public final class RawExportV3SidecarWriter {
         Gson gson = new GsonBuilder().setPrettyPrinting().serializeNulls().create();
         writeJson(gson, new File(rawDir, "manifest.json"), manifest);
         writeJson(gson, new File(rawDir, "export_report.json"), report);
+        writeJson(gson, new File(rawDir, "validation/export_report.json"), report);
 
-        Logger.chatMessage(EnumChatFormatting.GREEN + "Raw-export v3 sidecar written:");
+        Logger.chatMessage(EnumChatFormatting.GREEN + "Raw-export sidecar written:");
         Logger.chatMessage(EnumChatFormatting.YELLOW + "  " + rawDir.getAbsolutePath());
     }
 
@@ -86,11 +89,20 @@ public final class RawExportV3SidecarWriter {
                 new File(repositoryDirectory, "canonical/export-stage-timings.json"),
                 new File(rawDir, "export_stage_timings.json"));
         copyIfPresent(
+                new File(repositoryDirectory, "canonical/export-stage-timings.json"),
+                new File(rawDir, "validation/export_stage_timings.json"));
+        copyIfPresent(
                 new File(repositoryDirectory, "canonical/stage-checksums.json"),
                 new File(rawDir, "stage_checksums.json"));
         copyIfPresent(
+                new File(repositoryDirectory, "canonical/stage-checksums.json"),
+                new File(rawDir, "validation/stage_checksums.json"));
+        copyIfPresent(
                 new File(repositoryDirectory, "canonical/export-validation-report.json"),
                 new File(rawDir, "validation_report.json"));
+        copyIfPresent(
+                new File(repositoryDirectory, "canonical/export-validation-report.json"),
+                new File(rawDir, "validation/export-health-report.json"));
     }
 
     private RawExportManifest buildManifest(RawExportReport report) {
@@ -103,21 +115,33 @@ public final class RawExportV3SidecarWriter {
         manifest.status = "sidecar-alpha";
         manifest.notes.add("Canonical export remains authoritative in this phase.");
         manifest.notes.add("JSONL files are present as stable compiler targets and will be populated incrementally.");
-        manifest.files.add(fileRef("items", "items.jsonl", "placeholder-jsonl"));
-        manifest.files.add(fileRef("fluids", "fluids.jsonl", "placeholder-jsonl"));
-        manifest.files.add(fileRef("recipes", "recipes.jsonl", "placeholder-jsonl"));
-        manifest.files.add(fileRef("groups", "groups.jsonl", "placeholder-jsonl"));
-        manifest.files.add(fileRef("nei-order", "nei_order.jsonl", "placeholder-jsonl"));
-        manifest.files.add(fileRef("textures", "textures.jsonl", "placeholder-jsonl"));
-        manifest.files.add(fileRef("animations", "animations.jsonl", "placeholder-jsonl"));
-        manifest.files.add(fileRef("browser-atlas-index", "browser_atlas_index.json", "canonical-report"));
-        manifest.files.add(fileRef("nei-handlers", "nei_handlers.jsonl", "placeholder-jsonl"));
-        manifest.files.add(fileRef("multiblocks", "multiblocks.jsonl", "placeholder-jsonl"));
-        manifest.files.add(fileRef("entities", "entities.jsonl", "placeholder-jsonl"));
-        manifest.files.add(fileRef("export-report", "export_report.json", "report"));
-        manifest.files.add(fileRef("stage-timings", "../canonical/export-stage-timings.json", "canonical-report"));
-        manifest.files.add(fileRef("integrity-manifest", "../canonical/export-integrity-manifest.json", "canonical-report"));
-        manifest.files.add(fileRef("canonical-repository", "../canonical/repository.json", "canonical-source"));
+        manifest.capabilities.add("facts");
+        manifest.capabilities.add("assets");
+        manifest.capabilities.add("validation");
+        manifest.files.put("items", "facts/items.jsonl");
+        manifest.files.put("fluids", "facts/fluids.jsonl");
+        manifest.files.put("recipes", "facts/recipes/all.jsonl");
+        manifest.files.put("recipeIndex", "facts/recipes/index.json");
+        manifest.files.put("groups", "facts/nei/groups.jsonl");
+        manifest.files.put("neiOrder", "facts/nei/order.jsonl");
+        manifest.files.put("textures", "assets/textures/index.jsonl");
+        manifest.files.put("animations", "assets/animations/index.jsonl");
+        manifest.files.put("browserAtlasIndex", "assets/textures/browser_atlas_index.json");
+        manifest.files.put("neiHandlers", "facts/nei/handlers.jsonl");
+        manifest.files.put("multiblocks", "models/multiblocks/index.jsonl");
+        manifest.files.put("entities", "models/entities/index.jsonl");
+        manifest.files.put("exportReport", "validation/export_report.json");
+        manifest.files.put("stageTimings", "validation/export_stage_timings.json");
+        manifest.files.put("stageChecksums", "validation/stage_checksums.json");
+        manifest.files.put("canonicalRepository", "../canonical/repository.json");
+        manifest.compatibilityFiles.add(fileRef("items", "items.jsonl", "compat-jsonl"));
+        manifest.compatibilityFiles.add(fileRef("fluids", "fluids.jsonl", "compat-jsonl"));
+        manifest.compatibilityFiles.add(fileRef("recipes", "recipes.jsonl", "compat-jsonl"));
+        manifest.compatibilityFiles.add(fileRef("groups", "groups.jsonl", "compat-jsonl"));
+        manifest.compatibilityFiles.add(fileRef("nei-order", "nei_order.jsonl", "compat-jsonl"));
+        manifest.compatibilityFiles.add(fileRef("textures", "textures.jsonl", "compat-jsonl"));
+        manifest.compatibilityFiles.add(fileRef("animations", "animations.jsonl", "compat-jsonl"));
+        manifest.compatibilityFiles.add(fileRef("browser-atlas-index", "browser_atlas_index.json", "compat-json"));
         manifest.counts = report.counts;
         return manifest;
     }
@@ -152,23 +176,40 @@ public final class RawExportV3SidecarWriter {
         RawFactCounts counts = new RawFactCounts();
         JsonObject repository = readObject(new File(repositoryDirectory, "canonical/repository.json"));
         if (repository != null) {
-            counts.items = writeArrayAsJsonl(repository.getAsJsonArray("items"), new File(rawDir, "items.jsonl"));
-            counts.fluids = writeArrayAsJsonl(repository.getAsJsonArray("fluids"), new File(rawDir, "fluids.jsonl"));
-            counts.recipes = writeArrayAsJsonl(repository.getAsJsonArray("recipes"), new File(rawDir, "recipes.jsonl"));
+            JsonArray items = repository.getAsJsonArray("items");
+            JsonArray fluids = repository.getAsJsonArray("fluids");
+            JsonArray recipes = repository.getAsJsonArray("recipes");
+            counts.items = writeArrayAsJsonl(items, new File(rawDir, "facts/items.jsonl"));
+            counts.fluids = writeArrayAsJsonl(fluids, new File(rawDir, "facts/fluids.jsonl"));
+            counts.recipes = writeArrayAsJsonl(recipes, new File(rawDir, "facts/recipes/all.jsonl"));
+            writeArrayAsJsonl(items, new File(rawDir, "items.jsonl"));
+            writeArrayAsJsonl(fluids, new File(rawDir, "fluids.jsonl"));
+            writeArrayAsJsonl(recipes, new File(rawDir, "recipes.jsonl"));
+            writeRecipeIndex(rawDir, recipes);
         } else {
             createEmptyJsonl(new File(rawDir, "items.jsonl"));
             createEmptyJsonl(new File(rawDir, "fluids.jsonl"));
             createEmptyJsonl(new File(rawDir, "recipes.jsonl"));
+            createEmptyJsonl(new File(rawDir, "facts/items.jsonl"));
+            createEmptyJsonl(new File(rawDir, "facts/fluids.jsonl"));
+            createEmptyJsonl(new File(rawDir, "facts/recipes/all.jsonl"));
+            writeRecipeIndex(rawDir, new JsonArray());
         }
 
         JsonObject browserLayout = readObject(new File(repositoryDirectory, "canonical/browser-layout-index.json"));
         if (browserLayout != null) {
-            counts.groups = writeArrayAsJsonl(browserLayout.getAsJsonArray("groups"), new File(rawDir, "groups.jsonl"));
+            JsonArray groups = browserLayout.getAsJsonArray("groups");
+            JsonArray order = browserLayout.getAsJsonArray("defaultEntries");
+            counts.groups = writeArrayAsJsonl(groups, new File(rawDir, "facts/nei/groups.jsonl"));
             counts.neiOrderEntries =
-                    writeArrayAsJsonl(browserLayout.getAsJsonArray("defaultEntries"), new File(rawDir, "nei_order.jsonl"));
+                    writeArrayAsJsonl(order, new File(rawDir, "facts/nei/order.jsonl"));
+            writeArrayAsJsonl(groups, new File(rawDir, "groups.jsonl"));
+            writeArrayAsJsonl(order, new File(rawDir, "nei_order.jsonl"));
         } else {
             createEmptyJsonl(new File(rawDir, "groups.jsonl"));
             createEmptyJsonl(new File(rawDir, "nei_order.jsonl"));
+            createEmptyJsonl(new File(rawDir, "facts/nei/groups.jsonl"));
+            createEmptyJsonl(new File(rawDir, "facts/nei/order.jsonl"));
         }
 
         JsonArray textureRows = new JsonArray();
@@ -184,31 +225,58 @@ public final class RawExportV3SidecarWriter {
             JsonObject renderManifest = readObject(new File(repositoryDirectory, "canonical/render-assets.json"));
             if (renderManifest != null && renderManifest.has("assets") && renderManifest.get("assets").isJsonArray()) {
                 JsonArray assets = renderManifest.getAsJsonArray("assets");
-                counts.textures = writeArrayAsJsonl(assets, new File(rawDir, "textures.jsonl"));
+                counts.textures = writeArrayAsJsonl(assets, new File(rawDir, "assets/textures/index.jsonl"));
                 JsonArray animated = new JsonArray();
                 for (JsonElement element : assets) {
                     if (element.isJsonObject() && isAnimated(element.getAsJsonObject())) {
                         animated.add(element);
                     }
                 }
-                counts.animations = writeArrayAsJsonl(animated, new File(rawDir, "animations.jsonl"));
+                counts.animations = writeArrayAsJsonl(animated, new File(rawDir, "assets/animations/index.jsonl"));
+                writeArrayAsJsonl(assets, new File(rawDir, "textures.jsonl"));
+                writeArrayAsJsonl(animated, new File(rawDir, "animations.jsonl"));
             } else {
                 createEmptyJsonl(new File(rawDir, "textures.jsonl"));
                 createEmptyJsonl(new File(rawDir, "animations.jsonl"));
+                createEmptyJsonl(new File(rawDir, "assets/textures/index.jsonl"));
+                createEmptyJsonl(new File(rawDir, "assets/animations/index.jsonl"));
             }
         } else {
-            counts.textures = writeArrayAsJsonl(textureRows, new File(rawDir, "textures.jsonl"));
-            counts.animations = writeArrayAsJsonl(animationRows, new File(rawDir, "animations.jsonl"));
+            counts.textures = writeArrayAsJsonl(textureRows, new File(rawDir, "assets/textures/index.jsonl"));
+            counts.animations = writeArrayAsJsonl(animationRows, new File(rawDir, "assets/animations/index.jsonl"));
+            writeArrayAsJsonl(textureRows, new File(rawDir, "textures.jsonl"));
+            writeArrayAsJsonl(animationRows, new File(rawDir, "animations.jsonl"));
         }
 
         copyIfPresent(
                 new File(repositoryDirectory, "canonical/browser-atlas-index.json"),
                 new File(rawDir, "browser_atlas_index.json"));
+        copyIfPresent(
+                new File(repositoryDirectory, "canonical/browser-atlas-index.json"),
+                new File(rawDir, "assets/textures/browser_atlas_index.json"));
 
         createEmptyJsonl(new File(rawDir, "nei_handlers.jsonl"));
         createEmptyJsonl(new File(rawDir, "multiblocks.jsonl"));
         createEmptyJsonl(new File(rawDir, "entities.jsonl"));
+        createEmptyJsonl(new File(rawDir, "facts/nei/handlers.jsonl"));
+        createEmptyJsonl(new File(rawDir, "models/multiblocks/index.jsonl"));
+        createEmptyJsonl(new File(rawDir, "models/entities/index.jsonl"));
         return counts;
+    }
+
+    private static void writeRecipeIndex(File rawDir, JsonArray recipes) throws IOException {
+        JsonObject index = new JsonObject();
+        index.addProperty("schemaVersion", SCHEMA_VERSION + "/recipe-index");
+        index.addProperty("strategy", "single-shard-compat");
+        index.addProperty("recipeCount", recipes == null ? 0 : recipes.size());
+        JsonArray shards = new JsonArray();
+        JsonObject shard = new JsonObject();
+        shard.addProperty("handlerId", "all");
+        shard.addProperty("path", "facts/recipes/all.jsonl");
+        shard.addProperty("recipeCount", recipes == null ? 0 : recipes.size());
+        shards.add(shard);
+        index.add("shards", shards);
+        writeJson(new GsonBuilder().setPrettyPrinting().serializeNulls().create(), new File(rawDir, "facts/recipes/index.json"), index);
     }
 
     private static JsonObject toRenderAssetRow(CanonicalRenderAsset asset) {
@@ -280,6 +348,10 @@ public final class RawExportV3SidecarWriter {
     private static long writeArrayAsJsonl(JsonArray array, File out) throws IOException {
         long count = 0L;
         Gson gson = new GsonBuilder().serializeNulls().create();
+        File parent = out.getParentFile();
+        if (parent != null) {
+            ensureDirectory(parent);
+        }
         try (FileOutputStream fos = new FileOutputStream(out);
              OutputStreamWriter writer = new OutputStreamWriter(fos, StandardCharsets.UTF_8)) {
             if (array != null) {
@@ -294,6 +366,10 @@ public final class RawExportV3SidecarWriter {
     }
 
     private static void createEmptyJsonl(File out) throws IOException {
+        File parent = out.getParentFile();
+        if (parent != null) {
+            ensureDirectory(parent);
+        }
         try (FileOutputStream ignored = new FileOutputStream(out)) {
             // Empty JSONL remains valid when a source is unavailable for this run.
         }
@@ -392,6 +468,10 @@ public final class RawExportV3SidecarWriter {
     }
 
     private static void writeJson(Gson gson, File out, Object value) throws IOException {
+        File parent = out.getParentFile();
+        if (parent != null) {
+            ensureDirectory(parent);
+        }
         try (FileOutputStream fos = new FileOutputStream(out);
              OutputStreamWriter writer = new OutputStreamWriter(fos, StandardCharsets.UTF_8)) {
             gson.toJson(value, writer);
@@ -413,7 +493,9 @@ public final class RawExportV3SidecarWriter {
         String status;
         RawExportCounts counts;
         List<String> notes = new ArrayList<String>();
-        List<FileRef> files = new ArrayList<FileRef>();
+        List<String> capabilities = new ArrayList<String>();
+        Map<String, String> files = new LinkedHashMap<String, String>();
+        List<FileRef> compatibilityFiles = new ArrayList<FileRef>();
     }
 
     private static final class RawExportReport {

@@ -11,7 +11,7 @@ import com.github.dcysteine.nesql.exporter.local.CanonicalAtlasRegistryWriter;
 import com.github.dcysteine.nesql.exporter.local.CanonicalBrowserAtlasIndexWriter;
 import com.github.dcysteine.nesql.exporter.local.CanonicalBrowserLayoutIndexWriter;
 import com.github.dcysteine.nesql.exporter.local.CanonicalRenderAssetCollector;
-import com.github.dcysteine.nesql.exporter.local.RawExportV3SidecarWriter;
+import com.github.dcysteine.nesql.exporter.local.RawExportSidecarWriter;
 import com.github.dcysteine.nesql.exporter.local.ModBasedItemExporter;
 import com.github.dcysteine.nesql.exporter.local.ModBasedRecipeExporter;
 import net.minecraft.util.EnumChatFormatting;
@@ -287,27 +287,27 @@ public final class ExportWriterSupport {
         }
     }
 
-    public static void writeRawExportV3Sidecar(
+    public static void writeRawExportSidecar(
             EntityManager entityManager,
             File repositoryDirectory,
             ExportContext exportContext,
             List<CanonicalRenderAsset> precollectedAssets) throws Exception {
-        Logger.chatMessage(EnumChatFormatting.AQUA + "Writing NESQL++ raw-export v3 sidecar...");
+        Logger.chatMessage(EnumChatFormatting.AQUA + "Writing NESQL++ raw-export sidecar...");
         try {
-            new RawExportV3SidecarWriter(entityManager, repositoryDirectory, exportContext, precollectedAssets).export();
+            new RawExportSidecarWriter(entityManager, repositoryDirectory, exportContext, precollectedAssets).export();
         } catch (Exception e) {
-            Logger.MOD.error("Failed to write NESQL++ raw-export v3 sidecar", e);
+            Logger.MOD.error("Failed to write NESQL++ raw-export sidecar", e);
             Logger.chatMessage(
-                    EnumChatFormatting.RED + "Failed to write raw-export v3 sidecar: " + e.getMessage());
+                    EnumChatFormatting.RED + "Failed to write raw-export sidecar: " + e.getMessage());
             throw e;
         }
     }
 
-    public static void syncRawExportV3FinalReports(File repositoryDirectory) {
+    public static void syncRawExportFinalReports(File repositoryDirectory) {
         try {
-            RawExportV3SidecarWriter.syncFinalReports(repositoryDirectory);
+            RawExportSidecarWriter.syncFinalReports(repositoryDirectory);
         } catch (Exception e) {
-            Logger.MOD.warn("Failed to sync raw-export v3 final reports", e);
+            Logger.MOD.warn("Failed to sync raw-export final reports", e);
         }
     }
 }
