@@ -1,8 +1,17 @@
 # Raw Export 成熟化地基开发计划
 
 日期：2026-05-26
-状态：已批准，开始推进
+状态：已批准，持续推进中
 硬性约束：Raw Export 目录、契约、阶段名、脚本名不再带路径级版本号；版本演进通过 `schemaVersion`、`manifest.capabilities` 与兼容策略表达，不把版本号写进目录名或主线命名。
+
+## 当前进度
+
+粗略完成度：约 52%。
+
+- P0-P3：已完成。
+- P4：资源与动画契约已完成大半，已加入 Atlas 权威校验，下一步收口 Compiler 侧 Atlas 生成/切换。
+- P5：特殊系统拆分尚未展开。
+- P6：新旧导出/编译对比与 canonical 降级尚未展开。
 
 ## 目标
 
@@ -42,10 +51,6 @@ NESQL++ 只负责游戏内真实数据采集和原始事实导出；NeoNEI Compi
       recipes/
         index.json
         by-handler/
-          minecraft.crafting.jsonl
-          minecraft.furnace.jsonl
-          gregtech.assembler.jsonl
-          gregtech.chemical_reactor.jsonl
       nei/
         handlers.jsonl
         order.jsonl
@@ -118,7 +123,8 @@ NESQL++ 只负责游戏内真实数据采集和原始事实导出；NeoNEI Compi
 - [x] 输出 `assets/animations/index.jsonl`。
 - [x] 输出 `assets/animations/native-sprites.jsonl` 与 `assets/animations/rendered-gifs.jsonl` 细分索引。
 - [x] 原生 MC 动画 timing、frame、sprite metadata 全部进入 Raw Export。
-- [ ] NeoNEI Compiler 基于资源索引生成全局 Atlas，不再猜单图 fallback。
+- [x] NeoNEI Compiler 输出 Atlas 权威校验报告，覆盖缺失条目、重复 itemId、assetRef 不一致与 atlas 文件缺失。
+- [ ] NeoNEI Compiler 基于资源索引生成/切换全局 Atlas，不再猜单图 fallback。
 
 ### P5：特殊系统拆分
 - [ ] GT 数据进入 `special/gregtech/`。
