@@ -75,6 +75,7 @@ public final class RawExportSidecarWriter {
         report.counts.rawNeiOrderEntries = factCounts.neiOrderEntries;
         report.counts.rawTextures = factCounts.textures;
         report.counts.rawAnimations = factCounts.animations;
+        report.counts.rawEntities = factCounts.entities;
         RawExportManifest manifest = buildManifest(report);
 
         Gson gson = new GsonBuilder().setPrettyPrinting().serializeNulls().create();
@@ -121,6 +122,7 @@ public final class RawExportSidecarWriter {
         manifest.notes.add("JSONL files are present as stable compiler targets and will be populated incrementally.");
         manifest.capabilities.add("facts");
         manifest.capabilities.add("assets");
+        manifest.capabilities.add("models");
         manifest.capabilities.add("validation");
         manifest.capabilities.add("special");
         manifest.files.put("items", "facts/items.jsonl");
@@ -295,11 +297,81 @@ public final class RawExportSidecarWriter {
 
         createEmptyJsonl(new File(rawDir, "nei_handlers.jsonl"));
         createEmptyJsonl(new File(rawDir, "multiblocks.jsonl"));
-        createEmptyJsonl(new File(rawDir, "entities.jsonl"));
         createEmptyJsonl(new File(rawDir, "facts/nei/handlers.jsonl"));
         createEmptyJsonl(new File(rawDir, "models/multiblocks/index.jsonl"));
-        createEmptyJsonl(new File(rawDir, "models/entities/index.jsonl"));
+        counts.entities = writeEntityModelIndex(rawDir);
         return counts;
+    }
+
+    private long writeEntityModelIndex(File rawDir) throws IOException {
+        JsonObject previews = readObject(new File(repositoryDirectory, "canonical/entity-previews.json"));
+        JsonObject models = readObject(new File(repositoryDirectory, "canonical/entity-models.json"));
+        JsonArray previewEntries = previews == null ? null : previews.getAsJsonArray("entries");
+        JsonArray modelEntries = models == null ? null : models.getAsJsonArray("entries");
+
+        Map<String, JsonObject> byMobName = new LinkedHashMap<String, JsonObject>();
+        if (previewEntries != null) {
+            for (JsonElement element : previewEntries) {
+                if (element == null || !element.isJsonObject()) {
+                    continue;
+                }
+                JsonObject preview = element.getAsJsonObject();
+                String mobName = stringAt(preview, "mobName");
+                if (mobName == null || mobName.trim().length() == 0) {
+                    continue;
+                }
+                JsonObject row = entityRow(byMobName, mobName.trim());
+                copyElement(row, "preview", preview, "");
+                copyString(row, "entityId", preview, "mobName");
+                copyString(row, "displayName", preview, "localizedName");
+                copyString(row, "modId", preview, "modId");
+                copyString(row, "previewImage", preview, "relativeGifPath");
+                copyFirstNumber(row, "frameCount", preview, "frameCount");
+                copyFirstNumber(row, "frameDurationMs", preview, "frameDurationMs");
+                copyFirstNumber(row, "width", preview, "width");
+                copyFirstNumber(row, "height", preview, "height");
+                copyString(row, "previewRenderMode", preview, "renderMode");
+            }
+        }
+        if (modelEntries != null) {
+            for (JsonElement element : modelEntries) {
+                if (element == null || !element.isJsonObject()) {
+                    continue;
+                }
+                JsonObject model = element.getAsJsonObject();
+                String mobName = stringAt(model, "mobName");
+                if (mobName == null || mobName.trim().length() == 0) {
+                    continue;
+                }
+                JsonObject row = entityRow(byMobName, mobName.trim());
+                copyElement(row, "model", model, "");
+                copyString(row, "entityId", model, "mobName");
+                copyString(row, "displayName", model, "localizedName");
+                copyString(row, "modId", model, "modId");
+                copyString(row, "modelPath", model, "relativeModelPath");
+                copyFirstNumber(row, "componentCount", model, "componentCount");
+                copyString(row, "modelRenderMode", model, "renderMode");
+            }
+        }
+
+        JsonArray rows = new JsonArray();
+        for (JsonObject row : byMobName.values()) {
+            row.addProperty("schemaVersion", SCHEMA_VERSION + "/entity-model");
+            rows.add(row);
+        }
+        writeArrayAsJsonl(rows, new File(rawDir, "entities.jsonl"));
+        return writeArrayAsJsonl(rows, new File(rawDir, "models/entities/index.jsonl"));
+    }
+
+    private static JsonObject entityRow(Map<String, JsonObject> rows, String mobName) {
+        JsonObject row = rows.get(mobName);
+        if (row == null) {
+            row = new JsonObject();
+            row.addProperty("entityId", mobName);
+            row.addProperty("mobName", mobName);
+            rows.put(mobName, row);
+        }
+        return row;
     }
 
     private static void writeRecipeIndex(File rawDir, JsonArray recipes) throws IOException {
@@ -719,6 +791,9 @@ public final class RawExportSidecarWriter {
     }
 
     private static JsonElement elementAt(JsonObject object, String dottedPath) {
+        if (dottedPath == null || dottedPath.length() == 0) {
+            return object;
+        }
         JsonElement current = object;
         for (String part : dottedPath.split("\\.")) {
             if (current == null || !current.isJsonObject()) {
@@ -1123,6 +1198,7 @@ public final class RawExportSidecarWriter {
         long rawNeiOrderEntries;
         long rawTextures;
         long rawAnimations;
+        long rawEntities;
     }
 
     private static final class RawFactCounts {
@@ -1133,6 +1209,7 @@ public final class RawExportSidecarWriter {
         long neiOrderEntries;
         long textures;
         long animations;
+        long entities;
     }
 
     private static final class RawExportValidation {
