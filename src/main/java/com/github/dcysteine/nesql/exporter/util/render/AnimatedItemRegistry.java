@@ -19,6 +19,7 @@ public enum AnimatedItemRegistry {
     private final Set<String> animatedItemIds = new HashSet<>();
     private final Set<String> framebufferAnimatedModIds = new HashSet<>();
     private final Set<String> singularityModIds = new HashSet<>();
+    private int animatedDetectionLogCount = 0;
 
     private AnimatedItemRegistry() {
         initializeAnimatedItems();
@@ -258,8 +259,10 @@ public enum AnimatedItemRegistry {
     }
 
     private void logAnimatedItem(String itemId, int damage) {
-        if (Logger.intermittentLog(0)) {
-            Logger.MOD.info("Detected animated item: {} (damage: {})", itemId, damage);
+        animatedDetectionLogCount++;
+        if (Logger.intermittentLog(animatedDetectionLogCount)) {
+            Logger.MOD.info("Detected {} animated item candidates so far; latest: {} (damage: {})",
+                    animatedDetectionLogCount, itemId, damage);
         }
     }
 

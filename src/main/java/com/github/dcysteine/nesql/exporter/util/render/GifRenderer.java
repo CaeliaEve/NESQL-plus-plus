@@ -142,8 +142,8 @@ public final class GifRenderer {
 
             frames.add(frame);
             currentFrame++;
-            if (currentFrame % 10 == 0) {
-                Logger.MOD.info(
+            if (currentFrame == totalFrames || currentFrame % 32 == 0) {
+                Logger.MOD.debug(
                         "Added frame {} of {} for {}",
                         currentFrame, totalFrames, outputFile.getName());
             }

@@ -96,6 +96,13 @@ public enum RenderDispatcher {
     // Track active GIF animation captures by output file path
     private final ConcurrentHashMap<String, GifRenderer.AnimationCapture> activeCaptures = new ConcurrentHashMap<>();
 
+    /**
+     * Multi-frame framebuffer capture is intentionally serialized to one frame per client tick.
+     * GTNH 2.8.4/Angelica can hard-exit when hundreds of animated GT metaitems advance and read
+     * back OpenGL framebuffers concurrently in the same tick.
+     */
+    private volatile boolean multiFrameWorkDoneThisTick = false;
+
     private File imageDirectory;
 
     public void setImageDirectory(File imageDirectory) {
@@ -187,6 +194,10 @@ public enum RenderDispatcher {
         return activeCaptures.size();
     }
 
+    public boolean hasMultiFrameWorkRemaining() {
+        return !multiFrameJobQueue.isEmpty() || !multiFrameDeferredQueue.isEmpty() || !activeCaptures.isEmpty();
+    }
+
     public int getDuplicateJobSkipCount() {
         return duplicateJobSkipCount.get();
     }
@@ -275,10 +286,7 @@ public enum RenderDispatcher {
     }
 
     public void beginClientTick() {
-        RenderJob deferredJob;
-        while ((deferredJob = multiFrameDeferredQueue.poll()) != null) {
-            multiFrameJobQueue.add(deferredJob);
-        }
+        multiFrameWorkDoneThisTick = false;
     }
 
     /**
@@ -297,16 +305,38 @@ public enum RenderDispatcher {
      * fast. This should be safe.
      */
     public Optional<RenderJob> getJob() {
-        // 优先处理多帧作业队列（动画物品需要连续快速捕获）
-        RenderJob job = multiFrameJobQueue.poll();
+        RenderJob job = null;
 
-        // 如果没有多帧作业，处理单帧作业队列
+        // Keep one animated framebuffer capture active at a time, and advance it by at most one
+        // frame per client tick. This avoids GTNH 2.8.4 hard exits caused by dense animated
+        // metaitem queues hammering texture updates + framebuffer readback in one tick.
+        if (!activeCaptures.isEmpty()) {
+            if (multiFrameWorkDoneThisTick) {
+                return Optional.empty();
+            }
+            job = multiFrameDeferredQueue.poll();
+            if (job == null) {
+                return Optional.empty();
+            }
+            multiFrameWorkDoneThisTick = true;
+            return Optional.of(job);
+        }
+
+        if (!multiFrameWorkDoneThisTick) {
+            job = multiFrameDeferredQueue.poll();
+            if (job == null) {
+                job = multiFrameJobQueue.poll();
+            }
+            if (job != null) {
+                multiFrameWorkDoneThisTick = true;
+            }
+        }
+
         if (job == null) {
             job = singleFrameJobQueue.poll();
         }
 
         if (job != null && job.needsMultipleFrames()) {
-            // Initialize multi-frame capture for this job
             String outputPath = job.getOutputFilePath();
             File outputFile = new File(imageDirectory, outputPath);
 
@@ -322,7 +352,6 @@ public enum RenderDispatcher {
 
         return Optional.ofNullable(job);
     }
-
     /**
      * Called by Renderer after rendering a frame. Handles multi-frame capture logic.
      *
@@ -381,7 +410,7 @@ public enum RenderDispatcher {
                     RenderSignatureSupport.write(imageDirectory, job);
                     activeCaptures.remove(outputPath);
 
-                    Logger.MOD.info("Static item export complete: {} (captured {} frames)",
+                    Logger.MOD.debug("Static item export complete: {} (captured {} frames)",
                         outputPath, capture.getCurrentFrameCount());
                 } catch (IOException e) {
                     Logger.MOD.error("Failed to write GIF: " + outputPath, e);
@@ -398,7 +427,7 @@ public enum RenderDispatcher {
                     RenderSignatureSupport.write(imageDirectory, job);
                     activeCaptures.remove(outputPath);
 
-                    Logger.MOD.info("Animated item export complete: {} (captured {} frames)",
+                    Logger.MOD.debug("Animated item export complete: {} (captured {} frames)",
                         outputPath, capture.getCurrentFrameCount());
                 } catch (IOException e) {
                     Logger.MOD.error("Failed to write GIF: " + outputPath, e);
@@ -409,10 +438,8 @@ public enum RenderDispatcher {
                 job.incrementFrame();
                 multiFrameDeferredQueue.add(job);
 
-                if (Logger.intermittentLog(0)) {
-                    Logger.MOD.info("Captured frame {} of {} for {}",
-                        job.getFrameIndex(), capture.getTotalFrames(), outputPath);
-                }
+                Logger.MOD.debug("Captured frame {} of {} for {}",
+                    job.getFrameIndex(), capture.getTotalFrames(), outputPath);
             }
         }
         // Single-frame jobs are handled directly by Renderer

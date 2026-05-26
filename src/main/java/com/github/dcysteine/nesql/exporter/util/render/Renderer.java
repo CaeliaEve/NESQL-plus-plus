@@ -143,8 +143,8 @@ public enum Renderer {
         try {
             int requestedIconsPerTick = Math.max(1, ConfigOptions.RENDER_ICONS_PER_TICK.get());
             int iconsPerTick = Math.min(requestedIconsPerTick, 128);
-            if (RenderDispatcher.INSTANCE.getActiveCaptureCount() > 0) {
-                iconsPerTick = Math.min(iconsPerTick, 48);
+            if (RenderDispatcher.INSTANCE.hasMultiFrameWorkRemaining()) {
+                iconsPerTick = 1;
             }
 
             for (int i = 0; i < iconsPerTick; i++) {
