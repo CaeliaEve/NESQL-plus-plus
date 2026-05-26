@@ -116,6 +116,7 @@ NESQL++ 只负责游戏内真实数据采集和原始事实导出；NeoNEI Compi
 ### P4：资源与动画契约
 - [x] 输出 `assets/textures/index.jsonl`。
 - [x] 输出 `assets/animations/index.jsonl`。
+- [x] 输出 `assets/animations/native-sprites.jsonl` 与 `assets/animations/rendered-gifs.jsonl` 细分索引。
 - [ ] 原生 MC 动画 timing、frame、sprite metadata 全部进入 Raw Export。
 - [ ] NeoNEI Compiler 基于资源索引生成全局 Atlas，不再猜单图 fallback。
 

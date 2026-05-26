@@ -1,4 +1,4 @@
-﻿# NESQL++ Raw Export Contract
+# NESQL++ Raw Export Contract
 
 Status: approved mainline contract
 Rule: Raw Export naming must not include path-level version suffixes in directories, public stage families, scripts, or primary documentation. Schema evolution is represented by `schemaVersion` and manifest capabilities, not by path names.
@@ -112,6 +112,8 @@ Minimum manifest fields:
     "neiGroups": "facts/nei/groups.jsonl",
     "textureIndex": "assets/textures/index.jsonl",
     "animationIndex": "assets/animations/index.jsonl",
+    "nativeSprites": "assets/animations/native-sprites.jsonl",
+    "renderedGifs": "assets/animations/rendered-gifs.jsonl",
     "validationReport": "validation/export-health-report.json"
   }
 }

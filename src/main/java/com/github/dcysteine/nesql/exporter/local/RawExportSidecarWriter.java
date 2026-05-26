@@ -128,6 +128,8 @@ public final class RawExportSidecarWriter {
         manifest.files.put("neiOrder", "facts/nei/order.jsonl");
         manifest.files.put("textures", "assets/textures/index.jsonl");
         manifest.files.put("animations", "assets/animations/index.jsonl");
+        manifest.files.put("nativeSprites", "assets/animations/native-sprites.jsonl");
+        manifest.files.put("renderedGifs", "assets/animations/rendered-gifs.jsonl");
         manifest.files.put("browserAtlasIndex", "assets/textures/browser_atlas_index.json");
         manifest.files.put("neiHandlers", "facts/nei/handlers.jsonl");
         manifest.files.put("multiblocks", "models/multiblocks/index.jsonl");
@@ -143,6 +145,8 @@ public final class RawExportSidecarWriter {
         manifest.compatibilityFiles.add(fileRef("nei-order", "nei_order.jsonl", "compat-jsonl"));
         manifest.compatibilityFiles.add(fileRef("textures", "textures.jsonl", "compat-jsonl"));
         manifest.compatibilityFiles.add(fileRef("animations", "animations.jsonl", "compat-jsonl"));
+        manifest.compatibilityFiles.add(fileRef("native-sprites", "native_sprites.jsonl", "compat-jsonl"));
+        manifest.compatibilityFiles.add(fileRef("rendered-gifs", "rendered_gifs.jsonl", "compat-jsonl"));
         manifest.compatibilityFiles.add(fileRef("browser-atlas-index", "browser_atlas_index.json", "compat-json"));
         manifest.counts = report.counts;
         return manifest;
@@ -216,11 +220,18 @@ public final class RawExportSidecarWriter {
 
         JsonArray textureRows = new JsonArray();
         JsonArray animationRows = new JsonArray();
+        JsonArray nativeSpriteRows = new JsonArray();
+        JsonArray renderedGifRows = new JsonArray();
         for (CanonicalRenderAsset asset : renderAssets) {
             JsonObject row = toRenderAssetRow(asset);
             textureRows.add(row);
             if (isAnimated(asset)) {
                 animationRows.add(row);
+                if (isNativeSpriteAnimation(asset)) {
+                    nativeSpriteRows.add(row);
+                } else if (isRenderedGifAnimation(asset)) {
+                    renderedGifRows.add(row);
+                }
             }
         }
         if (textureRows.size() == 0) {
@@ -229,27 +240,46 @@ public final class RawExportSidecarWriter {
                 JsonArray assets = renderManifest.getAsJsonArray("assets");
                 counts.textures = writeArrayAsJsonl(assets, new File(rawDir, "assets/textures/index.jsonl"));
                 JsonArray animated = new JsonArray();
+                JsonArray nativeSprites = new JsonArray();
+                JsonArray renderedGifs = new JsonArray();
                 for (JsonElement element : assets) {
                     if (element.isJsonObject() && isAnimated(element.getAsJsonObject())) {
+                        JsonObject asset = element.getAsJsonObject();
                         animated.add(element);
+                        if (isNativeSpriteAnimation(asset)) {
+                            nativeSprites.add(element);
+                        } else if (isRenderedGifAnimation(asset)) {
+                            renderedGifs.add(element);
+                        }
                     }
                 }
                 counts.animations = writeArrayAsJsonl(animated, new File(rawDir, "assets/animations/index.jsonl"));
+                writeArrayAsJsonl(nativeSprites, new File(rawDir, "assets/animations/native-sprites.jsonl"));
+                writeArrayAsJsonl(renderedGifs, new File(rawDir, "assets/animations/rendered-gifs.jsonl"));
                 writeArrayAsJsonl(assets, new File(rawDir, "textures.jsonl"));
                 writeArrayAsJsonl(animated, new File(rawDir, "animations.jsonl"));
+                writeArrayAsJsonl(nativeSprites, new File(rawDir, "native_sprites.jsonl"));
+                writeArrayAsJsonl(renderedGifs, new File(rawDir, "rendered_gifs.jsonl"));
             } else {
                 createEmptyJsonl(new File(rawDir, "textures.jsonl"));
                 createEmptyJsonl(new File(rawDir, "animations.jsonl"));
+                createEmptyJsonl(new File(rawDir, "native_sprites.jsonl"));
+                createEmptyJsonl(new File(rawDir, "rendered_gifs.jsonl"));
                 createEmptyJsonl(new File(rawDir, "assets/textures/index.jsonl"));
                 createEmptyJsonl(new File(rawDir, "assets/animations/index.jsonl"));
+                createEmptyJsonl(new File(rawDir, "assets/animations/native-sprites.jsonl"));
+                createEmptyJsonl(new File(rawDir, "assets/animations/rendered-gifs.jsonl"));
             }
         } else {
             counts.textures = writeArrayAsJsonl(textureRows, new File(rawDir, "assets/textures/index.jsonl"));
             counts.animations = writeArrayAsJsonl(animationRows, new File(rawDir, "assets/animations/index.jsonl"));
+            writeArrayAsJsonl(nativeSpriteRows, new File(rawDir, "assets/animations/native-sprites.jsonl"));
+            writeArrayAsJsonl(renderedGifRows, new File(rawDir, "assets/animations/rendered-gifs.jsonl"));
             writeArrayAsJsonl(textureRows, new File(rawDir, "textures.jsonl"));
             writeArrayAsJsonl(animationRows, new File(rawDir, "animations.jsonl"));
+            writeArrayAsJsonl(nativeSpriteRows, new File(rawDir, "native_sprites.jsonl"));
+            writeArrayAsJsonl(renderedGifRows, new File(rawDir, "rendered_gifs.jsonl"));
         }
-
         copyIfPresent(
                 new File(repositoryDirectory, "canonical/browser-atlas-index.json"),
                 new File(rawDir, "browser_atlas_index.json"));
@@ -410,6 +440,34 @@ public final class RawExportSidecarWriter {
                 || asset.framePattern != null;
     }
 
+
+    private static boolean isNativeSpriteAnimation(CanonicalRenderAsset asset) {
+        return "native_sprite_animation".equals(asset.mode)
+                || "native_sprite".equals(asset.animationMode)
+                || "native_sprite_aux".equals(asset.animationMode)
+                || asset.spriteMetadataFile != null;
+    }
+
+    private static boolean isNativeSpriteAnimation(JsonObject asset) {
+        return "native_sprite_animation".equals(stringValue(asset, "mode"))
+                || "native_sprite".equals(stringValue(asset, "animationMode"))
+                || "native_sprite_aux".equals(stringValue(asset, "animationMode"))
+                || stringValue(asset, "spriteMetadataFile") != null;
+    }
+
+    private static boolean isRenderedGifAnimation(CanonicalRenderAsset asset) {
+        return containsIgnoreCase(asset.animationMode, "gif")
+                || containsIgnoreCase(asset.mode, "gif")
+                || containsIgnoreCase(asset.primaryArtifact, ".gif")
+                || containsIgnoreCase(asset.staticFile, ".gif");
+    }
+
+    private static boolean isRenderedGifAnimation(JsonObject asset) {
+        return containsIgnoreCase(stringValue(asset, "animationMode"), "gif")
+                || containsIgnoreCase(stringValue(asset, "mode"), "gif")
+                || containsIgnoreCase(stringValue(asset, "primaryArtifact"), ".gif")
+                || containsIgnoreCase(stringValue(asset, "staticFile"), ".gif");
+    }
     private static boolean isAnimated(JsonObject asset) {
         return intValue(asset, "frameCount") > 1
                 || intValue(asset, "capturedFrameCount") > 1
