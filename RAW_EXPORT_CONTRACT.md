@@ -63,12 +63,12 @@ raw-export/
       by-id/
 
   special/
-    gregtech/
-    thaumcraft/
-    botania/
-    bloodmagic/
-    forestry/
-    eec/
+    gregtech/      # recipes.jsonl, payloads.jsonl, summary.json
+    thaumcraft/     # recipes.jsonl, payloads.jsonl, summary.json
+    botania/        # recipes.jsonl, payloads.jsonl, summary.json
+    bloodmagic/     # recipes.jsonl, payloads.jsonl, summary.json
+    forestry/       # recipes.jsonl, payloads.jsonl, summary.json
+    eec/            # recipes.jsonl, payloads.jsonl, summary.json
 
   validation/
     export_report.json
@@ -147,7 +147,18 @@ Minimum manifest fields:
 }
 ```
 
-## 5. Validation Requirements
+## 5. Special Domain Streams
+
+Each `special/<domain>/` directory must contain:
+
+- `recipes.jsonl`: raw canonical recipe rows selected for that domain.
+- `payloads.jsonl`: normalized domain payload rows for NeoNEI compiler/runtime consumption.
+- `summary.json`: small statistics and representative samples for validation.
+- `index.json`: domain-local paths and declared counts.
+
+`special/index.json` must list every domain and declare `recipes`, `payloads`, and `summary` paths. Domain payloads preserve the original recipe identifiers and copy the canonical slot/fluid/machine metadata while adding a `facts` object for domain-specific values such as EU/ticks, aspects, mana, LP, bee mutations, or entity drops.
+
+## 6. Validation Requirements
 
 Every raw export must report:
 

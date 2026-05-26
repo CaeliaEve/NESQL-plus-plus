@@ -77,12 +77,12 @@ NESQL++ 只负责游戏内真实数据采集和原始事实导出；NeoNEI Compi
         by-id/
 
     special/
-      gregtech/
-      thaumcraft/
-      botania/
-      bloodmagic/
-      forestry/
-      eec/
+      gregtech/      # recipes.jsonl, payloads.jsonl, summary.json
+      thaumcraft/     # recipes.jsonl, payloads.jsonl, summary.json
+      botania/        # recipes.jsonl, payloads.jsonl, summary.json
+      bloodmagic/     # recipes.jsonl, payloads.jsonl, summary.json
+      forestry/       # recipes.jsonl, payloads.jsonl, summary.json
+      eec/            # recipes.jsonl, payloads.jsonl, summary.json
 
     validation/
       export-health-report.json

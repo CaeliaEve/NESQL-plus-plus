@@ -383,6 +383,8 @@ public final class RawExportSidecarWriter {
             File domainDir = new File(rawDir, "special/" + domainId);
             ensureDirectory(domainDir);
             writeArrayAsJsonl(bucket, new File(domainDir, "recipes.jsonl"));
+            JsonArray payloads = buildSpecialDomainPayloads(domainId, bucket);
+            writeArrayAsJsonl(payloads, new File(domainDir, "payloads.jsonl"));
 
             JsonObject summary = buildSpecialDomainSummary(domainId, bucket);
             JsonObject index = new JsonObject();
@@ -390,6 +392,7 @@ public final class RawExportSidecarWriter {
             index.addProperty("domain", domainId);
             index.addProperty("recipeCount", bucket.size());
             index.addProperty("recipes", "special/" + domainId + "/recipes.jsonl");
+            index.addProperty("payloads", "special/" + domainId + "/payloads.jsonl");
             index.addProperty("summary", "special/" + domainId + "/summary.json");
             index.add("stats", summary);
             writeJson(gson, new File(domainDir, "index.json"), index);
@@ -400,6 +403,7 @@ public final class RawExportSidecarWriter {
             entry.addProperty("recipeCount", bucket.size());
             entry.addProperty("index", "special/" + domainId + "/index.json");
             entry.addProperty("recipes", "special/" + domainId + "/recipes.jsonl");
+            entry.addProperty("payloads", "special/" + domainId + "/payloads.jsonl");
             entry.addProperty("summary", "special/" + domainId + "/summary.json");
             entry.add("stats", summary);
             domainIndex.add(entry);
@@ -411,6 +415,98 @@ public final class RawExportSidecarWriter {
         writeJson(gson, new File(rawDir, "special/index.json"), root);
     }
 
+
+    private static JsonArray buildSpecialDomainPayloads(String domainId, JsonArray recipes) {
+        JsonArray payloads = new JsonArray();
+        if (recipes == null) {
+            return payloads;
+        }
+
+        int ordinal = 0;
+        for (JsonElement element : recipes) {
+            if (element == null || !element.isJsonObject()) {
+                continue;
+            }
+            JsonObject recipe = element.getAsJsonObject();
+            JsonObject payload = new JsonObject();
+            payload.addProperty("domain", domainId);
+            payload.addProperty("ordinal", ordinal++);
+            copyString(payload, "recipeId", recipe, "recipeId");
+            copyString(payload, "family", recipe, "family");
+            copyString(payload, "sourcePlugin", recipe, "sourcePlugin");
+            copyString(payload, "sourceMod", recipe, "sourceMod");
+            copyString(payload, "recipeType", recipe, "recipeType");
+            copyString(payload, "displayName", recipe, "displayName");
+            copyString(payload, "handlerId", recipe, "metadata.handlerId");
+            copyString(payload, "handlerName", recipe, "metadata.handlerName");
+            copyString(payload, "handlerClass", recipe, "metadata.handlerClass");
+            copyString(payload, "machineId", recipe, "machine.machineId");
+            copyString(payload, "machineName", recipe, "machine.displayName");
+            copyString(payload, "layoutClass", recipe, "layout.layoutClass");
+
+            copyElement(payload, "machine", recipe, "machine");
+            copyElement(payload, "layout", recipe, "layout");
+            copyElement(payload, "itemInputs", recipe, "itemInputs");
+            copyElement(payload, "itemOutputs", recipe, "itemOutputs");
+            copyElement(payload, "fluidInputs", recipe, "fluidInputs");
+            copyElement(payload, "fluidOutputs", recipe, "fluidOutputs");
+            copyElement(payload, "probabilities", recipe, "probabilities");
+            copyElement(payload, "renderHints", recipe, "renderHints");
+            copyElement(payload, "extensions", recipe, "extensions");
+
+            JsonObject facts = new JsonObject();
+            addDomainFacts(facts, domainId, recipe);
+            if (facts.entrySet().size() > 0) {
+                payload.add("facts", facts);
+            }
+
+            JsonElement metadata = elementAt(recipe, "metadata");
+            if (metadata != null && metadata.isJsonObject()) {
+                payload.add("metadata", cloneJson(metadata));
+            }
+            payloads.add(payload);
+        }
+        return payloads;
+    }
+
+    private static void addDomainFacts(JsonObject facts, String domainId, JsonObject recipe) {
+        if ("gregtech".equals(domainId)) {
+            copyFirstNumber(facts, "duration", recipe, "metadata.duration", "metadata.ticks");
+            copyFirstNumber(facts, "voltage", recipe, "metadata.voltage");
+            copyFirstNumber(facts, "amperage", recipe, "metadata.amperage");
+            copyFirstNumber(facts, "totalEU", recipe, "metadata.totalEU");
+            copyString(facts, "voltageTier", recipe, "metadata.voltageTier");
+            copyElement(facts, "requiresCleanroom", recipe, "metadata.requiresCleanroom");
+            copyElement(facts, "requiresLowGravity", recipe, "metadata.requiresLowGravity");
+            copyElement(facts, "specialItems", recipe, "metadata.specialItems");
+        } else if ("thaumcraft".equals(domainId)) {
+            copyElement(facts, "aspects", recipe, "metadata.aspects");
+            copyElement(facts, "research", recipe, "metadata.research");
+            copyElement(facts, "instability", recipe, "metadata.instability");
+            copyElement(facts, "centralItemId", recipe, "metadata.centralItemId");
+            copyElement(facts, "componentSlotOrder", recipe, "metadata.componentSlotOrder");
+        } else if ("botania".equals(domainId)) {
+            copyFirstNumber(facts, "manaCost", recipe, "metadata.manaCost", "metadata.mana");
+            copyFirstNumber(facts, "ticks", recipe, "metadata.ticks", "metadata.duration");
+            copyElement(facts, "catalyst", recipe, "metadata.catalyst");
+        } else if ("bloodmagic".equals(domainId)) {
+            copyFirstNumber(facts, "bloodCost", recipe, "metadata.bloodCost", "metadata.lpCost", "metadata.lp");
+            copyFirstNumber(facts, "tier", recipe, "metadata.tier");
+            copyElement(facts, "orb", recipe, "metadata.orb");
+            copyElement(facts, "ritual", recipe, "metadata.ritual");
+        } else if ("forestry".equals(domainId)) {
+            copyElement(facts, "beeSpecies", recipe, "metadata.beeSpecies");
+            copyElement(facts, "chance", recipe, "metadata.chance");
+            copyElement(facts, "mutations", recipe, "metadata.mutations");
+        } else if ("eec".equals(domainId)) {
+            copyElement(facts, "entity", recipe, "metadata.entity");
+            copyElement(facts, "entityId", recipe, "metadata.entityId");
+            copyElement(facts, "entityName", recipe, "metadata.entityName");
+            copyElement(facts, "entityHealth", recipe, "metadata.entityHealth");
+            copyElement(facts, "drops", recipe, "metadata.drops");
+            copyElement(facts, "fluidDrops", recipe, "metadata.fluidDrops");
+        }
+    }
 
     private static JsonObject buildSpecialDomainSummary(String domainId, JsonArray recipes) {
         JsonObject summary = new JsonObject();
@@ -482,6 +578,51 @@ public final class RawExportSidecarWriter {
         }
         return out;
     }
+
+    private static void copyString(JsonObject target, String to, JsonObject source, String dottedPath) {
+        String value = stringAt(source, dottedPath);
+        if (value != null && value.trim().length() > 0) {
+            target.addProperty(to, value.trim());
+        }
+    }
+
+    private static void copyElement(JsonObject target, String to, JsonObject source, String dottedPath) {
+        JsonElement value = elementAt(source, dottedPath);
+        if (value != null && !value.isJsonNull()) {
+            target.add(to, cloneJson(value));
+        }
+    }
+
+    private static void copyFirstNumber(JsonObject target, String to, JsonObject source, String... dottedPaths) {
+        for (String dottedPath : dottedPaths) {
+            JsonElement value = elementAt(source, dottedPath);
+            if (value == null || value.isJsonNull() || !value.isJsonPrimitive()) {
+                continue;
+            }
+            try {
+                target.add(to, cloneJson(value));
+                return;
+            } catch (Exception ignored) {
+                // Try the next candidate.
+            }
+        }
+    }
+
+    private static JsonElement cloneJson(JsonElement value) {
+        return value == null ? null : new JsonParser().parse(value.toString());
+    }
+
+    private static JsonElement elementAt(JsonObject object, String dottedPath) {
+        JsonElement current = object;
+        for (String part : dottedPath.split("\\.")) {
+            if (current == null || !current.isJsonObject()) {
+                return null;
+            }
+            current = current.getAsJsonObject().get(part);
+        }
+        return current;
+    }
+
     private static String recipeDescriptor(JsonElement element) {
         if (element == null || !element.isJsonObject()) {
             return "";
