@@ -456,6 +456,16 @@ public final class RawExportSidecarWriter {
             copyElement(payload, "renderHints", recipe, "renderHints");
             copyElement(payload, "extensions", recipe, "extensions");
 
+            JsonObject slotStats = buildSpecialSlotStats(recipe);
+            if (slotStats.entrySet().size() > 0) {
+                payload.add("slotStats", slotStats);
+            }
+
+            JsonObject primaryRefs = buildSpecialPrimaryRefs(recipe);
+            if (primaryRefs.entrySet().size() > 0) {
+                payload.add("primaryRefs", primaryRefs);
+            }
+
             JsonObject facts = new JsonObject();
             addDomainFacts(facts, domainId, recipe);
             if (facts.entrySet().size() > 0) {
@@ -471,6 +481,26 @@ public final class RawExportSidecarWriter {
         return payloads;
     }
 
+    private static JsonObject buildSpecialSlotStats(JsonObject recipe) {
+        JsonObject stats = new JsonObject();
+        addCount(stats, "itemInputCount", recipe, "itemInputs");
+        addCount(stats, "itemOutputCount", recipe, "itemOutputs");
+        addCount(stats, "fluidInputCount", recipe, "fluidInputs");
+        addCount(stats, "fluidOutputCount", recipe, "fluidOutputs");
+        addCount(stats, "layoutItemSlotCount", recipe, "layout.itemSlots");
+        addCount(stats, "layoutFluidSlotCount", recipe, "layout.fluidSlots");
+        return stats;
+    }
+
+    private static JsonObject buildSpecialPrimaryRefs(JsonObject recipe) {
+        JsonObject refs = new JsonObject();
+        addCollectedStrings(refs, "itemInputIds", recipe, "itemInputs", "variants", "itemId", 24);
+        addCollectedStrings(refs, "itemOutputIds", recipe, "itemOutputs", null, "itemId", 24);
+        addCollectedStrings(refs, "fluidInputIds", recipe, "fluidInputs", "variants", "fluidId", 24);
+        addCollectedStrings(refs, "fluidOutputIds", recipe, "fluidOutputs", null, "fluidId", 24);
+        return refs;
+    }
+
     private static void addDomainFacts(JsonObject facts, String domainId, JsonObject recipe) {
         if ("gregtech".equals(domainId)) {
             copyFirstNumber(facts, "duration", recipe, "metadata.duration", "metadata.ticks");
@@ -483,19 +513,31 @@ public final class RawExportSidecarWriter {
             copyElement(facts, "specialItems", recipe, "metadata.specialItems");
         } else if ("thaumcraft".equals(domainId)) {
             copyElement(facts, "aspects", recipe, "metadata.aspects");
+            copyElement(facts, "aspects", recipe, "layout.bindings.aspects");
             copyElement(facts, "research", recipe, "metadata.research");
+            copyElement(facts, "research", recipe, "layout.bindings.research");
             copyElement(facts, "instability", recipe, "metadata.instability");
+            copyElement(facts, "instability", recipe, "layout.bindings.instability");
             copyElement(facts, "centralItemId", recipe, "metadata.centralItemId");
+            copyElement(facts, "centralItemId", recipe, "layout.bindings.centralItemId");
+            copyElement(facts, "centerInputSlotIndex", recipe, "metadata.centerInputSlotIndex");
+            copyElement(facts, "centerInputSlotIndex", recipe, "layout.bindings.centerInputSlotIndex");
             copyElement(facts, "componentSlotOrder", recipe, "metadata.componentSlotOrder");
+            copyElement(facts, "componentSlotOrder", recipe, "layout.bindings.componentSlotOrder");
         } else if ("botania".equals(domainId)) {
-            copyFirstNumber(facts, "manaCost", recipe, "metadata.manaCost", "metadata.mana");
-            copyFirstNumber(facts, "ticks", recipe, "metadata.ticks", "metadata.duration");
+            copyFirstNumber(facts, "manaCost", recipe, "metadata.manaCost", "layout.bindings.manaCost", "metadata.mana");
+            copyFirstNumber(facts, "ticks", recipe, "metadata.ticks", "layout.bindings.ticks", "metadata.duration");
             copyElement(facts, "catalyst", recipe, "metadata.catalyst");
         } else if ("bloodmagic".equals(domainId)) {
-            copyFirstNumber(facts, "bloodCost", recipe, "metadata.bloodCost", "metadata.lpCost", "metadata.lp");
-            copyFirstNumber(facts, "tier", recipe, "metadata.tier");
+            copyFirstNumber(facts, "bloodCost", recipe, "metadata.bloodCost", "layout.bindings.bloodCost", "metadata.lpCost", "layout.bindings.lpCost", "metadata.lp");
+            copyFirstNumber(facts, "tier", recipe, "metadata.tier", "layout.bindings.tier");
+            copyFirstNumber(facts, "consumptionRate", recipe, "metadata.consumptionRate", "layout.bindings.consumptionRate");
+            copyFirstNumber(facts, "drainRate", recipe, "metadata.drainRate", "layout.bindings.drainRate");
+            copyFirstNumber(facts, "tartaricCost", recipe, "metadata.tartaricCost", "layout.bindings.tartaricCost");
             copyElement(facts, "orb", recipe, "metadata.orb");
             copyElement(facts, "ritual", recipe, "metadata.ritual");
+            copyElement(facts, "isWeakActivation", recipe, "metadata.isWeakActivation");
+            copyElement(facts, "isWeakActivation", recipe, "layout.bindings.isWeakActivation");
         } else if ("forestry".equals(domainId)) {
             copyElement(facts, "beeSpecies", recipe, "metadata.beeSpecies");
             copyElement(facts, "chance", recipe, "metadata.chance");
@@ -507,6 +549,8 @@ public final class RawExportSidecarWriter {
             copyElement(facts, "entityHealth", recipe, "metadata.entityHealth");
             copyElement(facts, "drops", recipe, "metadata.drops");
             copyElement(facts, "fluidDrops", recipe, "metadata.fluidDrops");
+            copyElement(facts, "modelRef", recipe, "metadata.modelRef");
+            copyElement(facts, "previewImage", recipe, "metadata.previewImage");
         }
     }
 
@@ -612,6 +656,66 @@ public final class RawExportSidecarWriter {
 
     private static JsonElement cloneJson(JsonElement value) {
         return value == null ? null : new JsonParser().parse(value.toString());
+    }
+
+    private static void addCount(JsonObject target, String to, JsonObject source, String dottedPath) {
+        JsonElement value = elementAt(source, dottedPath);
+        if (value != null && value.isJsonArray()) {
+            target.addProperty(to, value.getAsJsonArray().size());
+        }
+    }
+
+    private static void addCollectedStrings(
+            JsonObject target,
+            String to,
+            JsonObject source,
+            String arrayPath,
+            String nestedArrayName,
+            String valueKey,
+            int limit) {
+        JsonElement value = elementAt(source, arrayPath);
+        if (value == null || !value.isJsonArray()) {
+            return;
+        }
+        JsonArray out = new JsonArray();
+        Set<String> seen = new LinkedHashSet<String>();
+        for (JsonElement row : value.getAsJsonArray()) {
+            if (out.size() >= limit || row == null || !row.isJsonObject()) {
+                continue;
+            }
+            if (nestedArrayName == null) {
+                addStringIfPresent(out, seen, row.getAsJsonObject().get(valueKey));
+            } else {
+                JsonElement nested = row.getAsJsonObject().get(nestedArrayName);
+                if (nested == null || !nested.isJsonArray()) {
+                    continue;
+                }
+                for (JsonElement nestedRow : nested.getAsJsonArray()) {
+                    if (out.size() >= limit || nestedRow == null || !nestedRow.isJsonObject()) {
+                        continue;
+                    }
+                    addStringIfPresent(out, seen, nestedRow.getAsJsonObject().get(valueKey));
+                }
+            }
+        }
+        if (out.size() > 0) {
+            target.add(to, out);
+        }
+    }
+
+    private static void addStringIfPresent(JsonArray target, Set<String> seen, JsonElement value) {
+        if (value == null || value.isJsonNull() || !value.isJsonPrimitive()) {
+            return;
+        }
+        try {
+            String text = value.getAsString();
+            if (text != null && text.trim().length() > 0 && !seen.contains(text.trim())) {
+                seen.add(text.trim());
+                target.add(new com.google.gson.JsonPrimitive(text.trim()));
+            }
+        } catch (Exception ignored) {
+            // Ignore non-string primitives.
+        }
     }
 
     private static JsonElement elementAt(JsonObject object, String dottedPath) {

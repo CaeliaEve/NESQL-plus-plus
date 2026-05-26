@@ -12,3 +12,6 @@ include/
 local-maven/
 readme.txt
 temp_jar/
+
+# Local planning documents
+docs/raw-export-foundation-plan.md
