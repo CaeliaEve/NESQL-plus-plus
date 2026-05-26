@@ -391,6 +391,7 @@ public final class RawExportSidecarWriter {
             index.addProperty("schemaVersion", SCHEMA_VERSION + "/special-domain");
             index.addProperty("domain", domainId);
             index.addProperty("recipeCount", bucket.size());
+            index.addProperty("payloadCount", payloads.size());
             index.addProperty("recipes", "special/" + domainId + "/recipes.jsonl");
             index.addProperty("payloads", "special/" + domainId + "/payloads.jsonl");
             index.addProperty("summary", "special/" + domainId + "/summary.json");
@@ -401,6 +402,7 @@ public final class RawExportSidecarWriter {
             JsonObject entry = new JsonObject();
             entry.addProperty("domain", domainId);
             entry.addProperty("recipeCount", bucket.size());
+            entry.addProperty("payloadCount", payloads.size());
             entry.addProperty("index", "special/" + domainId + "/index.json");
             entry.addProperty("recipes", "special/" + domainId + "/recipes.jsonl");
             entry.addProperty("payloads", "special/" + domainId + "/payloads.jsonl");

@@ -156,7 +156,7 @@ Each `special/<domain>/` directory must contain:
 - `summary.json`: small statistics and representative samples for validation.
 - `index.json`: domain-local paths and declared counts.
 
-`special/index.json` must list every domain and declare `recipes`, `payloads`, and `summary` paths. Domain payloads preserve the original recipe identifiers and copy the canonical slot/fluid/machine metadata while adding a `facts` object for domain-specific values such as EU/ticks, aspects, mana, LP, bee mutations, or entity drops.
+`special/index.json` must list every domain and declare `recipes`, `payloads`, `summary`, `recipeCount`, and `payloadCount`. Domain payloads preserve the original recipe identifiers and copy the canonical slot/fluid/machine metadata while adding a `facts` object for domain-specific values such as EU/ticks, aspects, mana, LP, bee mutations, or entity drops.
 
 ## 6. Validation Requirements
 
