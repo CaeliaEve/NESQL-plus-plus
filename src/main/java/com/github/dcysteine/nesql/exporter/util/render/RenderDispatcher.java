@@ -183,6 +183,10 @@ public enum RenderDispatcher {
         return singleFrameJobQueue.size() + multiFrameJobQueue.size() + multiFrameDeferredQueue.size() + activeCaptures.size();
     }
 
+    public int getActiveCaptureCount() {
+        return activeCaptures.size();
+    }
+
     public int getDuplicateJobSkipCount() {
         return duplicateJobSkipCount.get();
     }

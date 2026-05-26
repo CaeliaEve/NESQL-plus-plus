@@ -141,7 +141,11 @@ public enum Renderer {
 
         setupRenderState();
         try {
-            int iconsPerTick = Math.max(ConfigOptions.RENDER_ICONS_PER_TICK.get(), 1024);
+            int requestedIconsPerTick = Math.max(1, ConfigOptions.RENDER_ICONS_PER_TICK.get());
+            int iconsPerTick = Math.min(requestedIconsPerTick, 128);
+            if (RenderDispatcher.INSTANCE.getActiveCaptureCount() > 0) {
+                iconsPerTick = Math.min(iconsPerTick, 48);
+            }
 
             for (int i = 0; i < iconsPerTick; i++) {
                 Optional<RenderJob> jobOptional = RenderDispatcher.INSTANCE.getJob();
