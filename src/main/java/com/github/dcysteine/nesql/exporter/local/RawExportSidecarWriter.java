@@ -421,7 +421,15 @@ public final class RawExportSidecarWriter {
         add(row, "staticFile", asset.staticFile);
         add(row, "framePattern", asset.framePattern);
         add(row, "frameCount", asset.frameCount);
+        add(row, "configuredFrameCount", asset.configuredFrameCount);
+        add(row, "capturedFrameCount", asset.capturedFrameCount);
         add(row, "frameDurationMs", asset.frameDurationMs);
+        add(row, "frames", asset.frames);
+        add(row, "timeline", asset.timeline);
+        add(row, "loopMode", asset.loopMode);
+        add(row, "loop", asset.loop);
+        add(row, "baseSize", asset.baseSize);
+        add(row, "rect", asset.rect);
         add(row, "atlasGroup", asset.atlasGroup);
         add(row, "atlasFile", asset.atlasFile);
         add(row, "atlasTexture", asset.atlasTexture);
@@ -556,6 +564,18 @@ public final class RawExportSidecarWriter {
         }
     }
 
+
+    private static void add(JsonObject object, String key, Boolean value) {
+        if (value != null) {
+            object.addProperty(key, value);
+        }
+    }
+
+    private static void add(JsonObject object, String key, Object value) {
+        if (value != null) {
+            object.add(key, new GsonBuilder().serializeNulls().create().toJsonTree(value));
+        }
+    }
     private static boolean containsIgnoreCase(String value, String token) {
         return value != null && token != null && value.toLowerCase(java.util.Locale.ROOT).contains(token.toLowerCase(java.util.Locale.ROOT));
     }
