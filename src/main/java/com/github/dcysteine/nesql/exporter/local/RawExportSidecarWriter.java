@@ -181,7 +181,9 @@ public final class RawExportSidecarWriter {
         report.validation.missingAnimationMetadataCount = 0;
         report.validation.missingGroupOrOrderCount = 0;
         report.validation.failedStages = new ArrayList<String>();
+        report.validation.gates = new ArrayList<RawValidationGate>();
         report.validation.status = "not-yet-enforced";
+        report.validation.readinessStatus = "blocked";
         return report;
     }
 
@@ -202,6 +204,59 @@ public final class RawExportSidecarWriter {
         report.validation.missingGroupOrOrderCount = (counts.rawGroups == 0 || counts.rawNeiOrderEntries == 0) ? 1 : 0;
         report.validation.failedStages = issues;
         report.validation.status = issues.isEmpty() ? "ok" : "warning";
+        report.validation.gates = buildRawValidationGates(counts, issues);
+        report.validation.readinessStatus = rawValidationReady(report.validation) ? "ready" : "blocked";
+    }
+
+    private static List<RawValidationGate> buildRawValidationGates(RawExportCounts counts, List<String> issues) {
+        List<RawValidationGate> gates = new ArrayList<RawValidationGate>();
+        gates.add(validationGate(
+                "core-counts",
+                issues.isEmpty(),
+                issues.isEmpty()
+                        ? "Raw fact counts match database/canonical source counts."
+                        : "Raw fact counts have " + issues.size() + " mismatch(es)."));
+        gates.add(validationGate(
+                "browser-order",
+                counts.rawGroups > 0 && counts.rawNeiOrderEntries > 0,
+                counts.rawGroups > 0 && counts.rawNeiOrderEntries > 0
+                        ? "NEI browser groups and ordering rows are present."
+                        : "NEI browser groups or ordering rows are missing."));
+        gates.add(validationGate(
+                "textures",
+                counts.rawItems == 0 || counts.rawTextures > 0,
+                counts.rawItems == 0 || counts.rawTextures > 0
+                        ? "Texture index stream is present for exported item rows."
+                        : "Texture index is empty while item rows are present."));
+        gates.add(validationGate(
+                "animations",
+                counts.rawAnimations >= 0,
+                "Animation metadata stream is present; zero rows is valid when no animated assets are detected."));
+        gates.add(validationGate(
+                "entity-models",
+                counts.rawEntities >= 0,
+                "Entity model stream is present; zero rows is valid when entity exports are not selected."));
+        return gates;
+    }
+
+    private static RawValidationGate validationGate(String name, boolean ready, String summary) {
+        RawValidationGate gate = new RawValidationGate();
+        gate.name = name;
+        gate.status = ready ? "ready" : "blocked";
+        gate.summary = summary;
+        return gate;
+    }
+
+    private static boolean rawValidationReady(RawExportValidation validation) {
+        if (validation == null || validation.gates == null || validation.gates.isEmpty()) {
+            return false;
+        }
+        for (RawValidationGate gate : validation.gates) {
+            if (!"ready".equals(gate.status)) {
+                return false;
+            }
+        }
+        return true;
     }
 
     private static void addCountMismatch(List<String> issues, String label, long expected, long actual) {
@@ -1240,10 +1295,18 @@ public final class RawExportSidecarWriter {
 
     private static final class RawExportValidation {
         String status;
+        String readinessStatus;
         long missingTextureCount;
         long missingAnimationMetadataCount;
         long missingGroupOrOrderCount;
         List<String> failedStages;
+        List<RawValidationGate> gates;
+    }
+
+    private static final class RawValidationGate {
+        String name;
+        String status;
+        String summary;
     }
 
     private static final class FileRef {
