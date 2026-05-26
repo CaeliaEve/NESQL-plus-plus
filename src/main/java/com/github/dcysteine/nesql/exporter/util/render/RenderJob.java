@@ -78,6 +78,10 @@ public abstract class RenderJob {
             return false;
         }
 
+        if (getType() == JobType.ITEM && shouldTrustNativeSpriteDespiteInventoryRenderer(getItem())) {
+            return true;
+        }
+
         if (getType() == JobType.ITEM && hasCustomInventoryRenderer()) {
             return false;
         }
@@ -469,6 +473,27 @@ public abstract class RenderJob {
         }
 
         return isAnimatedCustomRendererClass(rendererClassName);
+    }
+
+    private boolean shouldTrustNativeSpriteDespiteInventoryRenderer(ItemStack stack) {
+        if (stack == null || stack.getItem() == null) {
+            return false;
+        }
+
+        String registryName;
+        try {
+            Object name = net.minecraft.item.Item.itemRegistry.getNameForObject(stack.getItem());
+            registryName = name == null ? "" : name.toString();
+        } catch (Throwable ignored) {
+            registryName = "";
+        }
+
+        return registryName.equals("Thaumcraft:ItemWispEssence")
+                || registryName.equals("Thaumcraft:ItemResource")
+                || registryName.equals("Thaumcraft:ItemCrystalEssence")
+                || registryName.equals("Thaumcraft:ItemCrystal")
+                || registryName.equals("Thaumcraft:ItemEldritchObject")
+                || registryName.equals("Thaumcraft:ItemPrimordialPearl");
     }
 
     private boolean isAnimatedCustomRendererClass(String rendererClassName) {

@@ -56,14 +56,10 @@ public enum AnimatedItemRegistry {
     }
 
     private void addThaumcraftAnimatedItems() {
-        animatedItemIds.add("Thaumcraft:ItemPrimordialPearl");
-        animatedItemIds.add("Thaumcraft:ItemEldritchObject");
-        animatedItemIds.add("Thaumcraft:ItemResource");
-        animatedItemIds.add("Thaumcraft:ItemWispEssence");
-
-        // Thaumcraft crystals
-        animatedItemIds.add("Thaumcraft:ItemCrystalEssence");
-        animatedItemIds.add("Thaumcraft:ItemCrystal");
+        // Do not force Thaumcraft aspect/wisp items through framebuffer GIF capture.
+        // GTNH exports many NBT-distinct variants during crafting scans, and repeatedly
+        // capturing them as GIFs can hard-exit the 2.8.4 client. Plain Thaumcraft animated
+        // sprites are handled by native sprite metadata instead.
     }
 
     private void addBotaniaAnimatedItems() {

@@ -12,6 +12,7 @@ import net.minecraftforge.common.util.ForgeDirection;
 
 final class GregTechAnimationDetector {
     private static final ForgeDirection INVENTORY_FACING = ForgeDirection.WEST;
+    private static int animatedMachineLogCount = 0;
     private static final ForgeDirection[] INVENTORY_SIDES = {
             ForgeDirection.DOWN,
             ForgeDirection.UP,
@@ -108,11 +109,13 @@ final class GregTechAnimationDetector {
             IMetaTileEntity metaTileEntity,
             ForgeDirection side,
             boolean active) {
-        if (!Logger.intermittentLog(0)) {
+        animatedMachineLogCount++;
+        if (!Logger.intermittentLog(animatedMachineLogCount)) {
             return;
         }
         Logger.MOD.info(
-                "Detected animated GregTech machine item: {} / {} (side={}, active={})",
+                "Detected {} animated GregTech machine candidates so far; latest: {} / {} (side={}, active={})",
+                animatedMachineLogCount,
                 stack.getItem().getUnlocalizedName(),
                 metaTileEntity.getMetaName(),
                 side,

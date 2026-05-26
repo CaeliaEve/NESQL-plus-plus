@@ -215,12 +215,12 @@ public final class GifRenderer {
 
             if (framesToWrite.size() == 1) {
                 writeSingleFrameGif(outputFile, firstFrame);
-                Logger.MOD.info("Wrote single-frame GIF: {}", outputFile.getName());
+                Logger.MOD.debug("Wrote single-frame GIF: {}", outputFile.getName());
                 return;
             }
 
             writeAnimatedGif(outputFile, framesToWrite, frameDelayMs, loop);
-            Logger.MOD.info(
+            Logger.MOD.debug(
                     "Successfully wrote animated GIF with {} frames for {}",
                     framesToWrite.size(), outputFile.getName());
         }

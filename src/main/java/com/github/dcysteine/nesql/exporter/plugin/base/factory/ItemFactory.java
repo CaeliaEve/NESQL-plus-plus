@@ -122,7 +122,7 @@ public class ItemFactory extends EntityFactory<Item, String> {
             if (shouldRender) {
                 Logger.intermittentLog(
                         logger,
-                        "Enqueueing render of item #{}: " + item.getLocalizedName(),
+                        "Enqueueing render of item #{}",
                         exporterState.incrementItemCount());
                 RenderDispatcher.INSTANCE.addJob(RenderJob.ofItem(itemStack));
             } else {

@@ -7,6 +7,7 @@ import com.github.dcysteine.nesql.exporter.plugin.PluginExporter;
 import com.github.dcysteine.nesql.exporter.plugin.PluginHelper;
 import com.github.dcysteine.nesql.exporter.plugin.minecraft.MinecraftRecipeTypeHandler;
 import com.github.dcysteine.nesql.exporter.plugin.base.factory.RecipeBuilder;
+import com.github.dcysteine.nesql.exporter.util.IdUtil;
 import com.github.dcysteine.nesql.exporter.util.ItemUtil;
 import net.minecraft.block.Block;
 import net.minecraft.item.Item;
@@ -79,7 +80,7 @@ public class CraftingRecipeProcessor extends PluginHelper {
             if (Logger.intermittentLog(count)) {
                 logger.info("Processed crafting recipe {} of {}", count, total);
                 logger.info(
-                        "Most recent recipe: {}", recipe.getRecipeOutput().getDisplayName());
+                        "Most recent recipe output id: {}", IdUtil.itemId(recipe.getRecipeOutput()));
             }
         }
 
