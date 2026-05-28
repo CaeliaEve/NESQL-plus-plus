@@ -65,6 +65,29 @@ public final class Main {
         }
 
         registerServerCommand(event, new ExportCommand(), "/nesql");
+        if (ConfigOptions.ENABLE_DEBUG_COMMANDS.get()) {
+            registerDebugServerCommands(event);
+        } else {
+            Logger.MOD.info("Legacy/debug export commands are hidden. Enable enable_debug_commands to register them.");
+        }
+        event.registerServerCommand(new ThaumcraftUnlockAspectsCommand()); // Unlock scanned item aspects
+        Logger.MOD.info("Server-side command registered: /nesql-tc-unlock-aspects");
+        Logger.MOD.info("  /nesql-tc-unlock-aspects - Unlock scanned Thaumcraft item aspects for a player");
+    }
+
+    private void registerClientCommands() {
+        registerOptionalClientCommand(new ExportCommand(), "/nesql"); // Complete export (data + images)
+        if (ConfigOptions.ENABLE_DEBUG_COMMANDS.get()) {
+            registerDebugClientCommands();
+        } else {
+            Logger.MOD.info("Legacy/debug client export commands are hidden. Use /nesql for GUI stage selection.");
+        }
+
+        Logger.MOD.info("Client export command registration finished.");
+        Logger.MOD.info("  /nesql - Complete export (data + images) [profile={}]", ExportProfile.FULL_V104.profileId);
+    }
+
+    private void registerDebugServerCommands(FMLServerStartingEvent event) {
         registerServerCommand(event, new DataExportCommand(), "/nesql-data");
         registerServerCommand(event, new ImageExportCommand(), "/nesql-images");
         registerServerCommand(event, new ThaumcraftDataExportCommand(), "/nesql-data-thaumcraft");
@@ -75,13 +98,9 @@ public final class Main {
         registerServerCommand(event, new BlockFaceExportCommand(), "/nesql-blockfaces");
         registerServerCommand(event, new IndustrialSlaughterhouseEntityExportCommand(), "/nesql-eec-models");
         registerServerCommand(event, new BrowserLayoutExportCommand(), "/nesql-browser-layout");
-        event.registerServerCommand(new ThaumcraftUnlockAspectsCommand()); // Unlock scanned item aspects
-        Logger.MOD.info("Server-side command registered: /nesql-tc-unlock-aspects");
-        Logger.MOD.info("  /nesql-tc-unlock-aspects - Unlock scanned Thaumcraft item aspects for a player");
     }
 
-    private void registerClientCommands() {
-        registerOptionalClientCommand(new ExportCommand(), "/nesql"); // Complete export (data + images)
+    private void registerDebugClientCommands() {
         registerOptionalClientCommand(new DataExportCommand(), "/nesql-data"); // Data only (no images)
         registerOptionalClientCommand(new ImageExportCommand(), "/nesql-images"); // Images only (requires existing data)
         registerOptionalClientCommand(new ThaumcraftDataExportCommand(), "/nesql-data-thaumcraft"); // Debug: Thaumcraft-family data only
@@ -93,8 +112,7 @@ public final class Main {
         registerOptionalClientCommand(new IndustrialSlaughterhouseEntityExportCommand(), "/nesql-eec-models"); // EEC mob preview models
         registerOptionalClientCommand(new BrowserLayoutExportCommand(), "/nesql-browser-layout"); // NEI browser order + collapsible groups only
 
-        Logger.MOD.info("Client export command registration finished.");
-        Logger.MOD.info("  /nesql - Complete export (data + images) [profile={}]", ExportProfile.FULL_V104.profileId);
+        Logger.MOD.info("Debug export commands enabled:");
         Logger.MOD.info("  /nesql-data - Data only (no images, v1.04 indexed export) [profile={}]", ExportProfile.DATA_ONLY_V104.profileId);
         Logger.MOD.info("  /nesql-data-thaumcraft - Debug data export for Thaumcraft-family NEI handlers only");
         Logger.MOD.info("  /nesql-data-botania - Debug data export for Botania-family NEI handlers only");

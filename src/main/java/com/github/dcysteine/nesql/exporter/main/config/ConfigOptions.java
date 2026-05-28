@@ -32,6 +32,15 @@ public final class ConfigOptions {
                             + "\nThe default repository name will be used.")
                     .register();
 
+    public static final Option<Boolean> ENABLE_DEBUG_COMMANDS =
+            new BooleanOption(
+                    Category.OPTIONS, "enable_debug_commands", false,
+                    "Whether to register legacy/debug export commands such as /nesql-images,"
+                            + " /nesql-render-contracts, and /nesql-browser-layout."
+                            + "\nNormal exports should use /nesql and select stages in the GUI.",
+                    true)
+                    .register();
+
     public static final Option<Boolean> ENABLE_CONFIG_FILE =
             new BooleanOption(
                     Category.OPTIONS, "enable_config_file", false,
@@ -79,12 +88,12 @@ public final class ConfigOptions {
 
     public static final Option<Boolean> EXPORT_FRAMEBUFFER_GIF =
             new BooleanOption(
-                    Category.OPTIONS, "export_framebuffer_gif", false,
+                    Category.OPTIONS, "export_framebuffer_gif", true,
                     "Whether the main export may capture multi-frame GIFs by repeatedly rendering"
                             + " inventory items through the client OpenGL framebuffer."
-                            + "\nDefault is false for GTNH-sized packs: native sprite animation"
-                            + " metadata is still exported, while expensive custom framebuffer"
-                            + " animations should be captured by a dedicated follow-up export.")
+                            + "\nDefault is true so custom-rendered GTNH animations are exported exactly"
+                            + " as they appear in NEI; stability is handled by render isolation and"
+                            + " crash diagnostics, not by disabling GIF output.")
                     .register();
 
     public static final Option<Integer> GIF_FRAMES =

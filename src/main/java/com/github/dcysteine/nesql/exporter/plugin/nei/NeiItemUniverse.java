@@ -32,8 +32,8 @@ final class NeiItemUniverse {
     static List<ItemStack> getItems() {
         boolean showSummary = LOGGED_ITEM_UNIVERSE_SUMMARY.compareAndSet(false, true);
         if (showSummary) {
-            Logger.chatMessage("准备阶段");
-            Logger.chatMessage("初始化物品索引...");
+            Logger.chatMessage("Preparation stage");
+            Logger.chatMessage("Initializing item index...");
         }
 
         List<ItemStack> baseItems = ItemList.items != null ? ItemList.items : Collections.<ItemStack>emptyList();
@@ -59,9 +59,9 @@ final class NeiItemUniverse {
                     unique.size(),
                     baseCount,
                     thaumcraftAdded);
-            Logger.chatMessage(String.format("扫描 NEI 物品索引：%,d 项", unique.size()));
-            Logger.chatMessage(String.format("已发现 %,d 个物品/变体", unique.size()));
-            Logger.chatMessage("正在建立导出上下文，请稍候");
+            Logger.chatMessage(String.format("Scanning NEI item index: %,d entries", unique.size()));
+            Logger.chatMessage(String.format("Discovered %,d items/variants", unique.size()));
+            Logger.chatMessage("Building export context, please wait");
         }
 
         return new ArrayList<ItemStack>(unique.values());
