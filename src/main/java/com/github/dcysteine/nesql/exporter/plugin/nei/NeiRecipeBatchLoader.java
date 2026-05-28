@@ -28,7 +28,7 @@ public class NeiRecipeBatchLoader {
 
     /**
      * Streaming export of all crafting recipes.
-     * Processes handlers one by one: load 鈫?export 鈫?discard.
+     * Processes handlers one by one: load, export, then discard.
      *
      * @param exporter The export processor to handle the actual export
      * @return The total number of recipes exported
@@ -108,7 +108,7 @@ public class NeiRecipeBatchLoader {
                     continue;
                 }
 
-                // 鈿?v1.04 浼樺寲5: 妫€鏌andler鏄惁闇€瑕佺墿鍝佹壂鎻?
+                // v1.04 optimization: decide whether this handler needs item-context scanning.
                 boolean needsItemScan = needsItemScanning(handlerName);
                 itemScan = needsItemScan;
 
@@ -119,7 +119,7 @@ public class NeiRecipeBatchLoader {
                             handlerIndex, GuiCraftingRecipe.craftinghandlers.size(), handlerName));
                     recipeCount = loadRecipesForHandler((TemplateRecipeHandler) workingHandler, itemUniverse);
                 } else {
-                    // Handler涓嶉渶瑕佺墿鍝佹壂鎻忥紝閰嶆柟宸茬粡鍦╝recipes涓?
+                    // Handler does not need item scanning; recipes are already available in arecipes.
                     Logger.MOD.debug("Handler {} doesn't need item scan, using pre-loaded recipes", handlerName);
                     recipeCount = workingHandler.numRecipes();
                 }
@@ -137,7 +137,7 @@ public class NeiRecipeBatchLoader {
                     totalRecipes.addAndGet(exported);
 
                     Logger.MOD.info("Exported {} recipes from handler: {}", exported, handlerName);
-                    Logger.chatMessage(String.format("[%d/%d] 鉁?Completed: %s (%d recipes)",
+                    Logger.chatMessage(String.format("[%d/%d] Completed: %s (%d recipes)",
                             handlerIndex, GuiCraftingRecipe.craftinghandlers.size(), handlerName, exported));
                 } else {
                     Logger.MOD.debug("No recipes found for handler: {}", handlerName);
@@ -174,7 +174,7 @@ public class NeiRecipeBatchLoader {
 
             } catch (Exception e) {
                 Logger.MOD.error("Error processing handler: " + handlerName, e);
-                Logger.chatMessage(String.format("[%d/%d] 鈿?Skipped: %s (error)",
+                Logger.chatMessage(String.format("[%d/%d] Skipped: %s (error)",
                         handlerIndex, GuiCraftingRecipe.craftinghandlers.size(), handlerName));
                 recordHandlerTiming(
                         handlerIndex,
@@ -250,7 +250,7 @@ public class NeiRecipeBatchLoader {
                         baseHandler.getHandlerId(),
                         handlerName,
                         baseHandler);
-                Logger.chatMessage(String.format("[%d/%d] 鉁?Completed: %s (%d recipes)",
+                Logger.chatMessage(String.format("[%d/%d] Completed: %s (%d recipes)",
                         handlerIndex, totalHandlers, handlerName, exported));
                 return exported;
             }
@@ -278,7 +278,7 @@ public class NeiRecipeBatchLoader {
             }
 
             if (exported > 0) {
-                Logger.chatMessage(String.format("[%d/%d] 鉁?Completed: %s (%d recipes)",
+                Logger.chatMessage(String.format("[%d/%d] Completed: %s (%d recipes)",
                         handlerIndex, totalHandlers, handlerName, exported));
             } else {
                 Logger.MOD.warn("No recipes resolved for non-template handler: {}", handlerName);
@@ -286,7 +286,7 @@ public class NeiRecipeBatchLoader {
             return exported;
         } catch (Exception e) {
             Logger.MOD.error("Error processing non-template crafting handler: " + handlerName, e);
-            Logger.chatMessage(String.format("[%d/%d] 鈿?Skipped: %s (error)",
+            Logger.chatMessage(String.format("[%d/%d] Skipped: %s (error)",
                     handlerIndex, totalHandlers, handlerName));
             return 0;
         }
@@ -350,7 +350,7 @@ public class NeiRecipeBatchLoader {
                     totalRecipes.addAndGet(exported);
 
                     Logger.MOD.info("Exported {} usage recipes from handler: {}", exported, handlerName);
-                    Logger.chatMessage(String.format("[%d/%d] 鉁?Completed: %s (%d recipes)",
+                    Logger.chatMessage(String.format("[%d/%d] Completed: %s (%d recipes)",
                             handlerIndex, GuiUsageRecipe.usagehandlers.size(), handlerName, exported));
                 } else {
                     Logger.MOD.debug("No usage recipes found for handler: {}", handlerName);
@@ -377,7 +377,7 @@ public class NeiRecipeBatchLoader {
 
             } catch (Exception e) {
                 Logger.MOD.error("Error processing usage handler: " + handlerName, e);
-                Logger.chatMessage(String.format("[%d/%d] 鈿?Skipped: %s (error)",
+                Logger.chatMessage(String.format("[%d/%d] Skipped: %s (error)",
                         handlerIndex, GuiUsageRecipe.usagehandlers.size(), handlerName));
             }
         }
@@ -405,10 +405,10 @@ public class NeiRecipeBatchLoader {
         AtomicInteger loadedCount = new AtomicInteger(0);
 
         try {
-            // 鈿?v1.04 浼樺寲1: 妫€鏌andler鏄惁宸茬粡鏈夐厤鏂?
+            // v1.04 optimization: use preloaded recipes when available.
             int initialCount = handler.numRecipes();
             if (initialCount > 0) {
-                // Handler宸茬粡棰勫姞杞戒簡閰嶆柟锛岀洿鎺ヨ繑鍥?
+                // Handler already populated recipes; avoid an expensive full item scan.
                 Logger.MOD.debug("Handler {} already has {} recipes, skipping item scan",
                     handler.getRecipeName(), initialCount);
                 return initialCount;
@@ -417,8 +417,8 @@ public class NeiRecipeBatchLoader {
             // Clear any existing recipes
             handler.arecipes.clear();
 
-            // 鈿?v1.04 淇: 绉婚櫎涓嶅噯纭殑浼樺寲锛屼娇鐢ㄥ畬鏁存壂鎻?
-            // 涔嬪墠鐨勯噰鏍锋娴嬪拰mod杩囨护浼氳烦杩囧ぇ閲忛厤鏂?
+            // v1.04 fallback: scan item universe only when the handler requires it.
+            // Most handlers are sparse; the caller decides whether this cost is acceptable.
             Logger.MOD.debug("Loading recipes for handler: {}", handler.getRecipeName());
             return loadRecipesFullScan(handler, itemUniverse, loadedCount);
 
@@ -472,7 +472,7 @@ public class NeiRecipeBatchLoader {
     }
 
     /**
-     * 鈿?瀹屾暣鐗╁搧鎵弿 - 鐢ㄤ簬澶勭悊鎵€鏈夌墿鍝佺殑handler
+     * Full item scan loader for handlers that need item-context recipe discovery.
      */
     private static int loadRecipesFullScan(
             TemplateRecipeHandler handler, List<ItemStack> itemUniverse, AtomicInteger loadedCount) {
@@ -493,7 +493,7 @@ public class NeiRecipeBatchLoader {
     }
 
     /**
-     * 鈿?杩囨护鐗╁搧鎵弿 - 鍙壂鎻忔弧瓒虫潯浠剁殑鐗╁搧
+     * Filtered item scan loader for specialized handlers.
      */
     private static int loadRecipesFiltered(TemplateRecipeHandler handler, AtomicInteger loadedCount,
                                           java.util.function.Predicate<ItemStack> filter) {
@@ -559,24 +559,24 @@ public class NeiRecipeBatchLoader {
     }
 
     /**
-     * 鈿?v1.04 浼樺寲: 妫€鏌andler鏄惁闇€瑕侀亶鍘嗘墍鏈夌墿鍝佹潵鍔犺浇閰嶆柟
-     * 鏌愪簺handler鍦ㄥ垵濮嬪寲鏃跺凡缁忓姞杞戒簡閰嶆柟锛屼笉闇€瑕佸啀鎵弿鐗╁搧
+     * v1.04 handler policy: only scan items when the handler needs item-context loading.
+     * Handlers that already preload recipes can skip the expensive scan.
      */
     private static boolean needsItemScanning(String handlerName) {
         String lower = handlerName.toLowerCase();
 
-        // 杩欎簺handler閫氬父宸茬粡棰勫姞杞戒簡閰嶆柟锛屼笉闇€瑕佺墿鍝佹壂鎻?
+        // GregTech assembly handlers preload recipes; scanning every item is redundant.
         if (lower.contains("gregtech") && (lower.contains("assembly") || lower.contains("line") || lower.contains("assemble"))) {
-            // GregTech瑁呴厤绾夸笉闇€瑕佺墿鍝佹壂鎻忥紙閰嶆柟宸茬粡棰勫姞杞斤級
+            // Keep the export fast by trusting the handler recipe list.
             return false;
         }
 
-        // NEI鍐呯疆handler閫氬父闇€瑕佺墿鍝佹壂鎻?
+        // Built-in NEI handlers usually need item-context loading.
         if (lower.startsWith("nei.")) {
             return true;
         }
 
-        // 榛樿闇€瑕佺墿鍝佹壂鎻?
+        // Default to scanning for correctness.
         return true;
     }
 }
