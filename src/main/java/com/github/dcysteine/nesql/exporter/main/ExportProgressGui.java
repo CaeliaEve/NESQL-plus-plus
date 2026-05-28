@@ -277,6 +277,11 @@ public class ExportProgressGui extends GuiScreen {
                 || lower.contains("failed")
                 || lower.contains("debug report")
                 || lower.contains("root cause")
+                || message.contains("准备阶段")
+                || message.contains("初始化物品索引")
+                || message.contains("扫描 NEI 物品索引")
+                || message.contains("已发现")
+                || message.contains("正在建立导出上下文")
                 || lower.contains("selection");
     }
 

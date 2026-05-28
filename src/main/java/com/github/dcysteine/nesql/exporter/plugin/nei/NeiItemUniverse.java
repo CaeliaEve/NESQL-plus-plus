@@ -24,11 +24,18 @@ import java.util.concurrent.atomic.AtomicBoolean;
  * so recipe scans can discover the full GTNH set.
  */
 final class NeiItemUniverse {
+    private static final AtomicBoolean LOGGED_ITEM_UNIVERSE_SUMMARY = new AtomicBoolean(false);
     private static final AtomicBoolean LOGGED_THAUMCRAFT_AUGMENTATION = new AtomicBoolean(false);
 
     private NeiItemUniverse() {}
 
     static List<ItemStack> getItems() {
+        boolean showSummary = LOGGED_ITEM_UNIVERSE_SUMMARY.compareAndSet(false, true);
+        if (showSummary) {
+            Logger.chatMessage("准备阶段");
+            Logger.chatMessage("初始化物品索引...");
+        }
+
         List<ItemStack> baseItems = ItemList.items != null ? ItemList.items : Collections.<ItemStack>emptyList();
         LinkedHashMap<String, ItemStack> unique = new LinkedHashMap<String, ItemStack>(baseItems.size() + 256);
 
@@ -44,6 +51,17 @@ final class NeiItemUniverse {
                     thaumcraftAdded,
                     baseCount,
                     unique.size());
+        }
+
+        if (showSummary) {
+            Logger.MOD.info(
+                    "Initialized NEI item universe: {} items/variants (base={}, thaumcraftAugmented={})",
+                    unique.size(),
+                    baseCount,
+                    thaumcraftAdded);
+            Logger.chatMessage(String.format("扫描 NEI 物品索引：%,d 项", unique.size()));
+            Logger.chatMessage(String.format("已发现 %,d 个物品/变体", unique.size()));
+            Logger.chatMessage("正在建立导出上下文，请稍候");
         }
 
         return new ArrayList<ItemStack>(unique.values());
