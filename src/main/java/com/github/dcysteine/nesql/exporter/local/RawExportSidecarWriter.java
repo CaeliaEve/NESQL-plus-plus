@@ -17,6 +17,7 @@ import java.io.FileInputStream;
 import java.io.FileOutputStream;
 import java.io.IOException;
 import java.io.OutputStreamWriter;
+import java.io.Writer;
 import java.nio.charset.StandardCharsets;
 import java.text.SimpleDateFormat;
 import java.util.ArrayList;
@@ -267,29 +268,10 @@ public final class RawExportSidecarWriter {
 
     private RawFactCounts writeRawFactStreams(File rawDir) throws IOException {
         RawFactCounts counts = new RawFactCounts();
-        JsonObject repository = readObject(new File(repositoryDirectory, "canonical/repository.json"));
-        if (repository != null) {
-            JsonArray items = repository.getAsJsonArray("items");
-            JsonArray fluids = repository.getAsJsonArray("fluids");
-            JsonArray recipes = repository.getAsJsonArray("recipes");
-            counts.items = writeArrayAsJsonl(items, new File(rawDir, "facts/items.jsonl"));
-            counts.fluids = writeArrayAsJsonl(fluids, new File(rawDir, "facts/fluids.jsonl"));
-            counts.recipes = writeArrayAsJsonl(recipes, new File(rawDir, "facts/recipes/all.jsonl"));
-            writeArrayAsJsonl(items, new File(rawDir, "items.jsonl"));
-            writeArrayAsJsonl(fluids, new File(rawDir, "fluids.jsonl"));
-            writeArrayAsJsonl(recipes, new File(rawDir, "recipes.jsonl"));
-            writeRecipeIndex(rawDir, recipes);
-            writeSpecialIndexes(rawDir, recipes);
-        } else {
-            createEmptyJsonl(new File(rawDir, "items.jsonl"));
-            createEmptyJsonl(new File(rawDir, "fluids.jsonl"));
-            createEmptyJsonl(new File(rawDir, "recipes.jsonl"));
-            createEmptyJsonl(new File(rawDir, "facts/items.jsonl"));
-            createEmptyJsonl(new File(rawDir, "facts/fluids.jsonl"));
-            createEmptyJsonl(new File(rawDir, "facts/recipes/all.jsonl"));
-            writeRecipeIndex(rawDir, new JsonArray());
-            writeSpecialIndexes(rawDir, new JsonArray());
-        }
+        RepositoryStreamResult repository = streamRepositoryFacts(new File(repositoryDirectory, "canonical/repository.json"), rawDir);
+        counts.items = repository.items;
+        counts.fluids = repository.fluids;
+        counts.recipes = repository.recipes;
 
         JsonObject browserLayout = readObject(new File(repositoryDirectory, "canonical/browser-layout-index.json"));
         if (browserLayout != null) {
@@ -503,14 +485,7 @@ public final class RawExportSidecarWriter {
 
 
     private static void writeSpecialIndexes(File rawDir, JsonArray recipes) throws IOException {
-        String[][] domains = new String[][] {
-                {"gregtech", "gregtech|gt_|gt |assembler|assembly line|chemical reactor|blast furnace|macerator|fluid solidifier|alloy smelter|research station"},
-                {"thaumcraft", "thaumcraft|thaumic|arcane|infusion|crucible|aspect|research"},
-                {"botania", "botania|mana pool|rune altar|runic altar|terra plate|pure daisy|elven trade|petal apothecary"},
-                {"bloodmagic", "bloodmagic|blood magic|blood altar|alchemy array|binding ritual|blood orb|lp"},
-                {"forestry", "forestry|bee|alveary|centrifuge|squeezer|carpenter"},
-                {"eec", "extreme entity crusher|industrial slaughter|infernal drops|mobsinfo|kubatech|entity crusher"}
-        };
+        String[][] domains = specialDomainSpecs();
 
         Map<String, JsonArray> buckets = new LinkedHashMap<String, JsonArray>();
         for (String[] domain : domains) {
@@ -667,6 +642,8 @@ public final class RawExportSidecarWriter {
         } else if ("thaumcraft".equals(domainId)) {
             copyElement(facts, "aspects", recipe, "metadata.aspects");
             copyElement(facts, "aspects", recipe, "layout.bindings.aspects");
+            copyElement(facts, "aspectItems", recipe, "metadata.aspectItems");
+            copyElement(facts, "aspectItems", recipe, "layout.bindings.aspectItems");
             copyElement(facts, "research", recipe, "metadata.research");
             copyElement(facts, "research", recipe, "layout.bindings.research");
             copyElement(facts, "instability", recipe, "metadata.instability");
@@ -681,9 +658,13 @@ public final class RawExportSidecarWriter {
             copyFirstNumber(facts, "manaCost", recipe, "metadata.manaCost", "layout.bindings.manaCost", "metadata.mana");
             copyFirstNumber(facts, "ticks", recipe, "metadata.ticks", "layout.bindings.ticks", "metadata.duration");
             copyElement(facts, "catalyst", recipe, "metadata.catalyst");
+            copyElement(facts, "catalystItemId", recipe, "metadata.catalystItemId");
+            copyString(facts, "recipeKind", recipe, "metadata.recipeKind");
+            copyString(facts, "recipeKind", recipe, "metadata.specialRecipeType");
         } else if ("bloodmagic".equals(domainId)) {
-            copyFirstNumber(facts, "bloodCost", recipe, "metadata.bloodCost", "layout.bindings.bloodCost", "metadata.lpCost", "layout.bindings.lpCost", "metadata.lp");
-            copyFirstNumber(facts, "tier", recipe, "metadata.tier", "layout.bindings.tier");
+            copyFirstNumber(facts, "bloodCost", recipe, "metadata.bloodCost", "layout.bindings.bloodCost", "metadata.lpCost", "layout.bindings.lpCost", "metadata.requiredLP", "metadata.lp");
+            copyFirstNumber(facts, "lpCost", recipe, "metadata.lpCost", "metadata.requiredLP", "metadata.bloodCost", "layout.bindings.lpCost");
+            copyFirstNumber(facts, "tier", recipe, "metadata.tier", "metadata.altarTier", "layout.bindings.tier");
             copyFirstNumber(facts, "consumptionRate", recipe, "metadata.consumptionRate", "layout.bindings.consumptionRate");
             copyFirstNumber(facts, "drainRate", recipe, "metadata.drainRate", "layout.bindings.drainRate");
             copyFirstNumber(facts, "tartaricCost", recipe, "metadata.tartaricCost", "layout.bindings.tartaricCost");
@@ -1109,6 +1090,423 @@ public final class RawExportSidecarWriter {
         return count;
     }
 
+    private RepositoryStreamResult streamRepositoryFacts(File repositoryFile, File rawDir) throws IOException {
+        createEmptyJsonl(new File(rawDir, "items.jsonl"));
+        createEmptyJsonl(new File(rawDir, "fluids.jsonl"));
+        createEmptyJsonl(new File(rawDir, "recipes.jsonl"));
+        createEmptyJsonl(new File(rawDir, "facts/items.jsonl"));
+        createEmptyJsonl(new File(rawDir, "facts/fluids.jsonl"));
+        createEmptyJsonl(new File(rawDir, "facts/recipes/all.jsonl"));
+
+        RepositoryStreamResult result = new RepositoryStreamResult();
+        if (repositoryFile == null || !repositoryFile.exists()) {
+            writeRecipeIndex(rawDir, new JsonArray());
+            writeSpecialIndexes(rawDir, new JsonArray());
+            return result;
+        }
+
+        Gson gson = new GsonBuilder().serializeNulls().create();
+        Map<String, RecipeShardState> shards = new LinkedHashMap<String, RecipeShardState>();
+        Set<String> usedShardFileNames = new LinkedHashSet<String>();
+        Map<String, SpecialDomainStreamState> domains = createSpecialDomainStreamStates(rawDir);
+        JsonlWriter itemFacts = null;
+        JsonlWriter itemCompat = null;
+        JsonlWriter fluidFacts = null;
+        JsonlWriter fluidCompat = null;
+        JsonlWriter recipeFacts = null;
+        JsonlWriter recipeCompat = null;
+        try {
+            itemFacts = new JsonlWriter(new File(rawDir, "facts/items.jsonl"), gson);
+            itemCompat = new JsonlWriter(new File(rawDir, "items.jsonl"), gson);
+            fluidFacts = new JsonlWriter(new File(rawDir, "facts/fluids.jsonl"), gson);
+            fluidCompat = new JsonlWriter(new File(rawDir, "fluids.jsonl"), gson);
+            recipeFacts = new JsonlWriter(new File(rawDir, "facts/recipes/all.jsonl"), gson);
+            recipeCompat = new JsonlWriter(new File(rawDir, "recipes.jsonl"), gson);
+
+            try (FileInputStream fis = new FileInputStream(repositoryFile);
+                 java.io.InputStreamReader input = new java.io.InputStreamReader(fis, StandardCharsets.UTF_8);
+                 com.google.gson.stream.JsonReader reader = new com.google.gson.stream.JsonReader(input)) {
+                reader.beginObject();
+                while (reader.hasNext()) {
+                    String name = reader.nextName();
+                    if ("items".equals(name)) {
+                        result.items = streamPlainArray(reader, itemFacts, itemCompat, gson);
+                    } else if ("fluids".equals(name)) {
+                        result.fluids = streamPlainArray(reader, fluidFacts, fluidCompat, gson);
+                    } else if ("recipes".equals(name)) {
+                        result.recipes = streamRecipes(reader, recipeFacts, recipeCompat, shards, usedShardFileNames, domains, rawDir, gson);
+                    } else {
+                        reader.skipValue();
+                    }
+                }
+                reader.endObject();
+            }
+        } catch (Exception e) {
+            Logger.MOD.warn("Failed to stream raw-export repository source: " + repositoryFile.getAbsolutePath(), e);
+            throw e instanceof IOException ? (IOException) e : new IOException(e);
+        } finally {
+            closeQuietly(itemFacts);
+            closeQuietly(itemCompat);
+            closeQuietly(fluidFacts);
+            closeQuietly(fluidCompat);
+            closeQuietly(recipeFacts);
+            closeQuietly(recipeCompat);
+            for (RecipeShardState shard : shards.values()) {
+                closeQuietly(shard.writer);
+            }
+            for (SpecialDomainStreamState domain : domains.values()) {
+                closeQuietly(domain.recipeWriter);
+                closeQuietly(domain.payloadWriter);
+            }
+        }
+
+        writeRecipeIndex(rawDir, shards, result.recipes);
+        writeSpecialIndexes(rawDir, domains);
+        return result;
+    }
+
+    private static long streamPlainArray(
+            com.google.gson.stream.JsonReader reader,
+            JsonlWriter primary,
+            JsonlWriter compatibility,
+            Gson gson) throws IOException {
+        long count = 0L;
+        reader.beginArray();
+        while (reader.hasNext()) {
+            JsonElement element = gson.fromJson(reader, JsonElement.class);
+            primary.write(element);
+            compatibility.write(element);
+            count++;
+        }
+        reader.endArray();
+        return count;
+    }
+
+    private static long streamRecipes(
+            com.google.gson.stream.JsonReader reader,
+            JsonlWriter allRecipes,
+            JsonlWriter compatibilityRecipes,
+            Map<String, RecipeShardState> shards,
+            Set<String> usedShardFileNames,
+            Map<String, SpecialDomainStreamState> domains,
+            File rawDir,
+            Gson gson) throws IOException {
+        long count = 0L;
+        reader.beginArray();
+        while (reader.hasNext()) {
+            JsonElement element = gson.fromJson(reader, JsonElement.class);
+            allRecipes.write(element);
+            compatibilityRecipes.write(element);
+            count++;
+
+            String handlerId = inferRecipeHandlerId(element);
+            RecipeShardState shard = shards.get(handlerId);
+            if (shard == null) {
+                String fileName = uniqueShardFileName(handlerId, usedShardFileNames);
+                String path = "facts/recipes/by-handler/" + fileName;
+                shard = new RecipeShardState(handlerId, path, new JsonlWriter(new File(rawDir, path), gson));
+                shards.put(handlerId, shard);
+            }
+            shard.writer.write(element);
+            shard.recipeCount++;
+
+            if (element != null && element.isJsonObject()) {
+                JsonObject recipe = element.getAsJsonObject();
+                String descriptor = recipeDescriptor(element);
+                for (SpecialDomainStreamState domain : domains.values()) {
+                    if (matchesAny(descriptor, domain.needles)) {
+                        domain.recipeWriter.write(element);
+                        JsonObject payload = buildSpecialDomainPayload(domain.domainId, recipe, domain.payloadOrdinal++);
+                        domain.payloadWriter.write(payload);
+                        domain.accept(recipe);
+                    }
+                }
+            }
+        }
+        reader.endArray();
+        return count;
+    }
+
+    private static void writeRecipeIndex(File rawDir, Map<String, RecipeShardState> shardsByHandler, long recipeCount)
+            throws IOException {
+        Gson gson = new GsonBuilder().setPrettyPrinting().serializeNulls().create();
+        JsonArray shards = new JsonArray();
+        for (RecipeShardState entry : shardsByHandler.values()) {
+            JsonObject shard = new JsonObject();
+            shard.addProperty("handlerId", entry.handlerId);
+            shard.addProperty("path", entry.path);
+            shard.addProperty("recipeCount", entry.recipeCount);
+            shards.add(shard);
+        }
+
+        JsonObject allShard = new JsonObject();
+        allShard.addProperty("handlerId", "all");
+        allShard.addProperty("path", "facts/recipes/all.jsonl");
+        allShard.addProperty("recipeCount", recipeCount);
+
+        JsonObject index = new JsonObject();
+        index.addProperty("schemaVersion", SCHEMA_VERSION + "/recipe-index");
+        index.addProperty("strategy", "by-handler");
+        index.addProperty("recipeCount", recipeCount);
+        index.addProperty("shardCount", shards.size());
+        index.add("shards", shards);
+        index.add("compatibilityShard", allShard);
+        writeJson(gson, new File(rawDir, "facts/recipes/index.json"), index);
+    }
+
+    private static void writeSpecialIndexes(File rawDir, Map<String, SpecialDomainStreamState> domains) throws IOException {
+        Gson gson = new GsonBuilder().setPrettyPrinting().serializeNulls().create();
+        JsonArray domainIndex = new JsonArray();
+        for (SpecialDomainStreamState domain : domains.values()) {
+            JsonObject summary = domain.summary();
+            JsonObject index = new JsonObject();
+            index.addProperty("schemaVersion", SCHEMA_VERSION + "/special-domain");
+            index.addProperty("domain", domain.domainId);
+            index.addProperty("recipeCount", domain.recipeCount);
+            index.addProperty("payloadCount", domain.payloadCount);
+            index.addProperty("recipes", "special/" + domain.domainId + "/recipes.jsonl");
+            index.addProperty("payloads", "special/" + domain.domainId + "/payloads.jsonl");
+            index.addProperty("summary", "special/" + domain.domainId + "/summary.json");
+            index.add("stats", summary);
+            File domainDir = new File(rawDir, "special/" + domain.domainId);
+            writeJson(gson, new File(domainDir, "index.json"), index);
+            writeJson(gson, new File(domainDir, "summary.json"), summary);
+
+            JsonObject entry = new JsonObject();
+            entry.addProperty("domain", domain.domainId);
+            entry.addProperty("recipeCount", domain.recipeCount);
+            entry.addProperty("payloadCount", domain.payloadCount);
+            entry.addProperty("index", "special/" + domain.domainId + "/index.json");
+            entry.addProperty("recipes", "special/" + domain.domainId + "/recipes.jsonl");
+            entry.addProperty("payloads", "special/" + domain.domainId + "/payloads.jsonl");
+            entry.addProperty("summary", "special/" + domain.domainId + "/summary.json");
+            entry.add("stats", summary);
+            domainIndex.add(entry);
+        }
+
+        JsonObject root = new JsonObject();
+        root.addProperty("schemaVersion", SCHEMA_VERSION + "/special-index");
+        root.add("domains", domainIndex);
+        writeJson(gson, new File(rawDir, "special/index.json"), root);
+    }
+
+    private static Map<String, SpecialDomainStreamState> createSpecialDomainStreamStates(File rawDir) throws IOException {
+        Gson gson = new GsonBuilder().serializeNulls().create();
+        Map<String, SpecialDomainStreamState> states = new LinkedHashMap<String, SpecialDomainStreamState>();
+        for (String[] spec : specialDomainSpecs()) {
+            File domainDir = new File(rawDir, "special/" + spec[0]);
+            ensureDirectory(domainDir);
+            states.put(spec[0], new SpecialDomainStreamState(
+                    spec[0],
+                    spec[1],
+                    new JsonlWriter(new File(domainDir, "recipes.jsonl"), gson),
+                    new JsonlWriter(new File(domainDir, "payloads.jsonl"), gson)));
+        }
+        return states;
+    }
+
+    private static String[][] specialDomainSpecs() {
+        return new String[][] {
+                {"gregtech", "gregtech|gt_|gt |assembler|assembly line|chemical reactor|blast furnace|macerator|fluid solidifier|alloy smelter|research station"},
+                {"thaumcraft", "thaumcraft|thaumic|arcane|infusion|crucible|aspect|research"},
+                {"botania", "botania|mana pool|rune altar|runic altar|terra plate|pure daisy|elven trade|petal apothecary"},
+                {"bloodmagic", "bloodmagic|blood magic|blood altar|alchemy array|binding ritual|blood orb|lp"},
+                {"forestry", "forestry|bee|alveary|centrifuge|squeezer|carpenter"},
+                {"eec", "extreme entity crusher|industrial slaughter|infernal drops|mobsinfo|kubatech|entity crusher"}
+        };
+    }
+
+    private static JsonObject buildSpecialDomainPayload(String domainId, JsonObject recipe, int ordinal) {
+        JsonObject payload = new JsonObject();
+        payload.addProperty("domain", domainId);
+        payload.addProperty("ordinal", ordinal);
+        copyString(payload, "recipeId", recipe, "recipeId");
+        copyString(payload, "family", recipe, "family");
+        copyString(payload, "sourcePlugin", recipe, "sourcePlugin");
+        copyString(payload, "sourceMod", recipe, "sourceMod");
+        copyString(payload, "recipeType", recipe, "recipeType");
+        copyString(payload, "displayName", recipe, "displayName");
+        copyString(payload, "handlerId", recipe, "metadata.handlerId");
+        copyString(payload, "handlerName", recipe, "metadata.handlerName");
+        copyString(payload, "handlerClass", recipe, "metadata.handlerClass");
+        copyString(payload, "machineId", recipe, "machine.machineId");
+        copyString(payload, "machineName", recipe, "machine.displayName");
+        copyString(payload, "layoutClass", recipe, "layout.layoutClass");
+
+        copyElement(payload, "machine", recipe, "machine");
+        copyElement(payload, "layout", recipe, "layout");
+        copyElement(payload, "itemInputs", recipe, "itemInputs");
+        copyElement(payload, "itemOutputs", recipe, "itemOutputs");
+        copyElement(payload, "fluidInputs", recipe, "fluidInputs");
+        copyElement(payload, "fluidOutputs", recipe, "fluidOutputs");
+        copyElement(payload, "probabilities", recipe, "probabilities");
+        copyElement(payload, "renderHints", recipe, "renderHints");
+        copyElement(payload, "extensions", recipe, "extensions");
+
+        JsonObject slotStats = buildSpecialSlotStats(recipe);
+        if (slotStats.entrySet().size() > 0) {
+            payload.add("slotStats", slotStats);
+        }
+        JsonObject primaryRefs = buildSpecialPrimaryRefs(recipe);
+        if (primaryRefs.entrySet().size() > 0) {
+            payload.add("primaryRefs", primaryRefs);
+        }
+        JsonObject facts = new JsonObject();
+        addDomainFacts(facts, domainId, recipe);
+        if (facts.entrySet().size() > 0) {
+            payload.add("domainFacts", facts);
+        }
+        JsonElement metadata = elementAt(recipe, "metadata");
+        if (metadata != null && metadata.isJsonObject()) {
+            copyElement(payload, "metadata", recipe, "metadata");
+        }
+        return payload;
+    }
+
+    private static void increment(Map<String, Integer> counts, String value) {
+        if (value == null || value.trim().length() == 0) {
+            return;
+        }
+        String normalized = value.trim();
+        Integer current = counts.get(normalized);
+        counts.put(normalized, current == null ? 1 : current + 1);
+    }
+
+    private static JsonArray topStrings(Map<String, Integer> counts, int limit) {
+        List<Map.Entry<String, Integer>> entries = new ArrayList<Map.Entry<String, Integer>>(counts.entrySet());
+        Collections.sort(entries, new Comparator<Map.Entry<String, Integer>>() {
+            @Override
+            public int compare(Map.Entry<String, Integer> left, Map.Entry<String, Integer> right) {
+                int byCount = right.getValue().compareTo(left.getValue());
+                return byCount != 0 ? byCount : left.getKey().compareTo(right.getKey());
+            }
+        });
+        JsonArray out = new JsonArray();
+        int count = 0;
+        for (Map.Entry<String, Integer> entry : entries) {
+            if (count >= limit) {
+                break;
+            }
+            JsonObject object = new JsonObject();
+            object.addProperty("value", entry.getKey());
+            object.addProperty("count", entry.getValue());
+            out.add(object);
+            count++;
+        }
+        return out;
+    }
+
+    private static JsonArray sampleStrings(Set<String> samples) {
+        JsonArray out = new JsonArray();
+        for (String sample : samples) {
+            out.add(new com.google.gson.JsonPrimitive(sample));
+        }
+        return out;
+    }
+
+    private static void closeQuietly(JsonlWriter writer) {
+        if (writer == null) {
+            return;
+        }
+        try {
+            writer.close();
+        } catch (IOException ignored) {
+            // best-effort cleanup after export failure
+        }
+    }
+
+    private static final class JsonlWriter implements java.io.Closeable {
+        private final Gson gson;
+        private final Writer writer;
+
+        JsonlWriter(File out, Gson gson) throws IOException {
+            this.gson = gson;
+            File parent = out.getParentFile();
+            if (parent != null) {
+                ensureDirectory(parent);
+            }
+            this.writer = new OutputStreamWriter(new FileOutputStream(out), StandardCharsets.UTF_8);
+        }
+
+        void write(JsonElement element) throws IOException {
+            gson.toJson(element, writer);
+            writer.write('\n');
+        }
+
+        @Override
+        public void close() throws IOException {
+            writer.close();
+        }
+    }
+
+    private static final class RepositoryStreamResult {
+        long items;
+        long fluids;
+        long recipes;
+    }
+
+    private static final class RecipeShardState {
+        final String handlerId;
+        final String path;
+        final JsonlWriter writer;
+        long recipeCount;
+
+        RecipeShardState(String handlerId, String path, JsonlWriter writer) {
+            this.handlerId = handlerId;
+            this.path = path;
+            this.writer = writer;
+        }
+    }
+
+    private static final class SpecialDomainStreamState {
+        final String domainId;
+        final String needles;
+        final JsonlWriter recipeWriter;
+        final JsonlWriter payloadWriter;
+        final Map<String, Integer> families = new LinkedHashMap<String, Integer>();
+        final Map<String, Integer> recipeTypes = new LinkedHashMap<String, Integer>();
+        final Map<String, Integer> sourcePlugins = new LinkedHashMap<String, Integer>();
+        final Map<String, Integer> machineIds = new LinkedHashMap<String, Integer>();
+        final Map<String, Integer> machineNames = new LinkedHashMap<String, Integer>();
+        final Set<String> sampleRecipeIds = new LinkedHashSet<String>();
+        long recipeCount;
+        long payloadCount;
+        int payloadOrdinal;
+
+        SpecialDomainStreamState(String domainId, String needles, JsonlWriter recipeWriter, JsonlWriter payloadWriter) {
+            this.domainId = domainId;
+            this.needles = needles;
+            this.recipeWriter = recipeWriter;
+            this.payloadWriter = payloadWriter;
+        }
+
+        void accept(JsonObject recipe) {
+            recipeCount++;
+            payloadCount++;
+            increment(families, stringAt(recipe, "family"));
+            increment(recipeTypes, stringAt(recipe, "recipeType"));
+            increment(sourcePlugins, stringAt(recipe, "sourcePlugin"));
+            increment(machineIds, stringAt(recipe, "machine.machineId"));
+            increment(machineNames, stringAt(recipe, "machine.displayName"));
+            String recipeId = stringAt(recipe, "recipeId");
+            if (recipeId != null && recipeId.trim().length() > 0 && sampleRecipeIds.size() < 50) {
+                sampleRecipeIds.add(recipeId.trim());
+            }
+        }
+
+        JsonObject summary() {
+            JsonObject summary = new JsonObject();
+            summary.addProperty("domain", domainId);
+            summary.addProperty("recipeCount", recipeCount);
+            summary.add("families", topStrings(families, 50));
+            summary.add("recipeTypes", topStrings(recipeTypes, 50));
+            summary.add("sourcePlugins", topStrings(sourcePlugins, 50));
+            summary.add("machineIds", topStrings(machineIds, 80));
+            summary.add("machineNames", topStrings(machineNames, 80));
+            summary.add("sampleRecipeIds", sampleStrings(sampleRecipeIds));
+            return summary;
+        }
+    }
     private static void createEmptyJsonl(File out) throws IOException {
         File parent = out.getParentFile();
         if (parent != null) {

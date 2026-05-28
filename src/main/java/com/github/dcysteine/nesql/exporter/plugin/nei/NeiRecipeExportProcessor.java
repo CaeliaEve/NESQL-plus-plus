@@ -785,7 +785,9 @@ public class NeiRecipeExportProcessor extends PluginHelper {
         data.put("itemNotes", metadata != null ? nullToEmpty(metadata.getItemNotes()) : "");
         addSlotLayout(data, "inputSlotLayout", buildPositionedSlotLayout(ingredients, recipeType, "input"));
         addSlotLayout(data, "outputSlotLayout", buildPositionedSlotLayout(singletonPositionedStack(result), null, "output"));
-        addSlotLayout(data, "otherSlotLayout", buildPositionedSlotLayout(others, null, "other"));
+        List<Map<String, Object>> otherSlotLayout = buildPositionedSlotLayout(others, null, "other");
+        addSlotLayout(data, "otherSlotLayout", otherSlotLayout);
+        enrichGenericHandlerFacts(data, handler, recipeType, otherSlotLayout);
 
         com.github.dcysteine.nesql.exporter.util.SpecialRecipeMetadataRegistry.registerMetadata(
                 builtRecipe.getId(),
@@ -1034,6 +1036,50 @@ public class NeiRecipeExportProcessor extends PluginHelper {
         metadata.put(key, layout);
     }
 
+    private void enrichGenericHandlerFacts(
+            Map<String, Object> metadata,
+            Object handler,
+            RecipeType recipeType,
+            List<Map<String, Object>> otherSlotLayout) {
+        String handlerText = ((handler == null ? "" : handler.getClass().getName())
+                + " "
+                + (recipeType == null ? "" : recipeType.getId())
+                + " "
+                + (recipeType == null ? "" : recipeType.getType())).toLowerCase();
+
+        if (handlerText.contains("botania")
+                || handlerText.contains("manapool")
+                || handlerText.contains("runicaltar")
+                || handlerText.contains("puredaisy")
+                || handlerText.contains("elventrade")
+                || handlerText.contains("petalapothecary")) {
+            if (!metadata.containsKey("recipeKind")) {
+                String kind = inferBotaniaRecipeKind(handlerText);
+                if (kind != null) {
+                    metadata.put("recipeKind", kind);
+                }
+            }
+            if (!metadata.containsKey("catalyst") && otherSlotLayout != null && !otherSlotLayout.isEmpty()) {
+                Map<String, Object> catalyst = new LinkedHashMap<>(otherSlotLayout.get(0));
+                metadata.put("catalyst", catalyst);
+                Object itemId = catalyst.get("itemId");
+                if (itemId != null) {
+                    metadata.put("catalystItemId", itemId);
+                }
+            }
+        }
+    }
+
+    private String inferBotaniaRecipeKind(String handlerText) {
+        if (handlerText.contains("runicaltar")) return "RuneAltar";
+        if (handlerText.contains("manapool")) return "ManaPool";
+        if (handlerText.contains("puredaisy")) return "PureDaisy";
+        if (handlerText.contains("elventrade")) return "ElvenTrade";
+        if (handlerText.contains("petalapothecary")) return "PetalApothecary";
+        if (handlerText.contains("terraplate")) return "TerraPlate";
+        return null;
+    }
+
     private void addIngredientToBuilder(RecipeBuilder builder, PositionedStack ingredient, Integer slotIndex) {
         if (ingredient == null) {
             if (slotIndex != null) builder.skipItemInputAt(slotIndex);
@@ -1149,7 +1195,13 @@ public class NeiRecipeExportProcessor extends PluginHelper {
                 extractThaumcraftAspects(handler, recipeIndex, builtRecipe);
             }
             // Blood Magic - extract blood cost
-            else if (combinedHandlerText.contains("blood") || combinedHandlerText.contains("awwayof")) {
+            else if (combinedHandlerText.contains("blood")
+                    || combinedHandlerText.contains("awwayof")
+                    || combinedHandlerText.contains("wayoftime")
+                    || combinedHandlerText.contains("alchemicalwizardry")
+                    || combinedHandlerText.contains("neialtarrecipehandler")
+                    || combinedHandlerText.contains("neialchemyrecipehandler")
+                    || combinedHandlerText.contains("neibindingritualhandler")) {
                 extractBloodMagicCost(handler, recipeIndex, builtRecipe);
             }
             else if (combinedHandlerText.contains("breeding") || combinedHandlerText.contains("produce")
@@ -1302,6 +1354,8 @@ public class NeiRecipeExportProcessor extends PluginHelper {
         List<Integer> componentSlotOrder = new ArrayList<>();
         Integer centerInputSlotIndex = null;
         String centralItemId = null;
+        List<Map<String, Object>> aspectItems = new ArrayList<>();
+        Map<String, Integer> aspectCosts = new LinkedHashMap<>();
 
         for (PositionedStack ingredient : ingredients) {
             if (!hasValidIngredient(ingredient)) continue;
@@ -1311,7 +1365,18 @@ public class NeiRecipeExportProcessor extends PluginHelper {
                 representative = ingredient.items[0];
             }
             if (representative == null || representative.getItem() == null) continue;
-            if (isThaumcraftAspectStack(representative)) continue;
+            if (isThaumcraftAspectStack(representative)) {
+                Map<String, Object> aspectItem = buildAspectItemFact(ingredient, representative);
+                if (!aspectItem.isEmpty()) {
+                    aspectItems.add(aspectItem);
+                    Object itemId = aspectItem.get("itemId");
+                    Object amount = aspectItem.get("amount");
+                    if (itemId != null && amount instanceof Number) {
+                        aspectCosts.put(String.valueOf(itemId), ((Number) amount).intValue());
+                    }
+                }
+                continue;
+            }
 
             Integer x = readStackX(ingredient);
             Integer y = readStackY(ingredient);
@@ -1335,6 +1400,31 @@ public class NeiRecipeExportProcessor extends PluginHelper {
         if (!componentSlotOrder.isEmpty()) {
             metadata.put("componentSlotOrder", componentSlotOrder);
         }
+        if (!aspectItems.isEmpty()) {
+            metadata.put("aspectItems", aspectItems);
+        }
+        if (!aspectCosts.isEmpty() && !metadata.containsKey("aspects")) {
+            metadata.put("aspects", aspectCosts);
+        }
+    }
+
+    private Map<String, Object> buildAspectItemFact(PositionedStack positionedStack, ItemStack representative) {
+        Map<String, Object> fact = new LinkedHashMap<>();
+        if (representative == null || representative.getItem() == null) return fact;
+        fact.put("itemId", itemFactory.get(representative).getId());
+        fact.put("amount", Math.max(1, representative.stackSize));
+        Integer x = readStackX(positionedStack);
+        Integer y = readStackY(positionedStack);
+        if (x != null) fact.put("x", x);
+        if (y != null) fact.put("y", y);
+        try {
+            String displayName = representative.getDisplayName();
+            if (displayName != null && !displayName.isEmpty()) {
+                fact.put("displayName", displayName);
+            }
+        } catch (Exception ignored) {
+        }
+        return fact;
     }
 
     private void extractBotaniaMetadata(
@@ -1610,12 +1700,26 @@ public class NeiRecipeExportProcessor extends PluginHelper {
                 metadata.put("specialRecipeType", "BloodAltar");
                 metadata.put("correctedMachineType", "Blood Altar");
 
+                ItemStack altarInput = firstIngredientStack(handler, recipeIndex);
+                Map<String, Integer> altarFacts = readBloodAltarRecipeFacts(altarInput);
+                if (altarFacts.containsKey("tier")) {
+                    metadata.put("tier", altarFacts.get("tier"));
+                    metadata.put("altarTier", altarFacts.get("tier"));
+                }
+                if (altarFacts.containsKey("bloodCost")) {
+                    metadata.put("bloodCost", altarFacts.get("bloodCost"));
+                    metadata.put("lpCost", altarFacts.get("bloodCost"));
+                    metadata.put("requiredLP", altarFacts.get("bloodCost"));
+                }
+
                 Integer bloodCost = readPositiveFieldInt(recipe, "lp_amount");
                 if (bloodCost == null) {
                     bloodCost = readPositiveFieldInt(recipe, "liquidRequired");
                 }
                 if (bloodCost != null) {
                     metadata.put("bloodCost", bloodCost);
+                    metadata.put("lpCost", bloodCost);
+                    metadata.put("requiredLP", bloodCost);
                 }
 
                 Integer consumption = readPositiveFieldInt(recipe, "consumption");
@@ -1675,6 +1779,48 @@ public class NeiRecipeExportProcessor extends PluginHelper {
         } catch (Exception e) {
             logger.debug("Failed to extract Blood Magic metadata", e);
         }
+    }
+
+    private ItemStack firstIngredientStack(codechicken.nei.recipe.IRecipeHandler handler, int recipeIndex) {
+        try {
+            List<PositionedStack> ingredients = handler.getIngredientStacks(recipeIndex);
+            if (ingredients == null) return null;
+            for (PositionedStack ingredient : ingredients) {
+                ItemStack stack = resolveRepresentativeStack(ingredient);
+                if (stack != null && stack.getItem() != null) {
+                    return stack;
+                }
+            }
+        } catch (Exception ignored) {
+        }
+        return null;
+    }
+
+    private Map<String, Integer> readBloodAltarRecipeFacts(ItemStack input) {
+        Map<String, Integer> facts = new LinkedHashMap<>();
+        if (input == null || input.getItem() == null) return facts;
+        try {
+            Class<?> recipesClass = Class.forName("WayofTime.alchemicalWizardry.AlchemyWizardryRecipes");
+            java.lang.reflect.Method tierMethod = recipesClass.getMethod("getTierOfRecipe", ItemStack.class);
+            Object tierValue = tierMethod.invoke(null, input);
+            int tier = tierValue instanceof Number ? ((Number) tierValue).intValue() : 0;
+            if (tier > 0) {
+                facts.put("tier", tier);
+            }
+
+            java.lang.reflect.Method bloodMethod = recipesClass.getMethod(
+                    "getBloodRequiredForRecipe",
+                    ItemStack.class,
+                    int.class);
+            Object bloodValue = bloodMethod.invoke(null, input, tier);
+            int bloodCost = bloodValue instanceof Number ? ((Number) bloodValue).intValue() : 0;
+            if (bloodCost > 0) {
+                facts.put("bloodCost", bloodCost);
+            }
+        } catch (Exception e) {
+            logger.debug("Unable to read Blood Magic altar API facts", e);
+        }
+        return facts;
     }
 
     /**
