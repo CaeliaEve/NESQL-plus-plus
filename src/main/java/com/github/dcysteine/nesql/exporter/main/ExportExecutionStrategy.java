@@ -164,10 +164,9 @@ interface ExportExecutionStrategy {
         @Override
         public void runCollectionStage(ExportContext exportContext, ExportRuntime exportRuntime) {
             try {
-                Logger.MOD.info("Step 1-3: exportRuntime.runPluginPipeline()...");
+                Logger.MOD.debug("Data export collection: running plugin pipeline");
                 exportRuntime.runPluginPipeline();
-                Logger.MOD.info("Step 3 complete");
-                Logger.MOD.info("=== postProcessPlugins() completed, starting v1.04 file export ===");
+                Logger.MOD.debug("Data export collection complete; file writers will finalize through the stage runner");
             } finally {
                 ExportPluginTimingReportWriter.write(exportContext, exportRuntime);
             }
@@ -175,13 +174,8 @@ interface ExportExecutionStrategy {
 
         @Override
         public void finishTransaction(ExportContext exportContext, EntityTransaction transaction) {
-            Logger.MOD.info("============================================================");
-            Logger.MOD.info("=== v1.04 file export complete, skipping database commit ===");
-            Logger.MOD.info("============================================================");
-            Logger.MOD.info("All v1.04 data files have been exported successfully");
-            Logger.MOD.info("Skipping database commit to save time");
+            Logger.MOD.info("v1.04 file export complete; skipping database commit");
             Logger.chatMessage(EnumChatFormatting.YELLOW + "Skipping database commit (data files already exported)");
-            Logger.chatMessage(EnumChatFormatting.YELLOW + "This saves several minutes of disk I/O!");
             ExportLifecycleSupport.finishTransaction(transaction, false);
         }
     }

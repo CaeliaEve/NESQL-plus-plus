@@ -9,7 +9,6 @@ import org.apache.logging.log4j.LogManager;
 public final class Logger {
     public static final org.apache.logging.log4j.Logger MOD = LogManager.getLogger(Main.MOD_NAME);
 
-    // Static class.
     private Logger() {}
 
     public static org.apache.logging.log4j.Logger getLogger(Plugin plugin) {
@@ -17,27 +16,42 @@ public final class Logger {
     }
 
     public static void chatMessage(String message) {
-        // ⭐ NESQL++ FIX: 添加空检查，防止玩家不在世界时NPE导致线程静默终止
+        boolean echoToChat = shouldEchoToChat(message);
         try {
             Minecraft mc = Minecraft.getMinecraft();
-            if (mc.thePlayer != null) {
+            if (echoToChat && mc.thePlayer != null) {
                 mc.thePlayer.addChatMessage(new ChatComponentText(message));
             }
         } catch (Throwable e) {
-            // 忽略chat错误，继续执行
             MOD.warn("Failed to send chat message: " + e.getMessage());
         }
 
-        // Update GUI progress if it's open
         try {
             ExportProgressGui gui = ExportProgressGui.getActiveGui();
             if (gui != null) {
                 gui.addMessage(message);
             }
         } catch (Throwable e) {
-            // 忽略GUI错误
             MOD.warn("Failed to update GUI: " + e.getMessage());
         }
+    }
+
+    private static boolean shouldEchoToChat(String message) {
+        if (message == null) {
+            return false;
+        }
+        String clean = message.replaceAll("\u00A7.", "").toLowerCase();
+        return clean.contains("opened nesql++ export selection")
+                || clean.contains("starting nesql")
+                || clean.contains("begin export")
+                || clean.contains("export complete")
+                || clean.contains("pipeline runtime")
+                || clean.contains("export failed")
+                || clean.contains("root cause")
+                || clean.contains("debug report")
+                || clean.contains("cannot create repository")
+                || clean.contains("failed to create repository")
+                || clean.contains("something went wrong");
     }
 
     /** Returns whether we should log a message, given the configured logging interval. */

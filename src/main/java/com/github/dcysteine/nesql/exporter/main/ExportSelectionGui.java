@@ -15,41 +15,45 @@ public final class ExportSelectionGui extends GuiScreen {
 
     private final String repositoryName;
     private final List<Option> options = new ArrayList<>();
+    private int panelLeft;
+    private int panelTop;
+    private int panelWidth;
     private int optionLeft;
     private int optionTop;
     private int optionWidth;
-    private int optionHeight = 18;
+    private final int optionHeight = 22;
 
     public ExportSelectionGui(String repositoryName) {
         this.repositoryName = repositoryName;
-        options.add(new Option("基础物品数据", "items/{modId}/items.json", true));
-        options.add(new Option("配方数据", "recipes/crafting/{modId}/recipes.json.gz", true));
-        options.add(new Option("Canonical 快照", "NeoNEI 统一读取快照", true));
-        options.add(new Option("GT 多方块蓝图", "multiblock blueprint 数据", true));
-        options.add(new Option("方块面元数据", "3D block face / UV 元数据", true));
-        options.add(new Option("物品贴图渲染", "静态图片与动画帧渲染", true));
-        options.add(new Option("渲染清单", "render-assets / animation manifest / render index", true));
-        options.add(new Option("静态 Atlas", "browser item atlas pages", true));
-        options.add(new Option("动画 Atlas", "animated atlas pages", true));
-        options.add(new Option("浏览区索引", "排序 / 分组 / atlas lookup index", true));
-        options.add(new Option("保存数据库", "完整 /nesql 兼容提交", true));
+        options.add(new Option("Core items", "Item and fluid facts", true));
+        options.add(new Option("Recipes", "Crafting, machine and NEI handlers", true));
+        options.add(new Option("Canonical snapshot", "Compatibility baseline for NeoNEI", true));
+        options.add(new Option("GT blueprints", "Multiblock structure contracts", true));
+        options.add(new Option("Block faces", "3D block face and UV metadata", true));
+        options.add(new Option("Item rendering", "Static icons and animation frames", true));
+        options.add(new Option("Render manifests", "Asset, animation and render indexes", true));
+        options.add(new Option("Static atlas", "Browser atlas pages", true));
+        options.add(new Option("Animated atlas", "Native sprite timing and GIF atlas", true));
+        options.add(new Option("Browser layout", "NEI order, groups and atlas lookup", true));
+        options.add(new Option("Database commit", "Legacy SQL compatibility output", true));
     }
 
     @Override
     @SuppressWarnings("unchecked")
     public void initGui() {
         buttonList.clear();
-        int panelWidth = Math.min(500, width - 32);
-        int panelLeft = (width - panelWidth) / 2;
-        int panelBottom = height - 24;
+        panelWidth = Math.min(560, width - 28);
+        panelLeft = (width - panelWidth) / 2;
+        panelTop = 16;
+        int panelBottom = height - 18;
         optionLeft = panelLeft + 22;
-        optionTop = 72;
+        optionTop = panelTop + 78;
         optionWidth = panelWidth - 44;
 
-        buttonList.add(new GuiButton(START_BUTTON_ID, panelLeft + panelWidth - 104, panelBottom - 22, 96, 20, "开始导出"));
-        buttonList.add(new GuiButton(ALL_BUTTON_ID, panelLeft + 8, panelBottom - 22, 78, 20, "全选"));
-        buttonList.add(new GuiButton(DATA_BUTTON_ID, panelLeft + 90, panelBottom - 22, 90, 20, "仅数据"));
-        buttonList.add(new GuiButton(CANCEL_BUTTON_ID, panelLeft + 184, panelBottom - 22, 72, 20, "取消"));
+        buttonList.add(new GuiButton(START_BUTTON_ID, panelLeft + panelWidth - 116, panelBottom - 26, 104, 20, "Begin Export"));
+        buttonList.add(new GuiButton(ALL_BUTTON_ID, panelLeft + 12, panelBottom - 26, 78, 20, "All"));
+        buttonList.add(new GuiButton(DATA_BUTTON_ID, panelLeft + 96, panelBottom - 26, 92, 20, "Data Only"));
+        buttonList.add(new GuiButton(CANCEL_BUTTON_ID, panelLeft + 194, panelBottom - 26, 76, 20, "Cancel"));
     }
 
     @Override
@@ -87,7 +91,7 @@ public final class ExportSelectionGui extends GuiScreen {
             if (mouseX >= optionLeft
                     && mouseX <= optionLeft + optionWidth
                     && mouseY >= y
-                    && mouseY <= y + optionHeight - 2) {
+                    && mouseY <= y + optionHeight - 4) {
                 options.get(i).enabled = !options.get(i).enabled;
                 normalizeDependencies();
                 return;
@@ -98,29 +102,61 @@ public final class ExportSelectionGui extends GuiScreen {
     @Override
     public void drawScreen(int mouseX, int mouseY, float partialTicks) {
         drawDefaultBackground();
-        int panelWidth = Math.min(500, width - 32);
-        int panelLeft = (width - panelWidth) / 2;
-        int panelTop = 22;
-        int panelBottom = height - 24;
+        if (fontRendererObj == null) {
+            return;
+        }
 
-        drawRect(panelLeft - 1, panelTop - 1, panelLeft + panelWidth + 1, panelBottom + 1, 0xE6081118);
-        drawRect(panelLeft, panelTop, panelLeft + panelWidth, panelBottom, 0xDD101922);
-        drawRect(panelLeft, panelTop, panelLeft + panelWidth, panelTop + 2, 0xFF49D38A);
-        drawCenteredString(fontRendererObj, "NESQL++ 导出选择", width / 2, panelTop + 12, 0xF8FCFF);
-        drawCenteredString(fontRendererObj, "/nesql " + repositoryName + "  ·  默认全选等价旧全量导出", width / 2, panelTop + 28, 0x8FD3E7);
-        drawString(fontRendererObj, "勾选本次需要输出的模块：", optionLeft, panelTop + 48, 0xEDE7C5);
+        panelWidth = Math.min(560, width - 28);
+        panelLeft = (width - panelWidth) / 2;
+        panelTop = 16;
+        int panelBottom = height - 18;
+        optionLeft = panelLeft + 22;
+        optionTop = panelTop + 78;
+        optionWidth = panelWidth - 44;
+
+        drawRect(panelLeft - 2, panelTop - 2, panelLeft + panelWidth + 2, panelBottom + 2, 0xEA050A10);
+        drawRect(panelLeft, panelTop, panelLeft + panelWidth, panelBottom, 0xDE0D151E);
+        drawRect(panelLeft, panelTop, panelLeft + panelWidth, panelTop + 2, 0xFF57E2B2);
+        drawRect(panelLeft + 1, panelTop + 2, panelLeft + panelWidth - 1, panelTop + 38, 0x371D6C7A);
+        drawRect(panelLeft + 14, panelTop + 48, panelLeft + panelWidth - 14, panelTop + 49, 0x66425E73);
+
+        drawString(fontRendererObj, "NESQL++ EXPORT", panelLeft + 22, panelTop + 12, 0xF8FCFF);
+        drawString(fontRendererObj, "Repository", panelLeft + panelWidth - 178, panelTop + 10, 0x86B8CA);
+        drawString(fontRendererObj, repositoryName, panelLeft + panelWidth - 178, panelTop + 22, 0xEDE7C5);
+        drawString(
+                fontRendererObj,
+                "Select the data lanes for this run. Full export is recommended for NeoNEI.",
+                panelLeft + 22,
+                panelTop + 56,
+                0x9CC7D8);
 
         for (int i = 0; i < options.size(); i++) {
             Option option = options.get(i);
             int y = optionTop + i * optionHeight;
-            int rowColor = i % 2 == 0 ? 0x331B2B38 : 0x22131D26;
-            drawRect(optionLeft, y - 2, optionLeft + optionWidth, y + optionHeight - 2, rowColor);
-            drawRect(optionLeft + 5, y + 2, optionLeft + 17, y + 14, 0xFF0A1118);
-            drawRect(optionLeft + 6, y + 3, optionLeft + 16, y + 13, option.enabled ? 0xFF49D38A : 0xFF26313B);
-            drawString(fontRendererObj, option.enabled ? "✓" : "", optionLeft + 8, y + 4, 0xFF061018);
-            drawString(fontRendererObj, option.label, optionLeft + 24, y + 3, option.enabled ? 0xF6FBFF : 0x8897A2);
-            drawString(fontRendererObj, option.description, optionLeft + 170, y + 3, 0x8FB2C3);
+            boolean hovered = mouseX >= optionLeft
+                    && mouseX <= optionLeft + optionWidth
+                    && mouseY >= y
+                    && mouseY <= y + optionHeight - 4;
+            int rowColor = hovered ? 0x55304C5B : (i % 2 == 0 ? 0x3315222C : 0x22101A22);
+            drawRect(optionLeft, y - 2, optionLeft + optionWidth, y + optionHeight - 4, rowColor);
+            drawRect(optionLeft, y - 2, optionLeft + 2, y + optionHeight - 4, option.enabled ? 0xFF57E2B2 : 0xFF34424C);
+
+            int boxLeft = optionLeft + 8;
+            drawRect(boxLeft, y + 2, boxLeft + 12, y + 14, 0xFF071017);
+            drawRect(boxLeft + 1, y + 3, boxLeft + 11, y + 13, option.enabled ? 0xFF57E2B2 : 0xFF26313B);
+            if (option.enabled) {
+                drawString(fontRendererObj, "x", boxLeft + 4, y + 4, 0xFF061018);
+            }
+            drawString(fontRendererObj, option.label, optionLeft + 28, y + 2, option.enabled ? 0xF6FBFF : 0x8796A2);
+            drawString(fontRendererObj, option.description, optionLeft + 178, y + 2, 0x8FB2C3);
         }
+
+        drawString(
+                fontRendererObj,
+                "Tip: Data Only is fast for index tests. Full export is required before final NeoNEI validation.",
+                panelLeft + 22,
+                panelBottom - 48,
+                0x7FAABB);
 
         super.drawScreen(mouseX, mouseY, partialTicks);
     }

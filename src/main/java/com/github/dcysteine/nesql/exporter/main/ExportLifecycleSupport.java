@@ -18,7 +18,6 @@ public final class ExportLifecycleSupport {
     public static void announceProfile(ExportContext exportContext, File repositoryDirectory, String introMessage) {
         Logger.chatMessage(EnumChatFormatting.AQUA + introMessage);
         Logger.chatMessage(EnumChatFormatting.YELLOW + "Repository: " + exportContext.paths.repositoryName);
-        Logger.chatMessage(EnumChatFormatting.YELLOW + "NESQL++ profile: " + exportContext.profile.profileId);
         Logger.MOD.info("Repository: {}", repositoryDirectory.getAbsolutePath());
         Logger.MOD.info("NESQL++ profile: {}", exportContext.profile.profileId);
         Logger.MOD.info("NESQL++ stage plan: {}", exportContext.executionPlan.describeStages());
@@ -45,12 +44,11 @@ public final class ExportLifecycleSupport {
     }
 
     public static void announceActivePlugins(Map<Plugin, PluginExporter> activePlugins) {
-        Logger.chatMessage(EnumChatFormatting.AQUA + "Active plugins:");
+        Logger.chatMessage(EnumChatFormatting.AQUA + "Active plugins: " + activePlugins.size());
         Logger.MOD.info("Active plugins: {}", activePlugins.size());
         activePlugins.keySet().forEach(
                 plugin -> {
-                    Logger.MOD.info("  - Plugin: {}", plugin.getName());
-                    Logger.chatMessage("  " + EnumChatFormatting.YELLOW + plugin.getName());
+                    Logger.MOD.debug("  - Plugin: {}", plugin.getName());
                 });
     }
 
@@ -85,7 +83,7 @@ public final class ExportLifecycleSupport {
     }
 
     public static void closeSession(ExportSession session, boolean logEntityManager) {
-        Logger.chatMessage(EnumChatFormatting.AQUA + "Closing database...");
+        Logger.chatMessage(EnumChatFormatting.AQUA + "Closing export session...");
         if (logEntityManager) {
             Logger.MOD.info("Closing EntityManager...");
         }

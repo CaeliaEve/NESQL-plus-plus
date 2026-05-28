@@ -31,7 +31,7 @@ public class ExportProgressGui extends GuiScreen {
     private int totalStages = 0;
     private int totalMessageCount = 0;
     private long lastMessageAtMs = openedAtMs;
-    private int maxMessages = 12;
+    private int maxMessages = 9;
 
     public ExportProgressGui() {
         // Set this as the active GUI instance
@@ -61,6 +61,11 @@ public class ExportProgressGui extends GuiScreen {
     public void addMessage(String message) {
         // Remove color codes for cleaner display
         String cleanMessage = message.replaceAll("\u00A7.", "");
+        if (!shouldShowInRecentOutput(cleanMessage)) {
+            parseStructuredState(cleanMessage);
+            return;
+        }
+        cleanMessage = simplifyMessage(cleanMessage);
         latestEvent = cleanMessage;
         lastMessageAtMs = System.currentTimeMillis();
         totalMessageCount++;
@@ -91,6 +96,7 @@ public class ExportProgressGui extends GuiScreen {
 
         drawRect(panelLeft - 1, panelTop - 1, panelLeft + panelWidth + 1, panelBottom + 1, 0xE60A1118);
         drawRect(panelLeft, panelTop, panelLeft + panelWidth, panelBottom, 0xD1121923);
+        drawRect(panelLeft + 1, panelTop + 2, panelLeft + panelWidth - 1, panelTop + 58, 0x241B6376);
         drawRect(panelLeft, panelTop, panelLeft + panelWidth, panelTop + 2, accentColor());
         drawRect(panelLeft, panelTop, panelLeft + 2, panelBottom, 0xAA29465A);
         drawRect(panelLeft + panelWidth - 2, panelTop, panelLeft + panelWidth, panelBottom, 0xAA29465A);
@@ -101,8 +107,9 @@ public class ExportProgressGui extends GuiScreen {
 
         drawCenteredString(fontRendererObj, title, width / 2, panelTop + 10, 0xF8FCFF);
         drawCenteredString(fontRendererObj, subtitle, width / 2, panelTop + 24, 0x8FD3E7);
+        drawCenteredString(fontRendererObj, "Raw Export Pipeline", width / 2, panelTop + 36, 0x6FB4C9);
 
-        int chipTop = panelTop + 42;
+        int chipTop = panelTop + 54;
         drawMetricChip(contentLeft, chipTop, 92, "Elapsed", formatElapsed(System.currentTimeMillis() - openedAtMs), 0xD6F6FF);
         drawMetricChip(contentLeft + 100, chipTop, 88, "Events", Integer.toString(totalMessageCount), 0xEDE7C5);
         drawMetricChip(contentLeft + 196, chipTop, 112, "Last update", formatElapsed(System.currentTimeMillis() - lastMessageAtMs), 0xD6FFE1);
@@ -153,7 +160,7 @@ public class ExportProgressGui extends GuiScreen {
 
         int logTop = cardsTop + leftCardHeight + 14;
         int logHeight = panelBottom - logTop - 12;
-        drawCard(contentLeft, logTop, barWidth, logHeight, "Recent output");
+        drawCard(contentLeft, logTop, barWidth, logHeight, "Curated output");
 
         int y = logTop + 20;
         int logIndex = 0;
@@ -190,7 +197,7 @@ public class ExportProgressGui extends GuiScreen {
         if (matcher.find()) {
             currentStageIndex = Integer.parseInt(matcher.group(1));
             totalStages = Integer.parseInt(matcher.group(2));
-            currentStage = matcher.group(3);
+            currentStage = humanizeStage(matcher.group(3));
             statusLine = "Running export pipeline";
             return;
         }
@@ -248,5 +255,58 @@ public class ExportProgressGui extends GuiScreen {
             return String.format("%02d:%02d:%02d", hours, minutes, seconds);
         }
         return String.format("%02d:%02d", minutes, seconds);
+    }
+
+    private boolean shouldShowInRecentOutput(String message) {
+        if (message == null || message.trim().isEmpty()) {
+            return false;
+        }
+        String lower = message.toLowerCase();
+        if (lower.startsWith("  ") || lower.contains("active plugins:")) {
+            return false;
+        }
+        if (lower.contains("repository:") || lower.contains("profile:")) {
+            return false;
+        }
+        if (lower.contains("closing database")) {
+            return false;
+        }
+        return lower.contains("[nesql]")
+                || lower.contains("starting")
+                || lower.contains("complete")
+                || lower.contains("failed")
+                || lower.contains("debug report")
+                || lower.contains("root cause")
+                || lower.contains("selection");
+    }
+
+    private String simplifyMessage(String message) {
+        if (message == null) {
+            return "";
+        }
+        if (message.contains("[NESQL] Stage ")) {
+            Matcher matcher = STAGE_PATTERN.matcher(message);
+            if (matcher.find()) {
+                return "Stage " + matcher.group(1) + "/" + matcher.group(2) + "  " + humanizeStage(matcher.group(3));
+            }
+        }
+        if (message.contains("[NESQL] Stage complete: ")) {
+            return message.replace("[NESQL] Stage complete: ", "Done  ");
+        }
+        return message;
+    }
+
+    private String humanizeStage(String stage) {
+        if (stage == null) {
+            return "-";
+        }
+        String[] parts = stage.replace('_', ' ').toLowerCase().split(" ");
+        StringBuilder builder = new StringBuilder();
+        for (String part : parts) {
+            if (part.isEmpty()) continue;
+            if (builder.length() > 0) builder.append(' ');
+            builder.append(Character.toUpperCase(part.charAt(0))).append(part.substring(1));
+        }
+        return builder.toString();
     }
 }
