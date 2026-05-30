@@ -100,6 +100,12 @@ public final class RawExportSidecarWriter {
                 new File(repositoryDirectory, "canonical/export-stage-timings.json"),
                 new File(rawDir, "validation/export_stage_timings.json"));
         copyIfPresent(
+                new File(repositoryDirectory, "canonical/export-stage-checkpoint.json"),
+                new File(rawDir, "stage_checkpoint.json"));
+        copyIfPresent(
+                new File(repositoryDirectory, "canonical/export-stage-checkpoint.json"),
+                new File(rawDir, "validation/stage_checkpoint.json"));
+        copyIfPresent(
                 new File(repositoryDirectory, "canonical/stage-checksums.json"),
                 new File(rawDir, "stage_checksums.json"));
         copyIfPresent(
@@ -146,6 +152,7 @@ public final class RawExportSidecarWriter {
         manifest.files.put("exportReport", "validation/export_report.json");
         manifest.files.put("errors", "validation/errors.jsonl");
         manifest.files.put("stageTimings", "validation/export_stage_timings.json");
+        manifest.files.put("stageCheckpoint", "validation/stage_checkpoint.json");
         manifest.files.put("stageChecksums", "validation/stage_checksums.json");
         manifest.files.put("canonicalRepository", "../canonical/repository.json");
         manifest.compatibilityFiles.add(fileRef("items", "items.jsonl", "compat-jsonl"));

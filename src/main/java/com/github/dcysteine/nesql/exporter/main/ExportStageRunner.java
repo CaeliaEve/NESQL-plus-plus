@@ -39,6 +39,16 @@ final class ExportStageRunner {
                 action.run();
                 long stageElapsedMs = System.currentTimeMillis() - stageStartedAt;
                 timings.add(new StageTiming(index, totalStages, stage, stageElapsedMs));
+                writeCheckpointReport(
+                        exportContext,
+                        timings,
+                        index,
+                        totalStages,
+                        stage,
+                        nextStage(exportContext, index),
+                        "running",
+                        System.currentTimeMillis() - exportStartedAt,
+                        null);
                 Logger.chatMessage(
                         EnumChatFormatting.GRAY
                                 + "[NESQL] Stage complete: "
@@ -50,6 +60,16 @@ final class ExportStageRunner {
                     EnumChatFormatting.GREEN
                             + "[NESQL] Export pipeline runtime: "
                             + formatDuration(System.currentTimeMillis() - exportStartedAt));
+            writeCheckpointReport(
+                    exportContext,
+                    timings,
+                    totalStages,
+                    totalStages,
+                    ExportStage.COMPLETE,
+                    null,
+                    "complete",
+                    System.currentTimeMillis() - exportStartedAt,
+                    null);
             writeTimingReport(exportContext, timings, System.currentTimeMillis() - exportStartedAt);
             ExportValidationReportWriter.write(exportContext);
             ExportIntegrityManifestWriter.write(exportContext);
@@ -60,6 +80,16 @@ final class ExportStageRunner {
             File reportFile =
                     ExportDiagnosticsSupport.writeFailureReport(
                             exportContext, stageState.currentStage, e);
+            writeCheckpointReport(
+                    exportContext,
+                    null,
+                    0,
+                    exportContext.executionPlan.stages.size(),
+                    stageState.currentStage,
+                    null,
+                    "failed",
+                    0L,
+                    ExportDiagnosticsSupport.summarizeThrowable(e));
             Logger.chatMessage(
                     EnumChatFormatting.RED
                             + "[NESQL] Export failed at stage: "
@@ -133,6 +163,71 @@ final class ExportStageRunner {
         }
     }
 
+    private static ExportStage nextStage(ExportContext exportContext, int completedIndex) {
+        if (completedIndex < 0 || completedIndex >= exportContext.executionPlan.stages.size()) {
+            return null;
+        }
+        return exportContext.executionPlan.stages.get(completedIndex);
+    }
+
+    private static void writeCheckpointReport(
+            ExportContext exportContext,
+            List<StageTiming> timings,
+            int completedStages,
+            int totalStages,
+            ExportStage currentStage,
+            ExportStage nextStage,
+            String status,
+            long elapsedMs,
+            String errorSummary) {
+        try {
+            File canonicalDir = new File(exportContext.paths.repositoryDirectory, "canonical");
+            if (!canonicalDir.exists()) {
+                canonicalDir.mkdirs();
+            }
+            File reportFile = new File(canonicalDir, "export-stage-checkpoint.json");
+            StageCheckpointReport report = new StageCheckpointReport();
+            report.schemaVersion = "nesqlpp/export-stage-checkpoint/v1";
+            report.generatedAtEpochMs = System.currentTimeMillis();
+            report.profile = exportContext.profile.profileId;
+            report.selection = exportContext.selection.describe();
+            report.status = status;
+            report.completedStages = Math.max(0, completedStages);
+            report.totalStages = Math.max(0, totalStages);
+            report.currentStage = currentStage == null ? null : currentStage.name();
+            report.nextStage = nextStage == null ? null : nextStage.name();
+            report.elapsedMs = Math.max(0L, elapsedMs);
+            report.elapsed = formatDuration(report.elapsedMs);
+            report.errorSummary = errorSummary;
+            report.completed = timings == null
+                    ? new ArrayList<StageTiming>()
+                    : new ArrayList<StageTiming>(timings);
+            try (FileOutputStream fos = new FileOutputStream(reportFile);
+                 OutputStreamWriter writer = new OutputStreamWriter(fos, StandardCharsets.UTF_8)) {
+                new GsonBuilder().setPrettyPrinting().create().toJson(report, writer);
+            }
+            syncCheckpointToRawExport(exportContext.paths.repositoryDirectory, reportFile);
+        } catch (Exception e) {
+            Logger.MOD.warn("Failed to write NESQL++ stage checkpoint report", e);
+        }
+    }
+
+    private static void syncCheckpointToRawExport(File repositoryDirectory, File sourceFile) {
+        try {
+            File rawValidationDir =
+                    new File(repositoryDirectory, "raw-export" + File.separator + "validation");
+            if (!rawValidationDir.exists()) {
+                rawValidationDir.mkdirs();
+            }
+            java.nio.file.Files.copy(
+                    sourceFile.toPath(),
+                    new File(rawValidationDir, "stage_checkpoint.json").toPath(),
+                    java.nio.file.StandardCopyOption.REPLACE_EXISTING);
+        } catch (Exception e) {
+            Logger.MOD.debug("Failed to sync stage checkpoint into raw-export validation", e);
+        }
+    }
+
     private static final class TimingReport {
         String schemaVersion;
         String profile;
@@ -140,6 +235,22 @@ final class ExportStageRunner {
         long totalElapsedMs;
         String totalElapsed;
         List<StageTiming> stages;
+    }
+
+    private static final class StageCheckpointReport {
+        String schemaVersion;
+        long generatedAtEpochMs;
+        String profile;
+        String selection;
+        String status;
+        int completedStages;
+        int totalStages;
+        String currentStage;
+        String nextStage;
+        long elapsedMs;
+        String elapsed;
+        String errorSummary;
+        List<StageTiming> completed;
     }
 
     private static final class StageTiming {
