@@ -2,6 +2,9 @@ package com.github.dcysteine.nesql.exporter.main;
 
 import net.minecraft.util.EnumChatFormatting;
 
+import com.google.gson.GsonBuilder;
+import com.google.gson.JsonObject;
+
 import java.io.File;
 import java.io.FileOutputStream;
 import java.io.OutputStreamWriter;
@@ -66,6 +69,7 @@ final class ExportDiagnosticsSupport {
         } catch (Exception reportError) {
             Logger.MOD.error("Failed to write NESQL debug report", reportError);
         }
+        writeFailureJsonl(exportContext, stage, error, reportFile);
         return reportFile;
     }
 
@@ -84,5 +88,53 @@ final class ExportDiagnosticsSupport {
 
     private static String safeMessage(Throwable error) {
         return error.getMessage() == null ? "<no message>" : error.getMessage();
+    }
+
+    private static void writeFailureJsonl(
+            ExportContext exportContext,
+            ExportStage stage,
+            Throwable error,
+            File reportFile) {
+        File validationDirectory = new File(exportContext.paths.repositoryDirectory, "validation");
+        if (!validationDirectory.exists() && !validationDirectory.mkdirs()) {
+            Logger.MOD.warn("Failed to create NESQL validation directory: {}", validationDirectory.getAbsolutePath());
+            return;
+        }
+
+        File errorsFile = new File(validationDirectory, "errors.jsonl");
+        Throwable root = rootCause(error);
+        JsonObject entry = new JsonObject();
+        entry.addProperty("schemaVersion", "nesqlpp/export-error/v1");
+        entry.addProperty("generatedAt", new SimpleDateFormat("yyyy-MM-dd'T'HH:mm:ss.SSSZ").format(new Date()));
+        entry.addProperty("repository", exportContext.paths.repositoryName);
+        entry.addProperty("profile", exportContext.profile.profileId);
+        entry.addProperty("selection", exportContext.selection.describe());
+        entry.addProperty("stage", stage == null ? "<unknown>" : stage.name());
+        entry.addProperty("errorClass", error.getClass().getName());
+        entry.addProperty("message", safeMessage(error));
+        entry.addProperty("rootCauseClass", root.getClass().getName());
+        entry.addProperty("rootCauseMessage", safeMessage(root));
+        entry.addProperty(
+                "debugReport",
+                relativize(exportContext.paths.repositoryDirectory, reportFile));
+
+        try (FileOutputStream fos = new FileOutputStream(errorsFile, true);
+             OutputStreamWriter writer = new OutputStreamWriter(fos, StandardCharsets.UTF_8)) {
+            writer.write(new GsonBuilder().disableHtmlEscaping().create().toJson(entry));
+            writer.write('\n');
+        } catch (Exception writeError) {
+            Logger.MOD.error("Failed to write NESQL validation/errors.jsonl", writeError);
+        }
+    }
+
+    private static String relativize(File root, File file) {
+        try {
+            return root.toPath().toAbsolutePath().normalize()
+                    .relativize(file.toPath().toAbsolutePath().normalize())
+                    .toString()
+                    .replace(File.separatorChar, '/');
+        } catch (Exception ignored) {
+            return file.getName();
+        }
     }
 }

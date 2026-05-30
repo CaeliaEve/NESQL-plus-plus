@@ -84,6 +84,7 @@ public final class RawExportSidecarWriter {
         writeJson(gson, new File(rawDir, "manifest.json"), manifest);
         writeJson(gson, new File(rawDir, "export_report.json"), report);
         writeJson(gson, new File(rawDir, "validation/export_report.json"), report);
+        createEmptyJsonlIfMissing(new File(rawDir, "validation/errors.jsonl"));
 
         Logger.chatMessage(EnumChatFormatting.GREEN + "Raw-export sidecar written:");
         Logger.chatMessage(EnumChatFormatting.YELLOW + "  " + rawDir.getAbsolutePath());
@@ -143,6 +144,7 @@ public final class RawExportSidecarWriter {
         manifest.files.put("entities", "models/entities/index.jsonl");
         manifest.files.put("specialIndex", "special/index.json");
         manifest.files.put("exportReport", "validation/export_report.json");
+        manifest.files.put("errors", "validation/errors.jsonl");
         manifest.files.put("stageTimings", "validation/export_stage_timings.json");
         manifest.files.put("stageChecksums", "validation/stage_checksums.json");
         manifest.files.put("canonicalRepository", "../canonical/repository.json");
@@ -1526,6 +1528,13 @@ public final class RawExportSidecarWriter {
         try (FileOutputStream ignored = new FileOutputStream(out)) {
             // Empty JSONL remains valid when a source is unavailable for this run.
         }
+    }
+
+    private static void createEmptyJsonlIfMissing(File out) throws IOException {
+        if (out.exists()) {
+            return;
+        }
+        createEmptyJsonl(out);
     }
 
     private static JsonObject readObject(File file) {

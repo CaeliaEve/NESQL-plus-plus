@@ -32,15 +32,6 @@ public final class ConfigOptions {
                             + "\nThe default repository name will be used.")
                     .register();
 
-    public static final Option<Boolean> ENABLE_DEBUG_COMMANDS =
-            new BooleanOption(
-                    Category.OPTIONS, "enable_debug_commands", false,
-                    "Whether to register legacy/debug export commands such as /nesql-images,"
-                            + " /nesql-render-contracts, and /nesql-browser-layout."
-                            + "\nNormal exports should use /nesql and select stages in the GUI.",
-                    true)
-                    .register();
-
     public static final Option<Boolean> ENABLE_CONFIG_FILE =
             new BooleanOption(
                     Category.OPTIONS, "enable_config_file", false,
