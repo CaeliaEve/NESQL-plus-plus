@@ -104,6 +104,9 @@ public final class BlockFaceExporter {
             String orientationKind = detectOrientationKind(block);
 
             for (int meta = 0; meta <= 15; meta++) {
+                if (shouldSkipBlockFaceMeta(blockName, meta)) {
+                    continue;
+                }
                 FaceCollection faceCollection = collectFaces(block, meta);
                 Map<String, String> faces = faceCollection.faces;
                 if (faces.isEmpty()) continue;
@@ -179,6 +182,13 @@ public final class BlockFaceExporter {
         result.faceUv = faceUv.isEmpty() ? null : faceUv;
         result.faceTextureUrls = faceTextureUrls.isEmpty() ? null : faceTextureUrls;
         return result;
+    }
+
+    private static boolean shouldSkipBlockFaceMeta(String blockName, int meta) {
+        if ("compactkineticgenerators:BlockCkg".equals(blockName)) {
+            return meta < 0 || meta > 11;
+        }
+        return false;
     }
 
     private static IIcon getIcon(Block block, int side, int meta) {

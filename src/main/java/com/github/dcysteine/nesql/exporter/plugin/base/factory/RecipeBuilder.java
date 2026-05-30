@@ -117,11 +117,9 @@ public class RecipeBuilder extends PluginHelper {
     }
 
     public RecipeBuilder skipItemInput() {
-        if (recipeType.isShapeless()) {
-            logger.warn("Skipping item input index for shapeless recipe!");
+        if (!recipeType.isShapeless()) {
+            itemInputsIndex++;
         }
-
-        itemInputsIndex++;
         return this;
     }
 
@@ -171,11 +169,9 @@ public class RecipeBuilder extends PluginHelper {
     }
 
     public RecipeBuilder skipFluidInput() {
-        if (recipeType.isShapeless()) {
-            logger.warn("Skipping fluid input index for shapeless recipe!");
+        if (!recipeType.isShapeless()) {
+            fluidInputsIndex++;
         }
-
-        fluidInputsIndex++;
         return this;
     }
 
@@ -203,11 +199,9 @@ public class RecipeBuilder extends PluginHelper {
     }
 
     public RecipeBuilder skipItemOutput() {
-        if (recipeType.isShapeless()) {
-            logger.warn("Skipping item output index for shapeless recipe!");
+        if (!recipeType.isShapeless()) {
+            itemOutputsIndex++;
         }
-
-        itemOutputsIndex++;
         return this;
     }
 
@@ -236,11 +230,9 @@ public class RecipeBuilder extends PluginHelper {
     }
 
     public RecipeBuilder skipFluidOutput() {
-        if (recipeType.isShapeless()) {
-            logger.warn("Skipping fluid output index for shapeless recipe!");
+        if (!recipeType.isShapeless()) {
+            fluidOutputsIndex++;
         }
-
-        fluidOutputsIndex++;
         return this;
     }
 
@@ -261,3 +253,5 @@ public class RecipeBuilder extends PluginHelper {
                 fluidFactory.get(fluidStack), fluidStack.amount, probability);
     }
 }
+
+

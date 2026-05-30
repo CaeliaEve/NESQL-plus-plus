@@ -66,8 +66,7 @@ val protoBufferVersion: String by project
 val protocPath = sequenceOf(
     System.getenv("NESQL_PROTOC_PATH"),
     File(rootDir, "bin/protoc.exe").absolutePath,
-    File(rootDir, "protoc-33.4-win64/bin/protoc.exe").absolutePath,
-    "E:/MC-test/protoc-33.4-win64/bin/protoc.exe"
+    File(rootDir, "protoc-33.4-win64/bin/protoc.exe").absolutePath
 ).firstOrNull { it != null && File(it).exists() }
     ?: error("No protoc.exe found. Set NESQL_PROTOC_PATH or extract protoc-33.4-win64.zip into the repo root.")
 
@@ -396,3 +395,4 @@ artifacts {
     archives(devJar)
     archives(sqlJar)
 }
+

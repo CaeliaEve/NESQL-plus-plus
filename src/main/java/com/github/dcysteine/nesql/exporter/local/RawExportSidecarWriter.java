@@ -665,6 +665,7 @@ public final class RawExportSidecarWriter {
             copyFirstNumber(facts, "bloodCost", recipe, "metadata.bloodCost", "layout.bindings.bloodCost", "metadata.lpCost", "layout.bindings.lpCost", "metadata.requiredLP", "metadata.lp");
             copyFirstNumber(facts, "lpCost", recipe, "metadata.lpCost", "metadata.requiredLP", "metadata.bloodCost", "layout.bindings.lpCost");
             copyFirstNumber(facts, "tier", recipe, "metadata.tier", "metadata.altarTier", "layout.bindings.tier");
+            copyFirstNumber(facts, "altarTier", recipe, "metadata.altarTier", "metadata.tier", "layout.bindings.altarTier", "layout.bindings.tier");
             copyFirstNumber(facts, "consumptionRate", recipe, "metadata.consumptionRate", "layout.bindings.consumptionRate");
             copyFirstNumber(facts, "drainRate", recipe, "metadata.drainRate", "layout.bindings.drainRate");
             copyFirstNumber(facts, "tartaricCost", recipe, "metadata.tartaricCost", "layout.bindings.tartaricCost");
@@ -674,12 +675,21 @@ public final class RawExportSidecarWriter {
             copyElement(facts, "isWeakActivation", recipe, "layout.bindings.isWeakActivation");
         } else if ("forestry".equals(domainId)) {
             copyElement(facts, "beeSpecies", recipe, "metadata.beeSpecies");
+            copyElement(facts, "species", recipe, "metadata.species");
+            copyElement(facts, "species", recipe, "metadata.beeSpecies");
+            copyElement(facts, "allele", recipe, "metadata.allele");
+            copyElement(facts, "alleles", recipe, "metadata.alleles");
+            copyElement(facts, "temperature", recipe, "metadata.temperature");
+            copyElement(facts, "humidity", recipe, "metadata.humidity");
             copyElement(facts, "chance", recipe, "metadata.chance");
             copyElement(facts, "mutations", recipe, "metadata.mutations");
         } else if ("eec".equals(domainId)) {
             copyElement(facts, "entity", recipe, "metadata.entity");
             copyElement(facts, "entityId", recipe, "metadata.entityId");
+            copyElement(facts, "entityId", recipe, "metadata.mobName");
+            copyElement(facts, "entityId", recipe, "metadata.entityName");
             copyElement(facts, "entityName", recipe, "metadata.entityName");
+            copyElement(facts, "mobName", recipe, "metadata.mobName");
             copyElement(facts, "entityHealth", recipe, "metadata.entityHealth");
             copyElement(facts, "drops", recipe, "metadata.drops");
             copyElement(facts, "fluidDrops", recipe, "metadata.fluidDrops");
@@ -986,6 +996,7 @@ public final class RawExportSidecarWriter {
         add(row, "configuredFrameCount", asset.configuredFrameCount);
         add(row, "capturedFrameCount", asset.capturedFrameCount);
         add(row, "frameDurationMs", asset.frameDurationMs);
+        add(row, "frameDurationSource", asset.frameDurationSource);
         add(row, "frames", asset.frames);
         add(row, "timeline", asset.timeline);
         add(row, "loopMode", asset.loopMode);
@@ -1713,4 +1724,5 @@ public final class RawExportSidecarWriter {
         String kind;
     }
 }
+
 

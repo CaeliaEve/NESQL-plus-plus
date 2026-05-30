@@ -43,6 +43,7 @@ public class CanonicalRenderAsset {
     public List<Map<String, Object>> frames;
     public List<Map<String, Object>> timeline;
     public Integer frameDurationMs;
+    public String frameDurationSource;
     public Boolean loop;
     public Map<String, Object> rect;
     public Map<String, Object> baseSize;

@@ -113,67 +113,79 @@ public abstract class RenderJob {
      * 3. IPatchedTextureAtlasSprite animation detection
      */
     public boolean needsMultipleFrames() {
+        return !"static".equals(getAnimationDecisionReason());
+    }
+
+    public String getAnimationDecisionReason() {
         if (getType() == JobType.ENTITY) {
-            return true;
+            return "entity-preview";
         }
 
         if (!ConfigOptions.EXPORT_GIF.get()) {
-            return false;
+            return "static";
         }
 
         if (shouldPreferNativeSpriteAnimation()) {
-            return false;
+            return "static";
         }
 
-        if (!ConfigOptions.EXPORT_FRAMEBUFFER_GIF.get()) {
-            return false;
-        }
-
-        // Method 0: Force-capture mode (capture ALL items and fluids)
         if (ConfigOptions.FORCE_ALL_ITEMS_ANIMATED.get()) {
-            return true;
+            return "force-all-items";
         }
 
-        // Only items can have animated textures (for non-force mode)
         if (getType() != JobType.ITEM) {
-            return false;
+            return "static";
         }
 
         ItemStack stack = getItem();
 
-        // Method 0.5: Singularity / infinity-style items must use the in-game framebuffer path.
-        // Some of them expose native sprite metadata, but the final inventory icon is composed
-        // by custom renderers, masks, halos, or shader-like overlays.
+        if (shouldUseContractStaticRenderOnly()) {
+            return "static";
+        }
+
         if (AnimatedItemRegistry.INSTANCE.requiresFramebufferAnimationCapture(stack)) {
-            return true;
+            return "framebuffer-registry";
         }
 
-        // Method 1: Check AnimatedItemRegistry (most reliable for known items)
         if (AnimatedItemRegistry.INSTANCE.isAnimatedItem(stack)) {
-            return true;
+            return "animated-item-registry";
         }
 
-        // Method 2: Check GT5 animation interface
         if (hasGregTechAnimation(stack)) {
-            return true;
+            return "gregtech-material-animation";
         }
 
-        // Method 3: Check GT machine block / hatch / pipe overlays rendered in inventory
         if (hasGregTechMachineAnimation(stack)) {
-            return true;
+            return "gregtech-machine-animation";
         }
 
-        // Method 4: Known custom inventory renderers with time-based transforms/effects
         if (hasAnimatedCustomRenderer(stack)) {
-            return true;
+            return "animated-custom-renderer";
         }
 
-        // Method 5: Generic animated texture detection
         if (hasAnimatedTexture(stack)) {
-            return true;
+            return "animated-texture";
         }
 
-        return false;
+        return "static";
+    }
+
+    /**
+     * Some GTNH shader inventory renderers are already represented by render-contract metadata.
+     * Capturing them through an off-screen framebuffer on Java 25 + LWJGL3ify can hard-exit the
+     * client inside the shader path. For those renderers, export the safe base icon plus the
+     * renderer/shader contract instead of invoking the unsafe inventory renderer repeatedly.
+     */
+    public boolean shouldUseContractStaticRenderOnly() {
+        if (getType() != JobType.ITEM) {
+            return false;
+        }
+        String rendererClassName = getInventoryRendererClassName();
+        if (rendererClassName == null || rendererClassName.isEmpty()) {
+            return false;
+        }
+        String normalized = rendererClassName.toLowerCase();
+        return isContractSafeRendererClass(normalized);
     }
 
     /**
@@ -188,7 +200,7 @@ public abstract class RenderJob {
             return true;
         }
 
-        if (!ConfigOptions.EXPORT_GIF.get() || !ConfigOptions.EXPORT_FRAMEBUFFER_GIF.get() || !needsMultipleFrames()) {
+        if (!ConfigOptions.EXPORT_GIF.get() || !needsMultipleFrames()) {
             return false;
         }
         if (ConfigOptions.FORCE_ALL_ITEMS_ANIMATED.get()) {
@@ -225,7 +237,6 @@ public abstract class RenderJob {
         }
 
         if (!ConfigOptions.EXPORT_GIF.get()
-                || !ConfigOptions.EXPORT_FRAMEBUFFER_GIF.get()
                 || !needsMultipleFrames()
                 || getType() != JobType.ITEM) {
             return false;
@@ -516,7 +527,8 @@ public abstract class RenderJob {
             return true;
         }
 
-        return normalized.contains("transcendentalmetaitemrenderer")
+        return isContractSafeRendererClass(normalized)
+                || normalized.contains("transcendentalmetaitemrenderer")
                 || normalized.contains("glitcheffectmetaitemrenderer")
                 || normalized.contains("wireframetesseractrenderer")
                 || normalized.contains("singularity")
@@ -535,6 +547,32 @@ public abstract class RenderJob {
                 || normalized.contains("gaiaspiritrenderer");
     }
 
+    /**
+     * Renderer families with declarative render contracts that should not be invoked through
+     * repeated off-screen framebuffer capture on Java 25 + LWJGL3ify. The web runtime can replay
+     * these shader/time effects from the emitted contract, while NESQL++ still exports the safe
+     * base icon and native sprite metadata.
+     */
+    private boolean isContractSafeRendererClass(String normalizedRendererClassName) {
+        if (normalizedRendererClassName == null || normalizedRendererClassName.isEmpty()) {
+            return false;
+        }
+
+        return normalizedRendererClassName.contains("cosmicitemrenderer")
+                || normalizedRendererClassName.contains("transcendentalmetaitemrenderer")
+                || normalizedRendererClassName.contains("transcendentmetalrenderer")
+                || normalizedRendererClassName.contains("infinitymetaitemrenderer")
+                || normalizedRendererClassName.contains("infinityrenderer")
+                || normalizedRendererClassName.contains("cosmicneutroniummetaitemrenderer")
+                || normalizedRendererClassName.contains("cosmicneutroniumrenderer")
+                || normalizedRendererClassName.contains("universiumrenderer")
+                || normalizedRendererClassName.contains("glitcheffectmetaitemrenderer")
+                || normalizedRendererClassName.contains("glitcheffectrenderer")
+                || normalizedRendererClassName.contains("wireframetesseractrenderer")
+                || normalizedRendererClassName.contains("rainbowoverlaymetaitemrenderer")
+                || normalizedRendererClassName.contains("rainbowoverlayrenderer")
+                || normalizedRendererClassName.contains("gaiaspiritrenderer");
+    }
     private boolean hasCustomInventoryRenderer() {
         if (getType() != JobType.ITEM) {
             return false;

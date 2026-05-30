@@ -7,9 +7,9 @@ import com.github.dcysteine.nesql.exporter.plugin.base.factory.RecipeBuilder;
 import com.github.dcysteine.nesql.exporter.util.SpecialRecipeMetadataRegistry;
 import com.github.dcysteine.nesql.sql.base.recipe.Recipe;
 import com.github.dcysteine.nesql.sql.base.recipe.RecipeType;
-import vazkii.botania.api.brew.BrewRecipe;
 import vazkii.botania.api.BotaniaAPI;
 
+import java.util.ArrayList;
 import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
@@ -28,36 +28,23 @@ public class BrewRecipeProcessor extends PluginHelper {
 
     public void process() {
         try {
-            Map<String, BrewRecipe> recipeMap = null;
-
-            // Try to access brewRecipes field - may not exist in all Botania versions
-            try {
-                recipeMap = BotaniaAPI.brewRecipes;
-            } catch (NoSuchFieldError e) {
-                logger.info("Brew recipes field not found in this Botania version, skipping Brew recipes");
-                return;
-            }
-
-            if (recipeMap == null || recipeMap.isEmpty()) {
+            List<?> recipes = readBrewRecipesReflectively();
+            if (recipes == null || recipes.isEmpty()) {
                 logger.info("No Brew recipes found!");
                 return;
             }
 
-            int total = recipeMap.size();
+            int total = recipes.size();
             logger.info("Processing {} Brew recipes...", total);
 
             int count = 0;
-            for (BrewRecipe recipe : recipeMap.values()) {
+            for (Object recipe : recipes) {
                 count++;
                 processRecipe(recipe);
 
                 if (Logger.intermittentLog(count)) {
                     logger.info("Processed Brew recipe {} of {}", count, total);
-                    try {
-                        logger.info("Most recent recipe: {}", recipe.getKey());
-                    } catch (Exception e) {
-                        // Ignore key display errors
-                    }
+                    logger.info("Most recent recipe: {}", readBrewKey(recipe));
                 }
             }
 
@@ -68,51 +55,125 @@ public class BrewRecipeProcessor extends PluginHelper {
         }
     }
 
-    private void processRecipe(BrewRecipe recipe) {
+    private List<?> readBrewRecipesReflectively() {
+        for (String fieldName : new String[] {"brewRecipes", "brewRecipeList"}) {
+            try {
+                java.lang.reflect.Field field = BotaniaAPI.class.getField(fieldName);
+                Object value = field.get(null);
+                if (value instanceof List<?>) {
+                    return (List<?>) value;
+                }
+                if (value instanceof Map<?, ?>) {
+                    return new ArrayList<>(((Map<?, ?>) value).values());
+                }
+            } catch (Exception ignored) {
+            }
+        }
+        logger.warn("Brew recipes field not found in this Botania version");
+        return null;
+    }
+
+    private void processRecipe(Object recipe) {
         try {
             RecipeBuilder builder = new RecipeBuilder(exporter, brewRecipe);
 
-            // Add inputs - handle API differences
-            try {
-                for (Object input : recipe.getIngredients()) {
-                    if (input == null) {
-                        continue;
-                    }
-                    if (input instanceof net.minecraft.item.ItemStack) {
-                        net.minecraft.item.ItemStack itemStack = (net.minecraft.item.ItemStack) input;
-                        if (itemStack.getItem() != null) {
-                            builder.addItemInput(itemStack);
-                        }
+            for (Object input : readInputs(recipe)) {
+                if (input instanceof net.minecraft.item.ItemStack) {
+                    net.minecraft.item.ItemStack itemStack = (net.minecraft.item.ItemStack) input;
+                    if (itemStack.getItem() != null) {
+                        builder.addItemInput(itemStack);
                     }
                 }
-            } catch (NoSuchMethodError e) {
-                logger.debug("getIngredients() method not found, skipping inputs");
             }
 
-            // Build recipe (Brew recipes don't have traditional item outputs)
             Recipe builtRecipe = builder.build();
 
-            // Register brew key as metadata - handle API differences
-            String brewKey = "unknown";
-            try {
-                brewKey = recipe.getKey();
-            } catch (NoSuchMethodError e) {
-                logger.debug("getKey() method not found, using default key 'unknown'");
-            }
-
             Map<String, Object> metadata = new HashMap<>();
-            metadata.put("brewKey", brewKey);
+            metadata.put("brewKey", readBrewKey(recipe));
+            int manaCost = readManaCost(recipe);
+            if (manaCost > 0) {
+                metadata.put("manaCost", manaCost);
+            }
             try {
                 SpecialRecipeMetadataRegistry.registerMetadata(
                         builtRecipe.getId(),
                         new SpecialRecipeMetadataRegistry.SpecialRecipeMetadata("Brew", metadata)
                 );
             } catch (Exception e) {
-                // Ignore metadata registration errors
+                // Ignore metadata registration errors.
             }
 
         } catch (Exception e) {
             logger.error("Error processing individual Brew recipe", e);
         }
+    }
+
+    private List<?> readInputs(Object recipe) {
+        for (String methodName : new String[] {"getInputs", "getIngredients"}) {
+            try {
+                java.lang.reflect.Method method = recipe.getClass().getMethod(methodName);
+                Object value = method.invoke(recipe);
+                if (value instanceof List<?>) {
+                    return (List<?>) value;
+                }
+                if (value instanceof Object[]) {
+                    List<Object> result = new ArrayList<>();
+                    for (Object entry : (Object[]) value) {
+                        result.add(entry);
+                    }
+                    return result;
+                }
+            } catch (Exception ignored) {
+            }
+        }
+        return java.util.Collections.emptyList();
+    }
+
+    private String readBrewKey(Object recipe) {
+        try {
+            java.lang.reflect.Method getBrew = recipe.getClass().getMethod("getBrew");
+            Object brew = getBrew.invoke(recipe);
+            if (brew != null) {
+                java.lang.reflect.Method getKey = brew.getClass().getMethod("getKey");
+                Object key = getKey.invoke(brew);
+                if (key != null) {
+                    return String.valueOf(key);
+                }
+            }
+        } catch (Exception ignored) {
+        }
+        try {
+            java.lang.reflect.Method getKey = recipe.getClass().getMethod("getKey");
+            Object key = getKey.invoke(recipe);
+            if (key != null) {
+                return String.valueOf(key);
+            }
+        } catch (Exception ignored) {
+        }
+        return "unknown";
+    }
+
+    private int readManaCost(Object recipe) {
+        try {
+            java.lang.reflect.Method getManaUsage = recipe.getClass().getMethod("getManaUsage");
+            Object value = getManaUsage.invoke(recipe);
+            if (value instanceof Number) {
+                return ((Number) value).intValue();
+            }
+        } catch (Exception ignored) {
+        }
+        try {
+            java.lang.reflect.Method getBrew = recipe.getClass().getMethod("getBrew");
+            Object brew = getBrew.invoke(recipe);
+            if (brew != null) {
+                java.lang.reflect.Method getManaCost = brew.getClass().getMethod("getManaCost");
+                Object value = getManaCost.invoke(brew);
+                if (value instanceof Number) {
+                    return ((Number) value).intValue();
+                }
+            }
+        } catch (Exception ignored) {
+        }
+        return 0;
     }
 }

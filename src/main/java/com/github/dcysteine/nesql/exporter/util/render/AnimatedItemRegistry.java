@@ -47,9 +47,9 @@ public enum AnimatedItemRegistry {
     }
 
     private void addGregTechAnimatedItems() {
-        // GT5 glitch/phase materials
-        animatedItemIds.add("gregtech:gt.metaitem.01"); // SixPhasedCopper, etc.
-
+        // GT5 material items are not registered by broad item id here.
+        // Actual GT animations are detected from render-pass texture metadata, machine textures,
+        // or custom renderers so static rods/plates/tools do not flood framebuffer GIF capture.
         // GT5 machines with animations
         // Most GT5 machine blocks have animated textures when active
         // We'll capture the item forms as static, but the blocks could be animated
@@ -67,9 +67,10 @@ public enum AnimatedItemRegistry {
         animatedItemIds.add("Botania:poolMinecart");
         animatedItemIds.add("Botania:manaBottle");
         animatedItemIds.add("Botania:manaPowder");
-
-        // Botania flowers with animation
-        animatedItemIds.add("Botania:flower");
+        // Plain Botania flowers are static block-item sprites in GTNH 2.8.4. Do not force them
+        // through framebuffer GIF capture: Java 25 + LWJGL3ify can hard-exit while repeatedly
+        // capturing some flower metadata variants, and atlas metadata will still handle any real
+        // animated Botania sprites discovered at runtime.
     }
 
     private void addOtherAnimatedItems() {
@@ -147,9 +148,14 @@ public enum AnimatedItemRegistry {
         framebufferAnimatedModIds.add("universal_singularities");
         framebufferAnimatedModIds.add("avaritiaddons");
         framebufferAnimatedModIds.add("avaritiaaddons");
-        framebufferAnimatedModIds.add("dreamcraft");
+        // DreamCraft contains a few singularity/infinity-style animated items, but also many
+        // plain static molds/circuits. Do not mark the whole mod for framebuffer GIF capture:
+        // Java 25 + LWJGL3ify can hard-exit when thousands of static DreamCraft items are
+        // repeatedly rendered as GIFs. Keep DreamCraft in the singularity classifier only,
+        // so real cosmic/singularity/infinity items still use the authoritative framebuffer path.
 
         singularityModIds.addAll(framebufferAnimatedModIds);
+        singularityModIds.add("dreamcraft");
     }
 
     /**
@@ -227,7 +233,7 @@ public enum AnimatedItemRegistry {
                 itemId,
                 modId,
                 safeUnlocalizedName(stack),
-                safeDisplayName(stack));
+                safeUnlocalizedName(stack));
 
         if (containsIgnoreCase(singularityModIds, modId)) {
             return containsAny(haystack,

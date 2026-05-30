@@ -483,6 +483,7 @@ public final class CanonicalRenderAssetCollector {
         asset.loop = Boolean.TRUE;
         asset.loopMode = "loop";
         asset.frameDurationMs = null;
+        asset.frameDurationSource = null;
         asset.configuredFrameCount = 1;
         asset.capturedFrameCount = 1;
         asset.detectionFrameCount = 10;
@@ -549,6 +550,7 @@ public final class CanonicalRenderAssetCollector {
             asset.playbackHint = "atlas_timeline";
             asset.sourceFormat = "gif";
             asset.frameDurationMs = gifAnimation.defaultFrameDurationMs;
+            asset.frameDurationSource = "gif_metadata";
             asset.loop = Boolean.TRUE;
             asset.loopMode = "loop";
             asset.framePattern = null;
@@ -583,6 +585,7 @@ public final class CanonicalRenderAssetCollector {
             asset.captureSource = "framebuffer_multiframe";
             asset.playbackHint = "atlas_timeline";
             asset.frameDurationMs = GifRenderer.DEFAULT_CAPTURE_FRAME_DELAY_MS;
+            asset.frameDurationSource = "minecraft_tick_capture";
             asset.loop = ConfigOptions.GIF_LOOP_COUNT.get() == 0;
             asset.loopMode = asset.loop ? "loop" : "once";
             asset.framePattern = buildFramePattern(baseFile);
@@ -813,6 +816,7 @@ public final class CanonicalRenderAssetCollector {
             Integer defaultFrameTime = integerValue(metadata.get("defaultFrameTime"));
             if (defaultFrameTime != null) {
                 asset.frameDurationMs = defaultFrameTime * 50;
+                asset.frameDurationSource = "native_sprite_metadata";
             }
             Object timeline = metadata.get("timeline");
             if (timeline instanceof List) {
@@ -1144,6 +1148,7 @@ public final class CanonicalRenderAssetCollector {
         copy.frames = copyNestedMapList(source.frames);
         copy.timeline = copyNestedMapList(source.timeline);
         copy.frameDurationMs = source.frameDurationMs;
+        copy.frameDurationSource = source.frameDurationSource;
         copy.loop = source.loop;
         copy.rect = copyNestedMap(source.rect);
         copy.baseSize = copyNestedMap(source.baseSize);

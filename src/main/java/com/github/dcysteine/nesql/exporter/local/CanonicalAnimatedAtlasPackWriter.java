@@ -529,6 +529,7 @@ public class CanonicalAnimatedAtlasPackWriter {
             }
             if (defaultFrameTime != null && defaultFrameTime > 0) {
                 asset.frameDurationMs = defaultFrameTime * 50;
+                asset.frameDurationSource = "native_sprite_metadata";
             }
             if (width != null && height != null) {
                 if (asset.baseSize == null) {

@@ -31,13 +31,24 @@ public final class IdUtil {
     }
 
     public static String itemId(Item item) {
-        GameRegistry.UniqueIdentifier uniqueId = GameRegistry.findUniqueIdentifierFor(item);
+        GameRegistry.UniqueIdentifier uniqueId = findUniqueIdentifierSafely(item);
         if (uniqueId == null) {
             String fallbackName =
                     item == null ? "null" : item.getClass().getName() + ID_SEPARATOR + Item.getIdFromItem(item);
             return sanitize("unregistered" + ID_SEPARATOR + fallbackName);
         }
         return sanitize(uniqueId.modId + ID_SEPARATOR + uniqueId.name);
+    }
+
+    public static GameRegistry.UniqueIdentifier findUniqueIdentifierSafely(Item item) {
+        if (item == null) {
+            return null;
+        }
+        try {
+            return GameRegistry.findUniqueIdentifierFor(item);
+        } catch (Throwable ignored) {
+            return null;
+        }
     }
 
     public static String imageFilePath(ItemStack itemStack) {

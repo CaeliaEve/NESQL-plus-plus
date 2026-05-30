@@ -4,6 +4,8 @@ import com.github.dcysteine.nesql.exporter.main.Logger;
 import com.github.dcysteine.nesql.exporter.plugin.PluginExporter;
 import com.github.dcysteine.nesql.exporter.plugin.PluginHelper;
 import com.github.dcysteine.nesql.exporter.plugin.base.factory.ItemFactory;
+import com.github.dcysteine.nesql.exporter.util.IdUtil;
+import com.github.dcysteine.nesql.exporter.util.render.RenderDiagnosticsSupport;
 import net.minecraft.item.ItemStack;
 import net.minecraft.util.EnumChatFormatting;
 
@@ -30,18 +32,18 @@ public class NeiItemListProcessor extends PluginHelper {
         for (ItemStack itemStack : exportItems) {
             count++;
             try {
+                RenderDiagnosticsSupport.writeCurrentNeiItem(itemStack, count, total);
                 itemFactory.get(itemStack);
             } catch (Exception e) {
                 // GTNH has some bad items, so we have to do this =(
-                // For whatever reason, the exceptions thrown by those items don't even have stack
-                // traces!
-                logger.info("Found a bad item: " + itemStack.getDisplayName());
+                // Avoid getDisplayName() here: some custom items do dangerous work in display-name paths.
+                logger.info("Found a bad item: {}", safeItemId(itemStack));
                 e.printStackTrace();
             }
 
             if (Logger.intermittentLog(count)) {
                 logger.info("Processed NEI item {} of {}", count, total);
-                logger.info("Most recent item: {}", itemStack.getDisplayName());
+                logger.info("Most recent item id: {}", safeItemId(itemStack));
             }
         }
 
@@ -49,4 +51,11 @@ public class NeiItemListProcessor extends PluginHelper {
         logger.info("Finished processing NEI items!");
     }
 
+    private String safeItemId(ItemStack itemStack) {
+        try {
+            return itemStack == null ? "<null>" : IdUtil.itemId(itemStack);
+        } catch (Throwable t) {
+            return "<item-id-error:" + t.getClass().getName() + ">";
+        }
+    }
 }

@@ -95,6 +95,9 @@ final class RenderContractMetadataExtractor {
             boolean hasCustomInventoryRenderer,
             LayerAnalysis layerAnalysis,
             boolean hasNativeSprite) {
+        if (job.shouldUseContractStaticRenderOnly()) {
+            return "renderer_family";
+        }
         if (hasCustomInventoryRenderer) {
             return "captured_final_atlas";
         }
@@ -116,6 +119,9 @@ final class RenderContractMetadataExtractor {
             boolean hasCustomInventoryRenderer,
             LayerAnalysis layerAnalysis,
             boolean hasNativeSprite) {
+        if (job.shouldUseContractStaticRenderOnly()) {
+            return "renderer_contract_safe_icon";
+        }
         if (hasCustomInventoryRenderer) {
             return rendererFamily != null && !rendererFamily.isEmpty()
                     ? "inventory_renderer_family_capture"

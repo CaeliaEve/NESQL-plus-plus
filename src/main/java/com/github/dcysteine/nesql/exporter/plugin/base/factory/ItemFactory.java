@@ -39,7 +39,7 @@ public class ItemFactory extends EntityFactory<Item, String> {
         }
 
         GameRegistry.UniqueIdentifier uniqueId =
-                GameRegistry.findUniqueIdentifierFor(itemStack.getItem());
+                IdUtil.findUniqueIdentifierSafely(itemStack.getItem());
         String modId = uniqueId == null ? "unregistered" : uniqueId.modId;
         String internalName =
                 uniqueId == null

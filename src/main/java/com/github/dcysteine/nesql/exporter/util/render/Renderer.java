@@ -96,12 +96,12 @@ public enum Renderer {
     @SubscribeEvent(priority = EventPriority.HIGHEST)
     @SuppressWarnings("unused")
     public void onClientTick(TickEvent.ClientTickEvent event) {
-        // 只在阶段结束时处理，避免每tick处理多次
+        // Only process once at the end of the client tick.
         if (event.phase != TickEvent.Phase.END) {
             return;
         }
 
-        // 确保在游戏界面中渲染，不在菜单界面
+        // Render only while a world is loaded, not from the main menu.
         if (FMLClientHandler.instance().getWorldClient() == null) {
             return;
         }
@@ -161,9 +161,8 @@ public enum Renderer {
                     }
                 }
                 try {
-                    clearBuffer();
-                    render(job);
-                    BufferedImage image = readImage(job);
+                    RenderDiagnosticsSupport.writeCurrentRenderJob(imageDirectory, job);
+                    BufferedImage image = renderIsolatedFrame(job);
 
                     // Handle multi-frame GIF capture vs single-frame PNG
                     if (job.needsMultipleFrames()) {
@@ -182,6 +181,73 @@ public enum Renderer {
         }
     }
 
+    private BufferedImage renderIsolatedFrame(RenderJob job) {
+        GL11.glPushAttrib(GL11.GL_ALL_ATTRIB_BITS);
+        GL11.glMatrixMode(GL11.GL_PROJECTION);
+        GL11.glPushMatrix();
+        GL11.glMatrixMode(GL11.GL_MODELVIEW);
+        GL11.glPushMatrix();
+        try {
+            resetPerJobRenderState();
+            clearBuffer();
+            render(job);
+            checkOpenGlError(job, "render");
+            BufferedImage image = readImage(job);
+            checkOpenGlError(job, "readback");
+            return image;
+        } finally {
+            try {
+                RenderHelper.disableStandardItemLighting();
+                GL11.glColor4f(1f, 1f, 1f, 1f);
+                GL11.glDisable(GL11.GL_BLEND);
+                GL11.glDisable(GL11.GL_ALPHA_TEST);
+                GL11.glDisable(GL11.GL_DEPTH_TEST);
+                OpenGlHelper.setActiveTexture(OpenGlHelper.lightmapTexUnit);
+                GL11.glDisable(GL11.GL_TEXTURE_2D);
+                OpenGlHelper.setActiveTexture(OpenGlHelper.defaultTexUnit);
+                GL11.glEnable(GL11.GL_TEXTURE_2D);
+            } catch (Throwable ignored) {
+            }
+            GL11.glMatrixMode(GL11.GL_MODELVIEW);
+            GL11.glPopMatrix();
+            GL11.glMatrixMode(GL11.GL_PROJECTION);
+            GL11.glPopMatrix();
+            GL11.glMatrixMode(GL11.GL_MODELVIEW);
+            GL11.glPopAttrib();
+            resetPerJobRenderState();
+        }
+    }
+
+    private void resetPerJobRenderState() {
+        framebuffer.bindFramebuffer(true);
+        OpenGlHelper.func_153171_g(GL30.GL_READ_FRAMEBUFFER, framebuffer.framebufferObject);
+        GL11.glViewport(0, 0, imageDim, imageDim);
+        GL11.glMatrixMode(GL11.GL_PROJECTION);
+        GL11.glLoadIdentity();
+        GL11.glOrtho(0.0, 1.0, 1.0, 0.0, -100.0, 100.0);
+        double scaleFactor = 1 / 16.0;
+        GL11.glScaled(scaleFactor, scaleFactor, scaleFactor);
+        GL11.glMatrixMode(GL11.GL_MODELVIEW);
+        GL11.glLoadIdentity();
+        GL11.glColor4f(1f, 1f, 1f, 1f);
+        GL11.glEnable(GL11.GL_TEXTURE_2D);
+        GL11.glEnable(GL12.GL_RESCALE_NORMAL);
+        RenderHelper.enableGUIStandardItemLighting();
+    }
+
+    private void checkOpenGlError(RenderJob job, String phase) {
+        int error = GL11.glGetError();
+        if (error != GL11.GL_NO_ERROR) {
+            Logger.MOD.warn(
+                    "OpenGL error {} during {} for {}",
+                    error,
+                    phase,
+                    job == null ? "<null>" : job.getOutputFilePath());
+            while (GL11.glGetError() != GL11.GL_NO_ERROR) {
+                // Drain the error queue so a bad renderer does not poison later jobs.
+            }
+        }
+    }
     private void advanceTextureAnimations(RenderJob job) {
         if (job == null || !job.shouldAdvanceTextureAtlasBetweenFrames()) {
             return;
@@ -226,7 +292,11 @@ public enum Renderer {
     private void render(RenderJob job) {
         switch (job.getType()) {
             case ITEM:
-                GuiContainerManager.drawItem(0, 0, job.getItem());
+                if (job.shouldUseContractStaticRenderOnly()) {
+                    renderSafeItemIcon(job);
+                } else {
+                    GuiContainerManager.drawItem(0, 0, job.getItem());
+                }
                 break;
 
             case FLUID:
@@ -252,6 +322,47 @@ public enum Renderer {
 
             default:
                 throw new IllegalArgumentException("Unrecognized job type: " + job);
+        }
+    }
+
+    private void renderSafeItemIcon(RenderJob job) {
+        net.minecraft.item.ItemStack stack = job.getItem();
+        if (stack == null || stack.getItem() == null) {
+            return;
+        }
+
+        net.minecraft.item.Item item = stack.getItem();
+        int passes = 1;
+        try {
+            if (item.requiresMultipleRenderPasses()) {
+                passes = Math.max(1, item.getRenderPasses(stack.getItemDamage()));
+            }
+        } catch (Throwable ignored) {
+        }
+
+        GuiDraw.changeTexture(item.getSpriteNumber() == 0 ? TextureMap.locationBlocksTexture : TextureMap.locationItemsTexture);
+        for (int pass = 0; pass < passes; pass++) {
+            IIcon icon = null;
+            try {
+                icon = item.getIcon(stack, pass);
+            } catch (Throwable ignored) {
+            }
+            if (icon == null) {
+                try {
+                    icon = item.getIconFromDamageForRenderPass(stack.getItemDamage(), pass);
+                } catch (Throwable ignored) {
+                }
+            }
+            if (icon == null) {
+                try {
+                    icon = stack.getIconIndex();
+                } catch (Throwable ignored) {
+                }
+            }
+            if (icon != null) {
+                GL11.glColor4f(1f, 1f, 1f, 1f);
+                GuiDraw.gui.drawTexturedModelRectFromIcon(0, 0, icon, 16, 16);
+            }
         }
     }
 

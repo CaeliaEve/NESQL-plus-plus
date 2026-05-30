@@ -1,9 +1,12 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import fs from 'fs';
+import path from 'path';
 
-const read = (relativePath) =>
-  fs.readFileSync(`E:/codex/ae2/NESQL++/${relativePath}`, 'utf8');
+const repoRoot = process.cwd();
+const readSource = (relativePath) => fs.readFileSync(path.join(repoRoot, relativePath), 'utf8');
+
+const read = readSource;
 
 test('base exported image paths stay on png so animated outputs can be an opt-in overlay', () => {
   const rendererSource = read('src/main/java/com/github/dcysteine/nesql/exporter/util/render/Renderer.java');
@@ -81,6 +84,13 @@ test('gif-backed item exports are treated as animated assets based on the actual
     collectorSource.includes('asset.renderMode = "captured_final_atlas";'),
     true,
     'Collector should normalize rendered GIF assets to captured_final_atlas playback metadata',
+  );
+
+  assert.equal(
+    collectorSource.includes('asset.frameDurationSource = "gif_metadata";')
+      && collectorSource.includes('asset.frameDurationSource = "minecraft_tick_capture";'),
+    true,
+    'Collector should label whether animation timing came from an existing GIF or from Minecraft tick capture',
   );
 
   assert.equal(
@@ -305,7 +315,8 @@ test('nei recipe export captures raw positioned slot geometry for the layout con
   assert.equal(
     neiSource.includes('addSlotLayout(data, "inputSlotLayout", buildPositionedSlotLayout(ingredients, recipeType, "input"));')
       && neiSource.includes('addSlotLayout(data, "outputSlotLayout", buildPositionedSlotLayout(singletonPositionedStack(result), null, "output"));')
-      && neiSource.includes('addSlotLayout(data, "otherSlotLayout", buildPositionedSlotLayout(others, null, "other"));'),
+      && neiSource.includes('List<Map<String, Object>> otherSlotLayout = buildPositionedSlotLayout(others, null, "other");')
+      && neiSource.includes('addSlotLayout(data, "otherSlotLayout", otherSlotLayout);'),
     true,
     'NEI export should persist input/output/other positioned stack geometry into recipe metadata',
   );

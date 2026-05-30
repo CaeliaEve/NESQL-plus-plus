@@ -9,6 +9,7 @@ import com.github.dcysteine.nesql.exporter.plugin.minecraft.MinecraftRecipeTypeH
 import com.github.dcysteine.nesql.exporter.plugin.base.factory.RecipeBuilder;
 import com.github.dcysteine.nesql.exporter.util.IdUtil;
 import com.github.dcysteine.nesql.exporter.util.ItemUtil;
+import com.github.dcysteine.nesql.exporter.util.render.RenderDiagnosticsSupport;
 import net.minecraft.block.Block;
 import net.minecraft.item.Item;
 import com.github.dcysteine.nesql.sql.base.recipe.RecipeType;
@@ -57,6 +58,7 @@ public class CraftingRecipeProcessor extends PluginHelper {
         int count = 0;
         for (IRecipe recipe : recipes) {
             count++;
+            RenderDiagnosticsSupport.writeCurrentCraftingRecipe(recipe, count, total);
 
             if (recipe.getRecipeOutput() == null) {
                 logger.warn("Skipping crafting recipe with null output: " + recipe);

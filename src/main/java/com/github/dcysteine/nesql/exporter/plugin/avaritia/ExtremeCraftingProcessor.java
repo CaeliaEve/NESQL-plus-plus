@@ -154,65 +154,14 @@ public class ExtremeCraftingProcessor extends PluginHelper {
 
     private void processRecipe(Object recipe) {
         try {
-            // Get output - use the correct field name: 'output'
-            ItemStack output = null;
-
-            try {
-                java.lang.reflect.Field outputField = recipe.getClass().getDeclaredField("output");
-                outputField.setAccessible(true);
-                output = (ItemStack) outputField.get(recipe);
-            } catch (Exception e) {
-                logger.debug("Field 'output' not found: {}", e.getMessage());
-            }
-
-            if (output == null) {
-                logger.warn("Skipping Extreme Crafting recipe - could not get output");
+            ItemStack output = readRecipeOutput(recipe);
+            if (output == null || output.getItem() == null) {
+                logger.warn("Skipping Extreme Crafting recipe - could not get output from {}", recipe.getClass().getName());
                 return;
             }
 
             RecipeBuilder builder = new RecipeBuilder(exporter, extremeCrafting);
-
-            // Get the 9x9 input grid - use the correct field name: 'input'
-            Object[] inputs = null;
-
-            // ⭐ FIX: Handle both array and List types for input field
-            try {
-                java.lang.reflect.Field inputField = recipe.getClass().getDeclaredField("input");
-                inputField.setAccessible(true);
-                Object inputObj = inputField.get(recipe);
-
-                // Check type and convert accordingly
-                if (inputObj instanceof Object[]) {
-                    // Already an array
-                    inputs = (Object[]) inputObj;
-                } else if (inputObj instanceof java.util.List) {
-                    // It's a List (ArrayList), convert to array
-                    java.util.List<?> inputList = (java.util.List<?>) inputObj;
-                    inputs = inputList.toArray();
-                } else if (inputObj != null) {
-                    // Unknown type, try to handle as array
-                    logger.debug("Input field is unexpected type: {}", inputObj.getClass().getName());
-                }
-            } catch (Exception e) {
-                logger.debug("Field 'input' not found: {}", e.getMessage());
-            }
-
-            // Method 2: Try getInput() method
-            if (inputs == null) {
-                try {
-                    java.lang.reflect.Method getInput = recipe.getClass().getMethod("getInput");
-                    Object inputObj = getInput.invoke(recipe);
-
-                    if (inputObj instanceof Object[]) {
-                        inputs = (Object[]) inputObj;
-                    } else if (inputObj instanceof java.util.List) {
-                        java.util.List<?> inputList = (java.util.List<?>) inputObj;
-                        inputs = inputList.toArray();
-                    }
-                } catch (Exception e) {
-                    logger.debug("Method getInput() not found: {}", e.getMessage());
-                }
-            }
+            Object[] inputs = readRecipeInputs(recipe);
 
             if (inputs == null) {
                 logger.warn("Extreme Crafting recipe has null input");
@@ -234,7 +183,6 @@ public class ExtremeCraftingProcessor extends PluginHelper {
                     handleItemInputAt(builder, entry.getValue(), entry.getKey());
                 }
             } else {
-                // Fallback: preserve source sequence.
                 for (int i = 0; i < inputs.length; i++) {
                     Object itemInput = inputs[i];
                     if (itemInput == null) {
@@ -250,6 +198,73 @@ public class ExtremeCraftingProcessor extends PluginHelper {
         } catch (Exception e) {
             logger.error("Error processing individual Extreme Crafting recipe", e);
         }
+    }
+    private ItemStack readRecipeOutput(Object recipe) {
+        for (String fieldName : new String[] {"output", "recipeOutput", "out"}) {
+            try {
+                java.lang.reflect.Field outputField = recipe.getClass().getDeclaredField(fieldName);
+                outputField.setAccessible(true);
+                Object value = outputField.get(recipe);
+                if (value instanceof ItemStack) {
+                    return (ItemStack) value;
+                }
+            } catch (Exception ignored) {
+            }
+        }
+        for (String methodName : new String[] {"getRecipeOutput", "getOutput"}) {
+            try {
+                java.lang.reflect.Method method = recipe.getClass().getMethod(methodName);
+                if (method.getParameterTypes().length == 0) {
+                    Object value = method.invoke(recipe);
+                    if (value instanceof ItemStack) {
+                        return (ItemStack) value;
+                    }
+                }
+            } catch (Exception ignored) {
+            }
+        }
+        return null;
+    }
+
+    private Object[] readRecipeInputs(Object recipe) {
+        for (String fieldName : new String[] {"input", "inputs"}) {
+            Object[] converted = readInputMember(recipe, fieldName, false);
+            if (converted != null) {
+                return converted;
+            }
+        }
+        for (String methodName : new String[] {"getInput", "getInputs"}) {
+            Object[] converted = readInputMember(recipe, methodName, true);
+            if (converted != null) {
+                return converted;
+            }
+        }
+        return null;
+    }
+
+    private Object[] readInputMember(Object recipe, String name, boolean method) {
+        try {
+            Object value;
+            if (method) {
+                java.lang.reflect.Method m = recipe.getClass().getMethod(name);
+                if (m.getParameterTypes().length != 0) {
+                    return null;
+                }
+                value = m.invoke(recipe);
+            } else {
+                java.lang.reflect.Field f = recipe.getClass().getDeclaredField(name);
+                f.setAccessible(true);
+                value = f.get(recipe);
+            }
+            if (value instanceof Object[]) {
+                return (Object[]) value;
+            }
+            if (value instanceof java.util.List) {
+                return ((java.util.List<?>) value).toArray();
+            }
+        } catch (Exception ignored) {
+        }
+        return null;
     }
 
     private void handleItemInput(RecipeBuilder builder, Object itemInput) {
@@ -389,3 +404,4 @@ public class ExtremeCraftingProcessor extends PluginHelper {
         return bySlot.isEmpty() ? null : bySlot;
     }
 }
+
