@@ -70,11 +70,8 @@ public class ModBasedItemExporter {
                 modCount++;
                 totalItems += modItems.size();
 
-                Logger.MOD.info("[{}/{}] Exporting mod: {} ({} items)",
+                Logger.MOD.debug("[{}/{}] Exporting mod: {} ({} items)",
                         modCount, itemsByMod.size(), modId, modItems.size());
-                Logger.chatMessage(EnumChatFormatting.YELLOW +
-                        String.format("[%d/%d] Exporting mod: %s (%d items)...",
-                                modCount, itemsByMod.size(), modId, modItems.size()));
 
                 String safeModId = ModBasedRecipeFileSupport.sanitizeModId(modId);
                 File modDir = new File(itemsDir, safeModId);
@@ -84,13 +81,10 @@ public class ModBasedItemExporter {
 
                 File compressedFile = ModBasedRecipeFileSupport.jsonGzipFile(modDir, "items.json");
                 long compressedSize = ModBasedRecipeFileSupport.writeCompressedJson(gson, modItems, compressedFile);
-
-                Logger.chatMessage(EnumChatFormatting.GREEN
-                        + String.format("OK %s (%d items)", modId, modItems.size()));
-                Logger.chatMessage(EnumChatFormatting.YELLOW
-                        + "  Wrote "
-                        + ModBasedRecipeFileSupport.formatSize(compressedSize)
-                        + " compressed");
+                Logger.MOD.debug(
+                        "Wrote item shard for {}: {} compressed",
+                        modId,
+                        ModBasedRecipeFileSupport.formatSize(compressedSize));
             }
 
             Logger.MOD.info("============================================================");

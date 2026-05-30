@@ -99,14 +99,8 @@ public class ModBasedRecipeExporter {
                 modCount++;
                 totalRecipes += modRecipes.size();
 
-                Logger.MOD.info("[{}/{}] Exporting mod: {} ({} recipes)",
+                Logger.MOD.debug("[{}/{}] Exporting mod: {} ({} recipes)",
                         modCount, recipesByMod.size(), modId, modRecipes.size());
-                Logger.chatMessage(String.format(
-                        "[%d/%d] Exporting mod: %s (%d recipes)...",
-                        modCount,
-                        recipesByMod.size(),
-                        modId,
-                        modRecipes.size()));
 
                 String safeModId = ModBasedRecipeFileSupport.sanitizeModId(modId);
                 File modDir = new File(recipesDir, safeModId);
@@ -115,16 +109,13 @@ public class ModBasedRecipeExporter {
                 }
 
                 File compressedFile = ModBasedRecipeFileSupport.jsonGzipFile(modDir, "recipes.json");
-                Logger.MOD.info("Writing compressed JSON to: {}", compressedFile.getAbsolutePath());
+                Logger.MOD.debug("Writing compressed JSON to: {}", compressedFile.getAbsolutePath());
                 long compressedSize = ModBasedRecipeFileSupport.writeCompressedJson(gson, modRecipes, compressedFile);
-                Logger.MOD.info("Compressed JSON written successfully: {}",
+                Logger.MOD.debug("Compressed JSON written successfully: {}",
                         ModBasedRecipeFileSupport.formatSize(compressedSize));
-                Logger.chatMessage("  Wrote " + ModBasedRecipeFileSupport.formatSize(compressedSize) + " compressed");
 
                 if (modCount % 10 == 0) {
-                    Logger.MOD.info("Progress: {}/{} mods completed", modCount, recipesByMod.size());
-                    Logger.chatMessage(String.format("Progress: %d/%d mods completed",
-                            modCount, recipesByMod.size()));
+                    Logger.MOD.debug("Progress: {}/{} mods completed", modCount, recipesByMod.size());
                 }
             }
 
