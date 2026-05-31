@@ -133,3 +133,24 @@ test('special facts keep domain aliases needed by runtime coverage gates', () =>
   assert.equal(nei.includes('copyFirstExistingForestryFact(metadata, recipe, "allele"'), true);
   assert.equal(nei.includes('extractForestryEnvironmentFromRequirements(metadata, requirements)'), true);
 });
+
+test('runtime command surface is limited to guided export and Thaumcraft aspect unlock', () => {
+  const main = readSource('src/main/java/com/github/dcysteine/nesql/exporter/main/Main.java');
+  const exportCommand = readSource('src/main/java/com/github/dcysteine/nesql/exporter/main/ExportCommand.java');
+  assert.equal(main.includes('new ExportCommand()'), true);
+  assert.equal(main.includes('new ThaumcraftUnlockAspectsCommand()'), true);
+  assert.equal(exportCommand.includes('return "nesql";'), true);
+  assert.equal(exportCommand.includes('ClientGuiScheduler.open(new ExportSelectionGui(repositoryName))'), true);
+  for (const legacyCommand of [
+    'new DataExportCommand()',
+    'new ImageExportCommand()',
+    'new BotaniaDataExportCommand()',
+    'new BrowserLayoutExportCommand()',
+    'new AnimatedAtlasExportCommand()',
+    'new GregTechMultiblockExportCommand()',
+    'new BlockFaceExportCommand()',
+    'new IndustrialSlaughterhouseEntityExportCommand()',
+  ]) {
+    assert.equal(main.includes(legacyCommand), false, `legacy command should not be registered: ${legacyCommand}`);
+  }
+});
