@@ -151,6 +151,8 @@ public final class RawExportSidecarWriter {
         manifest.files.put("specialIndex", "special/index.json");
         manifest.files.put("exportReport", "validation/export_report.json");
         manifest.files.put("errors", "validation/errors.jsonl");
+        manifest.files.put("neiHandlerAnomalies", "validation/nei_handler_anomalies.json");
+        manifest.files.put("pluginTimings", "validation/export-plugin-timings.json");
         manifest.files.put("stageTimings", "validation/export_stage_timings.json");
         manifest.files.put("stageCheckpoint", "validation/stage_checkpoint.json");
         manifest.files.put("stageChecksums", "validation/stage_checksums.json");
