@@ -8,18 +8,22 @@ import com.google.gson.JsonObject;
 import com.google.gson.JsonParser;
 import net.minecraft.util.EnumChatFormatting;
 
+import java.io.BufferedReader;
 import java.io.File;
 import java.io.FileInputStream;
 import java.io.FileOutputStream;
 import java.io.InputStreamReader;
 import java.io.OutputStreamWriter;
 import java.nio.charset.StandardCharsets;
+import java.text.SimpleDateFormat;
 import java.util.ArrayList;
+import java.util.Date;
 import java.util.HashSet;
 import java.util.List;
 import java.util.Locale;
 import java.util.Map;
 import java.util.Set;
+import java.util.regex.Pattern;
 
 /** Writes a lightweight post-export integrity summary without changing exported data contracts. */
 final class ExportValidationReportWriter {
@@ -169,8 +173,157 @@ final class ExportValidationReportWriter {
             report.warnings.add("Browser layout items missing atlas coverage: "
                     + report.browserAtlasLayoutMissingItems);
         }
+        if (report.exportPathHygieneViolations > 0) {
+            report.warnings.add("Runtime export payloads contain machine-specific paths: "
+                    + report.exportPathHygieneViolations);
+        }
     }
 
+    private static final PathHygieneRule[] PATH_HYGIENE_RULES = new PathHygieneRule[] {
+            new PathHygieneRule("windows-backslash-absolute", Pattern.compile("(^|[\\s\\\"'`([{:=,])[A-Za-z]:\\\\[A-Za-z0-9._ -]")),
+            new PathHygieneRule("windows-slash-absolute", Pattern.compile("(^|[\\s\\\"'`([{:=,])[A-Za-z]:/[A-Za-z0-9._ -]")),
+            new PathHygieneRule("minecraft-version-path", Pattern.compile("\\.minecraft[\\\\/]versions", Pattern.CASE_INSENSITIVE)),
+            new PathHygieneRule("local-gtnh-path", Pattern.compile("[A-Za-z]:[\\\\/]GTNH", Pattern.CASE_INSENSITIVE)),
+            new PathHygieneRule("local-codex-path", Pattern.compile("[A-Za-z]:[\\\\/]codex", Pattern.CASE_INSENSITIVE)),
+            new PathHygieneRule("linux-home-absolute", Pattern.compile("(^|[\\s\\\"'`([{:=,])/(?:home|Users|mnt|opt|srv)/"))
+    };
+
+    private static void inspectExportPathHygiene(File repositoryDirectory, ValidationReport report) {
+        List<File> files = new ArrayList<File>();
+        collectRuntimeJsonFiles(new File(repositoryDirectory, "manifest.json"), files);
+        collectRuntimeJsonFiles(new File(repositoryDirectory, "canonical"), files);
+        collectRuntimeJsonFiles(new File(repositoryDirectory, "facts"), files);
+        collectRuntimeJsonFiles(new File(repositoryDirectory, "assets"), files);
+        collectRuntimeJsonFiles(new File(repositoryDirectory, "special"), files);
+        collectRuntimeJsonFiles(new File(repositoryDirectory, "models"), files);
+        collectRuntimeJsonFiles(new File(repositoryDirectory, "raw-export" + File.separator + "manifest.json"), files);
+        report.exportPathHygieneAuditedFiles = files.size();
+        for (File file : files) {
+            inspectExportPathHygieneFile(repositoryDirectory, file, report);
+        }
+        report.exportPathHygieneStatus = report.exportPathHygieneViolations == 0 ? "ok" : "failed";
+        if (report.exportPathHygieneViolations > 0) {
+            writePathHygieneErrors(repositoryDirectory, report);
+        }
+    }
+
+    private static void collectRuntimeJsonFiles(File file, List<File> files) {
+        if (file == null || !file.exists() || isDiagnosticPath(file)) {
+            return;
+        }
+        if (file.isFile()) {
+            String name = file.getName().toLowerCase(Locale.ROOT);
+            if (name.endsWith(".json") || name.endsWith(".jsonl")) {
+                files.add(file);
+            }
+            return;
+        }
+        File[] children = file.listFiles();
+        if (children == null) {
+            return;
+        }
+        for (File child : children) {
+            collectRuntimeJsonFiles(child, files);
+        }
+    }
+
+    private static boolean isDiagnosticPath(File file) {
+        String normalized = file.getPath().replace(File.separatorChar, '/').toLowerCase(Locale.ROOT);
+        return normalized.contains("/validation/")
+                || normalized.contains("/diagnostic")
+                || normalized.contains("/logs/")
+                || normalized.endsWith("report.json")
+                || normalized.endsWith("report.jsonl")
+                || normalized.endsWith("log.json")
+                || normalized.endsWith("log.jsonl");
+    }
+
+    private static void inspectExportPathHygieneFile(
+            File repositoryDirectory,
+            File file,
+            ValidationReport report) {
+        try (FileInputStream fis = new FileInputStream(file);
+             InputStreamReader input = new InputStreamReader(fis, StandardCharsets.UTF_8);
+             BufferedReader reader = new BufferedReader(input)) {
+            String line;
+            int lineNumber = 0;
+            while ((line = reader.readLine()) != null) {
+                lineNumber++;
+                for (PathHygieneRule rule : PATH_HYGIENE_RULES) {
+                    if (rule.pattern.matcher(line).find()) {
+                        report.exportPathHygieneViolations++;
+                        addPathHygieneSample(
+                                report,
+                                relativize(repositoryDirectory, file),
+                                lineNumber,
+                                rule.name,
+                                line);
+                    }
+                }
+            }
+        } catch (Exception e) {
+            Logger.MOD.warn("Failed to inspect export path hygiene for {}", file.getAbsolutePath(), e);
+        }
+    }
+
+    private static void addPathHygieneSample(
+            ValidationReport report,
+            String file,
+            int line,
+            String rule,
+            String text) {
+        if (report.exportPathHygieneSamples.size() >= 100) {
+            return;
+        }
+        PathHygieneSample sample = new PathHygieneSample();
+        sample.file = file;
+        sample.line = line;
+        sample.rule = rule;
+        sample.text = text == null ? "" : text.trim().replaceAll("\\s+", " ");
+        if (sample.text.length() > 240) {
+            sample.text = sample.text.substring(0, 240);
+        }
+        report.exportPathHygieneSamples.add(sample);
+    }
+
+    private static void writePathHygieneErrors(File repositoryDirectory, ValidationReport report) {
+        File validationDirectory = new File(repositoryDirectory, "validation");
+        if (!validationDirectory.exists() && !validationDirectory.mkdirs()) {
+            Logger.MOD.warn("Failed to create NESQL validation directory: {}", validationDirectory.getAbsolutePath());
+            return;
+        }
+        File errorsFile = new File(validationDirectory, "errors.jsonl");
+        try (FileOutputStream fos = new FileOutputStream(errorsFile, true);
+             OutputStreamWriter writer = new OutputStreamWriter(fos, StandardCharsets.UTF_8)) {
+            Gson gson = new GsonBuilder().disableHtmlEscaping().create();
+            for (PathHygieneSample sample : report.exportPathHygieneSamples) {
+                JsonObject entry = new JsonObject();
+                entry.addProperty("schemaVersion", "nesqlpp/export-error/v1");
+                entry.addProperty("generatedAt", new SimpleDateFormat("yyyy-MM-dd'T'HH:mm:ss.SSSZ").format(new Date()));
+                entry.addProperty("stage", "VALIDATION");
+                entry.addProperty("code", "export-path-hygiene");
+                entry.addProperty("message", "Runtime export payload contains a machine-specific path");
+                entry.addProperty("file", sample.file);
+                entry.addProperty("line", sample.line);
+                entry.addProperty("rule", sample.rule);
+                writer.write(gson.toJson(entry));
+                writer.write('\n');
+            }
+        } catch (Exception e) {
+            Logger.MOD.warn("Failed to write export path hygiene diagnostics", e);
+        }
+    }
+
+    private static String relativize(File root, File file) {
+        try {
+            return root.toPath().toAbsolutePath().normalize()
+                    .relativize(file.toPath().toAbsolutePath().normalize())
+                    .toString()
+                    .replace(File.separatorChar, '/');
+        } catch (Exception ignored) {
+            return file.getName();
+        }
+    }
     private static void inspectBrowserAtlasCoverage(File canonicalDir, ValidationReport report) {
         File browserAtlasFile = new File(canonicalDir, "browser-atlas-index.json");
         File browserLayoutFile = new File(canonicalDir, "browser-layout-index.json");
@@ -608,9 +761,30 @@ final class ExportValidationReportWriter {
         int animatedSingularityLikeRenderAssets;
         int suspiciousStaticSingularityAssets;
         List<String> suspiciousStaticSingularitySamples = new ArrayList<String>();
+        String exportPathHygieneStatus = "unknown";
+        int exportPathHygieneAuditedFiles;
+        int exportPathHygieneViolations;
+        List<PathHygieneSample> exportPathHygieneSamples = new ArrayList<PathHygieneSample>();
         PreviousSnapshot previous;
         DeltaSnapshot delta;
         List<String> warnings = new ArrayList<String>();
+    }
+
+    private static final class PathHygieneRule {
+        final String name;
+        final Pattern pattern;
+
+        PathHygieneRule(String name, Pattern pattern) {
+            this.name = name;
+            this.pattern = pattern;
+        }
+    }
+
+    private static final class PathHygieneSample {
+        String file;
+        int line;
+        String rule;
+        String text;
     }
 
     private static final class RenderAssetManifest {
