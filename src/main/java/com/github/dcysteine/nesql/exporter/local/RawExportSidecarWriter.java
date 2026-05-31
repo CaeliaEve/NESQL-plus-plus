@@ -607,6 +607,7 @@ public final class RawExportSidecarWriter {
             addDomainFacts(facts, domainId, recipe);
             if (facts.entrySet().size() > 0) {
                 payload.add("facts", facts);
+                payload.add("domainFacts", cloneJson(facts));
             }
 
             JsonElement metadata = elementAt(recipe, "metadata");
