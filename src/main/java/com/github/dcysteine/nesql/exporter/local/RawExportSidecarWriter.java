@@ -38,6 +38,7 @@ import java.util.List;
 import java.util.Map;
 import java.util.Set;
 import java.util.TimeZone;
+import java.util.zip.GZIPOutputStream;
 
 /**
  * Writes the first raw-export sidecar without replacing the current canonical
@@ -76,6 +77,7 @@ public final class RawExportSidecarWriter {
     public void export() throws IOException {
         File rawDir = new File(repositoryDirectory, OUTPUT_DIRECTORY);
         ensureDirectory(rawDir);
+        purgeLegacyRawExportOutputs(rawDir);
 
         RawFactCounts factCounts = writeRawFactStreams(rawDir);
 
@@ -95,6 +97,7 @@ public final class RawExportSidecarWriter {
         writeJson(gson, new File(rawDir, "manifest.json"), manifest);
         writeJson(gson, new File(rawDir, "export_report.json"), report);
         writeJson(gson, new File(rawDir, "validation/export_report.json"), report);
+        writeSizeReport(gson, rawDir);
         createEmptyJsonlIfMissing(new File(rawDir, "validation/errors.jsonl"));
 
         Logger.chatMessage(EnumChatFormatting.GREEN + "Raw-export sidecar written:");
@@ -137,28 +140,27 @@ public final class RawExportSidecarWriter {
         manifest.repositoryName = exportContext.paths.repositoryName;
         manifest.profile = exportContext.profile.profileId;
         manifest.selection = exportContext.selection.describe();
-        manifest.status = "sidecar-alpha";
-        manifest.notes.add("Canonical export remains authoritative in this phase.");
-        manifest.notes.add("JSONL files are present as stable compiler targets and will be populated incrementally.");
+        manifest.status = "raw-export-authoritative";
+        manifest.notes.add("Raw-export is the authoritative compiler input.");
+        manifest.notes.add("Large fact streams are gzip-compressed JSONL and recipes are stored only as handler shards.");
         manifest.capabilities.add("facts");
         manifest.capabilities.add("assets");
         manifest.capabilities.add("models");
         manifest.capabilities.add("validation");
         manifest.capabilities.add("special");
-        manifest.files.put("items", "facts/items.jsonl");
-        manifest.files.put("fluids", "facts/fluids.jsonl");
-        manifest.files.put("recipes", "facts/recipes/all.jsonl");
+        manifest.files.put("items", "facts/items.jsonl.gz");
+        manifest.files.put("fluids", "facts/fluids.jsonl.gz");
         manifest.files.put("recipeIndex", "facts/recipes/index.json");
-        manifest.files.put("groups", "facts/nei/groups.jsonl");
-        manifest.files.put("neiOrder", "facts/nei/order.jsonl");
-        manifest.files.put("textures", "assets/textures/index.jsonl");
-        manifest.files.put("animations", "assets/animations/index.jsonl");
-        manifest.files.put("nativeSprites", "assets/animations/native-sprites.jsonl");
-        manifest.files.put("renderedGifs", "assets/animations/rendered-gifs.jsonl");
+        manifest.files.put("groups", "facts/nei/groups.jsonl.gz");
+        manifest.files.put("neiOrder", "facts/nei/order.jsonl.gz");
+        manifest.files.put("textures", "assets/textures/index.jsonl.gz");
+        manifest.files.put("animations", "assets/animations/index.jsonl.gz");
+        manifest.files.put("nativeSprites", "assets/animations/native-sprites.jsonl.gz");
+        manifest.files.put("renderedGifs", "assets/animations/rendered-gifs.jsonl.gz");
         manifest.files.put("browserAtlasIndex", "assets/textures/browser_atlas_index.json");
-        manifest.files.put("neiHandlers", "facts/nei/handlers.jsonl");
-        manifest.files.put("multiblocks", "models/multiblocks/index.jsonl");
-        manifest.files.put("entities", "models/entities/index.jsonl");
+        manifest.files.put("neiHandlers", "facts/nei/handlers.jsonl.gz");
+        manifest.files.put("multiblocks", "models/multiblocks/index.jsonl.gz");
+        manifest.files.put("entities", "models/entities/index.jsonl.gz");
         manifest.files.put("specialIndex", "special/index.json");
         manifest.files.put("exportReport", "validation/export_report.json");
         manifest.files.put("errors", "validation/errors.jsonl");
@@ -167,17 +169,7 @@ public final class RawExportSidecarWriter {
         manifest.files.put("stageTimings", "validation/export_stage_timings.json");
         manifest.files.put("stageCheckpoint", "validation/stage_checkpoint.json");
         manifest.files.put("stageChecksums", "validation/stage_checksums.json");
-        manifest.files.put("canonicalRepository", "../canonical/repository.json");
-        manifest.compatibilityFiles.add(fileRef("items", "items.jsonl", "compat-jsonl"));
-        manifest.compatibilityFiles.add(fileRef("fluids", "fluids.jsonl", "compat-jsonl"));
-        manifest.compatibilityFiles.add(fileRef("recipes", "recipes.jsonl", "compat-jsonl"));
-        manifest.compatibilityFiles.add(fileRef("groups", "groups.jsonl", "compat-jsonl"));
-        manifest.compatibilityFiles.add(fileRef("nei-order", "nei_order.jsonl", "compat-jsonl"));
-        manifest.compatibilityFiles.add(fileRef("textures", "textures.jsonl", "compat-jsonl"));
-        manifest.compatibilityFiles.add(fileRef("animations", "animations.jsonl", "compat-jsonl"));
-        manifest.compatibilityFiles.add(fileRef("native-sprites", "native_sprites.jsonl", "compat-jsonl"));
-        manifest.compatibilityFiles.add(fileRef("rendered-gifs", "rendered_gifs.jsonl", "compat-jsonl"));
-        manifest.compatibilityFiles.add(fileRef("browser-atlas-index", "browser_atlas_index.json", "compat-json"));
+        manifest.files.put("sizeReport", "validation/size_report.json");
         manifest.counts = report.counts;
         return manifest;
     }
@@ -299,16 +291,12 @@ public final class RawExportSidecarWriter {
         if (browserLayout != null) {
             JsonArray groups = browserLayout.getAsJsonArray("groups");
             JsonArray order = browserLayout.getAsJsonArray("defaultEntries");
-            counts.groups = writeArrayAsJsonl(groups, new File(rawDir, "facts/nei/groups.jsonl"));
+            counts.groups = writeArrayAsJsonl(groups, new File(rawDir, "facts/nei/groups.jsonl.gz"));
             counts.neiOrderEntries =
-                    writeArrayAsJsonl(order, new File(rawDir, "facts/nei/order.jsonl"));
-            writeArrayAsJsonl(groups, new File(rawDir, "groups.jsonl"));
-            writeArrayAsJsonl(order, new File(rawDir, "nei_order.jsonl"));
+                    writeArrayAsJsonl(order, new File(rawDir, "facts/nei/order.jsonl.gz"));
         } else {
-            createEmptyJsonl(new File(rawDir, "groups.jsonl"));
-            createEmptyJsonl(new File(rawDir, "nei_order.jsonl"));
-            createEmptyJsonl(new File(rawDir, "facts/nei/groups.jsonl"));
-            createEmptyJsonl(new File(rawDir, "facts/nei/order.jsonl"));
+            createEmptyJsonl(new File(rawDir, "facts/nei/groups.jsonl.gz"));
+            createEmptyJsonl(new File(rawDir, "facts/nei/order.jsonl.gz"));
         }
 
         JsonArray textureRows = new JsonArray();
@@ -331,7 +319,7 @@ public final class RawExportSidecarWriter {
             JsonObject renderManifest = readObject(new File(repositoryDirectory, "canonical/render-assets.json"));
             if (renderManifest != null && renderManifest.has("assets") && renderManifest.get("assets").isJsonArray()) {
                 JsonArray assets = renderManifest.getAsJsonArray("assets");
-                counts.textures = writeArrayAsJsonl(assets, new File(rawDir, "assets/textures/index.jsonl"));
+                counts.textures = writeArrayAsJsonl(assets, new File(rawDir, "assets/textures/index.jsonl.gz"));
                 JsonArray animated = new JsonArray();
                 JsonArray nativeSprites = new JsonArray();
                 JsonArray renderedGifs = new JsonArray();
@@ -346,44 +334,27 @@ public final class RawExportSidecarWriter {
                         }
                     }
                 }
-                counts.animations = writeArrayAsJsonl(animated, new File(rawDir, "assets/animations/index.jsonl"));
-                writeArrayAsJsonl(nativeSprites, new File(rawDir, "assets/animations/native-sprites.jsonl"));
-                writeArrayAsJsonl(renderedGifs, new File(rawDir, "assets/animations/rendered-gifs.jsonl"));
-                writeArrayAsJsonl(assets, new File(rawDir, "textures.jsonl"));
-                writeArrayAsJsonl(animated, new File(rawDir, "animations.jsonl"));
-                writeArrayAsJsonl(nativeSprites, new File(rawDir, "native_sprites.jsonl"));
-                writeArrayAsJsonl(renderedGifs, new File(rawDir, "rendered_gifs.jsonl"));
+                counts.animations = writeArrayAsJsonl(animated, new File(rawDir, "assets/animations/index.jsonl.gz"));
+                writeArrayAsJsonl(nativeSprites, new File(rawDir, "assets/animations/native-sprites.jsonl.gz"));
+                writeArrayAsJsonl(renderedGifs, new File(rawDir, "assets/animations/rendered-gifs.jsonl.gz"));
             } else {
-                createEmptyJsonl(new File(rawDir, "textures.jsonl"));
-                createEmptyJsonl(new File(rawDir, "animations.jsonl"));
-                createEmptyJsonl(new File(rawDir, "native_sprites.jsonl"));
-                createEmptyJsonl(new File(rawDir, "rendered_gifs.jsonl"));
-                createEmptyJsonl(new File(rawDir, "assets/textures/index.jsonl"));
-                createEmptyJsonl(new File(rawDir, "assets/animations/index.jsonl"));
-                createEmptyJsonl(new File(rawDir, "assets/animations/native-sprites.jsonl"));
-                createEmptyJsonl(new File(rawDir, "assets/animations/rendered-gifs.jsonl"));
+                createEmptyJsonl(new File(rawDir, "assets/textures/index.jsonl.gz"));
+                createEmptyJsonl(new File(rawDir, "assets/animations/index.jsonl.gz"));
+                createEmptyJsonl(new File(rawDir, "assets/animations/native-sprites.jsonl.gz"));
+                createEmptyJsonl(new File(rawDir, "assets/animations/rendered-gifs.jsonl.gz"));
             }
         } else {
-            counts.textures = writeArrayAsJsonl(textureRows, new File(rawDir, "assets/textures/index.jsonl"));
-            counts.animations = writeArrayAsJsonl(animationRows, new File(rawDir, "assets/animations/index.jsonl"));
-            writeArrayAsJsonl(nativeSpriteRows, new File(rawDir, "assets/animations/native-sprites.jsonl"));
-            writeArrayAsJsonl(renderedGifRows, new File(rawDir, "assets/animations/rendered-gifs.jsonl"));
-            writeArrayAsJsonl(textureRows, new File(rawDir, "textures.jsonl"));
-            writeArrayAsJsonl(animationRows, new File(rawDir, "animations.jsonl"));
-            writeArrayAsJsonl(nativeSpriteRows, new File(rawDir, "native_sprites.jsonl"));
-            writeArrayAsJsonl(renderedGifRows, new File(rawDir, "rendered_gifs.jsonl"));
+            counts.textures = writeArrayAsJsonl(textureRows, new File(rawDir, "assets/textures/index.jsonl.gz"));
+            counts.animations = writeArrayAsJsonl(animationRows, new File(rawDir, "assets/animations/index.jsonl.gz"));
+            writeArrayAsJsonl(nativeSpriteRows, new File(rawDir, "assets/animations/native-sprites.jsonl.gz"));
+            writeArrayAsJsonl(renderedGifRows, new File(rawDir, "assets/animations/rendered-gifs.jsonl.gz"));
         }
-        copyIfPresent(
-                new File(repositoryDirectory, "canonical/browser-atlas-index.json"),
-                new File(rawDir, "browser_atlas_index.json"));
         copyIfPresent(
                 new File(repositoryDirectory, "canonical/browser-atlas-index.json"),
                 new File(rawDir, "assets/textures/browser_atlas_index.json"));
 
-        createEmptyJsonl(new File(rawDir, "nei_handlers.jsonl"));
-        createEmptyJsonl(new File(rawDir, "multiblocks.jsonl"));
-        createEmptyJsonl(new File(rawDir, "facts/nei/handlers.jsonl"));
-        createEmptyJsonl(new File(rawDir, "models/multiblocks/index.jsonl"));
+        createEmptyJsonl(new File(rawDir, "facts/nei/handlers.jsonl.gz"));
+        createEmptyJsonl(new File(rawDir, "models/multiblocks/index.jsonl.gz"));
         counts.entities = writeEntityModelIndex(rawDir);
         return counts;
     }
@@ -444,8 +415,7 @@ public final class RawExportSidecarWriter {
             row.addProperty("schemaVersion", SCHEMA_VERSION + "/entity-model");
             rows.add(row);
         }
-        writeArrayAsJsonl(rows, new File(rawDir, "entities.jsonl"));
-        return writeArrayAsJsonl(rows, new File(rawDir, "models/entities/index.jsonl"));
+        return writeArrayAsJsonl(rows, new File(rawDir, "models/entities/index.jsonl.gz"));
     }
 
     private static JsonObject entityRow(Map<String, JsonObject> rows, String mobName) {
@@ -457,179 +427,6 @@ public final class RawExportSidecarWriter {
             rows.put(mobName, row);
         }
         return row;
-    }
-
-    private static void writeRecipeIndex(File rawDir, JsonArray recipes) throws IOException {
-        Map<String, JsonArray> byHandler = new LinkedHashMap<String, JsonArray>();
-        if (recipes != null) {
-            for (JsonElement element : recipes) {
-                String handlerId = inferRecipeHandlerId(element);
-                JsonArray bucket = byHandler.get(handlerId);
-                if (bucket == null) {
-                    bucket = new JsonArray();
-                    byHandler.put(handlerId, bucket);
-                }
-                bucket.add(element);
-            }
-        }
-
-        File shardDir = new File(rawDir, "facts/recipes/by-handler");
-        ensureDirectory(shardDir);
-        JsonArray shards = new JsonArray();
-        Set<String> usedFileNames = new LinkedHashSet<String>();
-        for (Map.Entry<String, JsonArray> entry : byHandler.entrySet()) {
-            String handlerId = entry.getKey();
-            String fileName = uniqueShardFileName(handlerId, usedFileNames);
-            String path = "facts/recipes/by-handler/" + fileName;
-            writeArrayAsJsonl(entry.getValue(), new File(rawDir, path));
-
-            JsonObject shard = new JsonObject();
-            shard.addProperty("handlerId", handlerId);
-            shard.addProperty("path", path);
-            shard.addProperty("recipeCount", entry.getValue().size());
-            shards.add(shard);
-        }
-
-        JsonObject allShard = new JsonObject();
-        allShard.addProperty("handlerId", "all");
-        allShard.addProperty("path", "facts/recipes/all.jsonl");
-        allShard.addProperty("recipeCount", recipes == null ? 0 : recipes.size());
-
-        JsonObject index = new JsonObject();
-        index.addProperty("schemaVersion", SCHEMA_VERSION + "/recipe-index");
-        index.addProperty("strategy", "by-handler");
-        index.addProperty("recipeCount", recipes == null ? 0 : recipes.size());
-        index.addProperty("shardCount", shards.size());
-        index.add("shards", shards);
-        index.add("compatibilityShard", allShard);
-        writeJson(new GsonBuilder().setPrettyPrinting().serializeNulls().create(), new File(rawDir, "facts/recipes/index.json"), index);
-    }
-
-
-    private static void writeSpecialIndexes(File rawDir, JsonArray recipes) throws IOException {
-        String[][] domains = specialDomainSpecs();
-
-        Map<String, JsonArray> buckets = new LinkedHashMap<String, JsonArray>();
-        for (String[] domain : domains) {
-            buckets.put(domain[0], new JsonArray());
-        }
-
-        if (recipes != null) {
-            for (JsonElement element : recipes) {
-                String descriptor = recipeDescriptor(element);
-                for (String[] domain : domains) {
-                    if (matchesAny(descriptor, domain[1])) {
-                        buckets.get(domain[0]).add(element);
-                    }
-                }
-            }
-        }
-
-        Gson gson = new GsonBuilder().setPrettyPrinting().serializeNulls().create();
-        JsonArray domainIndex = new JsonArray();
-        for (String[] domain : domains) {
-            String domainId = domain[0];
-            JsonArray bucket = buckets.get(domainId);
-            File domainDir = new File(rawDir, "special/" + domainId);
-            ensureDirectory(domainDir);
-            writeArrayAsJsonl(bucket, new File(domainDir, "recipes.jsonl"));
-            JsonArray payloads = buildSpecialDomainPayloads(domainId, bucket);
-            writeArrayAsJsonl(payloads, new File(domainDir, "payloads.jsonl"));
-
-            JsonObject summary = buildSpecialDomainSummary(domainId, bucket);
-            JsonObject index = new JsonObject();
-            index.addProperty("schemaVersion", SCHEMA_VERSION + "/special-domain");
-            index.addProperty("domain", domainId);
-            index.addProperty("recipeCount", bucket.size());
-            index.addProperty("payloadCount", payloads.size());
-            index.addProperty("recipes", "special/" + domainId + "/recipes.jsonl");
-            index.addProperty("payloads", "special/" + domainId + "/payloads.jsonl");
-            index.addProperty("summary", "special/" + domainId + "/summary.json");
-            index.add("stats", summary);
-            writeJson(gson, new File(domainDir, "index.json"), index);
-            writeJson(gson, new File(domainDir, "summary.json"), summary);
-
-            JsonObject entry = new JsonObject();
-            entry.addProperty("domain", domainId);
-            entry.addProperty("recipeCount", bucket.size());
-            entry.addProperty("payloadCount", payloads.size());
-            entry.addProperty("index", "special/" + domainId + "/index.json");
-            entry.addProperty("recipes", "special/" + domainId + "/recipes.jsonl");
-            entry.addProperty("payloads", "special/" + domainId + "/payloads.jsonl");
-            entry.addProperty("summary", "special/" + domainId + "/summary.json");
-            entry.add("stats", summary);
-            domainIndex.add(entry);
-        }
-
-        JsonObject root = new JsonObject();
-        root.addProperty("schemaVersion", SCHEMA_VERSION + "/special-index");
-        root.add("domains", domainIndex);
-        writeJson(gson, new File(rawDir, "special/index.json"), root);
-    }
-
-
-    private static JsonArray buildSpecialDomainPayloads(String domainId, JsonArray recipes) {
-        JsonArray payloads = new JsonArray();
-        if (recipes == null) {
-            return payloads;
-        }
-
-        int ordinal = 0;
-        for (JsonElement element : recipes) {
-            if (element == null || !element.isJsonObject()) {
-                continue;
-            }
-            JsonObject recipe = element.getAsJsonObject();
-            JsonObject payload = new JsonObject();
-            payload.addProperty("domain", domainId);
-            payload.addProperty("ordinal", ordinal++);
-            copyString(payload, "recipeId", recipe, "recipeId");
-            copyString(payload, "family", recipe, "family");
-            copyString(payload, "sourcePlugin", recipe, "sourcePlugin");
-            copyString(payload, "sourceMod", recipe, "sourceMod");
-            copyString(payload, "recipeType", recipe, "recipeType");
-            copyString(payload, "displayName", recipe, "displayName");
-            copyString(payload, "handlerId", recipe, "metadata.handlerId");
-            copyString(payload, "handlerName", recipe, "metadata.handlerName");
-            copyString(payload, "handlerClass", recipe, "metadata.handlerClass");
-            copyString(payload, "machineId", recipe, "machine.machineId");
-            copyString(payload, "machineName", recipe, "machine.displayName");
-            copyString(payload, "layoutClass", recipe, "layout.layoutClass");
-
-            copyElement(payload, "machine", recipe, "machine");
-            copyElement(payload, "layout", recipe, "layout");
-            copyElement(payload, "itemInputs", recipe, "itemInputs");
-            copyElement(payload, "itemOutputs", recipe, "itemOutputs");
-            copyElement(payload, "fluidInputs", recipe, "fluidInputs");
-            copyElement(payload, "fluidOutputs", recipe, "fluidOutputs");
-            copyElement(payload, "probabilities", recipe, "probabilities");
-            copyElement(payload, "renderHints", recipe, "renderHints");
-            copyElement(payload, "extensions", recipe, "extensions");
-
-            JsonObject slotStats = buildSpecialSlotStats(recipe);
-            if (slotStats.entrySet().size() > 0) {
-                payload.add("slotStats", slotStats);
-            }
-
-            JsonObject primaryRefs = buildSpecialPrimaryRefs(recipe);
-            if (primaryRefs.entrySet().size() > 0) {
-                payload.add("primaryRefs", primaryRefs);
-            }
-
-            JsonObject facts = new JsonObject();
-            addDomainFacts(facts, domainId, recipe);
-            if (facts.entrySet().size() > 0) {
-                payload.add("facts", facts);
-                payload.add("domainFacts", cloneJson(facts));
-            }
-
-            JsonElement metadata = elementAt(recipe, "metadata");
-            if (metadata != null && metadata.isJsonObject()) {
-                payload.add("metadata", cloneJson(metadata));
-            }
-            payloads.add(payload);
-        }
-        return payloads;
     }
 
     private static JsonObject buildSpecialSlotStats(JsonObject recipe) {
@@ -985,10 +782,10 @@ public final class RawExportSidecarWriter {
 
     private static String uniqueShardFileName(String handlerId, Set<String> usedFileNames) {
         String base = safeShardFileName(handlerId);
-        String candidate = base + ".jsonl";
+        String candidate = base + ".jsonl.gz";
         int suffix = 2;
         while (usedFileNames.contains(candidate)) {
-            candidate = base + "-" + suffix + ".jsonl";
+            candidate = base + "-" + suffix + ".jsonl.gz";
             suffix++;
         }
         usedFileNames.add(candidate);
@@ -1111,8 +908,7 @@ public final class RawExportSidecarWriter {
         if (parent != null) {
             ensureDirectory(parent);
         }
-        try (FileOutputStream fos = new FileOutputStream(out);
-             OutputStreamWriter writer = new OutputStreamWriter(fos, StandardCharsets.UTF_8)) {
+        try (OutputStreamWriter writer = createUtf8Writer(out)) {
             if (array != null) {
                 for (JsonElement element : array) {
                     gson.toJson(element, writer);
@@ -1135,12 +931,8 @@ public final class RawExportSidecarWriter {
     }
 
     private RepositoryStreamResult streamDatabaseRepositoryFacts(File rawDir) throws IOException {
-        createEmptyJsonl(new File(rawDir, "items.jsonl"));
-        createEmptyJsonl(new File(rawDir, "fluids.jsonl"));
-        createEmptyJsonl(new File(rawDir, "recipes.jsonl"));
-        createEmptyJsonl(new File(rawDir, "facts/items.jsonl"));
-        createEmptyJsonl(new File(rawDir, "facts/fluids.jsonl"));
-        createEmptyJsonl(new File(rawDir, "facts/recipes/all.jsonl"));
+        createEmptyJsonl(new File(rawDir, "facts/items.jsonl.gz"));
+        createEmptyJsonl(new File(rawDir, "facts/fluids.jsonl.gz"));
 
         RepositoryStreamResult result = new RepositoryStreamResult();
         Gson gson = new GsonBuilder().serializeNulls().create();
@@ -1148,25 +940,15 @@ public final class RawExportSidecarWriter {
         Set<String> usedShardFileNames = new LinkedHashSet<String>();
         Map<String, SpecialDomainStreamState> domains = createSpecialDomainStreamStates(rawDir);
         JsonlWriter itemFacts = null;
-        JsonlWriter itemCompat = null;
         JsonlWriter fluidFacts = null;
-        JsonlWriter fluidCompat = null;
-        JsonlWriter recipeFacts = null;
-        JsonlWriter recipeCompat = null;
         try {
-            itemFacts = new JsonlWriter(new File(rawDir, "facts/items.jsonl"), gson);
-            itemCompat = new JsonlWriter(new File(rawDir, "items.jsonl"), gson);
-            fluidFacts = new JsonlWriter(new File(rawDir, "facts/fluids.jsonl"), gson);
-            fluidCompat = new JsonlWriter(new File(rawDir, "fluids.jsonl"), gson);
-            recipeFacts = new JsonlWriter(new File(rawDir, "facts/recipes/all.jsonl"), gson);
-            recipeCompat = new JsonlWriter(new File(rawDir, "recipes.jsonl"), gson);
+            itemFacts = new JsonlWriter(new File(rawDir, "facts/items.jsonl.gz"), gson);
+            fluidFacts = new JsonlWriter(new File(rawDir, "facts/fluids.jsonl.gz"), gson);
 
-            result.items = streamDatabaseItems(itemFacts, itemCompat, gson);
-            result.fluids = streamDatabaseFluids(fluidFacts, fluidCompat, gson);
+            result.items = streamDatabaseItems(itemFacts, gson);
+            result.fluids = streamDatabaseFluids(fluidFacts, gson);
             result.recipes =
                     streamDatabaseRecipes(
-                            recipeFacts,
-                            recipeCompat,
                             shards,
                             usedShardFileNames,
                             domains,
@@ -1174,16 +956,11 @@ public final class RawExportSidecarWriter {
                             gson);
         } finally {
             closeQuietly(itemFacts);
-            closeQuietly(itemCompat);
             closeQuietly(fluidFacts);
-            closeQuietly(fluidCompat);
-            closeQuietly(recipeFacts);
-            closeQuietly(recipeCompat);
             for (RecipeShardState shard : shards.values()) {
                 closeQuietly(shard.writer);
             }
             for (SpecialDomainStreamState domain : domains.values()) {
-                closeQuietly(domain.recipeWriter);
                 closeQuietly(domain.payloadWriter);
             }
         }
@@ -1193,7 +970,7 @@ public final class RawExportSidecarWriter {
         return result;
     }
 
-    private long streamDatabaseItems(JsonlWriter primary, JsonlWriter compatibility, Gson gson) throws IOException {
+    private long streamDatabaseItems(JsonlWriter primary, Gson gson) throws IOException {
         long written = 0L;
         int offset = 0;
         while (true) {
@@ -1211,7 +988,6 @@ public final class RawExportSidecarWriter {
                 CanonicalItem mapped = CanonicalExportMapper.mapItem(item);
                 JsonElement element = gson.toJsonTree(mapped, CanonicalItem.class);
                 primary.write(element);
-                compatibility.write(element);
                 written++;
             }
             offset += items.size();
@@ -1220,7 +996,7 @@ public final class RawExportSidecarWriter {
         return written;
     }
 
-    private long streamDatabaseFluids(JsonlWriter primary, JsonlWriter compatibility, Gson gson) throws IOException {
+    private long streamDatabaseFluids(JsonlWriter primary, Gson gson) throws IOException {
         long written = 0L;
         int offset = 0;
         while (true) {
@@ -1238,7 +1014,6 @@ public final class RawExportSidecarWriter {
                 CanonicalFluid mapped = CanonicalExportMapper.mapFluid(fluid);
                 JsonElement element = gson.toJsonTree(mapped, CanonicalFluid.class);
                 primary.write(element);
-                compatibility.write(element);
                 written++;
             }
             offset += fluids.size();
@@ -1248,8 +1023,6 @@ public final class RawExportSidecarWriter {
     }
 
     private long streamDatabaseRecipes(
-            JsonlWriter allRecipes,
-            JsonlWriter compatibilityRecipes,
             Map<String, RecipeShardState> shards,
             Set<String> usedShardFileNames,
             Map<String, SpecialDomainStreamState> domains,
@@ -1272,7 +1045,7 @@ public final class RawExportSidecarWriter {
             for (Recipe recipe : recipes) {
                 CanonicalRecipe mapped = CanonicalExportMapper.mapRecipe(recipe, gtByRecipeId.get(recipe.getId()));
                 JsonElement element = gson.toJsonTree(mapped, CanonicalRecipe.class);
-                writeRecipeElement(element, allRecipes, compatibilityRecipes, shards, usedShardFileNames, domains, rawDir, gson);
+                writeRecipeElement(element, shards, usedShardFileNames, domains, rawDir, gson);
                 written++;
             }
             offset += recipes.size();
@@ -1309,8 +1082,6 @@ public final class RawExportSidecarWriter {
 
     private static long streamRecipes(
             com.google.gson.stream.JsonReader reader,
-            JsonlWriter allRecipes,
-            JsonlWriter compatibilityRecipes,
             Map<String, RecipeShardState> shards,
             Set<String> usedShardFileNames,
             Map<String, SpecialDomainStreamState> domains,
@@ -1322,8 +1093,6 @@ public final class RawExportSidecarWriter {
             JsonElement element = gson.fromJson(reader, JsonElement.class);
             writeRecipeElement(
                     element,
-                    allRecipes,
-                    compatibilityRecipes,
                     shards,
                     usedShardFileNames,
                     domains,
@@ -1337,16 +1106,11 @@ public final class RawExportSidecarWriter {
 
     private static void writeRecipeElement(
             JsonElement element,
-            JsonlWriter allRecipes,
-            JsonlWriter compatibilityRecipes,
             Map<String, RecipeShardState> shards,
             Set<String> usedShardFileNames,
             Map<String, SpecialDomainStreamState> domains,
             File rawDir,
             Gson gson) throws IOException {
-        allRecipes.write(element);
-        compatibilityRecipes.write(element);
-
         String handlerId = inferRecipeHandlerId(element);
         RecipeShardState shard = shards.get(handlerId);
         if (shard == null) {
@@ -1363,7 +1127,6 @@ public final class RawExportSidecarWriter {
             String descriptor = recipeDescriptor(element);
             for (SpecialDomainStreamState domain : domains.values()) {
                 if (matchesAny(descriptor, domain.needles)) {
-                    domain.recipeWriter.write(element);
                     JsonObject payload = buildSpecialDomainPayload(domain.domainId, recipe, domain.payloadOrdinal++);
                     domain.payloadWriter.write(payload);
                     domain.accept(recipe);
@@ -1384,18 +1147,12 @@ public final class RawExportSidecarWriter {
             shards.add(shard);
         }
 
-        JsonObject allShard = new JsonObject();
-        allShard.addProperty("handlerId", "all");
-        allShard.addProperty("path", "facts/recipes/all.jsonl");
-        allShard.addProperty("recipeCount", recipeCount);
-
         JsonObject index = new JsonObject();
         index.addProperty("schemaVersion", SCHEMA_VERSION + "/recipe-index");
         index.addProperty("strategy", "by-handler");
         index.addProperty("recipeCount", recipeCount);
         index.addProperty("shardCount", shards.size());
         index.add("shards", shards);
-        index.add("compatibilityShard", allShard);
         writeJson(gson, new File(rawDir, "facts/recipes/index.json"), index);
     }
 
@@ -1409,8 +1166,7 @@ public final class RawExportSidecarWriter {
             index.addProperty("domain", domain.domainId);
             index.addProperty("recipeCount", domain.recipeCount);
             index.addProperty("payloadCount", domain.payloadCount);
-            index.addProperty("recipes", "special/" + domain.domainId + "/recipes.jsonl");
-            index.addProperty("payloads", "special/" + domain.domainId + "/payloads.jsonl");
+            index.addProperty("payloads", "special/" + domain.domainId + "/payloads.jsonl.gz");
             index.addProperty("summary", "special/" + domain.domainId + "/summary.json");
             index.add("stats", summary);
             File domainDir = new File(rawDir, "special/" + domain.domainId);
@@ -1422,8 +1178,7 @@ public final class RawExportSidecarWriter {
             entry.addProperty("recipeCount", domain.recipeCount);
             entry.addProperty("payloadCount", domain.payloadCount);
             entry.addProperty("index", "special/" + domain.domainId + "/index.json");
-            entry.addProperty("recipes", "special/" + domain.domainId + "/recipes.jsonl");
-            entry.addProperty("payloads", "special/" + domain.domainId + "/payloads.jsonl");
+            entry.addProperty("payloads", "special/" + domain.domainId + "/payloads.jsonl.gz");
             entry.addProperty("summary", "special/" + domain.domainId + "/summary.json");
             entry.add("stats", summary);
             domainIndex.add(entry);
@@ -1444,8 +1199,7 @@ public final class RawExportSidecarWriter {
             states.put(spec[0], new SpecialDomainStreamState(
                     spec[0],
                     spec[1],
-                    new JsonlWriter(new File(domainDir, "recipes.jsonl"), gson),
-                    new JsonlWriter(new File(domainDir, "payloads.jsonl"), gson)));
+                    new JsonlWriter(new File(domainDir, "payloads.jsonl.gz"), gson)));
         }
         return states;
     }
@@ -1478,16 +1232,6 @@ public final class RawExportSidecarWriter {
         copyString(payload, "machineName", recipe, "machine.displayName");
         copyString(payload, "layoutClass", recipe, "layout.layoutClass");
 
-        copyElement(payload, "machine", recipe, "machine");
-        copyElement(payload, "layout", recipe, "layout");
-        copyElement(payload, "itemInputs", recipe, "itemInputs");
-        copyElement(payload, "itemOutputs", recipe, "itemOutputs");
-        copyElement(payload, "fluidInputs", recipe, "fluidInputs");
-        copyElement(payload, "fluidOutputs", recipe, "fluidOutputs");
-        copyElement(payload, "probabilities", recipe, "probabilities");
-        copyElement(payload, "renderHints", recipe, "renderHints");
-        copyElement(payload, "extensions", recipe, "extensions");
-
         JsonObject slotStats = buildSpecialSlotStats(recipe);
         if (slotStats.entrySet().size() > 0) {
             payload.add("slotStats", slotStats);
@@ -1500,10 +1244,6 @@ public final class RawExportSidecarWriter {
         addDomainFacts(facts, domainId, recipe);
         if (facts.entrySet().size() > 0) {
             payload.add("domainFacts", facts);
-        }
-        JsonElement metadata = elementAt(recipe, "metadata");
-        if (metadata != null && metadata.isJsonObject()) {
-            copyElement(payload, "metadata", recipe, "metadata");
         }
         return payload;
     }
@@ -1570,7 +1310,7 @@ public final class RawExportSidecarWriter {
             if (parent != null) {
                 ensureDirectory(parent);
             }
-            this.writer = new OutputStreamWriter(new FileOutputStream(out), StandardCharsets.UTF_8);
+            this.writer = createUtf8Writer(out);
         }
 
         void write(JsonElement element) throws IOException {
@@ -1606,7 +1346,6 @@ public final class RawExportSidecarWriter {
     private static final class SpecialDomainStreamState {
         final String domainId;
         final String needles;
-        final JsonlWriter recipeWriter;
         final JsonlWriter payloadWriter;
         final Map<String, Integer> families = new LinkedHashMap<String, Integer>();
         final Map<String, Integer> recipeTypes = new LinkedHashMap<String, Integer>();
@@ -1618,10 +1357,9 @@ public final class RawExportSidecarWriter {
         long payloadCount;
         int payloadOrdinal;
 
-        SpecialDomainStreamState(String domainId, String needles, JsonlWriter recipeWriter, JsonlWriter payloadWriter) {
+        SpecialDomainStreamState(String domainId, String needles, JsonlWriter payloadWriter) {
             this.domainId = domainId;
             this.needles = needles;
-            this.recipeWriter = recipeWriter;
             this.payloadWriter = payloadWriter;
         }
 
@@ -1657,7 +1395,7 @@ public final class RawExportSidecarWriter {
         if (parent != null) {
             ensureDirectory(parent);
         }
-        try (FileOutputStream ignored = new FileOutputStream(out)) {
+        try (Writer ignored = createUtf8Writer(out)) {
             // Empty JSONL remains valid when a source is unavailable for this run.
         }
     }
@@ -1782,6 +1520,99 @@ public final class RawExportSidecarWriter {
              OutputStreamWriter writer = new OutputStreamWriter(fos, StandardCharsets.UTF_8)) {
             gson.toJson(value, writer);
         }
+    }
+
+    private static void writeSizeReport(Gson gson, File rawDir) throws IOException {
+        JsonObject report = new JsonObject();
+        report.addProperty("schemaVersion", SCHEMA_VERSION + "/size-report");
+        report.addProperty("generatedAt", utcNow());
+        report.addProperty("strategy", "raw-export-only");
+        report.addProperty("totalBytes", directorySize(rawDir));
+
+        JsonArray prohibited = new JsonArray();
+        addProhibitedFile(prohibited, rawDir, "recipes.jsonl");
+        addProhibitedFile(prohibited, rawDir, "items.jsonl");
+        addProhibitedFile(prohibited, rawDir, "fluids.jsonl");
+        addProhibitedFile(prohibited, rawDir, "entities.jsonl");
+        addProhibitedFile(prohibited, rawDir, "facts/items.jsonl");
+        addProhibitedFile(prohibited, rawDir, "facts/fluids.jsonl");
+        addProhibitedFile(prohibited, rawDir, "facts/recipes/all.jsonl");
+        addProhibitedFile(prohibited, rawDir, "special/gregtech/recipes.jsonl");
+        addProhibitedFile(prohibited, rawDir, "special/thaumcraft/recipes.jsonl");
+        addProhibitedFile(prohibited, rawDir, "special/botania/recipes.jsonl");
+        addProhibitedFile(prohibited, rawDir, "special/bloodmagic/recipes.jsonl");
+        addProhibitedFile(prohibited, rawDir, "special/forestry/recipes.jsonl");
+        addProhibitedFile(prohibited, rawDir, "special/eec/recipes.jsonl");
+        report.add("prohibitedOutputs", prohibited);
+        report.addProperty("status", prohibited.size() == 0 ? "pass" : "fail");
+        writeJson(gson, new File(rawDir, "validation/size_report.json"), report);
+    }
+
+    private static void purgeLegacyRawExportOutputs(File rawDir) throws IOException {
+        deleteIfExists(new File(rawDir, "recipes.jsonl"));
+        deleteIfExists(new File(rawDir, "items.jsonl"));
+        deleteIfExists(new File(rawDir, "fluids.jsonl"));
+        deleteIfExists(new File(rawDir, "entities.jsonl"));
+        deleteIfExists(new File(rawDir, "facts/items.jsonl"));
+        deleteIfExists(new File(rawDir, "facts/fluids.jsonl"));
+        deleteIfExists(new File(rawDir, "facts/recipes/all.jsonl"));
+        for (String[] spec : specialDomainSpecs()) {
+            deleteIfExists(new File(rawDir, "special/" + spec[0] + "/recipes.jsonl"));
+        }
+    }
+
+    private static void deleteIfExists(File file) throws IOException {
+        if (file == null || !file.exists()) {
+            return;
+        }
+        if (file.isDirectory()) {
+            File[] children = file.listFiles();
+            if (children != null) {
+                for (File child : children) {
+                    deleteIfExists(child);
+                }
+            }
+        }
+        if (!file.delete() && file.exists()) {
+            throw new IOException("Failed to delete legacy raw-export output: " + file.getAbsolutePath());
+        }
+    }
+
+    private static void addProhibitedFile(JsonArray out, File rawDir, String relativePath) {
+        File file = new File(rawDir, relativePath.replace('/', File.separatorChar));
+        if (!file.exists()) {
+            return;
+        }
+        JsonObject entry = new JsonObject();
+        entry.addProperty("path", relativePath);
+        entry.addProperty("bytes", file.isFile() ? file.length() : directorySize(file));
+        out.add(entry);
+    }
+
+    private static long directorySize(File file) {
+        if (file == null || !file.exists()) {
+            return 0L;
+        }
+        if (file.isFile()) {
+            return file.length();
+        }
+        long total = 0L;
+        File[] children = file.listFiles();
+        if (children == null) {
+            return 0L;
+        }
+        for (File child : children) {
+            total += directorySize(child);
+        }
+        return total;
+    }
+
+    private static OutputStreamWriter createUtf8Writer(File out) throws IOException {
+        FileOutputStream fos = new FileOutputStream(out);
+        if (out.getName().endsWith(".gz")) {
+            return new OutputStreamWriter(new GZIPOutputStream(fos), StandardCharsets.UTF_8);
+        }
+        return new OutputStreamWriter(fos, StandardCharsets.UTF_8);
     }
 
     private static String utcNow() {
