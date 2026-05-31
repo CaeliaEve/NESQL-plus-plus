@@ -37,12 +37,13 @@ public class ModBasedItemExporter {
         Logger.MOD.info("============================================================");
         Logger.MOD.info("=== Starting Item Export ===");
         Logger.MOD.info("============================================================");
-        Logger.chatMessage(EnumChatFormatting.AQUA + "=== Starting item export ===");
-        Logger.chatMessage(EnumChatFormatting.YELLOW + "Grouping output by mod...");
+        Logger.chatMessage(EnumChatFormatting.AQUA + "Preparation stage");
+        Logger.chatMessage(EnumChatFormatting.YELLOW + "Initializing item index...");
 
         try {
             ModBasedItemDataset dataset = ModBasedItemDatasetLoader.load(entityManager);
-            Logger.chatMessage(EnumChatFormatting.AQUA + "Found " + dataset.items.size() + " items");
+            Logger.chatMessage(EnumChatFormatting.AQUA + "Scanning NEI item index: " + dataset.items.size() + " entries");
+            Logger.chatMessage(EnumChatFormatting.YELLOW + "Building export context, please wait");
 
             if (dataset.items.isEmpty()) {
                 Logger.MOD.warn("No items found in database!");

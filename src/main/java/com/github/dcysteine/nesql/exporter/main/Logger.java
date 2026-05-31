@@ -48,6 +48,7 @@ public final class Logger {
                 || clean.contains("pipeline runtime")
                 || clean.contains("export failed")
                 || clean.contains("initializing item index")
+                || clean.contains("scanning nei item index")
                 || clean.contains("discovered")
                 || clean.contains("building export context")
                 || clean.contains("root cause")

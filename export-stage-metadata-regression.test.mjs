@@ -154,3 +154,53 @@ test('runtime command surface is limited to guided export and Thaumcraft aspect 
     assert.equal(main.includes(legacyCommand), false, `legacy command should not be registered: ${legacyCommand}`);
   }
 });
+
+test('guided export GUI exposes selectable lanes and keeps command entrypoint concise', () => {
+  const gui = readSource('src/main/java/com/github/dcysteine/nesql/exporter/main/ExportSelectionGui.java');
+  const command = readSource('src/main/java/com/github/dcysteine/nesql/exporter/main/ExportCommand.java');
+  for (const label of [
+    'Core items',
+    'Recipes',
+    'Canonical snapshot',
+    'GT blueprints',
+    'Block faces',
+    'Item rendering',
+    'Render manifests',
+    'Static atlas',
+    'Animated atlas',
+    'Browser layout',
+    'Database commit',
+  ]) {
+    assert.equal(gui.includes(`new Option("${label}"`), true, `missing selectable lane ${label}`);
+  }
+  assert.equal(gui.includes('Begin Export'), true);
+  assert.equal(gui.includes('Data Only'), true);
+  assert.equal(gui.includes('normalizeDependencies();'), true);
+  assert.equal(command.includes('ClientGuiScheduler.open(new ExportSelectionGui(repositoryName))'), true);
+  assert.equal(command.includes('new Exporter(repositoryName, selection)'), true);
+});
+
+test('export progress noise is curated into English preparation summaries', () => {
+  const itemExporter = readSource('src/main/java/com/github/dcysteine/nesql/exporter/local/ModBasedItemExporter.java');
+  const logger = readSource('src/main/java/com/github/dcysteine/nesql/exporter/main/Logger.java');
+  const progressGui = readSource('src/main/java/com/github/dcysteine/nesql/exporter/main/ExportProgressGui.java');
+  assert.equal(itemExporter.includes('"Preparation stage"'), true);
+  assert.equal(itemExporter.includes('"Initializing item index..."'), true);
+  assert.equal(itemExporter.includes('"Scanning NEI item index: " + dataset.items.size() + " entries"'), true);
+  assert.equal(itemExporter.includes('"Building export context, please wait"'), true);
+  assert.equal(itemExporter.includes('"Found " + dataset.items.size() + " items"'), false);
+  assert.equal(logger.includes('clean.contains("scanning nei item index")'), true);
+  assert.equal(progressGui.includes('lower.contains("scanning nei item index")'), true);
+});
+
+test('stage diagnostics write machine-readable checkpoint and error records', () => {
+  const runner = readSource('src/main/java/com/github/dcysteine/nesql/exporter/main/ExportStageRunner.java');
+  const diagnostics = readSource('src/main/java/com/github/dcysteine/nesql/exporter/main/ExportDiagnosticsSupport.java');
+  assert.equal(runner.includes('export-stage-checkpoint.json'), true);
+  assert.equal(runner.includes('"raw-export" + File.separator + "validation"'), true);
+  assert.equal(runner.includes('"stage_checkpoint.json"'), true);
+  assert.equal(runner.includes('ExportValidationReportWriter.write(exportContext)'), true);
+  assert.equal(diagnostics.includes('new File(validationDirectory, "errors.jsonl")'), true);
+  assert.equal(diagnostics.includes('"nesqlpp/export-error/v1"'), true);
+  assert.equal(diagnostics.includes('entry.addProperty("stage"'), true);
+});
