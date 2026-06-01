@@ -142,9 +142,9 @@ final class ExportPluginTimingReportWriter {
         NeiHandlerAnomaly anomaly = new NeiHandlerAnomaly();
         anomaly.index = timing.index;
         anomaly.total = timing.total;
-        anomaly.handlerId = timing.handlerId;
-        anomaly.handlerName = timing.handlerName;
-        anomaly.handlerClass = timing.handlerClass;
+        anomaly.handlerId = sanitizeJsonString(timing.handlerId);
+        anomaly.handlerName = sanitizeJsonString(timing.handlerName);
+        anomaly.handlerClass = sanitizeJsonString(timing.handlerClass);
         anomaly.templateHandler = timing.templateHandler;
         anomaly.itemScan = timing.itemScan;
         anomaly.loadedRecipes = timing.loadedRecipes;
@@ -211,6 +211,35 @@ final class ExportPluginTimingReportWriter {
 
     private static String lower(String value) {
         return value == null ? "" : value.toLowerCase(java.util.Locale.ROOT);
+    }
+
+    private static String sanitizeJsonString(String value) {
+        if (value == null) {
+            return null;
+        }
+        StringBuilder builder = new StringBuilder(value.length());
+        for (int index = 0; index < value.length(); index++) {
+            char current = value.charAt(index);
+            if (Character.isHighSurrogate(current)) {
+                if (index + 1 < value.length() && Character.isLowSurrogate(value.charAt(index + 1))) {
+                    builder.append(current).append(value.charAt(index + 1));
+                    index++;
+                } else {
+                    builder.append('\uFFFD');
+                }
+                continue;
+            }
+            if (Character.isLowSurrogate(current)) {
+                builder.append('\uFFFD');
+                continue;
+            }
+            if (Character.isISOControl(current) && current != '\t' && current != '\n' && current != '\r') {
+                builder.append(' ');
+                continue;
+            }
+            builder.append(current);
+        }
+        return builder.toString();
     }
 
     private static void increment(Map<String, Integer> map, String key) {
