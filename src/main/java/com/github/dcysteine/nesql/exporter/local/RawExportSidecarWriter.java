@@ -90,6 +90,7 @@ public final class RawExportSidecarWriter {
         report.counts.rawTextures = factCounts.textures;
         report.counts.rawAnimations = factCounts.animations;
         report.counts.rawEntities = factCounts.entities;
+        report.counts.rawBrowserAtlasAssets = factCounts.browserAtlasAssets;
         applyRawValidation(report);
         RawExportManifest manifest = buildManifest(report);
 
@@ -158,6 +159,7 @@ public final class RawExportSidecarWriter {
         manifest.files.put("nativeSprites", "assets/animations/native-sprites.jsonl.gz");
         manifest.files.put("renderedGifs", "assets/animations/rendered-gifs.jsonl.gz");
         manifest.files.put("browserAtlasIndex", "assets/textures/browser_atlas_index.json");
+        manifest.files.put("browserAtlasAssets", "assets/textures/atlas-assets");
         manifest.files.put("neiHandlers", "facts/nei/handlers.jsonl.gz");
         manifest.files.put("multiblocks", "models/multiblocks/index.jsonl.gz");
         manifest.files.put("entities", "models/entities/index.jsonl.gz");
@@ -349,9 +351,7 @@ public final class RawExportSidecarWriter {
             writeArrayAsJsonl(nativeSpriteRows, new File(rawDir, "assets/animations/native-sprites.jsonl.gz"));
             writeArrayAsJsonl(renderedGifRows, new File(rawDir, "assets/animations/rendered-gifs.jsonl.gz"));
         }
-        copyIfPresent(
-                new File(repositoryDirectory, "canonical/browser-atlas-index.json"),
-                new File(rawDir, "assets/textures/browser_atlas_index.json"));
+        counts.browserAtlasAssets = writeBrowserAtlasIndexAndAssets(rawDir);
 
         createEmptyJsonl(new File(rawDir, "facts/nei/handlers.jsonl.gz"));
         createEmptyJsonl(new File(rawDir, "models/multiblocks/index.jsonl.gz"));
@@ -416,6 +416,99 @@ public final class RawExportSidecarWriter {
             rows.add(row);
         }
         return writeArrayAsJsonl(rows, new File(rawDir, "models/entities/index.jsonl.gz"));
+    }
+
+    private long writeBrowserAtlasIndexAndAssets(File rawDir) throws IOException {
+        JsonObject atlasIndex = readObject(new File(repositoryDirectory, "canonical/browser-atlas-index.json"));
+        if (atlasIndex == null) {
+            return 0L;
+        }
+
+        LinkedHashSet<String> copiedAssets = new LinkedHashSet<String>();
+        JsonArray items = atlasIndex.getAsJsonArray("items");
+        if (items != null) {
+            for (JsonElement element : items) {
+                if (element == null || !element.isJsonObject()) {
+                    continue;
+                }
+                JsonObject item = element.getAsJsonObject();
+                rewriteBrowserAtlasPlacement(rawDir, item.getAsJsonObject("staticAtlas"), copiedAssets);
+                rewriteBrowserAtlasPlacement(rawDir, item.getAsJsonObject("animatedAtlas"), copiedAssets);
+            }
+        }
+        atlasIndex.addProperty("rawExportMaterializedAtlasAssets", copiedAssets.size());
+        writeJson(new GsonBuilder().setPrettyPrinting().serializeNulls().create(),
+                new File(rawDir, "assets/textures/browser_atlas_index.json"),
+                atlasIndex);
+        return copiedAssets.size();
+    }
+
+    private void rewriteBrowserAtlasPlacement(
+            File rawDir,
+            JsonObject placement,
+            Set<String> copiedAssets) throws IOException {
+        if (placement == null || !placement.has("atlasFile")) {
+            return;
+        }
+        String atlasFile = stringAt(placement, "atlasFile");
+        String rawAtlasPath = materializeBrowserAtlasAsset(rawDir, atlasFile);
+        if (rawAtlasPath != null) {
+            placement.addProperty("atlasFile", rawAtlasPath);
+            copiedAssets.add(rawAtlasPath);
+        }
+    }
+
+    private String materializeBrowserAtlasAsset(File rawDir, String atlasFile) throws IOException {
+        String normalized = normalizeRelativePath(atlasFile);
+        if (normalized == null) {
+            return null;
+        }
+        String rawRelative = "assets/textures/atlas-assets/" + stripCanonicalPrefix(normalized);
+        File source = resolveRepositoryRelativeFile(normalized);
+        if (source == null || !source.isFile()) {
+            Logger.MOD.warn("Missing browser atlas asset for raw-export: " + normalized);
+            return normalized;
+        }
+        copyIfPresent(source, new File(rawDir, rawRelative.replace('/', File.separatorChar)));
+        return rawRelative;
+    }
+
+    private File resolveRepositoryRelativeFile(String relativePath) {
+        File direct = new File(repositoryDirectory, relativePath.replace('/', File.separatorChar));
+        if (direct.isFile()) {
+            return direct;
+        }
+        String stripped = stripCanonicalPrefix(relativePath);
+        File canonical = new File(new File(repositoryDirectory, "canonical"), stripped.replace('/', File.separatorChar));
+        if (canonical.isFile()) {
+            return canonical;
+        }
+        return direct;
+    }
+
+    private static String stripCanonicalPrefix(String relativePath) {
+        return relativePath != null && relativePath.startsWith("canonical/")
+                ? relativePath.substring("canonical/".length())
+                : relativePath;
+    }
+
+    private static String normalizeRelativePath(String relativePath) {
+        if (relativePath == null) {
+            return null;
+        }
+        String normalized = relativePath.trim().replace('\\', '/');
+        while (normalized.startsWith("/")) {
+            normalized = normalized.substring(1);
+        }
+        if (normalized.length() == 0
+                || normalized.indexOf('\0') >= 0
+                || normalized.contains("://")
+                || normalized.startsWith("../")
+                || normalized.contains("/../")
+                || normalized.matches("^[A-Za-z]:/.*")) {
+            return null;
+        }
+        return normalized;
     }
 
     private static JsonObject entityRow(Map<String, JsonObject> rows, String mobName) {
@@ -1661,6 +1754,7 @@ public final class RawExportSidecarWriter {
         long rawTextures;
         long rawAnimations;
         long rawEntities;
+        long rawBrowserAtlasAssets;
     }
 
     private static final class RawFactCounts {
@@ -1672,6 +1766,7 @@ public final class RawExportSidecarWriter {
         long textures;
         long animations;
         long entities;
+        long browserAtlasAssets;
     }
 
     private static final class RawExportValidation {
