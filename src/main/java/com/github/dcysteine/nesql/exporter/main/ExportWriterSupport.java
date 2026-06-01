@@ -310,4 +310,38 @@ public final class ExportWriterSupport {
             Logger.MOD.warn("Failed to sync raw-export final reports", e);
         }
     }
+
+    public static void deleteCanonicalStagingDirectory(File repositoryDirectory) {
+        File canonicalDir = new File(repositoryDirectory, "canonical");
+        if (!canonicalDir.exists()) {
+            return;
+        }
+        try {
+            deleteRecursively(canonicalDir);
+            Logger.chatMessage(
+                    EnumChatFormatting.GREEN
+                            + "[NESQL] Removed legacy canonical staging output; raw-export is authoritative.");
+        } catch (Exception e) {
+            Logger.MOD.warn("Failed to remove legacy canonical staging directory", e);
+            Logger.chatMessage(
+                    EnumChatFormatting.YELLOW
+                            + "[NESQL] Could not remove canonical staging directory: "
+                            + e.getMessage());
+        }
+    }
+
+    private static void deleteRecursively(File file) throws java.io.IOException {
+        if (file == null || !file.exists()) {
+            return;
+        }
+        if (file.isDirectory()) {
+            File[] children = file.listFiles();
+            if (children != null) {
+                for (File child : children) {
+                    deleteRecursively(child);
+                }
+            }
+        }
+        java.nio.file.Files.deleteIfExists(file.toPath());
+    }
 }

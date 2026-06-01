@@ -161,7 +161,7 @@ test('guided export GUI exposes selectable lanes and keeps command entrypoint co
   for (const label of [
     'Core items',
     'Recipes',
-    'Canonical snapshot',
+    'Debug canonical snapshot',
     'GT blueprints',
     'Block faces',
     'Item rendering',
@@ -175,9 +175,23 @@ test('guided export GUI exposes selectable lanes and keeps command entrypoint co
   }
   assert.equal(gui.includes('Begin Export'), true);
   assert.equal(gui.includes('Data Only'), true);
+  assert.equal(gui.includes('Legacy compatibility files; off for lean raw-export'), true);
   assert.equal(gui.includes('normalizeDependencies();'), true);
   assert.equal(command.includes('ClientGuiScheduler.open(new ExportSelectionGui(repositoryName))'), true);
   assert.equal(command.includes('new Exporter(repositoryName, selection)'), true);
+});
+
+test('canonical output is opt-in debug staging after raw-export migration', () => {
+  const selection = readSource('src/main/java/com/github/dcysteine/nesql/exporter/main/ExportSelection.java');
+  const runner = readSource('src/main/java/com/github/dcysteine/nesql/exporter/main/ExportStageRunner.java');
+  const support = readSource('src/main/java/com/github/dcysteine/nesql/exporter/main/ExportWriterSupport.java');
+  const raw = readSource('src/main/java/com/github/dcysteine/nesql/exporter/local/RawExportSidecarWriter.java');
+  assert.equal(selection.includes('private boolean writeCanonicalSnapshot = false;'), true);
+  assert.equal(selection.includes('&& writeCanonicalSnapshot\n                && writeMultiblocks'), false);
+  assert.equal(runner.includes('!exportContext.selection.writeCanonicalSnapshot'), true);
+  assert.equal(runner.includes('deleteCanonicalStagingDirectory'), true);
+  assert.equal(support.includes('Removed legacy canonical staging output; raw-export is authoritative.'), true);
+  assert.equal(raw.includes('export_manifest.json'), true);
 });
 
 test('export progress noise is curated into English preparation summaries', () => {

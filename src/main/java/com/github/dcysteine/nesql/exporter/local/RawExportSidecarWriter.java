@@ -127,6 +127,12 @@ public final class RawExportSidecarWriter {
                 new File(repositoryDirectory, "canonical/stage-checksums.json"),
                 new File(rawDir, "validation/stage_checksums.json"));
         copyIfPresent(
+                new File(repositoryDirectory, "canonical/export-manifest.json"),
+                new File(rawDir, "export_manifest.json"));
+        copyIfPresent(
+                new File(repositoryDirectory, "canonical/export-manifest.json"),
+                new File(rawDir, "validation/export_manifest.json"));
+        copyIfPresent(
                 new File(repositoryDirectory, "canonical/export-validation-report.json"),
                 new File(rawDir, "validation_report.json"));
         copyIfPresent(

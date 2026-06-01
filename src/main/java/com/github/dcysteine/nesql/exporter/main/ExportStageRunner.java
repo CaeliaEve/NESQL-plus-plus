@@ -74,6 +74,9 @@ final class ExportStageRunner {
             ExportValidationReportWriter.write(exportContext);
             ExportIntegrityManifestWriter.write(exportContext);
             ExportWriterSupport.syncRawExportFinalReports(exportContext.paths.repositoryDirectory);
+            if (!exportContext.selection.writeCanonicalSnapshot) {
+                ExportWriterSupport.deleteCanonicalStagingDirectory(exportContext.paths.repositoryDirectory);
+            }
         } catch (RepositoryPreparationStoppedException ignored) {
             return;
         } catch (Exception e) {

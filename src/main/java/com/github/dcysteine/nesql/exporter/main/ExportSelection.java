@@ -39,7 +39,6 @@ public final class ExportSelection {
     public boolean isFullExportCompatible() {
         return writeItems
                 && writeRecipes
-                && writeCanonicalSnapshot
                 && writeMultiblocks
                 && writeBlockFaces
                 && renderImages
@@ -112,7 +111,7 @@ public final class ExportSelection {
     public static final class Builder {
         private boolean writeItems = true;
         private boolean writeRecipes = true;
-        private boolean writeCanonicalSnapshot = true;
+        private boolean writeCanonicalSnapshot = false;
         private boolean writeMultiblocks = true;
         private boolean writeBlockFaces = true;
         private boolean renderImages = true;

@@ -27,7 +27,7 @@ public final class ExportSelectionGui extends GuiScreen {
         this.repositoryName = repositoryName;
         options.add(new Option("Core items", "Item and fluid facts", true));
         options.add(new Option("Recipes", "Crafting, machine and NEI handlers", true));
-        options.add(new Option("Canonical snapshot", "Compatibility baseline for NeoNEI", true));
+        options.add(new Option("Debug canonical snapshot", "Legacy compatibility files; off for lean raw-export", false));
         options.add(new Option("GT blueprints", "Multiblock structure contracts", true));
         options.add(new Option("Block faces", "3D block face and UV metadata", true));
         options.add(new Option("Item rendering", "Static icons and animation frames", true));
@@ -125,7 +125,7 @@ public final class ExportSelectionGui extends GuiScreen {
         drawString(fontRendererObj, repositoryName, panelLeft + panelWidth - 178, panelTop + 22, 0xEDE7C5);
         drawString(
                 fontRendererObj,
-                "Select the data lanes for this run. Full export is recommended for NeoNEI.",
+                "Select the data lanes for this run. Recommended full export writes raw-export without legacy canonical output.",
                 panelLeft + 22,
                 panelTop + 56,
                 0x9CC7D8);
@@ -153,7 +153,7 @@ public final class ExportSelectionGui extends GuiScreen {
 
         drawString(
                 fontRendererObj,
-                "Tip: Data Only is fast for index tests. Full export is required before final NeoNEI validation.",
+                "Tip: Debug canonical is opt-in only. Keep it off for smaller NeoNEI raw-export packages.",
                 panelLeft + 22,
                 panelBottom - 48,
                 0x7FAABB);
@@ -194,7 +194,6 @@ public final class ExportSelectionGui extends GuiScreen {
         setAll(false);
         options.get(0).enabled = true;
         options.get(1).enabled = true;
-        options.get(2).enabled = true;
         options.get(9).enabled = true;
         options.get(10).enabled = false;
     }
@@ -204,8 +203,6 @@ public final class ExportSelectionGui extends GuiScreen {
             options.get(6).enabled = false;
             options.get(7).enabled = false;
             options.get(8).enabled = false;
-        } else {
-            options.get(2).enabled = true;
         }
         if (!options.get(0).enabled) {
             options.get(9).enabled = false;
