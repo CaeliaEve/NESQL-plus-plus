@@ -59,7 +59,12 @@ final class AtlasPackingSupport {
     }
 
     static void writeAtlasImage(File atlasFile, PackLayout layout) throws IOException {
-        ImageIO.write(renderAtlas(layout), "PNG", atlasFile);
+        BufferedImage atlasImage = renderAtlas(layout);
+        try {
+            ImageIO.write(atlasImage, "PNG", atlasFile);
+        } finally {
+            atlasImage.flush();
+        }
     }
 
     static int nextPowerOfTwo(int value) {

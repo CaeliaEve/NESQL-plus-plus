@@ -22,10 +22,6 @@ import java.util.HashMap;
 import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
-import java.util.concurrent.Callable;
-import java.util.concurrent.ExecutorService;
-import java.util.concurrent.Executors;
-import java.util.concurrent.Future;
 
 /**
  * Atlas packer for static assets, preferring native sprite atlases when available and falling
@@ -38,7 +34,8 @@ public class CanonicalAtlasPackWriter {
     private static final String GROUP_DIRECTORY = "atlas-manifests-by-group";
     private static final int WEBGL_SAFE_ATLAS_CHUNK_SIZE = 3000;
     private static final int WEBGL_SAFE_MAX_ATLAS_HEIGHT = 8192;
-    private static final int PACKER_VERSION = 2;
+    private static final int MAX_SOURCE_IMAGES_IN_MEMORY = 768;
+    private static final int PACKER_VERSION = 3;
 
     private final EntityManager entityManager;
     private final File exportDirectory;
@@ -98,47 +95,19 @@ public class CanonicalAtlasPackWriter {
             return new ArrayList<>();
         }
 
-        int workers = Math.max(1, Math.min(Runtime.getRuntime().availableProcessors() * 2, entries.size()));
-        if (workers == 1) {
-            List<AtlasGroupManifest> groups = new ArrayList<>();
-            for (Map.Entry<String, List<CanonicalRenderAsset>> entry : entries) {
-                groups.addAll(packGroup(atlasDir, entry.getKey(), entry.getValue()));
-            }
-            return groups;
-        }
-
         Logger.chatMessage(
                 EnumChatFormatting.AQUA
-                        + "Packing static atlas groups with "
-                        + workers
-                        + " IO workers...");
-        ExecutorService executor = Executors.newFixedThreadPool(workers);
-        try {
-            List<Future<List<AtlasGroupManifest>>> futures = new ArrayList<>();
-            for (Map.Entry<String, List<CanonicalRenderAsset>> entry : entries) {
-                final String atlasGroup = entry.getKey();
-                final List<CanonicalRenderAsset> assets = new ArrayList<>(entry.getValue());
-                futures.add(executor.submit(new Callable<List<AtlasGroupManifest>>() {
-                    @Override
-                    public List<AtlasGroupManifest> call() throws Exception {
-                        return packGroup(atlasDir, atlasGroup, assets);
-                    }
-                }));
+                        + "Packing static atlas groups with bounded memory pages...");
+        List<AtlasGroupManifest> groups = new ArrayList<>();
+        for (Map.Entry<String, List<CanonicalRenderAsset>> entry : entries) {
+            try {
+                groups.addAll(packGroup(atlasDir, entry.getKey(), entry.getValue()));
+            } catch (Exception e) {
+                throw new IOException("Failed to pack static atlas group " + entry.getKey(), e);
             }
-
-            List<AtlasGroupManifest> groups = new ArrayList<>();
-            for (Future<List<AtlasGroupManifest>> future : futures) {
-                try {
-                    groups.addAll(future.get());
-                } catch (Exception e) {
-                    throw new IOException("Failed to pack static atlas group", e);
-                }
-            }
-            groups.sort(Comparator.comparing(group -> group.atlasGroup));
-            return groups;
-        } finally {
-            executor.shutdownNow();
         }
+        groups.sort(Comparator.comparing(group -> group.atlasGroup));
+        return groups;
     }
 
     private Map<String, List<CanonicalRenderAsset>> groupStaticAtlasAssets(List<CanonicalRenderAsset> assets) {
@@ -169,90 +138,115 @@ public class CanonicalAtlasPackWriter {
         if (!reusableGroups.isEmpty()) {
             return reusableGroups;
         }
+        deleteStaleAtlasGroupFiles(atlasDir, safeName);
 
-        List<AtlasPackingSupport.AtlasSourceImage> sources = loadSourceImages(assets);
-        if (sources.isEmpty()) {
-            return new ArrayList<>();
-        }
-
-        List<List<AtlasPackingSupport.AtlasSourceImage>> chunks = splitWebglSafeChunks(sources);
         List<AtlasGroupManifest> groupManifests = new ArrayList<>();
-        for (int chunkIndex = 0; chunkIndex < chunks.size(); chunkIndex++) {
-            String chunkSafeName = chunks.size() == 1 ? safeName : String.format("%s-%03d", safeName, chunkIndex);
-            String chunkAtlasGroup = chunks.size() == 1 ? atlasGroup : String.format("%s-%03d", atlasGroup, chunkIndex);
-            File atlasFile = new File(atlasDir, chunkSafeName + ".png");
-            AtlasPackingSupport.PackLayout layout = AtlasPackingSupport.computeLayout(chunks.get(chunkIndex));
-            AtlasPackingSupport.writeAtlasImage(atlasFile, layout);
-
-            AtlasGroupManifest groupManifest = new AtlasGroupManifest();
-            groupManifest.packerVersion = PACKER_VERSION;
-            groupManifest.atlasGroup = chunkAtlasGroup;
-            groupManifest.atlasFile = relativizeFromExportDirectory(atlasFile);
-            groupManifest.width = layout.width;
-            groupManifest.height = layout.height;
-            groupManifest.sourceSignature = sourceSignature(chunks.get(chunkIndex));
-            groupManifest.atlasPageSha256 = sha256(atlasFile);
-            groupManifest.assets = new ArrayList<>();
-
-            for (AtlasPackingSupport.AtlasPlacement placement : layout.placements) {
-                AtlasAssetPlacement assetPlacement = new AtlasAssetPlacement();
-                assetPlacement.assetId = placement.source.asset.assetId;
-                assetPlacement.variantKey = placement.source.asset.variantKey;
-                assetPlacement.x = placement.x;
-                assetPlacement.y = placement.y;
-                assetPlacement.width = placement.source.image.getWidth();
-                assetPlacement.height = placement.source.image.getHeight();
-                assetPlacement.sourcePath = relativizeFromExportDirectory(placement.source.file);
-                assetPlacement.sourceBytes = placement.source.file.length();
-                assetPlacement.sourceSha256 = sha256(placement.source.file);
-                groupManifest.assets.add(assetPlacement);
+        int atlasPageIndex = 0;
+        for (int start = 0; start < assets.size(); start += MAX_SOURCE_IMAGES_IN_MEMORY) {
+            int end = Math.min(assets.size(), start + MAX_SOURCE_IMAGES_IN_MEMORY);
+            List<AtlasPackingSupport.AtlasSourceImage> sources =
+                    loadSourceImagesSequential(assets.subList(start, end));
+            try {
+                if (sources.isEmpty()) {
+                    continue;
+                }
+                List<List<AtlasPackingSupport.AtlasSourceImage>> chunks = splitWebglSafeChunks(sources);
+                for (List<AtlasPackingSupport.AtlasSourceImage> chunk : chunks) {
+                    String chunkSafeName = atlasPageName(safeName, atlasPageIndex);
+                    String chunkAtlasGroup = atlasPageName(atlasGroup, atlasPageIndex);
+                    groupManifests.add(writeAtlasPage(atlasDir, chunkSafeName, chunkAtlasGroup, chunk));
+                    atlasPageIndex++;
+                }
+            } finally {
+                releaseSources(sources);
             }
-            groupManifests.add(groupManifest);
         }
 
         return groupManifests;
     }
 
-    private List<AtlasPackingSupport.AtlasSourceImage> loadSourceImages(List<CanonicalRenderAsset> assets) throws IOException {
-        if (assets.size() < 512) {
-            List<AtlasPackingSupport.AtlasSourceImage> sources = new ArrayList<>();
-            for (CanonicalRenderAsset asset : assets) {
-                AtlasPackingSupport.AtlasSourceImage source = loadSourceImage(asset);
-                if (source != null) {
-                    sources.add(source);
+    private AtlasGroupManifest writeAtlasPage(
+            File atlasDir,
+            String chunkSafeName,
+            String chunkAtlasGroup,
+            List<AtlasPackingSupport.AtlasSourceImage> chunk) throws IOException {
+        File atlasFile = new File(atlasDir, chunkSafeName + ".png");
+        AtlasPackingSupport.PackLayout layout = AtlasPackingSupport.computeLayout(chunk);
+        AtlasPackingSupport.writeAtlasImage(atlasFile, layout);
+
+        AtlasGroupManifest groupManifest = new AtlasGroupManifest();
+        groupManifest.packerVersion = PACKER_VERSION;
+        groupManifest.atlasGroup = chunkAtlasGroup;
+        groupManifest.atlasFile = relativizeFromExportDirectory(atlasFile);
+        groupManifest.width = layout.width;
+        groupManifest.height = layout.height;
+        groupManifest.sourceSignature = sourceSignature(chunk);
+        groupManifest.atlasPageSha256 = sha256(atlasFile);
+        groupManifest.assets = new ArrayList<>();
+
+        for (AtlasPackingSupport.AtlasPlacement placement : layout.placements) {
+            AtlasAssetPlacement assetPlacement = new AtlasAssetPlacement();
+            assetPlacement.assetId = placement.source.asset.assetId;
+            assetPlacement.variantKey = placement.source.asset.variantKey;
+            assetPlacement.x = placement.x;
+            assetPlacement.y = placement.y;
+            assetPlacement.width = placement.source.image.getWidth();
+            assetPlacement.height = placement.source.image.getHeight();
+            assetPlacement.sourcePath = relativizeFromExportDirectory(placement.source.file);
+            assetPlacement.sourceBytes = placement.source.file.length();
+            assetPlacement.sourceSha256 = sha256(placement.source.file);
+            groupManifest.assets.add(assetPlacement);
+        }
+        return groupManifest;
+    }
+
+    private String atlasPageName(String baseName, int pageIndex) {
+        return pageIndex == 0 ? baseName : String.format("%s-%03d", baseName, pageIndex);
+    }
+
+    private List<AtlasPackingSupport.AtlasSourceImage> loadSourceImagesSequential(
+            List<CanonicalRenderAsset> assets) throws IOException {
+        List<AtlasPackingSupport.AtlasSourceImage> sources = new ArrayList<>();
+        for (CanonicalRenderAsset asset : assets) {
+            AtlasPackingSupport.AtlasSourceImage source = loadSourceImage(asset);
+            if (source != null) {
+                sources.add(source);
+            }
+        }
+        return sources;
+    }
+
+    private void releaseSources(List<AtlasPackingSupport.AtlasSourceImage> sources) {
+        for (AtlasPackingSupport.AtlasSourceImage source : sources) {
+            if (source != null && source.image != null) {
+                source.image.flush();
+            }
+        }
+    }
+
+    private void deleteStaleAtlasGroupFiles(File atlasDir, String safeName) {
+        File[] atlasFiles = atlasDir.listFiles((dir, name) ->
+                name.equals(safeName + ".png")
+                        || (name.startsWith(safeName + "-") && name.endsWith(".png")));
+        if (atlasFiles != null) {
+            for (File atlasFile : atlasFiles) {
+                if (!atlasFile.delete()) {
+                    Logger.MOD.debug("Failed to delete stale atlas page {}", atlasFile.getAbsolutePath());
                 }
             }
-            return sources;
         }
 
-        int workers = Math.max(1, Math.min(Runtime.getRuntime().availableProcessors() * 2, assets.size()));
-        Logger.MOD.info("Loading {} static atlas source images with {} workers...", assets.size(), workers);
-        ExecutorService executor = Executors.newFixedThreadPool(workers);
-        try {
-            List<Future<AtlasPackingSupport.AtlasSourceImage>> futures = new ArrayList<>(assets.size());
-            for (final CanonicalRenderAsset asset : assets) {
-                futures.add(executor.submit(new Callable<AtlasPackingSupport.AtlasSourceImage>() {
-                    @Override
-                    public AtlasPackingSupport.AtlasSourceImage call() throws Exception {
-                        return loadSourceImage(asset);
-                    }
-                }));
-            }
-
-            List<AtlasPackingSupport.AtlasSourceImage> sources = new ArrayList<>(assets.size());
-            for (Future<AtlasPackingSupport.AtlasSourceImage> future : futures) {
-                try {
-                    AtlasPackingSupport.AtlasSourceImage source = future.get();
-                    if (source != null) {
-                        sources.add(source);
-                    }
-                } catch (Exception e) {
-                    throw new IOException("Failed to load static atlas source image", e);
+        File canonicalDir = atlasDir.getParentFile();
+        File groupDir = new File(canonicalDir, GROUP_DIRECTORY);
+        File[] shardFiles = groupDir.listFiles((dir, name) ->
+                name.equals(safeName + ".json")
+                        || (name.startsWith(safeName + "-") && name.endsWith(".json")));
+        if (shardFiles != null) {
+            for (File shardFile : shardFiles) {
+                if (!shardFile.delete()) {
+                    Logger.MOD.debug("Failed to delete stale atlas group shard {}", shardFile.getAbsolutePath());
                 }
             }
-            return sources;
-        } finally {
-            executor.shutdownNow();
         }
     }
 
