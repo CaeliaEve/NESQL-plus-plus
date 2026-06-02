@@ -438,8 +438,8 @@ public final class RawExportSidecarWriter {
                     continue;
                 }
                 JsonObject item = element.getAsJsonObject();
-                rewriteBrowserAtlasPlacement(rawDir, item.getAsJsonObject("staticAtlas"), copiedAssets);
-                rewriteBrowserAtlasPlacement(rawDir, item.getAsJsonObject("animatedAtlas"), copiedAssets);
+                rewriteBrowserAtlasPlacement(rawDir, objectAt(item, "staticAtlas"), copiedAssets);
+                rewriteBrowserAtlasPlacement(rawDir, objectAt(item, "animatedAtlas"), copiedAssets);
             }
         }
         atlasIndex.addProperty("rawExportMaterializedAtlasAssets", copiedAssets.size());
@@ -462,6 +462,17 @@ public final class RawExportSidecarWriter {
             placement.addProperty("atlasFile", rawAtlasPath);
             copiedAssets.add(rawAtlasPath);
         }
+    }
+
+    private JsonObject objectAt(JsonObject object, String key) {
+        if (object == null || key == null || !object.has(key)) {
+            return null;
+        }
+        JsonElement element = object.get(key);
+        if (element == null || !element.isJsonObject()) {
+            return null;
+        }
+        return element.getAsJsonObject();
     }
 
     private String materializeBrowserAtlasAsset(File rawDir, String atlasFile) throws IOException {

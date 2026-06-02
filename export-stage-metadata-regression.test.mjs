@@ -192,6 +192,9 @@ test('canonical output is opt-in debug staging after raw-export migration', () =
   assert.equal(runner.includes('deleteCanonicalStagingDirectory'), true);
   assert.equal(support.includes('Removed legacy canonical staging output; raw-export is authoritative.'), true);
   assert.equal(raw.includes('export_manifest.json'), true);
+  assert.equal(raw.includes('objectAt(item, "staticAtlas")'), true);
+  assert.equal(raw.includes('objectAt(item, "animatedAtlas")'), true);
+  assert.equal(raw.includes('element == null || !element.isJsonObject()'), true);
 });
 
 test('export progress noise is curated into English preparation summaries', () => {
