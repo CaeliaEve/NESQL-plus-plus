@@ -87,10 +87,19 @@ public final class RawExportSidecarWriter {
         report.counts.rawRecipes = factCounts.recipes;
         report.counts.rawGroups = factCounts.groups;
         report.counts.rawNeiOrderEntries = factCounts.neiOrderEntries;
+        report.counts.neiRuntimePanelItems = factCounts.neiRuntimePanelItems;
+        report.counts.neiExportOnlyItems = factCounts.neiExportOnlyItems;
+        report.counts.neiBrowserItems = factCounts.neiBrowserItems;
+        report.counts.neiDefaultEntries = factCounts.neiDefaultEntries;
+        report.counts.neiFallbackGroups = factCounts.neiFallbackGroups;
+        report.counts.neiNativeGroups = factCounts.neiNativeGroups;
+        report.counts.neiSyntheticGroups = factCounts.neiSyntheticGroups;
+        report.counts.neiRepresentativeMismatches = factCounts.neiRepresentativeMismatches;
         report.counts.rawTextures = factCounts.textures;
         report.counts.rawAnimations = factCounts.animations;
         report.counts.rawEntities = factCounts.entities;
         report.counts.rawBrowserAtlasAssets = factCounts.browserAtlasAssets;
+        report.neiBrowserContract = factCounts.neiBrowserContract;
         applyRawValidation(report);
         RawExportManifest manifest = buildManifest(report);
 
@@ -98,6 +107,9 @@ public final class RawExportSidecarWriter {
         writeJson(gson, new File(rawDir, "manifest.json"), manifest);
         writeJson(gson, new File(rawDir, "export_report.json"), report);
         writeJson(gson, new File(rawDir, "validation/export_report.json"), report);
+        if (report.neiBrowserContract != null) {
+            writeJson(gson, new File(rawDir, "validation/nei_browser_contract.json"), report.neiBrowserContract);
+        }
         writeSizeReport(gson, rawDir);
         createEmptyJsonlIfMissing(new File(rawDir, "validation/errors.jsonl"));
 
@@ -178,6 +190,7 @@ public final class RawExportSidecarWriter {
         manifest.files.put("stageCheckpoint", "validation/stage_checkpoint.json");
         manifest.files.put("stageChecksums", "validation/stage_checksums.json");
         manifest.files.put("sizeReport", "validation/size_report.json");
+        manifest.files.put("neiBrowserContract", "validation/nei_browser_contract.json");
         manifest.counts = report.counts;
         return manifest;
     }
@@ -246,6 +259,26 @@ public final class RawExportSidecarWriter {
                         ? "NEI browser groups and ordering rows are present."
                         : "NEI browser groups or ordering rows are missing."));
         gates.add(validationGate(
+                "nei-browser-contract",
+                counts.neiBrowserItems > 0
+                        && counts.rawGroups == counts.neiNativeGroups + counts.neiFallbackGroups + counts.neiSyntheticGroups
+                        && counts.neiRepresentativeMismatches == 0,
+                "NEI browser contract: panelItems="
+                        + counts.neiRuntimePanelItems
+                        + ", browserItems="
+                        + counts.neiBrowserItems
+                        + ", groups="
+                        + counts.rawGroups
+                        + ", nativeGroups="
+                        + counts.neiNativeGroups
+                        + ", fallbackGroups="
+                        + counts.neiFallbackGroups
+                        + ", syntheticGroups="
+                        + counts.neiSyntheticGroups
+                        + ", representativeMismatches="
+                        + counts.neiRepresentativeMismatches
+                        + "."));
+        gates.add(validationGate(
                 "textures",
                 counts.rawItems == 0 || counts.rawTextures > 0,
                 counts.rawItems == 0 || counts.rawTextures > 0
@@ -302,6 +335,17 @@ public final class RawExportSidecarWriter {
             counts.groups = writeArrayAsJsonl(groups, new File(rawDir, "facts/nei/groups.jsonl.gz"));
             counts.neiOrderEntries =
                     writeArrayAsJsonl(order, new File(rawDir, "facts/nei/order.jsonl.gz"));
+            counts.neiBrowserContract = buildNeiBrowserContract(browserLayout, groups, order);
+            counts.neiRuntimePanelItems = readLong(browserLayout, "neiRuntimeItemCount", 0L);
+            counts.neiExportOnlyItems = readLong(browserLayout, "exportOnlyItemCount", 0L);
+            counts.neiBrowserItems = readLong(browserLayout, "itemCount", countArray(browserLayout, "items"));
+            counts.neiDefaultEntries = readLong(browserLayout, "defaultEntryCount", order == null ? 0L : order.size());
+            if (counts.neiBrowserContract != null) {
+                counts.neiFallbackGroups = counts.neiBrowserContract.fallbackGroupCount;
+                counts.neiNativeGroups = counts.neiBrowserContract.nativeGroupCount;
+                counts.neiSyntheticGroups = counts.neiBrowserContract.syntheticGroupCount;
+                counts.neiRepresentativeMismatches = counts.neiBrowserContract.representativeMismatchCount;
+            }
         } else {
             createEmptyJsonl(new File(rawDir, "facts/nei/groups.jsonl.gz"));
             createEmptyJsonl(new File(rawDir, "facts/nei/order.jsonl.gz"));
@@ -363,6 +407,133 @@ public final class RawExportSidecarWriter {
         createEmptyJsonl(new File(rawDir, "models/multiblocks/index.jsonl.gz"));
         counts.entities = writeEntityModelIndex(rawDir);
         return counts;
+    }
+
+    private static NeiBrowserContract buildNeiBrowserContract(
+            JsonObject browserLayout,
+            JsonArray groups,
+            JsonArray defaultEntries) {
+        NeiBrowserContract contract = new NeiBrowserContract();
+        contract.schemaVersion = SCHEMA_VERSION + "/nei-browser-contract";
+        contract.generatedAt = utcNow();
+        contract.neiRuntimeSnapshot = readBoolean(browserLayout, "neiRuntimeSnapshot", false);
+        contract.neiRuntimePanelItemCount = readLong(browserLayout, "neiRuntimeItemCount", 0L);
+        contract.exportOnlyItemCount = readLong(browserLayout, "exportOnlyItemCount", 0L);
+        contract.browserItemCount = readLong(browserLayout, "itemCount", countArray(browserLayout, "items"));
+        contract.groupCount = readLong(browserLayout, "groupCount", groups == null ? 0L : groups.size());
+        contract.defaultEntryCount = readLong(browserLayout, "defaultEntryCount", defaultEntries == null ? 0L : defaultEntries.size());
+        JsonObject source = browserLayout == null ? null : browserLayout.getAsJsonObject("source");
+        if (source != null) {
+            contract.orderSource = readString(source, "order", null);
+            contract.groupingSource = readString(source, "grouping", null);
+        }
+        if (groups != null) {
+            for (JsonElement element : groups) {
+                if (element == null || !element.isJsonObject()) {
+                    continue;
+                }
+                JsonObject group = element.getAsJsonObject();
+                String groupKey = readString(group, "groupKey", "");
+                if (groupKey.startsWith("fallback:")) {
+                    contract.fallbackGroupCount++;
+                } else if (groupKey.startsWith("nei:")) {
+                    contract.nativeGroupCount++;
+                } else if (!groupKey.isEmpty()) {
+                    contract.syntheticGroupCount++;
+                }
+                JsonArray members = group.getAsJsonArray("memberItemIds");
+                contract.groupedMemberCount += members == null ? 0 : members.size();
+                String representative = readString(group, "representativeItemId", null);
+                if (representative == null || representative.isEmpty()) {
+                    contract.missingRepresentativeCount++;
+                } else if (!arrayContainsString(members, representative)) {
+                    contract.representativeMismatchCount++;
+                    if (contract.representativeMismatchSamples.size() < 50) {
+                        BrowserContractMismatch sample = new BrowserContractMismatch();
+                        sample.groupKey = groupKey;
+                        sample.groupLabel = readString(group, "groupLabel", null);
+                        sample.representativeItemId = representative;
+                        sample.firstMemberItemIds = firstStrings(members, 5);
+                        contract.representativeMismatchSamples.add(sample);
+                    }
+                }
+            }
+        }
+        contract.ungroupedBrowserItemCount = Math.max(0L, contract.browserItemCount - contract.groupedMemberCount);
+        contract.runtimeToBrowserDelta = contract.browserItemCount - contract.neiRuntimePanelItemCount;
+        contract.status = contract.browserItemCount > 0 && contract.representativeMismatchCount == 0 ? "ok" : "warning";
+        contract.summary = "NEI panel items="
+                + contract.neiRuntimePanelItemCount
+                + ", NeoNEI browser items="
+                + contract.browserItemCount
+                + ", groups="
+                + contract.groupCount
+                + ", fallbackGroups="
+                + contract.fallbackGroupCount
+                + ", representativeMismatches="
+                + contract.representativeMismatchCount
+                + ".";
+        return contract;
+    }
+
+    private static long countArray(JsonObject object, String key) {
+        JsonArray array = object == null ? null : object.getAsJsonArray(key);
+        return array == null ? 0L : array.size();
+    }
+
+    private static long readLong(JsonObject object, String key, long fallback) {
+        try {
+            JsonElement element = object == null ? null : object.get(key);
+            return element == null || element.isJsonNull() ? fallback : element.getAsLong();
+        } catch (Exception ignored) {
+            return fallback;
+        }
+    }
+
+    private static boolean readBoolean(JsonObject object, String key, boolean fallback) {
+        try {
+            JsonElement element = object == null ? null : object.get(key);
+            return element == null || element.isJsonNull() ? fallback : element.getAsBoolean();
+        } catch (Exception ignored) {
+            return fallback;
+        }
+    }
+
+    private static String readString(JsonObject object, String key, String fallback) {
+        try {
+            JsonElement element = object == null ? null : object.get(key);
+            return element == null || element.isJsonNull() ? fallback : element.getAsString();
+        } catch (Exception ignored) {
+            return fallback;
+        }
+    }
+
+    private static boolean arrayContainsString(JsonArray array, String expected) {
+        if (array == null || expected == null) {
+            return false;
+        }
+        for (JsonElement element : array) {
+            if (element != null && !element.isJsonNull() && expected.equals(element.getAsString())) {
+                return true;
+            }
+        }
+        return false;
+    }
+
+    private static List<String> firstStrings(JsonArray array, int limit) {
+        List<String> values = new ArrayList<String>();
+        if (array == null || limit <= 0) {
+            return values;
+        }
+        for (JsonElement element : array) {
+            if (values.size() >= limit) {
+                break;
+            }
+            if (element != null && !element.isJsonNull()) {
+                values.add(element.getAsString());
+            }
+        }
+        return values;
     }
 
     private long writeEntityModelIndex(File rawDir) throws IOException {
@@ -1752,6 +1923,7 @@ public final class RawExportSidecarWriter {
         String selection;
         RawExportCounts counts;
         RawExportValidation validation = new RawExportValidation();
+        NeiBrowserContract neiBrowserContract;
     }
 
     private static final class RawExportCounts {
@@ -1768,6 +1940,14 @@ public final class RawExportSidecarWriter {
         long rawRecipes;
         long rawGroups;
         long rawNeiOrderEntries;
+        long neiRuntimePanelItems;
+        long neiExportOnlyItems;
+        long neiBrowserItems;
+        long neiDefaultEntries;
+        long neiFallbackGroups;
+        long neiNativeGroups;
+        long neiSyntheticGroups;
+        long neiRepresentativeMismatches;
         long rawTextures;
         long rawAnimations;
         long rawEntities;
@@ -1780,10 +1960,50 @@ public final class RawExportSidecarWriter {
         long recipes;
         long groups;
         long neiOrderEntries;
+        long neiRuntimePanelItems;
+        long neiExportOnlyItems;
+        long neiBrowserItems;
+        long neiDefaultEntries;
+        long neiFallbackGroups;
+        long neiNativeGroups;
+        long neiSyntheticGroups;
+        long neiRepresentativeMismatches;
         long textures;
         long animations;
         long entities;
         long browserAtlasAssets;
+        NeiBrowserContract neiBrowserContract;
+    }
+
+    private static final class NeiBrowserContract {
+        String schemaVersion;
+        String generatedAt;
+        String status;
+        String summary;
+        boolean neiRuntimeSnapshot;
+        String orderSource;
+        String groupingSource;
+        long neiRuntimePanelItemCount;
+        long exportOnlyItemCount;
+        long browserItemCount;
+        long runtimeToBrowserDelta;
+        long groupCount;
+        long nativeGroupCount;
+        long fallbackGroupCount;
+        long syntheticGroupCount;
+        long defaultEntryCount;
+        long groupedMemberCount;
+        long ungroupedBrowserItemCount;
+        long missingRepresentativeCount;
+        long representativeMismatchCount;
+        List<BrowserContractMismatch> representativeMismatchSamples = new ArrayList<BrowserContractMismatch>();
+    }
+
+    private static final class BrowserContractMismatch {
+        String groupKey;
+        String groupLabel;
+        String representativeItemId;
+        List<String> firstMemberItemIds = new ArrayList<String>();
     }
 
     private static final class RawExportValidation {

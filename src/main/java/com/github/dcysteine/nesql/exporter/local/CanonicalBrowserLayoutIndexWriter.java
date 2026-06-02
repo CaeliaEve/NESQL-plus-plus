@@ -511,10 +511,40 @@ public class CanonicalBrowserLayoutIndexWriter {
         }
 
         index.groups.addAll(groups.values());
+        repairGroupRepresentatives(index);
         index.itemCount = index.items.size();
         index.groupCount = index.groups.size();
         index.defaultEntryCount = index.defaultEntries.size();
         return index;
+    }
+
+    private static void repairGroupRepresentatives(BrowserLayoutIndex index) {
+        Map<String, String> repairedRepresentatives = new HashMap<>();
+        for (BrowserGroup group : index.groups) {
+            if (group == null || group.groupKey == null || group.memberItemIds == null || group.memberItemIds.isEmpty()) {
+                continue;
+            }
+            if (!group.memberItemIds.contains(group.representativeItemId)) {
+                group.representativeItemId = group.memberItemIds.get(0);
+            }
+            repairedRepresentatives.put(group.groupKey, group.representativeItemId);
+        }
+        if (repairedRepresentatives.isEmpty()) {
+            return;
+        }
+        for (BrowserLayoutItem item : index.items) {
+            if (item != null && item.groupKey != null && repairedRepresentatives.containsKey(item.groupKey)) {
+                item.representativeItemId = repairedRepresentatives.get(item.groupKey);
+            }
+        }
+        for (BrowserDefaultEntry entry : index.defaultEntries) {
+            if (entry != null
+                    && "group-collapsed".equals(entry.entryKind)
+                    && entry.groupKey != null
+                    && repairedRepresentatives.containsKey(entry.groupKey)) {
+                entry.itemId = repairedRepresentatives.get(entry.groupKey);
+            }
+        }
     }
 
     private void writeIndex(File canonicalDir, BrowserLayoutIndex index) throws IOException {
