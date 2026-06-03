@@ -75,3 +75,11 @@ test('raw export health gates include semantic identity readiness', () => {
   assert.equal(sidecar.includes('semanticIdentityMapRows'), true);
   assert.equal(sidecar.includes('semanticUnclassifiedTaggedItems'), true);
 });
+test('quick semantic check refreshes raw export readiness reports', () => {
+  const quickCheck = readSource('src/main/java/com/github/dcysteine/nesql/exporter/main/SemanticIdentityQuickCheckRunner.java');
+
+  assert.equal(quickCheck.includes('refreshRawExportReports(rawExportDirectory, summary);'), true);
+  assert.equal(quickCheck.includes('export_report.json'), true);
+  assert.equal(quickCheck.includes('semantic-identity'), true);
+  assert.equal(quickCheck.includes('semanticIdentityMapRows'), true);
+});
