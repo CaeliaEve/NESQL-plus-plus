@@ -74,8 +74,14 @@ public final class SemanticItemIdentityMapper {
         if (isTGregworksPart(mod, internal, payload)) {
             return "toolpart.tgregworks";
         }
+        if (isIc2CropSeed(mod, internal, payload)) {
+            return "crop.ic2";
+        }
         if ((mod.contains("thaumcraft") || mod.contains("tcwands") || id.contains("wand")) && (payload.contains("rod") || payload.contains("cap") || payload.contains("sceptre"))) {
             return "thaumcraft.wand";
+        }
+        if (isFluidContainerVariant(internal, payload)) {
+            return "fluid.container";
         }
         if (isChargedStateVariant(payload)) {
             return mod.contains("gregtech") || internal.contains("gt.") || internal.contains("meta")
@@ -164,13 +170,17 @@ public final class SemanticItemIdentityMapper {
         } else if ("data_carrier.encoded-pattern".equals(normalizedFamily)) {
             putIfPresent(facets, "encodedPattern", firstNbtValue(nbt, "encodedPattern", "EncodedPattern"));
             putIfPresent(facets, "output", firstNbtValue(nbt, "out", "output"));
-        }
-        if ("ic2".equals(lower(item.getModId())) && lower(item.getInternalName()).contains("cropseed")) {
+        } else if ("crop.ic2".equals(normalizedFamily)) {
             putIfPresent(facets, "crop", firstNbtValue(nbt, "name"));
             putIfPresent(facets, "growth", firstNbtValue(nbt, "growth"));
             putIfPresent(facets, "gain", firstNbtValue(nbt, "gain"));
             putIfPresent(facets, "resistance", firstNbtValue(nbt, "resistance"));
             putIfPresent(facets, "scan", firstNbtValue(nbt, "scan"));
+            putIfPresent(facets, "owner", firstNbtValue(nbt, "owner"));
+        } else if ("fluid.container".equals(normalizedFamily)) {
+            putIfPresent(facets, "fluid", firstNbtValue(nbt, "FluidName", "fluidName", "Name"));
+            putIfPresent(facets, "amount", firstNbtValue(nbt, "Amount", "amount"));
+            putIfPresent(facets, "capacity", firstNbtValue(nbt, "Capacity", "capacity"));
         }
         return facets;
     }
@@ -179,7 +189,7 @@ public final class SemanticItemIdentityMapper {
         StringBuilder builder = new StringBuilder();
         for (Map.Entry<String, String> entry : facets.entrySet()) {
             if (builder.length() > 0) {
-                builder.append(" · ");
+                builder.append(" | ");
             }
             builder.append(entry.getKey()).append('=').append(entry.getValue());
             if (builder.length() > 96) {
@@ -298,6 +308,22 @@ public final class SemanticItemIdentityMapper {
                 && (payload.contains("maxcharge") || payload.contains("maxdamage") || payload.contains("voltage"));
     }
 
+    private static boolean isIc2CropSeed(String mod, String internal, String payload) {
+        return mod.equals("ic2")
+                && internal.contains("cropseed")
+                && (payload.contains("growth") || payload.contains("gain") || payload.contains("resistance") || payload.contains("scan"));
+    }
+
+    private static boolean isFluidContainerVariant(String internal, String payload) {
+        return (payload.contains("fluidname") || (payload.contains("fluid") && payload.contains("amount")))
+                && (internal.contains("cell")
+                || internal.contains("bucket")
+                || internal.contains("capsule")
+                || internal.contains("tank")
+                || internal.contains("container")
+                || payload.contains("capacity"));
+    }
+
     private static boolean isEntityCaptureVariant(String mod, String internal, String payload) {
         return internal.contains("mobsoul")
                 || internal.contains("mobcrystal")
@@ -315,3 +341,4 @@ public final class SemanticItemIdentityMapper {
         return value == null ? "" : value;
     }
 }
+

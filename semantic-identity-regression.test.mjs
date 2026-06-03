@@ -23,6 +23,8 @@ test('semantic mapper covers high-volume NBT families from GTNH exports', () => 
     '"charge.gregtech"',
     '"charge.generic"',
     '"cosmetic.color"',
+    '"crop.ic2"',
+    '"fluid.container"',
   ]) {
     assert.equal(mapper.includes(family), true, `missing semantic family ${family}`);
   }
@@ -42,6 +44,8 @@ test('semantic mapper covers high-volume NBT families from GTNH exports', () => 
     'internal.contains("mobcrystal")',
     'isChargedStateVariant',
     'isCosmeticColorVariant',
+    'isIc2CropSeed',
+    'isFluidContainerVariant',
     'semanticFacets',
     'variantLabel',
     'facetSummary',
