@@ -105,6 +105,16 @@ public final class RawExportSidecarWriter {
         report.counts.rawAnimations = factCounts.animations;
         report.counts.rawEntities = factCounts.entities;
         report.counts.rawBrowserAtlasAssets = factCounts.browserAtlasAssets;
+        report.counts.semanticTotalItems = semanticAudit.totalItems;
+        report.counts.semanticTaggedItems = semanticAudit.taggedItems;
+        report.counts.semanticClassifiedTaggedItems = semanticAudit.classifiedTaggedItems;
+        report.counts.semanticUnclassifiedTaggedItems = semanticAudit.unclassifiedTaggedItems;
+        report.counts.semanticEstimatedPublicItems = semanticAudit.estimatedPublicItemsAfterNormalization;
+        report.counts.semanticFamilyCount = semanticAudit.familyCount;
+        report.counts.semanticItems = semanticAudit.semanticItems;
+        report.counts.semanticVariants = semanticAudit.variants;
+        report.counts.semanticPayloads = semanticAudit.payloads;
+        report.counts.semanticIdentityMapRows = semanticAudit.identityMapRows;
         report.neiBrowserContract = factCounts.neiBrowserContract;
         applyRawValidation(report);
         RawExportManifest manifest = buildManifest(report);
@@ -302,6 +312,28 @@ public final class RawExportSidecarWriter {
                         + counts.neiSyntheticGroups
                         + ", representativeMismatches="
                         + counts.neiRepresentativeMismatches
+                        + "."));
+        gates.add(validationGate(
+                "semantic-identity",
+                counts.rawItems == 0
+                        || (counts.semanticTotalItems == counts.rawItems
+                                && counts.semanticIdentityMapRows == counts.rawItems
+                                && counts.semanticItems > 0
+                                && counts.semanticFamilyCount > 0),
+                "Semantic identity streams: rawItems="
+                        + counts.rawItems
+                        + ", totalItems="
+                        + counts.semanticTotalItems
+                        + ", identityMapRows="
+                        + counts.semanticIdentityMapRows
+                        + ", semanticItems="
+                        + counts.semanticItems
+                        + ", families="
+                        + counts.semanticFamilyCount
+                        + ", classifiedTagged="
+                        + counts.semanticClassifiedTaggedItems
+                        + ", unclassifiedTagged="
+                        + counts.semanticUnclassifiedTaggedItems
                         + "."));
         gates.add(validationGate(
                 "native-nei-rules",
@@ -2107,6 +2139,16 @@ public final class RawExportSidecarWriter {
         long rawAnimations;
         long rawEntities;
         long rawBrowserAtlasAssets;
+        long semanticTotalItems;
+        long semanticTaggedItems;
+        long semanticClassifiedTaggedItems;
+        long semanticUnclassifiedTaggedItems;
+        long semanticEstimatedPublicItems;
+        long semanticFamilyCount;
+        long semanticItems;
+        long semanticVariants;
+        long semanticPayloads;
+        long semanticIdentityMapRows;
     }
 
     private static final class RawFactCounts {

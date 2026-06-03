@@ -67,3 +67,11 @@ test('semantic stream writer validates one identity row per raw item', () => {
   assert.equal(writer.includes('unclassifiedFamilyCounts'), true);
   assert.equal(writer.includes('unclassifiedFamilySamples'), true);
 });
+
+test('raw export health gates include semantic identity readiness', () => {
+  const sidecar = readSource('src/main/java/com/github/dcysteine/nesql/exporter/local/RawExportSidecarWriter.java');
+
+  assert.equal(sidecar.includes('"semantic-identity"'), true);
+  assert.equal(sidecar.includes('semanticIdentityMapRows'), true);
+  assert.equal(sidecar.includes('semanticUnclassifiedTaggedItems'), true);
+});
