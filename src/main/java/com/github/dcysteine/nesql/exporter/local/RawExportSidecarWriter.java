@@ -26,6 +26,8 @@ import java.io.FileOutputStream;
 import java.io.IOException;
 import java.io.OutputStreamWriter;
 import java.io.Writer;
+import java.io.BufferedReader;
+import java.io.InputStreamReader;
 import java.nio.charset.StandardCharsets;
 import java.text.SimpleDateFormat;
 import java.util.ArrayList;
@@ -96,6 +98,8 @@ public final class RawExportSidecarWriter {
         report.counts.neiFallbackGroups = factCounts.neiFallbackGroups;
         report.counts.neiNativeGroups = factCounts.neiNativeGroups;
         report.counts.neiSyntheticGroups = factCounts.neiSyntheticGroups;
+        report.counts.neiGuidFilterRules = factCounts.neiGuidFilterRules;
+        report.counts.neiHiddenItemRules = factCounts.neiHiddenItemRules;
         report.counts.neiRepresentativeMismatches = factCounts.neiRepresentativeMismatches;
         report.counts.rawTextures = factCounts.textures;
         report.counts.rawAnimations = factCounts.animations;
@@ -178,6 +182,7 @@ public final class RawExportSidecarWriter {
         manifest.capabilities.add("validation");
         manifest.capabilities.add("special");
         manifest.capabilities.add("semanticIdentity");
+        manifest.capabilities.add("nativeNeiRules");
         manifest.files.put("items", "facts/items.jsonl.gz");
         manifest.files.put("semanticItems", "facts/items/semantic-items.jsonl.gz");
         manifest.files.put("itemVariants", "facts/items/variants.jsonl.gz");
@@ -187,6 +192,8 @@ public final class RawExportSidecarWriter {
         manifest.files.put("recipeIndex", "facts/recipes/index.json");
         manifest.files.put("groups", "facts/nei/groups.jsonl.gz");
         manifest.files.put("neiOrder", "facts/nei/order.jsonl.gz");
+        manifest.files.put("neiGuidFilters", "facts/nei/guidfilters.jsonl.gz");
+        manifest.files.put("neiHiddenItems", "facts/nei/hiddenitems.jsonl.gz");
         manifest.files.put("textures", "assets/textures/index.jsonl.gz");
         manifest.files.put("animations", "assets/animations/index.jsonl.gz");
         manifest.files.put("nativeSprites", "assets/animations/native-sprites.jsonl.gz");
@@ -297,6 +304,14 @@ public final class RawExportSidecarWriter {
                         + counts.neiRepresentativeMismatches
                         + "."));
         gates.add(validationGate(
+                "native-nei-rules",
+                counts.neiGuidFilterRules >= 0 && counts.neiHiddenItemRules >= 0,
+                "Native NEI rule streams: guidFilters="
+                        + counts.neiGuidFilterRules
+                        + ", hiddenItems="
+                        + counts.neiHiddenItemRules
+                        + "."));
+        gates.add(validationGate(
                 "textures",
                 counts.rawItems == 0 || counts.rawTextures > 0,
                 counts.rawItems == 0 || counts.rawTextures > 0
@@ -368,6 +383,8 @@ public final class RawExportSidecarWriter {
             createEmptyJsonl(new File(rawDir, "facts/nei/groups.jsonl.gz"));
             createEmptyJsonl(new File(rawDir, "facts/nei/order.jsonl.gz"));
         }
+        counts.neiGuidFilterRules = writeGuidFilterRules(rawDir);
+        counts.neiHiddenItemRules = writeHiddenItemRules(rawDir);
 
         JsonArray textureRows = new JsonArray();
         JsonArray animationRows = new JsonArray();
@@ -636,6 +653,113 @@ public final class RawExportSidecarWriter {
                 new File(rawDir, "assets/textures/browser_atlas_index.json"),
                 atlasIndex);
         return copiedAssets.size();
+    }
+
+    private long writeGuidFilterRules(File rawDir) throws IOException {
+        File source = resolveNativeNeiRulePath(
+                "nesql.guidFiltersCfg",
+                "NESQL_GUID_FILTERS_CFG",
+                "guidfilters.cfg",
+                "assets/nei/cfg/guidfilters.cfg");
+        JsonArray rows = new JsonArray();
+        if (source != null) {
+            try (BufferedReader reader = openUtf8Reader(source)) {
+                String rawLine;
+                int lineNumber = 0;
+                while ((rawLine = reader.readLine()) != null) {
+                    lineNumber++;
+                    String line = stripBom(rawLine).trim();
+                    if (line.length() == 0 || line.startsWith("#")) {
+                        continue;
+                    }
+                    JsonObject row = new JsonObject();
+                    row.addProperty("schemaVersion", SCHEMA_VERSION + "/nei-guidfilter-rule");
+                    row.addProperty("source", source.getAbsolutePath());
+                    row.addProperty("lineNumber", lineNumber);
+                    row.addProperty("raw", line);
+                    int comma = line.indexOf(',');
+                    String itemExpression = comma >= 0 ? line.substring(0, comma).trim() : line;
+                    String nbtPath = comma >= 0 ? line.substring(comma + 1).trim() : "";
+                    row.addProperty("itemExpression", itemExpression);
+                    row.addProperty("nbtPath", nbtPath.length() == 0 ? null : nbtPath);
+                    row.addProperty("normalizedItemExpression", normalizeRuleToken(itemExpression));
+                    row.addProperty("normalizedNbtPath", nbtPath.length() == 0 ? null : normalizeRuleToken(nbtPath));
+                    rows.add(row);
+                }
+            }
+        }
+        return writeArrayAsJsonl(rows, new File(rawDir, "facts/nei/guidfilters.jsonl.gz"));
+    }
+
+    private long writeHiddenItemRules(File rawDir) throws IOException {
+        File source = resolveNativeNeiRulePath(
+                "nesql.hiddenItemsCfg",
+                "NESQL_HIDDEN_ITEMS_CFG",
+                "hiddenitems.cfg",
+                null);
+        JsonArray rows = new JsonArray();
+        if (source != null) {
+            try (BufferedReader reader = openUtf8Reader(source)) {
+                String rawLine;
+                int lineNumber = 0;
+                while ((rawLine = reader.readLine()) != null) {
+                    lineNumber++;
+                    String line = stripBom(rawLine).trim();
+                    if (line.length() == 0 || line.startsWith("#") || line.startsWith(";")) {
+                        continue;
+                    }
+                    JsonObject row = new JsonObject();
+                    row.addProperty("schemaVersion", SCHEMA_VERSION + "/nei-hidden-item-rule");
+                    row.addProperty("source", source.getAbsolutePath());
+                    row.addProperty("lineNumber", lineNumber);
+                    row.addProperty("raw", line);
+                    row.addProperty("itemExpression", line);
+                    row.addProperty("normalizedItemExpression", normalizeRuleToken(line));
+                    rows.add(row);
+                }
+            }
+        }
+        return writeArrayAsJsonl(rows, new File(rawDir, "facts/nei/hiddenitems.jsonl.gz"));
+    }
+
+    private static File resolveNativeNeiRulePath(
+            String propertyName,
+            String envName,
+            String fileName,
+            String bundledResourceRelativePath) {
+        List<File> candidates = new ArrayList<File>();
+        String property = System.getProperty(propertyName);
+        if (property != null && !property.trim().isEmpty()) {
+            candidates.add(new File(property.trim()));
+        }
+        String env = System.getenv(envName);
+        if (env != null && !env.trim().isEmpty()) {
+            candidates.add(new File(env.trim()));
+        }
+        candidates.add(new File("config/NEI/" + fileName));
+        candidates.add(new File("config/notenoughitems/" + fileName));
+        candidates.add(new File("config/" + fileName));
+        if (bundledResourceRelativePath != null && !bundledResourceRelativePath.trim().isEmpty()) {
+            candidates.add(new File(bundledResourceRelativePath.trim()));
+        }
+        for (File candidate : candidates) {
+            if (candidate.exists() && candidate.isFile()) {
+                return candidate;
+            }
+        }
+        return null;
+    }
+
+    private static BufferedReader openUtf8Reader(File file) throws IOException {
+        return new BufferedReader(new InputStreamReader(new FileInputStream(file), StandardCharsets.UTF_8));
+    }
+
+    private static String stripBom(String value) {
+        return value == null ? "" : value.replaceFirst("^\\uFEFF", "");
+    }
+
+    private static String normalizeRuleToken(String value) {
+        return (value == null ? "" : value).trim().toLowerCase(java.util.Locale.ROOT).replaceAll("\\s+", "");
     }
 
     private void rewriteBrowserAtlasPlacement(
@@ -1976,6 +2100,8 @@ public final class RawExportSidecarWriter {
         long neiFallbackGroups;
         long neiNativeGroups;
         long neiSyntheticGroups;
+        long neiGuidFilterRules;
+        long neiHiddenItemRules;
         long neiRepresentativeMismatches;
         long rawTextures;
         long rawAnimations;
@@ -1996,6 +2122,8 @@ public final class RawExportSidecarWriter {
         long neiFallbackGroups;
         long neiNativeGroups;
         long neiSyntheticGroups;
+        long neiGuidFilterRules;
+        long neiHiddenItemRules;
         long neiRepresentativeMismatches;
         long textures;
         long animations;

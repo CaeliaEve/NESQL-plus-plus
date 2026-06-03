@@ -1,11 +1,16 @@
 package com.github.dcysteine.nesql.exporter.semantic;
 
 import com.github.dcysteine.nesql.sql.base.item.Item;
+import com.google.gson.JsonObject;
 
 import java.nio.charset.StandardCharsets;
 import java.security.MessageDigest;
 import java.security.NoSuchAlgorithmException;
 import java.util.Locale;
+import java.util.Map;
+import java.util.LinkedHashMap;
+import java.util.regex.Matcher;
+import java.util.regex.Pattern;
 
 public final class SemanticItemIdentityMapper {
     private SemanticItemIdentityMapper() {}
@@ -28,6 +33,7 @@ public final class SemanticItemIdentityMapper {
         identity.variantId = payloadHash == null
                 ? null
                 : identity.publicItemId + ":variant:" + payloadHash.substring(0, 16);
+        applyFacets(identity, item, nbt);
         return identity;
     }
 
@@ -90,6 +96,139 @@ public final class SemanticItemIdentityMapper {
 
     public static String baseKey(Item item) {
         return safe(item.getModId()) + "|" + safe(item.getInternalName()) + "|" + item.getItemDamage();
+    }
+
+    private static void applyFacets(SemanticItemIdentity identity, Item item, String nbt) {
+        if (identity == null || nbt == null || nbt.trim().length() == 0) {
+            return;
+        }
+        Map<String, String> facets = semanticFacets(identity.family, item, nbt);
+        if (facets.isEmpty()) {
+            return;
+        }
+        JsonObject object = new JsonObject();
+        for (Map.Entry<String, String> entry : facets.entrySet()) {
+            object.addProperty(entry.getKey(), entry.getValue());
+        }
+        identity.facets = object;
+        identity.facetSummary = facetSummary(identity.family, facets);
+        identity.variantLabel = identity.facetSummary;
+        identity.sortKey = sortKey(identity.family, facets, item);
+    }
+
+    public static Map<String, String> semanticFacets(String family, Item item, String nbt) {
+        LinkedHashMap<String, String> facets = new LinkedHashMap<String, String>();
+        String normalizedFamily = safe(family);
+        if ("facade.buildcraft".equals(normalizedFamily)
+                || "facade.ae2".equals(normalizedFamily)
+                || "facade.enderio.paint".equals(normalizedFamily)) {
+            putIfPresent(facets, "block", firstNbtValue(nbt, "block", "source_block", "sourceBlock"));
+            putIfPresent(facets, "metadata", firstNbtValue(nbt, "metadata", "meta"));
+            putIfPresent(facets, "hollow", firstNbtValue(nbt, "hollow"));
+            putIfPresent(facets, "transparent", firstNbtValue(nbt, "transparent"));
+            putIfPresent(facets, "facadeType", firstNbtValue(nbt, "type", "facadeType"));
+        } else if ("thaumcraft.wand".equals(normalizedFamily)) {
+            putIfPresent(facets, "rod", firstNbtValue(nbt, "rod"));
+            putIfPresent(facets, "cap", firstNbtValue(nbt, "cap"));
+            putIfPresent(facets, "focus", firstNbtValue(nbt, "focus", "focusId"));
+            putIfPresent(facets, "kind", lower(item.getInternalName()).contains("staff") ? "staff" : lower(item.getInternalName()).contains("sceptre") ? "sceptre" : "wand");
+        } else if ("toolpart.tconstruct".equals(normalizedFamily)) {
+            putIfPresent(facets, "partType", item.getInternalName());
+            putIfPresent(facets, "material", String.valueOf(item.getItemDamage()));
+            putIfPresent(facets, "material2", firstNbtValue(nbt, "Material2", "material2"));
+        } else if ("toolpart.tgregworks".equals(normalizedFamily)) {
+            putIfPresent(facets, "partType", item.getInternalName());
+            putIfPresent(facets, "material", firstNbtValue(nbt, "material"));
+        } else if ("tool.gregtech".equals(normalizedFamily) || "charge.gregtech".equals(normalizedFamily)) {
+            putIfPresent(facets, "primaryMaterial", firstNbtValue(nbt, "PrimaryMaterial", "primaryMaterial"));
+            putIfPresent(facets, "secondaryMaterial", firstNbtValue(nbt, "SecondaryMaterial", "secondaryMaterial"));
+            putIfPresent(facets, "voltage", firstNbtValue(nbt, "Voltage", "voltage"));
+            putIfPresent(facets, "charge", firstNbtValue(nbt, "Charge", "Energy", "Electric"));
+        } else if ("tool.tconstruct".equals(normalizedFamily)) {
+            putIfPresent(facets, "head", firstNbtValue(nbt, "RenderHead", "Head"));
+            putIfPresent(facets, "handle", firstNbtValue(nbt, "RenderHandle", "Handle"));
+            putIfPresent(facets, "accessory", firstNbtValue(nbt, "RenderAccessory", "Accessory"));
+            putIfPresent(facets, "durability", firstNbtValue(nbt, "TotalDurability", "Durability"));
+        } else if (normalizedFamily.startsWith("genetics.")) {
+            putIfPresent(facets, "root", firstNbtValue(nbt, "root"));
+            putIfPresent(facets, "species", firstNbtValue(nbt, "species", "Species"));
+            putIfPresent(facets, "allele", firstNbtValue(nbt, "allele"));
+            putIfPresent(facets, "chromosomes", firstNbtValue(nbt, "Chromosomes", "chromo"));
+        } else if (normalizedFamily.startsWith("entity_capture.")) {
+            putIfPresent(facets, "entity", firstNbtValue(nbt, "Name", "EntityId", "EntityID", "mobType", "MobType", "id"));
+            putIfPresent(facets, "skeletonType", firstNbtValue(nbt, "SkeletonType"));
+        } else if ("cosmetic.color".equals(normalizedFamily)) {
+            putIfPresent(facets, "color", firstNbtValue(nbt, "color", "colour"));
+            putIfPresent(facets, "color1", firstNbtValue(nbt, "color1"));
+            putIfPresent(facets, "color2", firstNbtValue(nbt, "color2"));
+        } else if ("data_carrier.encoded-pattern".equals(normalizedFamily)) {
+            putIfPresent(facets, "encodedPattern", firstNbtValue(nbt, "encodedPattern", "EncodedPattern"));
+            putIfPresent(facets, "output", firstNbtValue(nbt, "out", "output"));
+        }
+        if ("ic2".equals(lower(item.getModId())) && lower(item.getInternalName()).contains("cropseed")) {
+            putIfPresent(facets, "crop", firstNbtValue(nbt, "name"));
+            putIfPresent(facets, "growth", firstNbtValue(nbt, "growth"));
+            putIfPresent(facets, "gain", firstNbtValue(nbt, "gain"));
+            putIfPresent(facets, "resistance", firstNbtValue(nbt, "resistance"));
+            putIfPresent(facets, "scan", firstNbtValue(nbt, "scan"));
+        }
+        return facets;
+    }
+
+    private static String facetSummary(String family, Map<String, String> facets) {
+        StringBuilder builder = new StringBuilder();
+        for (Map.Entry<String, String> entry : facets.entrySet()) {
+            if (builder.length() > 0) {
+                builder.append(" · ");
+            }
+            builder.append(entry.getKey()).append('=').append(entry.getValue());
+            if (builder.length() > 96) {
+                break;
+            }
+        }
+        return builder.length() == 0 ? family : builder.toString();
+    }
+
+    private static String sortKey(String family, Map<String, String> facets, Item item) {
+        return stableToken(family)
+                + "|"
+                + stableToken(facetSummary(family, facets))
+                + "|"
+                + stableToken(item.getId());
+    }
+
+    private static void putIfPresent(Map<String, String> facets, String key, String value) {
+        String safeValue = safe(value).trim();
+        if (safeValue.length() > 0) {
+            facets.put(key, safeValue);
+        }
+    }
+
+    private static String firstNbtValue(String nbt, String... keys) {
+        for (String key : keys) {
+            String value = nbtValue(nbt, key);
+            if (value != null && value.trim().length() > 0) {
+                return value.trim();
+            }
+        }
+        return null;
+    }
+
+    private static String nbtValue(String nbt, String key) {
+        if (nbt == null || key == null || key.trim().length() == 0) {
+            return null;
+        }
+        Pattern pattern = Pattern.compile("(?i)(?:^|[,{\\s])" + Pattern.quote(key) + "\\s*:\\s*(?:\\\"([^\\\"]*)\\\"|([^,}\\]]+))");
+        Matcher matcher = pattern.matcher(nbt);
+        if (!matcher.find()) {
+            return null;
+        }
+        String quoted = matcher.group(1);
+        String raw = quoted != null ? quoted : matcher.group(2);
+        if (raw == null) {
+            return null;
+        }
+        return raw.trim().replaceAll("[bBsSlLfFdD]$", "");
     }
 
     private static String sha256(String value) {

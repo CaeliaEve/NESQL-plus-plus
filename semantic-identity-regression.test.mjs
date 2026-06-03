@@ -42,6 +42,9 @@ test('semantic mapper covers high-volume NBT families from GTNH exports', () => 
     'internal.contains("mobcrystal")',
     'isChargedStateVariant',
     'isCosmeticColorVariant',
+    'semanticFacets',
+    'variantLabel',
+    'facetSummary',
   ]) {
     assert.equal(mapper.includes(highVolumeSignal), true, `missing high-volume classifier signal ${highVolumeSignal}`);
   }

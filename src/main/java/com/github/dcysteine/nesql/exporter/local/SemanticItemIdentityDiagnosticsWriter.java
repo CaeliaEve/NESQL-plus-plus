@@ -275,6 +275,11 @@ public final class SemanticItemIdentityDiagnosticsWriter {
         row.addProperty("damage", item.getItemDamage());
         row.addProperty("representativeLegacyItemId", item.getId());
         row.addProperty("renderAssetRef", "nesqlpp:item/" + item.getId());
+        row.addProperty("facetSummary", identity.facetSummary);
+        row.addProperty("sortKey", identity.sortKey);
+        if (identity.facets != null) {
+            row.add("facets", identity.facets);
+        }
         return row;
     }
 
@@ -289,6 +294,12 @@ public final class SemanticItemIdentityDiagnosticsWriter {
         row.addProperty("variantKey", variantKey(item, safe(item.getNbt())));
         row.addProperty("localizedName", item.getLocalizedName());
         row.addProperty("renderAssetRef", "nesqlpp:item/" + item.getId());
+        row.addProperty("variantLabel", identity.variantLabel);
+        row.addProperty("facetSummary", identity.facetSummary);
+        row.addProperty("sortKey", identity.sortKey);
+        if (identity.facets != null) {
+            row.add("facets", identity.facets);
+        }
         return row;
     }
 
@@ -311,6 +322,8 @@ public final class SemanticItemIdentityDiagnosticsWriter {
         row.addProperty("payloadHash", identity.payloadHash);
         row.addProperty("family", identity.family);
         row.addProperty("classification", identity.classification);
+        row.addProperty("facetSummary", identity.facetSummary);
+        row.addProperty("sortKey", identity.sortKey);
         return row;
     }
 
