@@ -2,6 +2,7 @@ package com.github.dcysteine.nesql.exporter.main;
 
 import net.minecraft.command.ICommand;
 import net.minecraft.command.ICommandSender;
+import net.minecraft.util.EnumChatFormatting;
 
 import java.util.List;
 
@@ -14,7 +15,7 @@ final class ExportCommand implements ICommand {
 
     @Override
     public String getCommandUsage(ICommandSender unused) {
-        return "/nesql [filename suffix]";
+        return "/nesql [filename suffix] [--semantic-check]";
     }
 
     @Override
@@ -25,17 +26,57 @@ final class ExportCommand implements ICommand {
 
     @Override
     public void processCommand(ICommandSender sender, String[] args) {
-        if (args.length > 1) {
+        if (args.length > 2) {
             Logger.chatMessage("Too many parameters! Usage: " + getCommandUsage(sender));
             return;
         }
 
-        String repositoryName = args.length == 1
-                ? args[0]
-                : com.github.dcysteine.nesql.exporter.main.config.ConfigOptions.REPOSITORY_NAME.get();
+        boolean semanticCheck = false;
+        String repositoryName = null;
+        for (String arg : args) {
+            if ("--semantic-check".equalsIgnoreCase(arg) || "--semantic-only".equalsIgnoreCase(arg)) {
+                semanticCheck = true;
+            } else if (repositoryName == null) {
+                repositoryName = arg;
+            } else {
+                Logger.chatMessage("Too many parameters! Usage: " + getCommandUsage(sender));
+                return;
+            }
+        }
 
-        ClientGuiScheduler.open(new ExportSelectionGui(repositoryName));
-        Logger.chatMessage("Opened NESQL++ export selection for repository: " + repositoryName);
+        if (repositoryName == null || repositoryName.trim().length() == 0) {
+            repositoryName = com.github.dcysteine.nesql.exporter.main.config.ConfigOptions.REPOSITORY_NAME.get();
+        }
+
+        if (semanticCheck) {
+            startSemanticCheck(repositoryName);
+            return;
+        }
+
+        String finalRepositoryName = repositoryName;
+        ClientGuiScheduler.open(new ExportSelectionGui(finalRepositoryName));
+        Logger.chatMessage("Opened NESQL++ export selection for repository: " + finalRepositoryName);
+    }
+
+    private static void startSemanticCheck(String repositoryName) {
+        final String finalRepositoryName = repositoryName;
+        Logger.chatMessage(
+                EnumChatFormatting.AQUA
+                        + "[NESQL] Starting quick semantic JSONL check for repository: "
+                        + finalRepositoryName);
+        Thread thread = new Thread(() -> {
+            try {
+                SemanticIdentityQuickCheckRunner.run(finalRepositoryName);
+            } catch (Exception e) {
+                Logger.MOD.error("NESQL++ quick semantic JSONL check failed", e);
+                Logger.chatMessage(
+                        EnumChatFormatting.RED
+                                + "[NESQL] Quick semantic JSONL check failed: "
+                                + e.getMessage());
+            }
+        }, "NESQL++ Semantic Check");
+        thread.setDaemon(true);
+        thread.start();
     }
 
     static void startSelectedExport(String repositoryName, ExportSelection selection, ExportSelectionGui selectionGui) {
@@ -63,6 +104,14 @@ final class ExportCommand implements ICommand {
         }, "NESQL++ Export");
         thread.setDaemon(true);
         thread.start();
+    }
+
+    /*
+     * Compatibility overload kept for older call sites compiled against the
+     * pre-GUI command surface.
+     */
+    static void startSelectedExport(String repositoryName, ExportSelection selection) {
+        startSelectedExport(repositoryName, selection, null);
     }
 
     @Override

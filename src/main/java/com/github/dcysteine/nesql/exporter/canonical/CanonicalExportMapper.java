@@ -13,6 +13,8 @@ import com.github.dcysteine.nesql.sql.base.recipe.Recipe;
 import com.github.dcysteine.nesql.sql.base.recipe.RecipeType;
 import com.github.dcysteine.nesql.sql.gregtech.GregTechRecipe;
 import com.github.dcysteine.nesql.exporter.util.SpecialRecipeMetadataRegistry;
+import com.github.dcysteine.nesql.exporter.semantic.SemanticItemIdentity;
+import com.github.dcysteine.nesql.exporter.semantic.SemanticItemIdentityMapper;
 
 import java.io.File;
 import java.util.ArrayList;
@@ -256,6 +258,7 @@ public final class CanonicalExportMapper {
             for (ItemStack stack : entry.getValue().getItemStacks()) {
                 Map<String, Object> variant = new LinkedHashMap<>();
                 variant.put("itemId", stack.getItem().getId());
+                addSemanticItemRefs(variant, stack.getItem());
                 variant.put("stackSize", stack.getStackSize());
                 variants.add(variant);
             }
@@ -273,11 +276,24 @@ public final class CanonicalExportMapper {
             Map<String, Object> output = new LinkedHashMap<>();
             output.put("slotIndex", entry.getKey());
             output.put("itemId", entry.getValue().getItem().getId());
+            addSemanticItemRefs(output, entry.getValue().getItem());
             output.put("stackSize", entry.getValue().getStackSize());
             output.put("probability", entry.getValue().getProbability());
             result.add(output);
         }
         return result;
+    }
+
+    private static void addSemanticItemRefs(Map<String, Object> target, Item item) {
+        if (target == null || item == null) {
+            return;
+        }
+        SemanticItemIdentity identity = SemanticItemIdentityMapper.map(item);
+        target.put("publicItemId", identity.publicItemId);
+        target.put("variantId", identity.variantId);
+        target.put("payloadHash", identity.payloadHash);
+        target.put("semanticFamily", identity.family);
+        target.put("semanticClassification", identity.classification);
     }
 
     private static List<Map<String, Object>> mapFluidInputs(Map<Integer, FluidGroup> fluidInputs) {

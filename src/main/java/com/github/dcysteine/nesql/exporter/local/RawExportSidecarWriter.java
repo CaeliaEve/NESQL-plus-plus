@@ -80,6 +80,8 @@ public final class RawExportSidecarWriter {
         purgeLegacyRawExportOutputs(rawDir);
 
         RawFactCounts factCounts = writeRawFactStreams(rawDir);
+        SemanticItemIdentityDiagnosticsWriter.SemanticAuditSummary semanticAudit =
+                new SemanticItemIdentityDiagnosticsWriter(entityManager, rawDir).write();
 
         RawExportReport report = buildReport();
         report.counts.rawItems = factCounts.items;
@@ -113,6 +115,14 @@ public final class RawExportSidecarWriter {
         writeSizeReport(gson, rawDir);
         createEmptyJsonlIfMissing(new File(rawDir, "validation/errors.jsonl"));
 
+        Logger.MOD.info(
+                "Semantic item identity audit written: totalItems={}, taggedItems={}, classifiedTaggedItems={}, semanticItems={}, variants={}, payloads={}",
+                semanticAudit.totalItems,
+                semanticAudit.taggedItems,
+                semanticAudit.classifiedTaggedItems,
+                semanticAudit.semanticItems,
+                semanticAudit.variants,
+                semanticAudit.payloads);
         Logger.chatMessage(EnumChatFormatting.GREEN + "Raw-export sidecar written:");
         Logger.chatMessage(EnumChatFormatting.YELLOW + "  " + rawDir.getAbsolutePath());
     }
@@ -167,7 +177,12 @@ public final class RawExportSidecarWriter {
         manifest.capabilities.add("models");
         manifest.capabilities.add("validation");
         manifest.capabilities.add("special");
+        manifest.capabilities.add("semanticIdentity");
         manifest.files.put("items", "facts/items.jsonl.gz");
+        manifest.files.put("semanticItems", "facts/items/semantic-items.jsonl.gz");
+        manifest.files.put("itemVariants", "facts/items/variants.jsonl.gz");
+        manifest.files.put("itemPayloads", "facts/items/payloads.jsonl.gz");
+        manifest.files.put("itemIdentityMap", "facts/items/identity-map.jsonl.gz");
         manifest.files.put("fluids", "facts/fluids.jsonl.gz");
         manifest.files.put("recipeIndex", "facts/recipes/index.json");
         manifest.files.put("groups", "facts/nei/groups.jsonl.gz");
@@ -191,6 +206,9 @@ public final class RawExportSidecarWriter {
         manifest.files.put("stageChecksums", "validation/stage_checksums.json");
         manifest.files.put("sizeReport", "validation/size_report.json");
         manifest.files.put("neiBrowserContract", "validation/nei_browser_contract.json");
+        manifest.files.put("semanticFamilyAudit", "validation/semantic/parametric-family-audit.json");
+        manifest.files.put("semanticNbtKeyDistribution", "validation/semantic/nbt-key-distribution.json");
+        manifest.files.put("semanticIdentityNormalizationReport", "validation/semantic/identity-normalization-report.json");
         manifest.counts = report.counts;
         return manifest;
     }

@@ -188,6 +188,9 @@ public final class ExportSelectionGui extends GuiScreen {
         for (Option option : options) {
             option.enabled = value;
         }
+        // raw-export is now authoritative. "All" means all production lanes,
+        // not legacy canonical debug staging.
+        options.get(2).enabled = false;
     }
 
     private void selectDataOnly() {
