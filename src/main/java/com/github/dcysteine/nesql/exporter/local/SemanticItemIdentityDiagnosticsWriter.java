@@ -124,6 +124,7 @@ public final class SemanticItemIdentityDiagnosticsWriter {
         Set<String> publicItemIds = new LinkedHashSet<String>();
         Set<String> variantIds = new LinkedHashSet<String>();
         Set<String> payloadHashes = new LinkedHashSet<String>();
+        Set<String> legacyItemIds = new LinkedHashSet<String>();
 
         JsonlWriter semanticItems = null;
         JsonlWriter variants = null;
@@ -144,6 +145,7 @@ public final class SemanticItemIdentityDiagnosticsWriter {
                     }
                     Item item = rawItemFromJson(parser.parse(line).getAsJsonObject());
                     SemanticItemIdentity identity = SemanticItemIdentityMapper.map(item);
+                    validateMappedIdentity(item, identity, legacyItemIds);
                     if (publicItemIds.add(identity.publicItemId)) {
                         semanticItems.write(toSemanticItemRow(item, identity));
                         counts.semanticItems++;
@@ -178,6 +180,7 @@ public final class SemanticItemIdentityDiagnosticsWriter {
         Set<String> publicItemIds = new LinkedHashSet<String>();
         Set<String> variantIds = new LinkedHashSet<String>();
         Set<String> payloadHashes = new LinkedHashSet<String>();
+        Set<String> legacyItemIds = new LinkedHashSet<String>();
 
         JsonlWriter semanticItems = null;
         JsonlWriter variants = null;
@@ -203,6 +206,7 @@ public final class SemanticItemIdentityDiagnosticsWriter {
                 }
                 for (Item item : items) {
                     SemanticItemIdentity identity = SemanticItemIdentityMapper.map(item);
+                    validateMappedIdentity(item, identity, legacyItemIds);
                     if (publicItemIds.add(identity.publicItemId)) {
                         semanticItems.write(toSemanticItemRow(item, identity));
                         counts.semanticItems++;
@@ -230,7 +234,35 @@ public final class SemanticItemIdentityDiagnosticsWriter {
         return counts;
     }
 
-        private static JsonObject toSemanticItemRow(Item item, SemanticItemIdentity identity) {
+    private static void validateMappedIdentity(
+            Item item,
+            SemanticItemIdentity identity,
+            Set<String> legacyItemIds) {
+        String legacyItemId = safe(item.getId());
+        if (legacyItemId.trim().length() == 0) {
+            throw new IllegalStateException("Semantic identity validation failed: empty legacy item id.");
+        }
+        if (!legacyItemIds.add(legacyItemId)) {
+            throw new IllegalStateException(
+                    "Semantic identity validation failed: duplicate legacy item id " + legacyItemId);
+        }
+        if (identity == null || safe(identity.publicItemId).trim().length() == 0) {
+            throw new IllegalStateException(
+                    "Semantic identity validation failed: missing publicItemId for " + legacyItemId);
+        }
+        boolean hasPayload = safe(identity.payloadHash).trim().length() > 0;
+        boolean hasVariant = safe(identity.variantId).trim().length() > 0;
+        if (hasPayload != hasVariant) {
+            throw new IllegalStateException(
+                    "Semantic identity validation failed: payload/variant mismatch for " + legacyItemId);
+        }
+        if (safe(identity.family).trim().length() == 0 || safe(identity.classification).trim().length() == 0) {
+            throw new IllegalStateException(
+                    "Semantic identity validation failed: missing family/classification for " + legacyItemId);
+        }
+    }
+
+    private static JsonObject toSemanticItemRow(Item item, SemanticItemIdentity identity) {
         JsonObject row = new JsonObject();
         row.addProperty("schemaVersion", SCHEMA + "/semantic-item");
         row.addProperty("publicItemId", identity.publicItemId);

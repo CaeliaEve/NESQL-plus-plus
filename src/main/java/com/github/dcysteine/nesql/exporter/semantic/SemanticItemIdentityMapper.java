@@ -56,14 +56,28 @@ public final class SemanticItemIdentityMapper {
                 && (payload.contains("gene") || payload.contains("species") || payload.contains("allele") || internal.contains("serum") || internal.contains("template"))) {
             return "genetics.binnie-gendustry";
         }
-        if (mod.contains("gregtech") && (internal.contains("metatool") || payload.contains("gt.toolstats") || payload.contains("primarymaterial"))) {
+        if (isGregTechLikeTool(mod, internal, payload)) {
             return "tool.gregtech";
         }
         if ((mod.contains("tconstruct") || mod.contains("tinkers")) && (payload.contains("infitool") || payload.contains("renderhead") || payload.contains("head"))) {
             return "tool.tconstruct";
         }
+        if (isTConstructPart(mod, internal, payload)) {
+            return "toolpart.tconstruct";
+        }
         if ((mod.contains("thaumcraft") || mod.contains("tcwands") || id.contains("wand")) && (payload.contains("rod") || payload.contains("cap") || payload.contains("sceptre"))) {
             return "thaumcraft.wand";
+        }
+        if (isChargedStateVariant(payload)) {
+            return mod.contains("gregtech") || internal.contains("gt.") || internal.contains("meta")
+                    ? "charge.gregtech"
+                    : "charge.generic";
+        }
+        if (isEntityCaptureVariant(mod, internal, payload)) {
+            return "entity_capture.generic";
+        }
+        if (isCosmeticColorVariant(mod, internal, payload)) {
+            return "cosmetic.color";
         }
         if (payload.contains("encodedpattern") || internal.contains("encoded") || internal.contains("pattern")) {
             return "data_carrier.encoded-pattern";
@@ -109,6 +123,43 @@ public final class SemanticItemIdentityMapper {
 
     private static String lower(String value) {
         return safe(value).toLowerCase(Locale.ROOT);
+    }
+
+    private static boolean isGregTechLikeTool(String mod, String internal, String payload) {
+        return internal.contains("metatool")
+                || payload.contains("gt.toolstats")
+                || (payload.contains("primarymaterial") && payload.contains("secondarymaterial"))
+                || (payload.contains("uid0") && payload.contains("uid1") && payload.contains("slot") && payload.contains("gt."));
+    }
+
+    private static boolean isTConstructPart(String mod, String internal, String payload) {
+        if (!(mod.contains("tconstruct") || mod.contains("tinkers"))) {
+            return false;
+        }
+        return internal.endsWith("part")
+                || internal.contains("part")
+                || payload.contains("dualmat")
+                || payload.contains("material2")
+                || payload.contains("renderhandle")
+                || payload.contains("renderaccessory");
+    }
+
+    private static boolean isChargedStateVariant(String payload) {
+        return (payload.contains("electric") || payload.contains("energy"))
+                && (payload.contains("maxcharge") || payload.contains("maxdamage") || payload.contains("voltage"));
+    }
+
+    private static boolean isEntityCaptureVariant(String mod, String internal, String payload) {
+        return internal.contains("mobsoul")
+                || internal.contains("mobcrystal")
+                || internal.contains("soulvial")
+                || payload.contains("mobtype")
+                || (payload.contains("entity") && payload.contains("id"));
+    }
+
+    private static boolean isCosmeticColorVariant(String mod, String internal, String payload) {
+        return (payload.contains("color") || payload.contains("colour"))
+                && (mod.contains("botania") || internal.contains("wand") || payload.contains("display"));
     }
 
     private static String safe(String value) {
