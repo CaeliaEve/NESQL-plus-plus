@@ -783,6 +783,7 @@ public final class RawExportSidecarWriter {
         } else if ("bloodmagic".equals(domainId)) {
             copyFirstNumber(facts, "bloodCost", recipe, "metadata.bloodCost", "layout.bindings.bloodCost", "metadata.lpCost", "layout.bindings.lpCost", "metadata.requiredLP", "metadata.lp");
             copyFirstNumber(facts, "lpCost", recipe, "metadata.lpCost", "metadata.requiredLP", "metadata.bloodCost", "layout.bindings.lpCost");
+            copyFirstNumber(facts, "requiredLP", recipe, "metadata.requiredLP", "metadata.lpCost", "metadata.bloodCost", "layout.bindings.lpCost", "layout.bindings.bloodCost");
             copyFirstNumber(facts, "tier", recipe, "metadata.tier", "metadata.altarTier", "layout.bindings.tier");
             copyFirstNumber(facts, "altarTier", recipe, "metadata.altarTier", "metadata.tier", "layout.bindings.altarTier", "layout.bindings.tier");
             copyFirstNumber(facts, "consumptionRate", recipe, "metadata.consumptionRate", "layout.bindings.consumptionRate");
@@ -810,8 +811,18 @@ public final class RawExportSidecarWriter {
             copyElement(facts, "entityName", recipe, "metadata.entityName");
             copyElement(facts, "mobName", recipe, "metadata.mobName");
             copyElement(facts, "entityHealth", recipe, "metadata.entityHealth");
+            copyElement(facts, "entityHealth", recipe, "metadata.maxHealth");
+            copyElement(facts, "maxHealth", recipe, "metadata.maxHealth");
             copyElement(facts, "drops", recipe, "metadata.drops");
             copyElement(facts, "fluidDrops", recipe, "metadata.fluidDrops");
+            copyFirstNumber(facts, "normalOutputsCount", recipe, "metadata.normalOutputsCount");
+            copyFirstNumber(facts, "rareOutputsCount", recipe, "metadata.rareOutputsCount");
+            copyFirstNumber(facts, "additionalOutputsCount", recipe, "metadata.additionalOutputsCount");
+            copyFirstNumber(facts, "infernalOutputsCount", recipe, "metadata.infernalOutputsCount");
+            copyFirstNumber(facts, "outputCount", recipe, "metadata.outputCount");
+            copyFirstNumber(facts, "eliteChance", recipe, "metadata.eliteChance");
+            copyFirstNumber(facts, "ultraChance", recipe, "metadata.ultraChance");
+            copyFirstNumber(facts, "infernoChance", recipe, "metadata.infernoChance");
             copyElement(facts, "modelRef", recipe, "metadata.modelRef");
             copyElement(facts, "previewImage", recipe, "metadata.previewImage");
         }
