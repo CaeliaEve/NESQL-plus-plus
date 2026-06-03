@@ -65,6 +65,9 @@ public final class SemanticItemIdentityMapper {
         if (isTConstructPart(mod, internal, payload)) {
             return "toolpart.tconstruct";
         }
+        if (isTGregworksPart(mod, internal, payload)) {
+            return "toolpart.tgregworks";
+        }
         if ((mod.contains("thaumcraft") || mod.contains("tcwands") || id.contains("wand")) && (payload.contains("rod") || payload.contains("cap") || payload.contains("sceptre"))) {
             return "thaumcraft.wand";
         }
@@ -142,6 +145,13 @@ public final class SemanticItemIdentityMapper {
                 || payload.contains("material2")
                 || payload.contains("renderhandle")
                 || payload.contains("renderaccessory");
+    }
+
+    private static boolean isTGregworksPart(String mod, String internal, String payload) {
+        if (!(mod.contains("tgregworks") || internal.contains("tgregtoolpart"))) {
+            return false;
+        }
+        return internal.contains("toolpart") || payload.contains("material");
     }
 
     private static boolean isChargedStateVariant(String payload) {
