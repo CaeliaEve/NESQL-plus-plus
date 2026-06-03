@@ -63,4 +63,7 @@ test('semantic stream writer validates one identity row per raw item', () => {
   assert.equal(writer.includes('payload/variant mismatch'), true);
   assert.equal(writer.includes('missing family/classification'), true);
   assert.equal(writer.includes('summary.identityMapRows = streamCounts.identityMapRows;'), true);
+  assert.equal(writer.includes('topUnclassifiedFamilies'), true);
+  assert.equal(writer.includes('unclassifiedFamilyCounts'), true);
+  assert.equal(writer.includes('unclassifiedFamilySamples'), true);
 });

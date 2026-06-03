@@ -425,7 +425,10 @@ public final class SemanticItemIdentityDiagnosticsWriter {
         String family = SemanticItemIdentityMapper.classify(item, nbt);
         if (family == null) {
             state.unclassifiedTaggedItems++;
+            String unclassifiedKey = unclassifiedFamilyKey(item);
+            increment(state.unclassifiedFamilyCounts, unclassifiedKey);
             addSample(state.unclassifiedSamples, sampleItem(item));
+            addSample(state.unclassifiedFamilySamples, unclassifiedKey + " => " + sampleItem(item));
             return;
         }
 
@@ -452,7 +455,9 @@ public final class SemanticItemIdentityDiagnosticsWriter {
         root.addProperty("familyCount", state.families.size());
         root.add("families", familyArray(state));
         root.add("topMods", topMap(state.modCounts, 40, "modId"));
+        root.add("topUnclassifiedFamilies", topMap(state.unclassifiedFamilyCounts, 80, "familyKey"));
         root.add("unclassifiedSamples", stringArray(state.unclassifiedSamples));
+        root.add("unclassifiedFamilySamples", stringArray(state.unclassifiedFamilySamples));
         return root;
     }
 
@@ -481,6 +486,7 @@ public final class SemanticItemIdentityDiagnosticsWriter {
         root.addProperty("classifiedTaggedItems", state.classifiedTaggedItems);
         root.addProperty("unclassifiedTaggedItems", state.unclassifiedTaggedItems);
         root.add("families", familyArray(state));
+        root.add("topUnclassifiedFamilies", topMap(state.unclassifiedFamilyCounts, 40, "familyKey"));
         root.add("nextActions", nextActions());
         return root;
     }
@@ -611,6 +617,10 @@ public final class SemanticItemIdentityDiagnosticsWriter {
 
     private static String sampleItem(Item item) {
         return safe(item.getId()) + " | " + safe(item.getModId()) + ":" + safe(item.getInternalName()) + ":" + item.getItemDamage();
+    }
+
+    private static String unclassifiedFamilyKey(Item item) {
+        return safe(item.getModId()) + "::" + safe(item.getInternalName());
     }
 
     private static JsonObject rootObject() {
@@ -745,7 +755,9 @@ public final class SemanticItemIdentityDiagnosticsWriter {
         final Map<String, FamilyStats> families = new LinkedHashMap<String, FamilyStats>();
         final Map<String, Long> nbtKeyCounts = new LinkedHashMap<String, Long>();
         final Map<String, Long> modCounts = new LinkedHashMap<String, Long>();
+        final Map<String, Long> unclassifiedFamilyCounts = new LinkedHashMap<String, Long>();
         final Set<String> unclassifiedSamples = new LinkedHashSet<String>();
+        final Set<String> unclassifiedFamilySamples = new LinkedHashSet<String>();
     }
 
     private static final class FamilyStats {
