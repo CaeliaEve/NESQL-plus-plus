@@ -109,6 +109,9 @@ public final class RawExportSidecarWriter {
         report.counts.rawAnimations = factCounts.animations;
         report.counts.rawEntities = factCounts.entities;
         report.counts.rawBrowserAtlasAssets = factCounts.browserAtlasAssets;
+        report.counts.renderBackendFacts = factCounts.renderBackendFacts;
+        report.counts.renderTextureSprites = factCounts.renderTextureSprites;
+        report.counts.renderItemRenderers = factCounts.renderItemRenderers;
         report.counts.semanticTotalItems = semanticAudit.totalItems;
         report.counts.semanticTaggedItems = semanticAudit.taggedItems;
         report.counts.semanticClassifiedTaggedItems = semanticAudit.classifiedTaggedItems;
@@ -216,6 +219,7 @@ public final class RawExportSidecarWriter {
         manifest.capabilities.add("semanticIdentity");
         manifest.capabilities.add("nativeNeiRules");
         manifest.capabilities.add("nativeNeiHandlers");
+        manifest.capabilities.add("angelicaNativeRenderFacts");
         manifest.files.put("items", "facts/items.jsonl.gz");
         manifest.files.put("semanticItems", "facts/items/semantic-items.jsonl.gz");
         manifest.files.put("itemVariants", "facts/items/variants.jsonl.gz");
@@ -231,6 +235,9 @@ public final class RawExportSidecarWriter {
         manifest.files.put("animations", "assets/animations/index.jsonl.gz");
         manifest.files.put("nativeSprites", "assets/animations/native-sprites.jsonl.gz");
         manifest.files.put("renderedGifs", "assets/animations/rendered-gifs.jsonl.gz");
+        manifest.files.put("renderBackend", "facts/render/backend.json");
+        manifest.files.put("renderTextureSprites", "facts/render/texture-sprites.jsonl.gz");
+        manifest.files.put("renderItemRenderers", "facts/render/item-renderers.jsonl.gz");
         manifest.files.put("browserAtlasIndex", "assets/textures/browser_atlas_index.json");
         manifest.files.put("browserAtlasAssets", "assets/textures/atlas-assets");
         manifest.files.put("neiHandlers", "facts/nei/handlers.jsonl.gz");
@@ -385,6 +392,18 @@ public final class RawExportSidecarWriter {
                 counts.rawAnimations >= 0,
                 "Animation metadata stream is present; zero rows is valid when no animated assets are detected."));
         gates.add(validationGate(
+                "angelica-render-facts",
+                counts.renderBackendFacts == 1 && counts.renderTextureSprites >= 0 && counts.renderItemRenderers == counts.rawItems,
+                "Angelica render facts: backendFacts="
+                        + counts.renderBackendFacts
+                        + ", textureSprites="
+                        + counts.renderTextureSprites
+                        + ", itemRenderers="
+                        + counts.renderItemRenderers
+                        + ", rawItems="
+                        + counts.rawItems
+                        + "."));
+        gates.add(validationGate(
                 "entity-models",
                 counts.rawEntities >= 0,
                 "Entity model stream is present; zero rows is valid when entity exports are not selected."));
@@ -507,6 +526,11 @@ public final class RawExportSidecarWriter {
         counts.neiHandlerLayouts = handlerCounts.layouts;
         createEmptyJsonl(new File(rawDir, "models/multiblocks/index.jsonl.gz"));
         counts.entities = writeEntityModelIndex(rawDir);
+        AngelicaRenderFactsWriter.Counts renderCounts =
+                new AngelicaRenderFactsWriter(entityManager, rawDir).write();
+        counts.renderBackendFacts = renderCounts.backendFacts;
+        counts.renderTextureSprites = renderCounts.textureSprites;
+        counts.renderItemRenderers = renderCounts.itemRenderers;
         return counts;
     }
 
@@ -2413,6 +2437,9 @@ public final class RawExportSidecarWriter {
         long rawAnimations;
         long rawEntities;
         long rawBrowserAtlasAssets;
+        long renderBackendFacts;
+        long renderTextureSprites;
+        long renderItemRenderers;
         long semanticTotalItems;
         long semanticTaggedItems;
         long semanticClassifiedTaggedItems;
@@ -2448,6 +2475,9 @@ public final class RawExportSidecarWriter {
         long animations;
         long entities;
         long browserAtlasAssets;
+        long renderBackendFacts;
+        long renderTextureSprites;
+        long renderItemRenderers;
         NeiBrowserContract neiBrowserContract;
     }
 
