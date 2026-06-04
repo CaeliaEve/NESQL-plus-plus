@@ -171,21 +171,14 @@ public abstract class RenderJob {
     }
 
     /**
-     * Some GTNH shader inventory renderers are already represented by render-contract metadata.
-     * Capturing them through an off-screen framebuffer on Java 25 + LWJGL3ify can hard-exit the
-     * client inside the shader path. For those renderers, export the safe base icon plus the
-     * renderer/shader contract instead of invoking the unsafe inventory renderer repeatedly.
+     * Legacy static-contract bypass is intentionally disabled.
+     *
+     * <p>Angelica-native export should capture known shader/custom renderers through the isolated
+     * framebuffer path and surface failures through render facts/validation instead of silently
+     * replacing them with a base icon.
      */
     public boolean shouldUseContractStaticRenderOnly() {
-        if (getType() != JobType.ITEM) {
-            return false;
-        }
-        String rendererClassName = getInventoryRendererClassName();
-        if (rendererClassName == null || rendererClassName.isEmpty()) {
-            return false;
-        }
-        String normalized = rendererClassName.toLowerCase();
-        return isContractSafeRendererClass(normalized);
+        return false;
     }
 
     /**
@@ -548,10 +541,9 @@ public abstract class RenderJob {
     }
 
     /**
-     * Renderer families with declarative render contracts that should not be invoked through
-     * repeated off-screen framebuffer capture on Java 25 + LWJGL3ify. The web runtime can replay
-     * these shader/time effects from the emitted contract, while NESQL++ still exports the safe
-     * base icon and native sprite metadata.
+     * Renderer families with declarative render contracts. These still require real Angelica
+     * framebuffer capture; the contract is exported as metadata for validation/runtime indexing,
+     * not as a replacement for native capture.
      */
     private boolean isContractSafeRendererClass(String normalizedRendererClassName) {
         if (normalizedRendererClassName == null || normalizedRendererClassName.isEmpty()) {

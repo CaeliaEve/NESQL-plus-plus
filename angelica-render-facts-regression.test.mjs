@@ -3,6 +3,7 @@ import assert from 'node:assert/strict';
 
 const sidecar = fs.readFileSync('src/main/java/com/github/dcysteine/nesql/exporter/local/RawExportSidecarWriter.java', 'utf8');
 const writer = fs.readFileSync('src/main/java/com/github/dcysteine/nesql/exporter/local/AngelicaRenderFactsWriter.java', 'utf8');
+const renderJob = fs.readFileSync('src/main/java/com/github/dcysteine/nesql/exporter/util/render/RenderJob.java', 'utf8');
 
 for (const required of [
   'angelicaNativeRenderFacts',
@@ -41,5 +42,10 @@ for (const required of [
 ]) {
   assert(writer.includes(required), `Angelica writer missing ${required}`);
 }
+
+assert(
+  /public boolean shouldUseContractStaticRenderOnly\(\)\s*\{\s*return false;\s*\}/.test(renderJob),
+  'RenderJob must not bypass known special renderer framebuffer capture'
+);
 
 console.log('Angelica render facts regression checks passed.');
