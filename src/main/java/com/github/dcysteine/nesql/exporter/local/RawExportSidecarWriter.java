@@ -724,7 +724,8 @@ public final class RawExportSidecarWriter {
                     }
                     JsonObject row = new JsonObject();
                     row.addProperty("schemaVersion", SCHEMA_VERSION + "/nei-guidfilter-rule");
-                    row.addProperty("source", source.getAbsolutePath());
+                    row.addProperty("sourceKind", "gtnh-nei-config");
+                    row.addProperty("sourceFile", source.getName());
                     row.addProperty("lineNumber", lineNumber);
                     row.addProperty("raw", line);
                     int comma = line.indexOf(',');
@@ -760,7 +761,8 @@ public final class RawExportSidecarWriter {
                     }
                     JsonObject row = new JsonObject();
                     row.addProperty("schemaVersion", SCHEMA_VERSION + "/nei-hidden-item-rule");
-                    row.addProperty("source", source.getAbsolutePath());
+                    row.addProperty("sourceKind", "gtnh-nei-config");
+                    row.addProperty("sourceFile", source.getName());
                     row.addProperty("lineNumber", lineNumber);
                     row.addProperty("raw", line);
                     row.addProperty("itemExpression", line);
@@ -2245,5 +2247,7 @@ public final class RawExportSidecarWriter {
         String kind;
     }
 }
+
+
 
 
