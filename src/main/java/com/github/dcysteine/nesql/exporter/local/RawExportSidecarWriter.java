@@ -112,8 +112,10 @@ public final class RawExportSidecarWriter {
         report.counts.renderBackendFacts = factCounts.renderBackendFacts;
         report.counts.renderBackendAngelica = factCounts.renderBackendAngelica;
         report.counts.renderTextureSprites = factCounts.renderTextureSprites;
+        report.counts.renderTextureSpritesMissingTiming = factCounts.renderTextureSpritesMissingTiming;
         report.counts.renderItemRenderers = factCounts.renderItemRenderers;
         report.counts.renderShaderItems = factCounts.renderShaderItems;
+        report.counts.renderUnknownSpecialRenderers = factCounts.renderUnknownSpecialRenderers;
         report.counts.renderFramebufferCaptures = factCounts.renderFramebufferCaptures;
         report.counts.semanticTotalItems = semanticAudit.totalItems;
         report.counts.semanticTaggedItems = semanticAudit.taggedItems;
@@ -398,15 +400,24 @@ public final class RawExportSidecarWriter {
                 "Animation metadata stream is present; zero rows is valid when no animated assets are detected."));
         gates.add(validationGate(
                 "angelica-render-facts",
-                counts.renderBackendFacts == 1 && counts.renderBackendAngelica == 1 && counts.renderTextureSprites >= 0 && counts.renderItemRenderers == counts.rawItems,
+                counts.renderBackendFacts == 1
+                        && counts.renderBackendAngelica == 1
+                        && counts.renderTextureSprites >= 0
+                        && counts.renderTextureSpritesMissingTiming == 0
+                        && counts.renderItemRenderers == counts.rawItems
+                        && counts.renderUnknownSpecialRenderers == 0,
                 "Angelica render facts: backendFacts="
                         + counts.renderBackendFacts
                         + ", backendAngelica="
                         + counts.renderBackendAngelica
                         + ", textureSprites="
                         + counts.renderTextureSprites
+                        + ", spritesMissingTiming="
+                        + counts.renderTextureSpritesMissingTiming
                         + ", itemRenderers="
                         + counts.renderItemRenderers
+                        + ", unknownSpecialRenderers="
+                        + counts.renderUnknownSpecialRenderers
                         + ", shaderItems="
                         + counts.renderShaderItems
                         + ", framebufferCaptures="
@@ -552,8 +563,10 @@ public final class RawExportSidecarWriter {
         counts.renderBackendFacts = renderCounts.backendFacts;
         counts.renderBackendAngelica = "angelica".equals(renderCounts.backend) ? 1L : 0L;
         counts.renderTextureSprites = renderCounts.textureSprites;
+        counts.renderTextureSpritesMissingTiming = renderCounts.textureSpritesMissingTiming;
         counts.renderItemRenderers = renderCounts.itemRenderers;
         counts.renderShaderItems = renderCounts.shaderItems;
+        counts.renderUnknownSpecialRenderers = renderCounts.unknownSpecialRenderers;
         counts.renderFramebufferCaptures = renderCounts.framebufferCaptures;
         return counts;
     }
@@ -2464,8 +2477,10 @@ public final class RawExportSidecarWriter {
         long renderBackendFacts;
         long renderBackendAngelica;
         long renderTextureSprites;
+        long renderTextureSpritesMissingTiming;
         long renderItemRenderers;
         long renderShaderItems;
+        long renderUnknownSpecialRenderers;
         long renderFramebufferCaptures;
         long semanticTotalItems;
         long semanticTaggedItems;
@@ -2505,8 +2520,10 @@ public final class RawExportSidecarWriter {
         long renderBackendFacts;
         long renderBackendAngelica;
         long renderTextureSprites;
+        long renderTextureSpritesMissingTiming;
         long renderItemRenderers;
         long renderShaderItems;
+        long renderUnknownSpecialRenderers;
         long renderFramebufferCaptures;
         NeiBrowserContract neiBrowserContract;
     }

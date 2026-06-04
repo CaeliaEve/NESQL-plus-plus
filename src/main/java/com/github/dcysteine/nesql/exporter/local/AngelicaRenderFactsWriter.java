@@ -70,12 +70,16 @@ final class AngelicaRenderFactsWriter {
         Counts counts = new Counts();
         counts.backend = writeBackendFacts(new File(rawDir, "facts/render/backend.json"));
         counts.backendFacts = 1L;
-        counts.textureSprites = writeTextureSpriteFacts(new File(rawDir, "facts/render/texture-sprites.jsonl.gz"));
+        TextureSpriteStreamCounts textureSpriteCounts =
+                writeTextureSpriteFacts(new File(rawDir, "facts/render/texture-sprites.jsonl.gz"));
+        counts.textureSprites = textureSpriteCounts.textureSprites;
+        counts.textureSpritesMissingTiming = textureSpriteCounts.missingTiming;
         ItemRendererStreamCounts itemRendererCounts = writeItemRendererFacts(
                 new File(rawDir, "facts/render/item-renderers.jsonl.gz"),
                 new File(rawDir, "facts/render/shader-items.jsonl.gz"));
         counts.itemRenderers = itemRendererCounts.itemRenderers;
         counts.shaderItems = itemRendererCounts.shaderItems;
+        counts.unknownSpecialRenderers = itemRendererCounts.unknownSpecialRenderers;
         counts.framebufferCaptures = writeFramebufferCaptureFacts(
                 new File(rawDir, "facts/render/framebuffer-captures.jsonl.gz"));
         return counts;
@@ -107,8 +111,8 @@ final class AngelicaRenderFactsWriter {
         return backend;
     }
 
-    private long writeTextureSpriteFacts(File out) throws IOException {
-        long count = 0L;
+    private TextureSpriteStreamCounts writeTextureSpriteFacts(File out) throws IOException {
+        TextureSpriteStreamCounts counts = new TextureSpriteStreamCounts();
         ensureDirectory(out.getParentFile());
         try (OutputStreamWriter writer = createUtf8JsonlWriter(out)) {
             Set<TextureMap> maps = collectTextureMaps();
@@ -142,24 +146,31 @@ final class AngelicaRenderFactsWriter {
                     row.addProperty("runtimeFrameCounter", intField(sprite, "frameCounter", -1));
                     row.addProperty("runtimeTickCounter", intField(sprite, "tickCounter", -1));
                     AnimationMetadataSection metadata = readAnimationMetadata(sprite);
+                    boolean missingNativeTiming = false;
                     if (metadata != null) {
                         row.addProperty("defaultFrameTimeTicks", metadata.getFrameTime());
                         row.addProperty("metadataFrameCount", metadata.getFrameCount());
                         row.add("timeline", animationTimeline(metadata, Math.max(frameCount, collectionSize(frames))));
+                        row.addProperty("timelineStatus", "native-metadata");
                         row.addProperty("interpolate", booleanMethod(metadata, "isInterpolate", false));
                     } else {
                         row.addProperty("defaultFrameTimeTicks", (Number) null);
                         row.addProperty("metadataFrameCount", (Number) null);
                         row.add("timeline", fallbackTimeline(Math.max(frameCount, collectionSize(frames))));
+                        missingNativeTiming = animated || frameCount > 1 || collectionSize(frames) > 1;
+                        row.addProperty("timelineStatus", missingNativeTiming ? "missing-native-metadata" : "static");
                         row.addProperty("interpolate", false);
+                    }
+                    if (missingNativeTiming) {
+                        counts.missingTiming++;
                     }
                     writer.write(GSON.toJson(row));
                     writer.write('\n');
-                    count++;
+                    counts.textureSprites++;
                 }
             }
         }
-        return count;
+        return counts;
     }
 
     private ItemRendererStreamCounts writeItemRendererFacts(File out, File shaderOut) throws IOException {
@@ -183,6 +194,9 @@ final class AngelicaRenderFactsWriter {
                     writer.write(GSON.toJson(row));
                     writer.write('\n');
                     counts.itemRenderers++;
+                    if (booleanValue(row, "knownSpecialRendererUnclassified")) {
+                        counts.unknownSpecialRenderers++;
+                    }
                     JsonObject shaderRow = toShaderItemRow(item, row);
                     if (shaderRow != null) {
                         shaderWriter.write(GSON.toJson(shaderRow));
@@ -223,6 +237,7 @@ final class AngelicaRenderFactsWriter {
         row.addProperty("usesShader", classification.usesShader);
         row.addProperty("requiresFramebufferCapture", classification.requiresFramebufferCapture);
         row.addProperty("supportsNativeAtlas", renderer == null);
+        row.addProperty("knownSpecialRendererUnclassified", isKnownSpecialRendererGap(item, rendererClass, classification));
         row.addProperty("notes", classification.notes);
         return row;
     }
@@ -311,6 +326,37 @@ final class AngelicaRenderFactsWriter {
             return new RendererClassification("gtnhlib.model-isbrh", false, true, "GTNHLib inventory model renderer.");
         }
         return new RendererClassification("generic.iitemrenderer", false, true, "Custom inventory IItemRenderer.");
+    }
+
+    private static boolean isKnownSpecialRendererGap(
+            Item item,
+            String rendererClass,
+            RendererClassification classification) {
+        if (classification == null || !"generic.iitemrenderer".equals(classification.kind)) {
+            return false;
+        }
+        StringBuilder haystack = new StringBuilder();
+        if (rendererClass != null) {
+            haystack.append(rendererClass).append('|');
+        }
+        if (item != null) {
+            haystack.append(item.getModId()).append('|')
+                    .append(item.getInternalName()).append('|')
+                    .append(item.getLocalizedName());
+        }
+        String lower = haystack.toString().toLowerCase(Locale.ROOT);
+        return lower.contains("avaritia")
+                || lower.contains("gtnhlib")
+                || lower.contains("cosmic")
+                || lower.contains("halo")
+                || lower.contains("singular")
+                || lower.contains("universium")
+                || lower.contains("infinity")
+                || lower.contains("transcendent")
+                || lower.contains("glitch")
+                || lower.contains("wireframe")
+                || lower.contains("rainbow")
+                || lower.contains("gaia");
     }
 
     private static boolean isShaderOrCaptureFamily(String rendererKind) {
@@ -665,14 +711,22 @@ final class AngelicaRenderFactsWriter {
         String backend;
         long backendFacts;
         long textureSprites;
+        long textureSpritesMissingTiming;
         long itemRenderers;
         long shaderItems;
+        long unknownSpecialRenderers;
         long framebufferCaptures;
+    }
+
+    private static final class TextureSpriteStreamCounts {
+        long textureSprites;
+        long missingTiming;
     }
 
     private static final class ItemRendererStreamCounts {
         long itemRenderers;
         long shaderItems;
+        long unknownSpecialRenderers;
     }
 
     static final class RendererClassification {

@@ -12,6 +12,8 @@ for (const required of [
   'facts/render/shader-items.jsonl.gz',
   'facts/render/framebuffer-captures.jsonl.gz',
   'angelica-render-facts',
+  'renderTextureSpritesMissingTiming',
+  'renderUnknownSpecialRenderers',
   'new AngelicaRenderFactsWriter(entityManager, rawDir, renderAssets).write()'
 ]) {
   assert(sidecar.includes(required), `Raw sidecar missing ${required}`);
@@ -30,7 +32,9 @@ for (const required of [
   'angelica-framebuffer-capture',
   'browserReimplementationAllowed',
   'framebuffer-capture',
-  'existing-render-dispatcher-capture'
+  'existing-render-dispatcher-capture',
+  'timelineStatus',
+  'knownSpecialRendererUnclassified'
 ]) {
   assert(writer.includes(required), `Angelica writer missing ${required}`);
 }
