@@ -39,12 +39,55 @@ for (const required of [
   'textureHints',
   'getMaskTexture',
   'getHaloTexture',
+  'getOverlayIcon',
+  'getMaskIcon',
+  'getFrameIcon',
   'framebuffer-capture',
   'existing-render-dispatcher-capture',
   'timelineStatus',
-  'knownSpecialRendererUnclassified'
+  'knownSpecialRendererUnclassified',
+  'native-render-tick',
+  'requiresFramebufferCapture',
+  'captureRequired',
+  'preferredExport'
 ]) {
   assert(writer.includes(required), `Angelica writer missing ${required}`);
+}
+
+for (const required of [
+  'asset.framePattern',
+  'asset.frameCount',
+  'asset.capturedFrameCount',
+  'asset.configuredFrameCount',
+  'asset.frameDurationMs',
+  'asset.frameDurationSource',
+  'GSON.toJsonTree(asset.frames)',
+  'GSON.toJsonTree(asset.timeline)',
+  'GSON.toJsonTree(asset.captureContract)',
+]) {
+  assert(writer.includes(required), `Framebuffer capture fact writer missing ${required}`);
+}
+
+for (const [rendererClass, family] of [
+  ['CosmicItemRenderer', 'avaritia.cosmic'],
+  ['FancyHaloRenderer', 'avaritia.halo'],
+  ['FracturedOreRenderer', 'avaritia.fractured-ore'],
+  ['TexturedItemRenderer', 'gtnhlib.textured-item'],
+  ['ModelISBRH', 'gtnhlib.model-isbrh'],
+]) {
+  assert(writer.toLowerCase().includes(rendererClass.toLowerCase()), `Renderer classifier missing ${rendererClass}`);
+  assert(writer.includes(family), `Renderer classifier missing ${family}`);
+}
+
+for (const required of [
+  'metadata.getFrameTime()',
+  'metadata.getFrameCount()',
+  'getFrameIndex',
+  'getFrameTimeSingle',
+  'durationTicks',
+  'durationMs',
+]) {
+  assert(writer.includes(required), `Texture sprite timeline export missing ${required}`);
 }
 
 assert(
