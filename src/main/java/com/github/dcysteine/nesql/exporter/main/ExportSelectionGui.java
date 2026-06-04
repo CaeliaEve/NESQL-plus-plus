@@ -27,7 +27,6 @@ public final class ExportSelectionGui extends GuiScreen {
         this.repositoryName = repositoryName;
         options.add(new Option("Core items", "Item and fluid facts", true));
         options.add(new Option("Recipes", "Crafting, machine and NEI handlers", true));
-        options.add(new Option("Debug canonical snapshot", "Legacy compatibility files; off for lean raw-export", false));
         options.add(new Option("GT blueprints", "Multiblock structure contracts", true));
         options.add(new Option("Block faces", "3D block face and UV metadata", true));
         options.add(new Option("Item rendering", "Static icons and animation frames", true));
@@ -125,7 +124,7 @@ public final class ExportSelectionGui extends GuiScreen {
         drawString(fontRendererObj, repositoryName, panelLeft + panelWidth - 178, panelTop + 22, 0xEDE7C5);
         drawString(
                 fontRendererObj,
-                "Select the data lanes for this run. Recommended full export writes raw-export without legacy canonical output.",
+                "Select data lanes for this run. Production export writes raw-export only; canonical is retired.",
                 panelLeft + 22,
                 panelTop + 56,
                 0x9CC7D8);
@@ -153,7 +152,7 @@ public final class ExportSelectionGui extends GuiScreen {
 
         drawString(
                 fontRendererObj,
-                "Tip: Debug canonical is opt-in only. Keep it off for smaller NeoNEI raw-export packages.",
+                "Tip: raw-export is authoritative. No canonical package is generated for production exports.",
                 panelLeft + 22,
                 panelBottom - 48,
                 0x7FAABB);
@@ -171,15 +170,15 @@ public final class ExportSelectionGui extends GuiScreen {
         ExportSelection selection = ExportSelection.builder()
                 .writeItems(options.get(0).enabled)
                 .writeRecipes(options.get(1).enabled)
-                .writeCanonicalSnapshot(options.get(2).enabled)
-                .writeMultiblocks(options.get(3).enabled)
-                .writeBlockFaces(options.get(4).enabled)
-                .renderImages(options.get(5).enabled)
-                .writeRenderManifests(options.get(6).enabled)
-                .writeAtlasPacks(options.get(7).enabled)
-                .writeAnimatedAtlasPacks(options.get(8).enabled)
-                .writeBrowserIndexes(options.get(9).enabled)
-                .commitDatabase(options.get(10).enabled)
+                .writeCanonicalSnapshot(false)
+                .writeMultiblocks(options.get(2).enabled)
+                .writeBlockFaces(options.get(3).enabled)
+                .renderImages(options.get(4).enabled)
+                .writeRenderManifests(options.get(5).enabled)
+                .writeAtlasPacks(options.get(6).enabled)
+                .writeAnimatedAtlasPacks(options.get(7).enabled)
+                .writeBrowserIndexes(options.get(8).enabled)
+                .commitDatabase(options.get(9).enabled)
                 .build();
         ExportCommand.startSelectedExport(repositoryName, selection, this);
     }
@@ -188,27 +187,25 @@ public final class ExportSelectionGui extends GuiScreen {
         for (Option option : options) {
             option.enabled = value;
         }
-        // raw-export is now authoritative. "All" means all production lanes,
-        // not legacy canonical debug staging.
-        options.get(2).enabled = false;
+        // raw-export is authoritative. There is no production canonical lane.
     }
 
     private void selectDataOnly() {
         setAll(false);
         options.get(0).enabled = true;
         options.get(1).enabled = true;
-        options.get(9).enabled = true;
-        options.get(10).enabled = false;
+        options.get(8).enabled = true;
+        options.get(9).enabled = false;
     }
 
     private void normalizeDependencies() {
-        if (!options.get(5).enabled) {
+        if (!options.get(4).enabled) {
+            options.get(5).enabled = false;
             options.get(6).enabled = false;
             options.get(7).enabled = false;
-            options.get(8).enabled = false;
         }
         if (!options.get(0).enabled) {
-            options.get(9).enabled = false;
+            options.get(8).enabled = false;
         }
     }
 
