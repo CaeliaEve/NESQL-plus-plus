@@ -1,5 +1,6 @@
 package com.github.dcysteine.nesql.exporter.local;
 
+import com.github.dcysteine.nesql.exporter.canonical.CanonicalRenderAsset;
 import com.github.dcysteine.nesql.exporter.main.Logger;
 import com.github.dcysteine.nesql.sql.base.item.Item;
 import com.google.gson.Gson;
@@ -53,10 +54,14 @@ final class AngelicaRenderFactsWriter {
 
     private final EntityManager entityManager;
     private final File rawDir;
+    private final List<CanonicalRenderAsset> renderAssets;
 
-    AngelicaRenderFactsWriter(EntityManager entityManager, File rawDir) {
+    AngelicaRenderFactsWriter(EntityManager entityManager, File rawDir, List<CanonicalRenderAsset> renderAssets) {
         this.entityManager = entityManager;
         this.rawDir = rawDir;
+        this.renderAssets = renderAssets == null
+                ? Collections.<CanonicalRenderAsset>emptyList()
+                : renderAssets;
     }
 
     Counts write() throws IOException {
@@ -70,6 +75,8 @@ final class AngelicaRenderFactsWriter {
                 new File(rawDir, "facts/render/shader-items.jsonl.gz"));
         counts.itemRenderers = itemRendererCounts.itemRenderers;
         counts.shaderItems = itemRendererCounts.shaderItems;
+        counts.framebufferCaptures = writeFramebufferCaptureFacts(
+                new File(rawDir, "facts/render/framebuffer-captures.jsonl.gz"));
         return counts;
     }
 
@@ -235,6 +242,46 @@ final class AngelicaRenderFactsWriter {
         return row;
     }
 
+    private long writeFramebufferCaptureFacts(File out) throws IOException {
+        long count = 0L;
+        ensureDirectory(out.getParentFile());
+        try (OutputStreamWriter writer = createUtf8JsonlWriter(out)) {
+            for (CanonicalRenderAsset asset : renderAssets) {
+                if (!isFramebufferCaptureAsset(asset)) {
+                    continue;
+                }
+                JsonObject row = new JsonObject();
+                row.addProperty("schemaVersion", SCHEMA_ROOT + "/framebuffer-capture");
+                row.addProperty("assetId", asset.assetId);
+                row.addProperty("variantKey", asset.variantKey);
+                row.addProperty("family", asset.family);
+                row.addProperty("rendererFamily", asset.rendererFamily);
+                row.addProperty("renderMode", asset.renderMode);
+                row.addProperty("animationMode", asset.animationMode);
+                row.addProperty("captureMethod", asset.captureMethod);
+                row.addProperty("captureSource", asset.captureSource);
+                row.addProperty("primaryArtifact", asset.primaryArtifact);
+                row.addProperty("staticFile", asset.staticFile);
+                row.addProperty("framePattern", asset.framePattern);
+                row.addProperty("frameCount", asset.frameCount);
+                row.addProperty("capturedFrameCount", asset.capturedFrameCount);
+                row.addProperty("configuredFrameCount", asset.configuredFrameCount);
+                row.addProperty("frameDurationMs", asset.frameDurationMs);
+                row.addProperty("frameDurationSource", asset.frameDurationSource);
+                row.add("frames", GSON.toJsonTree(asset.frames));
+                row.add("timeline", GSON.toJsonTree(asset.timeline));
+                row.add("rendererContract", GSON.toJsonTree(asset.rendererContract));
+                row.add("shaderContract", GSON.toJsonTree(asset.shaderContract));
+                row.add("captureContract", GSON.toJsonTree(asset.captureContract));
+                row.addProperty("source", "existing-render-dispatcher-capture");
+                writer.write(GSON.toJson(row));
+                writer.write('\n');
+                count++;
+            }
+        }
+        return count;
+    }
+
     static RendererClassification classifyRenderer(String rendererClass) {
         if (rendererClass == null || rendererClass.trim().isEmpty()) {
             return new RendererClassification("vanilla.atlas", false, false, "No inventory IItemRenderer registered.");
@@ -264,6 +311,24 @@ final class AngelicaRenderFactsWriter {
                 && (rendererKind.startsWith("avaritia.")
                         || rendererKind.startsWith("gtnhlib.")
                         || rendererKind.equals("generic.iitemrenderer"));
+    }
+
+    private static boolean isFramebufferCaptureAsset(CanonicalRenderAsset asset) {
+        if (asset == null) {
+            return false;
+        }
+        return containsIgnoreCase(asset.captureMethod, "framebuffer")
+                || containsIgnoreCase(asset.captureSource, "framebuffer")
+                || containsIgnoreCase(asset.renderMode, "framebuffer")
+                || containsIgnoreCase(asset.animationMode, "framebuffer")
+                || containsIgnoreCase(asset.mode, "framebuffer")
+                || containsIgnoreCase(asset.primaryArtifact, ".gif")
+                || asset.framePattern != null
+                || (asset.capturedFrameCount != null && asset.capturedFrameCount > 1);
+    }
+
+    private static boolean containsIgnoreCase(String value, String token) {
+        return value != null && token != null && value.toLowerCase(Locale.ROOT).contains(token.toLowerCase(Locale.ROOT));
     }
 
     private static String shaderFamily(String rendererKind) {
@@ -530,6 +595,7 @@ final class AngelicaRenderFactsWriter {
         long textureSprites;
         long itemRenderers;
         long shaderItems;
+        long framebufferCaptures;
     }
 
     private static final class ItemRendererStreamCounts {

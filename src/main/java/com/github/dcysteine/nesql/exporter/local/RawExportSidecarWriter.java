@@ -113,6 +113,7 @@ public final class RawExportSidecarWriter {
         report.counts.renderTextureSprites = factCounts.renderTextureSprites;
         report.counts.renderItemRenderers = factCounts.renderItemRenderers;
         report.counts.renderShaderItems = factCounts.renderShaderItems;
+        report.counts.renderFramebufferCaptures = factCounts.renderFramebufferCaptures;
         report.counts.semanticTotalItems = semanticAudit.totalItems;
         report.counts.semanticTaggedItems = semanticAudit.taggedItems;
         report.counts.semanticClassifiedTaggedItems = semanticAudit.classifiedTaggedItems;
@@ -240,6 +241,7 @@ public final class RawExportSidecarWriter {
         manifest.files.put("renderTextureSprites", "facts/render/texture-sprites.jsonl.gz");
         manifest.files.put("renderItemRenderers", "facts/render/item-renderers.jsonl.gz");
         manifest.files.put("renderShaderItems", "facts/render/shader-items.jsonl.gz");
+        manifest.files.put("renderFramebufferCaptures", "facts/render/framebuffer-captures.jsonl.gz");
         manifest.files.put("browserAtlasIndex", "assets/textures/browser_atlas_index.json");
         manifest.files.put("browserAtlasAssets", "assets/textures/atlas-assets");
         manifest.files.put("neiHandlers", "facts/nei/handlers.jsonl.gz");
@@ -404,9 +406,21 @@ public final class RawExportSidecarWriter {
                         + counts.renderItemRenderers
                         + ", shaderItems="
                         + counts.renderShaderItems
+                        + ", framebufferCaptures="
+                        + counts.renderFramebufferCaptures
                         + ", rawItems="
                         + counts.rawItems
                         + "."));
+        gates.add(validationGate(
+                "angelica-special-captures",
+                counts.renderShaderItems == 0 || counts.renderFramebufferCaptures > 0,
+                counts.renderShaderItems == 0
+                        ? "No shader/custom renderer items require framebuffer capture."
+                        : "Shader/custom renderer items requiring capture="
+                                + counts.renderShaderItems
+                                + ", exported framebuffer capture assets="
+                                + counts.renderFramebufferCaptures
+                                + "."));
         gates.add(validationGate(
                 "entity-models",
                 counts.rawEntities >= 0,
@@ -531,11 +545,12 @@ public final class RawExportSidecarWriter {
         createEmptyJsonl(new File(rawDir, "models/multiblocks/index.jsonl.gz"));
         counts.entities = writeEntityModelIndex(rawDir);
         AngelicaRenderFactsWriter.Counts renderCounts =
-                new AngelicaRenderFactsWriter(entityManager, rawDir).write();
+                new AngelicaRenderFactsWriter(entityManager, rawDir, renderAssets).write();
         counts.renderBackendFacts = renderCounts.backendFacts;
         counts.renderTextureSprites = renderCounts.textureSprites;
         counts.renderItemRenderers = renderCounts.itemRenderers;
         counts.renderShaderItems = renderCounts.shaderItems;
+        counts.renderFramebufferCaptures = renderCounts.framebufferCaptures;
         return counts;
     }
 
@@ -2446,6 +2461,7 @@ public final class RawExportSidecarWriter {
         long renderTextureSprites;
         long renderItemRenderers;
         long renderShaderItems;
+        long renderFramebufferCaptures;
         long semanticTotalItems;
         long semanticTaggedItems;
         long semanticClassifiedTaggedItems;
@@ -2485,6 +2501,7 @@ public final class RawExportSidecarWriter {
         long renderTextureSprites;
         long renderItemRenderers;
         long renderShaderItems;
+        long renderFramebufferCaptures;
         NeiBrowserContract neiBrowserContract;
     }
 

@@ -10,8 +10,9 @@ for (const required of [
   'facts/render/texture-sprites.jsonl.gz',
   'facts/render/item-renderers.jsonl.gz',
   'facts/render/shader-items.jsonl.gz',
+  'facts/render/framebuffer-captures.jsonl.gz',
   'angelica-render-facts',
-  'new AngelicaRenderFactsWriter(entityManager, rawDir).write()'
+  'new AngelicaRenderFactsWriter(entityManager, rawDir, renderAssets).write()'
 ]) {
   assert(sidecar.includes(required), `Raw sidecar missing ${required}`);
 }
@@ -27,7 +28,9 @@ for (const required of [
   'avaritia.halo',
   'gtnhlib.textured-item',
   'angelica-framebuffer-capture',
-  'browserReimplementationAllowed'
+  'browserReimplementationAllowed',
+  'framebuffer-capture',
+  'existing-render-dispatcher-capture'
 ]) {
   assert(writer.includes(required), `Angelica writer missing ${required}`);
 }
