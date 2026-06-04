@@ -54,6 +54,29 @@ test('semantic mapper covers high-volume NBT families from GTNH exports', () => 
   }
 });
 
+test('semantic family plugin foundation is present for native NBT semantics', () => {
+  const semanticFamily = readSource('src/main/java/com/github/dcysteine/nesql/exporter/semantic/SemanticFamily.java');
+  const parsedNbt = readSource('src/main/java/com/github/dcysteine/nesql/exporter/semantic/ParsedNbt.java');
+  const mapper = readSource('src/main/java/com/github/dcysteine/nesql/exporter/semantic/SemanticItemIdentityMapper.java');
+
+  for (const method of [
+    'boolean matches(Item item, ParsedNbt nbt)',
+    'String publicIdentity(Item item, ParsedNbt nbt)',
+    'String variantIdentity(Item item, ParsedNbt nbt, String payloadHash)',
+    'Map<String, String> facets(Item item, ParsedNbt nbt)',
+    'String sortKey(Item item, ParsedNbt nbt, Map<String, String> facets)',
+    'int representativePriority(Item item, ParsedNbt nbt)',
+  ]) {
+    assert.equal(semanticFamily.includes(method), true, `missing SemanticFamily contract method ${method}`);
+  }
+
+  assert.equal(parsedNbt.includes('public static ParsedNbt parse(String raw)'), true);
+  assert.equal(parsedNbt.includes('public String first(String... keys)'), true);
+  assert.equal(parsedNbt.includes('KEY_VALUE_PATTERN'), true);
+  assert.equal(mapper.includes('ParsedNbt.parse(nbt)'), true);
+  assert.equal(mapper.includes('semanticFacets(String family, Item item, ParsedNbt parsedNbt)'), true);
+});
+
 test('semantic stream writer validates one identity row per raw item', () => {
   const writer = readSource('src/main/java/com/github/dcysteine/nesql/exporter/local/SemanticItemIdentityDiagnosticsWriter.java');
 
