@@ -291,6 +291,7 @@ public class CanonicalBrowserLayoutIndexWriter {
                     String groupKey = "nei:" + groupIndex;
                     String groupLabel = safeNeiGroupLabel(groupIndex);
                     assignment.groupKey = groupKey;
+                    assignment.groupSource = "nativeNei";
                     assignment.groupLabel = groupLabel;
                     if (!groupSortOrders.containsKey(groupKey)) {
                         groupSortOrders.put(groupKey, nextGroupSortOrder++);
@@ -327,6 +328,7 @@ public class CanonicalBrowserLayoutIndexWriter {
                 } else {
                     String fallbackGroupKey = "fallback:" + assignment.groupKey;
                     assignment.groupKey = fallbackGroupKey;
+                    assignment.groupSource = "fallback";
                     if (!groupSortOrders.containsKey(fallbackGroupKey)) {
                         groupSortOrders.put(fallbackGroupKey, nextGroupSortOrder++);
                     }
@@ -498,6 +500,7 @@ public class CanonicalBrowserLayoutIndexWriter {
             item.itemId = candidate.itemId;
             item.browserOrder = candidate.browserOrder;
             item.groupKey = assignment.groupKey;
+            item.groupSource = assignment.groupSource;
             item.groupLabel = assignment.groupLabel;
             item.groupSize = assignment.groupSize;
             item.groupSortOrder = assignment.groupSortOrder;
@@ -513,6 +516,7 @@ public class CanonicalBrowserLayoutIndexWriter {
             BrowserGroup group = groups.computeIfAbsent(assignment.groupKey, key -> {
                 BrowserGroup created = new BrowserGroup();
                 created.groupKey = key;
+                created.groupSource = assignment.groupSource;
                 created.groupLabel = assignment.groupLabel;
                 created.groupSize = assignment.groupSize;
                 created.groupSortOrder = assignment.groupSortOrder;
@@ -527,7 +531,8 @@ public class CanonicalBrowserLayoutIndexWriter {
                         group.representativeItemId,
                         assignment.groupKey,
                         assignment.groupLabel,
-                        assignment.groupSize));
+                        assignment.groupSize,
+                        assignment.groupSource));
             }
         }
 
@@ -646,6 +651,7 @@ public class CanonicalBrowserLayoutIndexWriter {
                     groupSortOrder.put(matched.key, nextSortOrder++);
                 }
                 assignment.groupKey = matched.key;
+                assignment.groupSource = "collapsibleItems";
                 assignment.groupLabel = matched.displayName;
                 assignment.groupSize = groupSizes.getOrDefault(matched.key, 1);
                 assignment.groupSortOrder = groupSortOrder.getOrDefault(matched.key, 0);
@@ -792,6 +798,7 @@ public class CanonicalBrowserLayoutIndexWriter {
             SyntheticAssignment assignment = new SyntheticAssignment();
             assignment.itemId = candidate.itemId;
             assignment.groupKey = groupKey;
+            assignment.groupSource = "syntheticFallback";
             assignment.groupLabel = groupLabel;
             assignment.groupSize = family.size();
             assignment.representativeItemId = representative.itemId;
@@ -811,6 +818,7 @@ public class CanonicalBrowserLayoutIndexWriter {
             boolean primaryIsGrouped = primary != null && primary.groupKey != null && primary.groupSize > 1;
             SyntheticAssignment secondary = primaryIsGrouped ? null : secondaryAssignments.get(candidate.itemId);
             String groupKey = primaryIsGrouped ? primary.groupKey : secondary != null ? secondary.groupKey : null;
+            String groupSource = primaryIsGrouped ? primary.groupSource : secondary != null ? secondary.groupSource : null;
             String groupLabel = primaryIsGrouped ? primary.groupLabel : secondary != null ? secondary.groupLabel : null;
             int groupSize = primaryIsGrouped ? primary.groupSize : secondary != null ? secondary.groupSize : 1;
             String representativeItemId = primaryIsGrouped
@@ -830,6 +838,7 @@ public class CanonicalBrowserLayoutIndexWriter {
             BrowserAssignment assignment = new BrowserAssignment();
             assignment.itemId = candidate.itemId;
             assignment.groupKey = groupKey != null && groupSize > 1 ? groupKey : null;
+            assignment.groupSource = groupKey != null && groupSize > 1 ? groupSource : null;
             assignment.groupLabel = groupKey != null && groupSize > 1 ? groupLabel : null;
             assignment.groupSize = groupKey != null && groupSize > 1 ? groupSize : 1;
             assignment.groupSortOrder = resolvedSortOrder;
@@ -1342,6 +1351,7 @@ public class CanonicalBrowserLayoutIndexWriter {
         String itemId;
         int browserOrder;
         String groupKey;
+        String groupSource;
         String groupLabel;
         int groupSize;
         int groupSortOrder;
@@ -1351,6 +1361,7 @@ public class CanonicalBrowserLayoutIndexWriter {
 
     private static final class BrowserGroup {
         String groupKey;
+        String groupSource;
         String groupLabel;
         int groupSize;
         int groupSortOrder;
@@ -1363,6 +1374,7 @@ public class CanonicalBrowserLayoutIndexWriter {
         String entryKind;
         String itemId;
         String groupKey;
+        String groupSource;
         String groupLabel;
         int groupSize;
 
@@ -1375,12 +1387,19 @@ public class CanonicalBrowserLayoutIndexWriter {
             return entry;
         }
 
-        static BrowserDefaultEntry group(int entryOrder, String itemId, String groupKey, String groupLabel, int groupSize) {
+        static BrowserDefaultEntry group(
+                int entryOrder,
+                String itemId,
+                String groupKey,
+                String groupLabel,
+                int groupSize,
+                String groupSource) {
             BrowserDefaultEntry entry = new BrowserDefaultEntry();
             entry.entryOrder = entryOrder;
             entry.entryKind = "group-collapsed";
             entry.itemId = itemId;
             entry.groupKey = groupKey;
+            entry.groupSource = groupSource;
             entry.groupLabel = groupLabel;
             entry.groupSize = groupSize;
             return entry;
@@ -1390,6 +1409,7 @@ public class CanonicalBrowserLayoutIndexWriter {
     private static final class BrowserAssignment {
         String itemId;
         String groupKey;
+        String groupSource;
         String groupLabel;
         int groupSize;
         int groupSortOrder;
@@ -1399,6 +1419,7 @@ public class CanonicalBrowserLayoutIndexWriter {
     private static final class SyntheticAssignment {
         String itemId;
         String groupKey;
+        String groupSource;
         String groupLabel;
         int groupSize;
         String representativeItemId;
