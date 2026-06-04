@@ -115,7 +115,7 @@ Minimum manifest fields:
     "nativeSprites": "assets/animations/native-sprites.jsonl",
     "renderedGifs": "assets/animations/rendered-gifs.jsonl",
     "specialIndex": "special/index.json",
-    "validationReport": "validation/export-health-report.json"
+    "exportHealthReport": "validation/export-health-report.json"
   }
 }
 ```
