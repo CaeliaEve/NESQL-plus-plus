@@ -182,6 +182,7 @@ public enum Renderer {
     }
 
     private BufferedImage renderIsolatedFrame(RenderJob job) {
+        AngelicaGlStateSnapshot glStateSnapshot = AngelicaGlStateSnapshot.capture();
         GL11.glPushAttrib(GL11.GL_ALL_ATTRIB_BITS);
         GL11.glMatrixMode(GL11.GL_PROJECTION);
         GL11.glPushMatrix();
@@ -214,7 +215,7 @@ public enum Renderer {
             GL11.glPopMatrix();
             GL11.glMatrixMode(GL11.GL_MODELVIEW);
             GL11.glPopAttrib();
-            resetPerJobRenderState();
+            glStateSnapshot.restore(job);
         }
     }
 
