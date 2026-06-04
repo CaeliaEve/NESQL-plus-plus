@@ -24,6 +24,7 @@ import java.io.File;
 import java.io.FileInputStream;
 import java.io.FileOutputStream;
 import java.io.IOException;
+import java.io.InputStream;
 import java.io.OutputStreamWriter;
 import java.io.Writer;
 import java.io.BufferedReader;
@@ -102,6 +103,8 @@ public final class RawExportSidecarWriter {
         report.counts.neiHiddenItemRules = factCounts.neiHiddenItemRules;
         report.counts.neiHiddenItems = factCounts.neiHiddenItems;
         report.counts.neiRepresentativeMismatches = factCounts.neiRepresentativeMismatches;
+        report.counts.neiHandlers = factCounts.neiHandlers;
+        report.counts.neiHandlerLayouts = factCounts.neiHandlerLayouts;
         report.counts.rawTextures = factCounts.textures;
         report.counts.rawAnimations = factCounts.animations;
         report.counts.rawEntities = factCounts.entities;
@@ -212,6 +215,7 @@ public final class RawExportSidecarWriter {
         manifest.capabilities.add("special");
         manifest.capabilities.add("semanticIdentity");
         manifest.capabilities.add("nativeNeiRules");
+        manifest.capabilities.add("nativeNeiHandlers");
         manifest.files.put("items", "facts/items.jsonl.gz");
         manifest.files.put("semanticItems", "facts/items/semantic-items.jsonl.gz");
         manifest.files.put("itemVariants", "facts/items/variants.jsonl.gz");
@@ -230,6 +234,7 @@ public final class RawExportSidecarWriter {
         manifest.files.put("browserAtlasIndex", "assets/textures/browser_atlas_index.json");
         manifest.files.put("browserAtlasAssets", "assets/textures/atlas-assets");
         manifest.files.put("neiHandlers", "facts/nei/handlers.jsonl.gz");
+        manifest.files.put("neiHandlerLayouts", "facts/nei/handler-layouts.jsonl.gz");
         manifest.files.put("multiblocks", "models/multiblocks/index.jsonl.gz");
         manifest.files.put("entities", "models/entities/index.jsonl.gz");
         manifest.files.put("specialIndex", "special/index.json");
@@ -364,6 +369,12 @@ public final class RawExportSidecarWriter {
                         + counts.neiHiddenItemRules
                         + "."));
         gates.add(validationGate(
+                "nei-handler-metadata",
+                counts.neiHandlers > 0 && counts.neiHandlerLayouts > 0,
+                counts.neiHandlers > 0 && counts.neiHandlerLayouts > 0
+                        ? "NEI handler metadata and layout streams are present."
+                        : "NEI handler metadata or layout facts are missing."));
+        gates.add(validationGate(
                 "textures",
                 counts.rawItems == 0 || counts.rawTextures > 0,
                 counts.rawItems == 0 || counts.rawTextures > 0
@@ -491,7 +502,9 @@ public final class RawExportSidecarWriter {
         }
         counts.browserAtlasAssets = writeBrowserAtlasIndexAndAssets(rawDir);
 
-        createEmptyJsonl(new File(rawDir, "facts/nei/handlers.jsonl.gz"));
+        HandlerMetadataCounts handlerCounts = writeHandlerMetadata(rawDir);
+        counts.neiHandlers = handlerCounts.handlers;
+        counts.neiHandlerLayouts = handlerCounts.layouts;
         createEmptyJsonl(new File(rawDir, "models/multiblocks/index.jsonl.gz"));
         counts.entities = writeEntityModelIndex(rawDir);
         return counts;
@@ -782,6 +795,234 @@ public final class RawExportSidecarWriter {
             }
         }
         return writeArrayAsJsonl(rows, new File(rawDir, "facts/nei/hiddenitems.jsonl.gz"));
+    }
+
+    private HandlerMetadataCounts writeHandlerMetadata(File rawDir) throws IOException {
+        JsonArray sourceEntries = loadBundledHandlerMetadata();
+        JsonArray handlerRows = new JsonArray();
+        JsonArray layoutRows = new JsonArray();
+        Set<String> seenHandlers = new LinkedHashSet<String>();
+        int ordinal = 0;
+        for (JsonElement element : sourceEntries) {
+            if (element == null || !element.isJsonObject()) {
+                continue;
+            }
+            JsonObject source = element.getAsJsonObject();
+            String handlerClass = trimToNull(readString(source, "handler", null));
+            if (handlerClass == null || seenHandlers.contains(handlerClass)) {
+                continue;
+            }
+            seenHandlers.add(handlerClass);
+            String itemName = trimToNull(readString(source, "itemName", null));
+            String modId = trimToNull(readString(source, "modId", null));
+            String modName = trimToNull(readString(source, "modName", null));
+            String displayName = handlerDisplayName(handlerClass, itemName);
+            String handlerKey = stableHandlerKey(handlerClass, itemName, ordinal++);
+            int width = parseInt(readString(source, "handlerWidth", null), 166);
+            int height = parseInt(readString(source, "handlerHeight", null), 65);
+            int maxPerPage = parseInt(readString(source, "maxRecipesPerPage", null), 1);
+            int yShift = parseInt(readString(source, "yShift", null), 0);
+            String family = classifyHandlerFamily(handlerClass, itemName, modId);
+            String layoutKind = inferLayoutKind(handlerClass, itemName, family);
+
+            JsonObject handler = new JsonObject();
+            handler.addProperty("schemaVersion", SCHEMA_VERSION + "/nei-handler");
+            handler.addProperty("handlerKey", handlerKey);
+            handler.addProperty("handlerClass", handlerClass);
+            handler.addProperty("displayName", displayName);
+            handler.addProperty("localizedName", displayName);
+            handler.addProperty("canonicalMachineFamily", family);
+            handler.addProperty("modId", modId);
+            handler.addProperty("modName", modName);
+            handler.addProperty("catalystItemName", itemName);
+            handler.addProperty("preferredMachineItemName", preferredMachineItemName(handlerClass, itemName, family));
+            handler.addProperty("gtMultiblockPreferred", isLikelyGtMultiblock(handlerClass, itemName, family));
+            handler.addProperty("maxRecipesPerPage", maxPerPage);
+            handler.addProperty("handlerWidth", width);
+            handler.addProperty("handlerHeight", height);
+            handler.addProperty("yShift", yShift);
+            handler.add("source", new JsonParser().parse(source.toString()));
+            handlerRows.add(handler);
+
+            JsonObject layout = new JsonObject();
+            layout.addProperty("schemaVersion", SCHEMA_VERSION + "/nei-handler-layout");
+            layout.addProperty("handlerKey", handlerKey);
+            layout.addProperty("handlerClass", handlerClass);
+            layout.addProperty("layoutKind", layoutKind);
+            layout.addProperty("width", width);
+            layout.addProperty("height", height);
+            layout.addProperty("yShift", yShift);
+            layout.addProperty("maxRecipesPerPage", maxPerPage);
+            layout.add("slots", defaultLayoutSlots(layoutKind));
+            layout.add("textOverlays", new JsonArray());
+            layoutRows.add(layout);
+        }
+
+        HandlerMetadataCounts counts = new HandlerMetadataCounts();
+        counts.handlers = writeArrayAsJsonl(handlerRows, new File(rawDir, "facts/nei/handlers.jsonl.gz"));
+        counts.layouts = writeArrayAsJsonl(layoutRows, new File(rawDir, "facts/nei/handler-layouts.jsonl.gz"));
+        return counts;
+    }
+
+    private static JsonArray loadBundledHandlerMetadata() throws IOException {
+        InputStream stream = RawExportSidecarWriter.class
+                .getClassLoader()
+                .getResourceAsStream("nesql/nei/handler-metadata.json");
+        if (stream == null) {
+            return new JsonArray();
+        }
+        try (InputStreamReader reader = new InputStreamReader(stream, StandardCharsets.UTF_8)) {
+            JsonElement parsed = new JsonParser().parse(reader);
+            if (parsed == null || !parsed.isJsonObject()) {
+                return new JsonArray();
+            }
+            JsonArray entries = parsed.getAsJsonObject().getAsJsonArray("entries");
+            return entries == null ? new JsonArray() : entries;
+        }
+    }
+
+    private static String stableHandlerKey(String handlerClass, String itemName, int ordinal) {
+        String base = normalizeKey(firstNonBlank(handlerClass, itemName, "handler-" + ordinal));
+        return base.length() == 0 ? "handler-" + ordinal : base;
+    }
+
+    private static String handlerDisplayName(String handlerClass, String itemName) {
+        String simple = handlerSimpleName(handlerClass);
+        if (simple.endsWith("RecipeHandler")) {
+            simple = simple.substring(0, simple.length() - "RecipeHandler".length());
+        } else if (simple.endsWith("Handler")) {
+            simple = simple.substring(0, simple.length() - "Handler".length());
+        }
+        simple = simple.replaceAll("([a-z])([A-Z])", "$1 $2").trim();
+        return simple.length() == 0 ? firstNonBlank(itemName, "NEI Handler") : simple;
+    }
+
+    private static String classifyHandlerFamily(String handlerClass, String itemName, String modId) {
+        String descriptor = (firstNonBlank(handlerClass, "") + " " + firstNonBlank(itemName, "") + " " + firstNonBlank(modId, ""))
+                .toLowerCase(java.util.Locale.ROOT);
+        if (descriptor.contains("shaped") || descriptor.contains("shapeless") || descriptor.contains("crafting")) {
+            return "crafting-table";
+        }
+        if (descriptor.contains("furnace") || descriptor.contains("smelting")) {
+            return "furnace";
+        }
+        if (descriptor.contains("brewing")) {
+            return "brewing";
+        }
+        if (descriptor.contains("gregtech") || descriptor.contains("gt.")) {
+            return "gregtech-machine";
+        }
+        if (descriptor.contains("thaum") || descriptor.contains("arcane") || descriptor.contains("crucible") || descriptor.contains("infusion")) {
+            return "thaumcraft";
+        }
+        if (descriptor.contains("botania") || descriptor.contains("mana")) {
+            return "botania";
+        }
+        if (descriptor.contains("fluid") || descriptor.contains("liquid") || descriptor.contains("chemical")) {
+            return "fluid-machine";
+        }
+        return "native-nei";
+    }
+
+    private static String inferLayoutKind(String handlerClass, String itemName, String family) {
+        String descriptor = (firstNonBlank(handlerClass, "") + " " + firstNonBlank(itemName, "") + " " + firstNonBlank(family, ""))
+                .toLowerCase(java.util.Locale.ROOT);
+        if (descriptor.contains("crafting") || descriptor.contains("shaped") || descriptor.contains("shapeless")) {
+            return "crafting-grid";
+        }
+        if (descriptor.contains("furnace") || descriptor.contains("smelting")) {
+            return "furnace";
+        }
+        if (descriptor.contains("fluid") || descriptor.contains("liquid") || descriptor.contains("chemical")) {
+            return "fluid-machine";
+        }
+        if (descriptor.contains("gregtech") || descriptor.contains("machine")) {
+            return "machine";
+        }
+        return "native-nei";
+    }
+
+    private static JsonArray defaultLayoutSlots(String layoutKind) {
+        JsonArray slots = new JsonArray();
+        if ("crafting-grid".equals(layoutKind)) {
+            addSlot(slots, "item-input", 0, 3, 3, 30, 12);
+            addSlot(slots, "item-output", 9, 1, 1, 124, 30);
+        } else if ("furnace".equals(layoutKind)) {
+            addSlot(slots, "item-input", 0, 1, 1, 45, 24);
+            addSlot(slots, "item-output", 1, 1, 1, 115, 24);
+            addSlot(slots, "fuel", 2, 1, 1, 45, 46);
+        } else if ("fluid-machine".equals(layoutKind)) {
+            addSlot(slots, "item-input", 0, 3, 2, 18, 16);
+            addSlot(slots, "fluid-input", 0, 3, 2, 72, 16);
+            addSlot(slots, "item-output", 6, 3, 2, 126, 16);
+        } else if ("machine".equals(layoutKind)) {
+            addSlot(slots, "item-input", 0, 3, 3, 18, 12);
+            addSlot(slots, "fluid-input", 0, 1, 3, 76, 12);
+            addSlot(slots, "item-output", 9, 2, 2, 112, 21);
+        } else {
+            addSlot(slots, "item-input", 0, 3, 2, 24, 18);
+            addSlot(slots, "item-output", 6, 2, 2, 116, 20);
+        }
+        return slots;
+    }
+
+    private static void addSlot(JsonArray slots, String role, int startIndex, int columns, int rows, int x, int y) {
+        JsonObject slot = new JsonObject();
+        slot.addProperty("role", role);
+        slot.addProperty("startIndex", startIndex);
+        slot.addProperty("columns", columns);
+        slot.addProperty("rows", rows);
+        slot.addProperty("x", x);
+        slot.addProperty("y", y);
+        slots.add(slot);
+    }
+
+    private static String preferredMachineItemName(String handlerClass, String itemName, String family) {
+        if (isLikelyGtMultiblock(handlerClass, itemName, family)) {
+            return itemName;
+        }
+        return itemName;
+    }
+
+    private static boolean isLikelyGtMultiblock(String handlerClass, String itemName, String family) {
+        String descriptor = (firstNonBlank(handlerClass, "") + " " + firstNonBlank(itemName, "") + " " + firstNonBlank(family, ""))
+                .toLowerCase(java.util.Locale.ROOT);
+        return descriptor.contains("gregtech")
+                && (descriptor.contains("multiblock")
+                || descriptor.contains("large")
+                || descriptor.contains("mega")
+                || descriptor.contains("gt.blockmachines"));
+    }
+
+    private static String handlerSimpleName(String handlerClass) {
+        String value = firstNonBlank(handlerClass, "");
+        int index = value.lastIndexOf('.');
+        return index >= 0 ? value.substring(index + 1) : value;
+    }
+
+    private static int parseInt(String value, int fallback) {
+        try {
+            return value == null || value.trim().length() == 0 ? fallback : Integer.parseInt(value.trim());
+        } catch (Exception ignored) {
+            return fallback;
+        }
+    }
+
+    private static String normalizeKey(String value) {
+        if (value == null) {
+            return "";
+        }
+        return value.trim().toLowerCase(java.util.Locale.ROOT)
+                .replaceAll("[^a-z0-9._:-]+", "-")
+                .replaceAll("^-+|-+$", "");
+    }
+
+    private static String trimToNull(String value) {
+        if (value == null) {
+            return null;
+        }
+        String trimmed = value.trim();
+        return trimmed.length() == 0 ? null : trimmed;
     }
 
     private static File resolveNativeNeiRulePath(
@@ -2166,6 +2407,8 @@ public final class RawExportSidecarWriter {
         long neiHiddenItemRules;
         long neiHiddenItems;
         long neiRepresentativeMismatches;
+        long neiHandlers;
+        long neiHandlerLayouts;
         long rawTextures;
         long rawAnimations;
         long rawEntities;
@@ -2199,11 +2442,18 @@ public final class RawExportSidecarWriter {
         long neiHiddenItemRules;
         long neiHiddenItems;
         long neiRepresentativeMismatches;
+        long neiHandlers;
+        long neiHandlerLayouts;
         long textures;
         long animations;
         long entities;
         long browserAtlasAssets;
         NeiBrowserContract neiBrowserContract;
+    }
+
+    private static final class HandlerMetadataCounts {
+        long handlers;
+        long layouts;
     }
 
     private static final class NeiBrowserContract {

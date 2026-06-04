@@ -154,6 +154,8 @@ final class ExportValidationReportWriter {
         report.rawNativeNeiGroups = readLongMember(counts, "neiNativeGroups");
         report.rawGuidFilterRules = readLongMember(counts, "neiGuidFilterRules");
         report.rawHiddenItemRules = readLongMember(counts, "neiHiddenItemRules");
+        report.rawNeiHandlers = readLongMember(counts, "neiHandlers");
+        report.rawNeiHandlerLayouts = readLongMember(counts, "neiHandlerLayouts");
         report.semanticTotalItems = readLongMember(counts, "semanticTotalItems");
         report.semanticTaggedItems = readLongMember(counts, "semanticTaggedItems");
         report.semanticClassifiedTaggedItems = readLongMember(counts, "semanticClassifiedTaggedItems");
@@ -255,6 +257,9 @@ final class ExportValidationReportWriter {
         if (report.semanticMissingSortKeyFamilyCount > 0) {
             report.warnings.add("Semantic families missing stable sort keys: "
                     + report.semanticMissingSortKeyFamilyCount);
+        }
+        if (report.rawRecipes > 0L && (report.rawNeiHandlers == 0L || report.rawNeiHandlerLayouts == 0L)) {
+            report.warnings.add("NEI handler metadata/layout facts are missing; recipe pages will use generic categories.");
         }
     }
 
@@ -963,6 +968,8 @@ final class ExportValidationReportWriter {
         long rawNativeNeiGroups;
         long rawGuidFilterRules;
         long rawHiddenItemRules;
+        long rawNeiHandlers;
+        long rawNeiHandlerLayouts;
         boolean semanticDiagnosticsPresent;
         long semanticTotalItems;
         long semanticTaggedItems;
