@@ -56,6 +56,7 @@ test('semantic mapper covers high-volume NBT families from GTNH exports', () => 
 
 test('semantic family plugin foundation is present for native NBT semantics', () => {
   const semanticFamily = readSource('src/main/java/com/github/dcysteine/nesql/exporter/semantic/SemanticFamily.java');
+  const registry = readSource('src/main/java/com/github/dcysteine/nesql/exporter/semantic/SemanticFamilyRegistry.java');
   const parsedNbt = readSource('src/main/java/com/github/dcysteine/nesql/exporter/semantic/ParsedNbt.java');
   const mapper = readSource('src/main/java/com/github/dcysteine/nesql/exporter/semantic/SemanticItemIdentityMapper.java');
 
@@ -73,7 +74,13 @@ test('semantic family plugin foundation is present for native NBT semantics', ()
   assert.equal(parsedNbt.includes('public static ParsedNbt parse(String raw)'), true);
   assert.equal(parsedNbt.includes('public String first(String... keys)'), true);
   assert.equal(parsedNbt.includes('KEY_VALUE_PATTERN'), true);
+  assert.equal(registry.includes('public static SemanticFamily match(Item item, ParsedNbt nbt)'), true);
+  assert.equal(registry.includes('BuildCraftFacadeFamily'), true);
+  assert.equal(registry.includes('ThaumcraftWandFamily'), true);
+  assert.equal(registry.includes('GenericEntityCaptureFamily'), true);
+  assert.equal(registry.includes('FluidContainerFamily'), true);
   assert.equal(mapper.includes('ParsedNbt.parse(nbt)'), true);
+  assert.equal(mapper.includes('SemanticFamilyRegistry.match(item, parsedNbt)'), true);
   assert.equal(mapper.includes('semanticFacets(String family, Item item, ParsedNbt parsedNbt)'), true);
 });
 

@@ -16,7 +16,8 @@ public final class SemanticItemIdentityMapper {
     public static SemanticItemIdentity map(Item item) {
         String nbt = safe(item.getNbt());
         ParsedNbt parsedNbt = ParsedNbt.parse(nbt);
-        String family = parsedNbt.isEmpty() ? null : classify(item, parsedNbt);
+        SemanticFamily semanticFamily = parsedNbt.isEmpty() ? null : SemanticFamilyRegistry.match(item, parsedNbt);
+        String family = semanticFamily == null ? (parsedNbt.isEmpty() ? null : classify(item, parsedNbt)) : semanticFamily.familyId();
         String payloadHash = nbt.trim().length() == 0 ? null : sha256(nbt);
         String base = baseKey(item);
 
@@ -26,13 +27,17 @@ public final class SemanticItemIdentityMapper {
                 ? (payloadHash == null ? "untagged-legacy" : "unclassified-tagged")
                 : "classified";
         identity.payloadHash = payloadHash;
-        identity.publicItemId = family == null
-                ? "item:" + stableToken(item.getId())
-                : "semantic:" + stableToken(family) + ":" + stableToken(base);
-        identity.variantId = payloadHash == null
-                ? null
-                : identity.publicItemId + ":variant:" + payloadHash.substring(0, 16);
-        applyFacets(identity, item, parsedNbt);
+        identity.publicItemId = semanticFamily != null
+                ? semanticFamily.publicIdentity(item, parsedNbt)
+                : family == null
+                        ? "item:" + stableToken(item.getId())
+                        : "semantic:" + stableToken(family) + ":" + stableToken(base);
+        identity.variantId = semanticFamily != null
+                ? semanticFamily.variantIdentity(item, parsedNbt, payloadHash)
+                : payloadHash == null
+                        ? null
+                        : identity.publicItemId + ":variant:" + payloadHash.substring(0, 16);
+        applyFacets(identity, item, parsedNbt, semanticFamily);
         return identity;
     }
 
@@ -107,11 +112,14 @@ public final class SemanticItemIdentityMapper {
         return safe(item.getModId()) + "|" + safe(item.getInternalName()) + "|" + item.getItemDamage();
     }
 
-    private static void applyFacets(SemanticItemIdentity identity, Item item, ParsedNbt parsedNbt) {
+    private static void applyFacets(SemanticItemIdentity identity, Item item, ParsedNbt parsedNbt, SemanticFamily semanticFamily) {
         if (identity == null || parsedNbt == null || parsedNbt.isEmpty()) {
             return;
         }
-        Map<String, String> facets = semanticFacets(identity.family, item, parsedNbt);
+        SemanticFamily familyPlugin = semanticFamily == null ? SemanticFamilyRegistry.byId(identity.family) : semanticFamily;
+        Map<String, String> facets = familyPlugin == null
+                ? semanticFacets(identity.family, item, parsedNbt)
+                : familyPlugin.facets(item, parsedNbt);
         if (facets.isEmpty()) {
             return;
         }
@@ -122,7 +130,7 @@ public final class SemanticItemIdentityMapper {
         identity.facets = object;
         identity.facetSummary = facetSummary(identity.family, facets);
         identity.variantLabel = identity.facetSummary;
-        identity.sortKey = sortKey(identity.family, facets, item);
+        identity.sortKey = familyPlugin == null ? sortKey(identity.family, facets, item) : familyPlugin.sortKey(item, parsedNbt, facets);
     }
 
     public static Map<String, String> semanticFacets(String family, Item item, String nbt) {
