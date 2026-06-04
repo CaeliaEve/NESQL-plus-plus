@@ -42,9 +42,20 @@ public final class SemanticFamilyRegistry {
         families.add(new Ae2FacadeFamily());
         families.add(new EnderIoPaintedFacadeFamily());
         families.add(new ThaumcraftWandFamily());
+        families.add(new ForestryGeneticsFamily());
+        families.add(new BinnieGendustryGeneticsFamily());
+        families.add(new GregTechToolFamily());
+        families.add(new TConstructToolFamily());
+        families.add(new TConstructPartFamily());
+        families.add(new TGregworksPartFamily());
+        families.add(new Ic2CropSeedFamily());
+        families.add(new FluidContainerFamily());
+        families.add(new GregTechChargeFamily());
+        families.add(new GenericChargeFamily());
         families.add(new EnderIoEntityCaptureFamily());
         families.add(new GenericEntityCaptureFamily());
-        families.add(new FluidContainerFamily());
+        families.add(new CosmeticColorFamily());
+        families.add(new EncodedPatternFamily());
         return Collections.unmodifiableList(families);
     }
 }

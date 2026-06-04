@@ -77,8 +77,15 @@ test('semantic family plugin foundation is present for native NBT semantics', ()
   assert.equal(registry.includes('public static SemanticFamily match(Item item, ParsedNbt nbt)'), true);
   assert.equal(registry.includes('BuildCraftFacadeFamily'), true);
   assert.equal(registry.includes('ThaumcraftWandFamily'), true);
+  assert.equal(registry.includes('TConstructPartFamily'), true);
+  assert.equal(registry.includes('TGregworksPartFamily'), true);
+  assert.equal(registry.includes('GregTechToolFamily'), true);
+  assert.equal(registry.includes('ForestryGeneticsFamily'), true);
+  assert.equal(registry.includes('Ic2CropSeedFamily'), true);
   assert.equal(registry.includes('GenericEntityCaptureFamily'), true);
   assert.equal(registry.includes('FluidContainerFamily'), true);
+  assert.equal(registry.includes('EncodedPatternFamily'), true);
+  assert.equal(registry.includes('CosmeticColorFamily'), true);
   assert.equal(mapper.includes('ParsedNbt.parse(nbt)'), true);
   assert.equal(mapper.includes('SemanticFamilyRegistry.match(item, parsedNbt)'), true);
   assert.equal(mapper.includes('semanticFacets(String family, Item item, ParsedNbt parsedNbt)'), true);
