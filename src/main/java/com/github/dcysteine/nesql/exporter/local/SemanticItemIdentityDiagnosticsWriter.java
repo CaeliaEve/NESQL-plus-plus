@@ -458,6 +458,7 @@ public final class SemanticItemIdentityDiagnosticsWriter {
         root.add("families", familyArray(state));
         root.add("topMods", topMap(state.modCounts, 40, "modId"));
         root.add("topUnclassifiedFamilies", topMap(state.unclassifiedFamilyCounts, 80, "familyKey"));
+        root.add("topUnclassifiedFamilyActions", topUnclassifiedFamilyActions(state, 80));
         root.add("unclassifiedSamples", stringArray(state.unclassifiedSamples));
         root.add("unclassifiedFamilySamples", stringArray(state.unclassifiedFamilySamples));
         return root;
@@ -489,6 +490,7 @@ public final class SemanticItemIdentityDiagnosticsWriter {
         root.addProperty("unclassifiedTaggedItems", state.unclassifiedTaggedItems);
         root.add("families", familyArray(state));
         root.add("topUnclassifiedFamilies", topMap(state.unclassifiedFamilyCounts, 40, "familyKey"));
+        root.add("topUnclassifiedFamilyActions", topUnclassifiedFamilyActions(state, 40));
         root.add("nextActions", nextActions());
         return root;
     }
@@ -654,6 +656,57 @@ public final class SemanticItemIdentityDiagnosticsWriter {
             count++;
         }
         return array;
+    }
+
+    private static JsonArray topUnclassifiedFamilyActions(AuditState state, int limit) {
+        List<Map.Entry<String, Long>> entries = new ArrayList<Map.Entry<String, Long>>(state.unclassifiedFamilyCounts.entrySet());
+        Collections.sort(entries, new Comparator<Map.Entry<String, Long>>() {
+            @Override
+            public int compare(Map.Entry<String, Long> left, Map.Entry<String, Long> right) {
+                int byCount = Long.compare(right.getValue(), left.getValue());
+                return byCount != 0 ? byCount : left.getKey().compareTo(right.getKey());
+            }
+        });
+        JsonArray array = new JsonArray();
+        int count = 0;
+        for (Map.Entry<String, Long> entry : entries) {
+            if (count >= limit) {
+                break;
+            }
+            JsonObject object = new JsonObject();
+            object.addProperty("familyKey", entry.getKey());
+            object.addProperty("count", entry.getValue());
+            object.addProperty("recommendation", unclassifiedRecommendation(entry.getKey()));
+            array.add(object);
+            count++;
+        }
+        return array;
+    }
+
+    private static String unclassifiedRecommendation(String familyKey) {
+        String key = safe(familyKey).toLowerCase(Locale.ROOT);
+        if (key.contains("debug") || key.contains("creative") || key.contains("test") || key.contains("wip")) {
+            return "verify-hidden-or-recipe-only";
+        }
+        if (key.contains("metaitem") || key.contains("meta_item") || key.contains("gregtech")) {
+            return "inspect-gregtech-metaitem-material-facets";
+        }
+        if (key.contains("thaum") || key.contains("wand") || key.contains("focus")) {
+            return "extend-thaumcraft-family";
+        }
+        if (key.contains("tconstruct") || key.contains("tgreg") || key.contains("tool")) {
+            return "extend-tool-or-toolpart-family";
+        }
+        if (key.contains("bee") || key.contains("forestry") || key.contains("genetic") || key.contains("gendustry")) {
+            return "extend-genetics-family";
+        }
+        if (key.contains("soul") || key.contains("mob") || key.contains("entity")) {
+            return "extend-entity-capture-family";
+        }
+        if (key.contains("cell") || key.contains("bucket") || key.contains("fluid")) {
+            return "extend-fluid-container-family";
+        }
+        return "inspect-samples-before-classifying";
     }
 
     private static JsonArray stringArray(Set<String> values) {
