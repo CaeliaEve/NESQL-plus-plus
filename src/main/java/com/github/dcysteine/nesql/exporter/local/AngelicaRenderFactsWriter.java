@@ -65,7 +65,11 @@ final class AngelicaRenderFactsWriter {
         writeBackendFacts(new File(rawDir, "facts/render/backend.json"));
         counts.backendFacts = 1L;
         counts.textureSprites = writeTextureSpriteFacts(new File(rawDir, "facts/render/texture-sprites.jsonl.gz"));
-        counts.itemRenderers = writeItemRendererFacts(new File(rawDir, "facts/render/item-renderers.jsonl.gz"));
+        ItemRendererStreamCounts itemRendererCounts = writeItemRendererFacts(
+                new File(rawDir, "facts/render/item-renderers.jsonl.gz"),
+                new File(rawDir, "facts/render/shader-items.jsonl.gz"));
+        counts.itemRenderers = itemRendererCounts.itemRenderers;
+        counts.shaderItems = itemRendererCounts.shaderItems;
         return counts;
     }
 
@@ -143,10 +147,12 @@ final class AngelicaRenderFactsWriter {
         return count;
     }
 
-    private long writeItemRendererFacts(File out) throws IOException {
-        long count = 0L;
+    private ItemRendererStreamCounts writeItemRendererFacts(File out, File shaderOut) throws IOException {
+        ItemRendererStreamCounts counts = new ItemRendererStreamCounts();
         ensureDirectory(out.getParentFile());
-        try (OutputStreamWriter writer = createUtf8JsonlWriter(out)) {
+        ensureDirectory(shaderOut.getParentFile());
+        try (OutputStreamWriter writer = createUtf8JsonlWriter(out);
+             OutputStreamWriter shaderWriter = createUtf8JsonlWriter(shaderOut)) {
             long offset = 0L;
             while (true) {
                 TypedQuery<Item> query = entityManager.createQuery(
@@ -161,13 +167,19 @@ final class AngelicaRenderFactsWriter {
                     JsonObject row = toItemRendererRow(item);
                     writer.write(GSON.toJson(row));
                     writer.write('\n');
-                    count++;
+                    counts.itemRenderers++;
+                    JsonObject shaderRow = toShaderItemRow(item, row);
+                    if (shaderRow != null) {
+                        shaderWriter.write(GSON.toJson(shaderRow));
+                        shaderWriter.write('\n');
+                        counts.shaderItems++;
+                    }
                 }
                 offset += items.size();
                 entityManager.clear();
             }
         }
-        return count;
+        return counts;
     }
 
     private JsonObject toItemRendererRow(Item item) {
@@ -200,6 +212,29 @@ final class AngelicaRenderFactsWriter {
         return row;
     }
 
+    private JsonObject toShaderItemRow(Item item, JsonObject rendererRow) {
+        String rendererKind = stringValue(rendererRow, "rendererKind");
+        if (!isShaderOrCaptureFamily(rendererKind)) {
+            return null;
+        }
+        JsonObject row = new JsonObject();
+        row.addProperty("schemaVersion", SCHEMA_ROOT + "/shader-item");
+        row.addProperty("itemId", item.getId());
+        row.addProperty("modId", item.getModId());
+        row.addProperty("internalName", item.getInternalName());
+        row.addProperty("damage", item.getItemDamage());
+        row.addProperty("localizedName", item.getLocalizedName());
+        row.addProperty("rendererClass", stringValue(rendererRow, "rendererClass"));
+        row.addProperty("rendererKind", rendererKind);
+        row.addProperty("shaderFamily", shaderFamily(rendererKind));
+        row.addProperty("timeSource", shaderTimeSource(rendererKind));
+        row.addProperty("captureRequired", booleanValue(rendererRow, "requiresFramebufferCapture"));
+        row.addProperty("preferredExport", "angelica-framebuffer-capture");
+        row.addProperty("browserReimplementationAllowed", false);
+        row.addProperty("notes", "Native renderer requires shader/capture facts; do not replace with static fallback.");
+        return row;
+    }
+
     static RendererClassification classifyRenderer(String rendererClass) {
         if (rendererClass == null || rendererClass.trim().isEmpty()) {
             return new RendererClassification("vanilla.atlas", false, false, "No inventory IItemRenderer registered.");
@@ -221,6 +256,40 @@ final class AngelicaRenderFactsWriter {
             return new RendererClassification("gtnhlib.model-isbrh", false, true, "GTNHLib inventory model renderer.");
         }
         return new RendererClassification("generic.iitemrenderer", false, true, "Custom inventory IItemRenderer.");
+    }
+
+    private static boolean isShaderOrCaptureFamily(String rendererKind) {
+        return rendererKind != null
+                && !rendererKind.equals("vanilla.atlas")
+                && (rendererKind.startsWith("avaritia.")
+                        || rendererKind.startsWith("gtnhlib.")
+                        || rendererKind.equals("generic.iitemrenderer"));
+    }
+
+    private static String shaderFamily(String rendererKind) {
+        if (rendererKind == null) {
+            return "unknown";
+        }
+        if (rendererKind.equals("avaritia.cosmic")) {
+            return "avaritia.cosmic";
+        }
+        if (rendererKind.equals("avaritia.halo")) {
+            return "avaritia.halo";
+        }
+        if (rendererKind.equals("avaritia.fractured-ore")) {
+            return "avaritia.fractured-ore";
+        }
+        if (rendererKind.startsWith("gtnhlib.")) {
+            return rendererKind;
+        }
+        return "custom.inventory-renderer";
+    }
+
+    private static String shaderTimeSource(String rendererKind) {
+        if (rendererKind != null && rendererKind.startsWith("avaritia.")) {
+            return "native-render-tick";
+        }
+        return "native-renderer";
     }
 
     private ItemStack resolveStack(Item item) {
@@ -412,6 +481,20 @@ final class AngelicaRenderFactsWriter {
         }
     }
 
+    private static String stringValue(JsonObject object, String key) {
+        if (object == null || !object.has(key) || object.get(key).isJsonNull()) {
+            return null;
+        }
+        return object.get(key).getAsString();
+    }
+
+    private static boolean booleanValue(JsonObject object, String key) {
+        if (object == null || !object.has(key) || object.get(key).isJsonNull()) {
+            return false;
+        }
+        return object.get(key).getAsBoolean();
+    }
+
     private static OutputStreamWriter createUtf8JsonlWriter(File out) throws IOException {
         FileOutputStream fos = new FileOutputStream(out, false);
         if (out.getName().endsWith(".gz")) {
@@ -446,6 +529,12 @@ final class AngelicaRenderFactsWriter {
         long backendFacts;
         long textureSprites;
         long itemRenderers;
+        long shaderItems;
+    }
+
+    private static final class ItemRendererStreamCounts {
+        long itemRenderers;
+        long shaderItems;
     }
 
     static final class RendererClassification {

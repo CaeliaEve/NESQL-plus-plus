@@ -112,6 +112,7 @@ public final class RawExportSidecarWriter {
         report.counts.renderBackendFacts = factCounts.renderBackendFacts;
         report.counts.renderTextureSprites = factCounts.renderTextureSprites;
         report.counts.renderItemRenderers = factCounts.renderItemRenderers;
+        report.counts.renderShaderItems = factCounts.renderShaderItems;
         report.counts.semanticTotalItems = semanticAudit.totalItems;
         report.counts.semanticTaggedItems = semanticAudit.taggedItems;
         report.counts.semanticClassifiedTaggedItems = semanticAudit.classifiedTaggedItems;
@@ -238,6 +239,7 @@ public final class RawExportSidecarWriter {
         manifest.files.put("renderBackend", "facts/render/backend.json");
         manifest.files.put("renderTextureSprites", "facts/render/texture-sprites.jsonl.gz");
         manifest.files.put("renderItemRenderers", "facts/render/item-renderers.jsonl.gz");
+        manifest.files.put("renderShaderItems", "facts/render/shader-items.jsonl.gz");
         manifest.files.put("browserAtlasIndex", "assets/textures/browser_atlas_index.json");
         manifest.files.put("browserAtlasAssets", "assets/textures/atlas-assets");
         manifest.files.put("neiHandlers", "facts/nei/handlers.jsonl.gz");
@@ -400,6 +402,8 @@ public final class RawExportSidecarWriter {
                         + counts.renderTextureSprites
                         + ", itemRenderers="
                         + counts.renderItemRenderers
+                        + ", shaderItems="
+                        + counts.renderShaderItems
                         + ", rawItems="
                         + counts.rawItems
                         + "."));
@@ -531,6 +535,7 @@ public final class RawExportSidecarWriter {
         counts.renderBackendFacts = renderCounts.backendFacts;
         counts.renderTextureSprites = renderCounts.textureSprites;
         counts.renderItemRenderers = renderCounts.itemRenderers;
+        counts.renderShaderItems = renderCounts.shaderItems;
         return counts;
     }
 
@@ -2440,6 +2445,7 @@ public final class RawExportSidecarWriter {
         long renderBackendFacts;
         long renderTextureSprites;
         long renderItemRenderers;
+        long renderShaderItems;
         long semanticTotalItems;
         long semanticTaggedItems;
         long semanticClassifiedTaggedItems;
@@ -2478,6 +2484,7 @@ public final class RawExportSidecarWriter {
         long renderBackendFacts;
         long renderTextureSprites;
         long renderItemRenderers;
+        long renderShaderItems;
         NeiBrowserContract neiBrowserContract;
     }
 

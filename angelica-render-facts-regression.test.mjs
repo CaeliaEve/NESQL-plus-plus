@@ -9,6 +9,7 @@ for (const required of [
   'facts/render/backend.json',
   'facts/render/texture-sprites.jsonl.gz',
   'facts/render/item-renderers.jsonl.gz',
+  'facts/render/shader-items.jsonl.gz',
   'angelica-render-facts',
   'new AngelicaRenderFactsWriter(entityManager, rawDir).write()'
 ]) {
@@ -24,7 +25,9 @@ for (const required of [
   'MinecraftForgeClient.getItemRenderer',
   'avaritia.cosmic',
   'avaritia.halo',
-  'gtnhlib.textured-item'
+  'gtnhlib.textured-item',
+  'angelica-framebuffer-capture',
+  'browserReimplementationAllowed'
 ]) {
   assert(writer.includes(required), `Angelica writer missing ${required}`);
 }
