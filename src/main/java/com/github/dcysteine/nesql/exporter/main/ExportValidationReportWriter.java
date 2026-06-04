@@ -33,8 +33,9 @@ final class ExportValidationReportWriter {
         try {
             File repositoryDirectory = exportContext.paths.repositoryDirectory;
             File canonicalDir = new File(repositoryDirectory, "canonical");
-            if (!canonicalDir.exists()) {
-                canonicalDir.mkdirs();
+            File validationDir = new File(repositoryDirectory, "raw-export" + File.separator + "validation");
+            if (!validationDir.exists()) {
+                validationDir.mkdirs();
             }
 
             ValidationReport report = new ValidationReport();
@@ -71,8 +72,8 @@ final class ExportValidationReportWriter {
                     readArrayCount(new File(canonicalDir, "entity-models.json"), "entries");
             inspectRenderAssets(repositoryDirectory, canonicalDir, report);
             report.atlasManifestCoverageRatio = ratio(report.totalAtlasManifestAssets, report.renderAssetManifestAssets);
-            File reportFile = new File(canonicalDir, "export-validation-report.json");
-            File healthReportFile = new File(canonicalDir, "export-health-report.json");
+            File reportFile = new File(validationDir, "export_validation_report.json");
+            File healthReportFile = new File(validationDir, "export-health-report.json");
             ValidationReport previousReport = readPreviousReport(reportFile);
             if (previousReport != null) {
                 report.previous = new PreviousSnapshot();

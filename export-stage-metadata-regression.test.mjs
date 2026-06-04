@@ -140,7 +140,7 @@ test('runtime command surface is limited to guided export and Thaumcraft aspect 
   assert.equal(main.includes('new ExportCommand()'), true);
   assert.equal(main.includes('new ThaumcraftUnlockAspectsCommand()'), true);
   assert.equal(exportCommand.includes('return "nesql";'), true);
-  assert.equal(exportCommand.includes('ClientGuiScheduler.open(new ExportSelectionGui(repositoryName))'), true);
+  assert.equal(exportCommand.includes('ClientGuiScheduler.open(new ExportSelectionGui(finalRepositoryName))'), true);
   for (const legacyCommand of [
     'new DataExportCommand()',
     'new ImageExportCommand()',
@@ -177,7 +177,7 @@ test('guided export GUI exposes selectable lanes and keeps command entrypoint co
   assert.equal(gui.includes('Data Only'), true);
   assert.equal(gui.includes('Legacy compatibility files; off for lean raw-export'), true);
   assert.equal(gui.includes('normalizeDependencies();'), true);
-  assert.equal(command.includes('ClientGuiScheduler.open(new ExportSelectionGui(repositoryName))'), true);
+  assert.equal(command.includes('ClientGuiScheduler.open(new ExportSelectionGui(finalRepositoryName))'), true);
   assert.equal(command.includes('new Exporter(repositoryName, selection)'), true);
 });
 
@@ -213,7 +213,7 @@ test('export progress noise is curated into English preparation summaries', () =
 test('stage diagnostics write machine-readable checkpoint and error records', () => {
   const runner = readSource('src/main/java/com/github/dcysteine/nesql/exporter/main/ExportStageRunner.java');
   const diagnostics = readSource('src/main/java/com/github/dcysteine/nesql/exporter/main/ExportDiagnosticsSupport.java');
-  assert.equal(runner.includes('export-stage-checkpoint.json'), true);
+  assert.equal(runner.includes('stage_checkpoint.json'), true);
   assert.equal(runner.includes('"raw-export" + File.separator + "validation"'), true);
   assert.equal(runner.includes('"stage_checkpoint.json"'), true);
   assert.equal(runner.includes('ExportValidationReportWriter.write(exportContext)'), true);

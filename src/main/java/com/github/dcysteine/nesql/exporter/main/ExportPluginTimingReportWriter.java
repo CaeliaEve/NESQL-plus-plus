@@ -24,10 +24,6 @@ final class ExportPluginTimingReportWriter {
         }
 
         try {
-            File canonicalDir = new File(exportContext.paths.repositoryDirectory, "canonical");
-            if (!canonicalDir.exists()) {
-                canonicalDir.mkdirs();
-            }
             File rawValidationDir = new File(exportContext.paths.repositoryDirectory, "raw-export/validation");
             if (!rawValidationDir.exists()) {
                 rawValidationDir.mkdirs();
@@ -53,11 +49,6 @@ final class ExportPluginTimingReportWriter {
             }
 
             com.google.gson.Gson gson = new GsonBuilder().setPrettyPrinting().create();
-            File reportFile = new File(canonicalDir, "export-plugin-timings.json");
-            try (FileOutputStream fos = new FileOutputStream(reportFile);
-                 OutputStreamWriter writer = new OutputStreamWriter(fos, StandardCharsets.UTF_8)) {
-                gson.toJson(report, writer);
-            }
             File rawTimingFile = new File(rawValidationDir, "export-plugin-timings.json");
             try (FileOutputStream fos = new FileOutputStream(rawTimingFile);
                  OutputStreamWriter writer = new OutputStreamWriter(fos, StandardCharsets.UTF_8)) {
@@ -74,7 +65,7 @@ final class ExportPluginTimingReportWriter {
             Logger.chatMessage(
                     EnumChatFormatting.GREEN
                             + "[NESQL] Plugin timing report written: "
-                            + reportFile.getAbsolutePath());
+                            + rawTimingFile.getAbsolutePath());
             if (anomalyReport.summary.suspiciousZeroExports > 0 || anomalyReport.summary.partialExports > 0) {
                 Logger.chatMessage(
                         EnumChatFormatting.YELLOW

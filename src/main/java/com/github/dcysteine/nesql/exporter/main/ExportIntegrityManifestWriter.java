@@ -24,11 +24,12 @@ final class ExportIntegrityManifestWriter {
         try {
             File repositoryDirectory = exportContext.paths.repositoryDirectory;
             File canonicalDir = new File(repositoryDirectory, "canonical");
-            if (!canonicalDir.exists()) {
-                canonicalDir.mkdirs();
+            File validationDir = new File(repositoryDirectory, "raw-export" + File.separator + "validation");
+            if (!validationDir.exists()) {
+                validationDir.mkdirs();
             }
 
-            File checksumFile = new File(canonicalDir, "stage-checksums.json");
+            File checksumFile = new File(validationDir, "stage_checksums.json");
             Map<String, ArtifactChecksum> previousArtifacts = readPreviousArtifacts(checksumFile);
             List<ArtifactChecksum> artifacts = collectArtifacts(repositoryDirectory, canonicalDir);
             annotateChanges(artifacts, previousArtifacts);
@@ -41,7 +42,7 @@ final class ExportIntegrityManifestWriter {
             manifest.nesqlImplementationVersion = implementationVersion();
             manifest.databaseFile = relative(repositoryDirectory, exportContext.paths.databaseFile);
             manifest.imageDirectory = relative(repositoryDirectory, exportContext.paths.imageDirectory);
-            manifest.canonicalDirectory = "canonical";
+            manifest.rawExportDirectory = "raw-export";
             manifest.artifacts = artifacts;
 
             ChecksumReport checksumReport = new ChecksumReport();
@@ -52,13 +53,13 @@ final class ExportIntegrityManifestWriter {
             checksumReport.selection = manifest.selection;
             checksumReport.artifacts = artifacts;
 
-            writeJson(new File(canonicalDir, "export-manifest.json"), manifest);
+            writeJson(new File(validationDir, "export_manifest.json"), manifest);
             writeJson(checksumFile, checksumReport);
 
             Logger.chatMessage(
                     EnumChatFormatting.GREEN
                             + "[NESQL] Export manifest/checksums written: "
-                            + new File(canonicalDir, "export-manifest.json").getAbsolutePath());
+                            + new File(validationDir, "export_manifest.json").getAbsolutePath());
         } catch (Exception e) {
             Logger.MOD.warn("Failed to write NESQL++ export manifest/checksums", e);
         }
@@ -247,7 +248,7 @@ final class ExportIntegrityManifestWriter {
         String nesqlImplementationVersion;
         String databaseFile;
         String imageDirectory;
-        String canonicalDirectory;
+        String rawExportDirectory;
         List<ArtifactChecksum> artifacts;
     }
 

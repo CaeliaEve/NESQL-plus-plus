@@ -69,7 +69,7 @@ final class ExportStageMetadata {
         if ("pipeline".equals(family) || "unknown".equals(family)) {
             return family;
         }
-        return "canonical/" + family;
+        return "raw-export/" + family;
     }
 
     static boolean skippableByChecksum(ExportStage stage) {

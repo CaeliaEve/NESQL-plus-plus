@@ -18,6 +18,7 @@ final class ExportStageRunner {
     static void run(ExportContext exportContext, ExportExecutionStrategy strategy) throws Exception {
         File repositoryDirectory = exportContext.paths.repositoryDirectory;
         ExportStageState stageState = new ExportStageState();
+        boolean pipelineCompleted = false;
 
         strategy.announceStartup(exportContext, repositoryDirectory);
         try {
@@ -74,7 +75,7 @@ final class ExportStageRunner {
             ExportValidationReportWriter.write(exportContext);
             ExportIntegrityManifestWriter.write(exportContext);
             ExportWriterSupport.syncRawExportFinalReports(exportContext.paths.repositoryDirectory);
-            ExportWriterSupport.deleteCanonicalStagingDirectory(exportContext.paths.repositoryDirectory);
+            pipelineCompleted = true;
         } catch (RepositoryPreparationStoppedException ignored) {
             return;
         } catch (Exception e) {
@@ -112,6 +113,9 @@ final class ExportStageRunner {
             } else if (stageState.runtime != null) {
                 stageState.runtime.close();
             }
+            if (pipelineCompleted && !exportContext.selection.writeCanonicalSnapshot) {
+                ExportWriterSupport.deleteCanonicalStagingDirectory(exportContext.paths.repositoryDirectory);
+            }
         }
         strategy.announceCompletion(exportContext, repositoryDirectory);
     }
@@ -139,11 +143,11 @@ final class ExportStageRunner {
             List<StageTiming> timings,
             long totalElapsedMs) {
         try {
-            File canonicalDir = new File(exportContext.paths.repositoryDirectory, "canonical");
-            if (!canonicalDir.exists()) {
-                canonicalDir.mkdirs();
+            File validationDir = new File(exportContext.paths.repositoryDirectory, "raw-export" + File.separator + "validation");
+            if (!validationDir.exists()) {
+                validationDir.mkdirs();
             }
-            File reportFile = new File(canonicalDir, "export-stage-timings.json");
+            File reportFile = new File(validationDir, "export_stage_timings.json");
             TimingReport report = new TimingReport();
             report.schemaVersion = "nesqlpp/export-stage-timings/v1";
             report.profile = exportContext.profile.profileId;
@@ -182,11 +186,11 @@ final class ExportStageRunner {
             long elapsedMs,
             String errorSummary) {
         try {
-            File canonicalDir = new File(exportContext.paths.repositoryDirectory, "canonical");
-            if (!canonicalDir.exists()) {
-                canonicalDir.mkdirs();
+            File validationDir = new File(exportContext.paths.repositoryDirectory, "raw-export" + File.separator + "validation");
+            if (!validationDir.exists()) {
+                validationDir.mkdirs();
             }
-            File reportFile = new File(canonicalDir, "export-stage-checkpoint.json");
+            File reportFile = new File(validationDir, "stage_checkpoint.json");
             StageCheckpointReport report = new StageCheckpointReport();
             report.schemaVersion = "nesqlpp/export-stage-checkpoint/v1";
             report.generatedAtEpochMs = System.currentTimeMillis();
@@ -207,25 +211,8 @@ final class ExportStageRunner {
                  OutputStreamWriter writer = new OutputStreamWriter(fos, StandardCharsets.UTF_8)) {
                 new GsonBuilder().setPrettyPrinting().create().toJson(report, writer);
             }
-            syncCheckpointToRawExport(exportContext.paths.repositoryDirectory, reportFile);
         } catch (Exception e) {
             Logger.MOD.warn("Failed to write NESQL++ stage checkpoint report", e);
-        }
-    }
-
-    private static void syncCheckpointToRawExport(File repositoryDirectory, File sourceFile) {
-        try {
-            File rawValidationDir =
-                    new File(repositoryDirectory, "raw-export" + File.separator + "validation");
-            if (!rawValidationDir.exists()) {
-                rawValidationDir.mkdirs();
-            }
-            java.nio.file.Files.copy(
-                    sourceFile.toPath(),
-                    new File(rawValidationDir, "stage_checkpoint.json").toPath(),
-                    java.nio.file.StandardCopyOption.REPLACE_EXISTING);
-        } catch (Exception e) {
-            Logger.MOD.debug("Failed to sync stage checkpoint into raw-export validation", e);
         }
     }
 

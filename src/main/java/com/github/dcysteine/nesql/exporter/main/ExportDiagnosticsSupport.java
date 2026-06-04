@@ -95,7 +95,7 @@ final class ExportDiagnosticsSupport {
             ExportStage stage,
             Throwable error,
             File reportFile) {
-        File validationDirectory = new File(exportContext.paths.repositoryDirectory, "validation");
+        File validationDirectory = new File(exportContext.paths.repositoryDirectory, "raw-export" + File.separator + "validation");
         if (!validationDirectory.exists() && !validationDirectory.mkdirs()) {
             Logger.MOD.warn("Failed to create NESQL validation directory: {}", validationDirectory.getAbsolutePath());
             return;

@@ -144,36 +144,54 @@ public final class RawExportSidecarWriter {
     public static void syncFinalReports(File repositoryDirectory) throws IOException {
         File rawDir = new File(repositoryDirectory, OUTPUT_DIRECTORY);
         ensureDirectory(rawDir);
+        File rawValidationDir = new File(rawDir, "validation");
+        ensureDirectory(rawValidationDir);
         copyIfPresent(
                 new File(repositoryDirectory, "canonical/export-stage-timings.json"),
                 new File(rawDir, "export_stage_timings.json"));
         copyIfPresent(
                 new File(repositoryDirectory, "canonical/export-stage-timings.json"),
-                new File(rawDir, "validation/export_stage_timings.json"));
+                new File(rawValidationDir, "export_stage_timings.json"));
         copyIfPresent(
                 new File(repositoryDirectory, "canonical/export-stage-checkpoint.json"),
                 new File(rawDir, "stage_checkpoint.json"));
         copyIfPresent(
                 new File(repositoryDirectory, "canonical/export-stage-checkpoint.json"),
-                new File(rawDir, "validation/stage_checkpoint.json"));
+                new File(rawValidationDir, "stage_checkpoint.json"));
         copyIfPresent(
                 new File(repositoryDirectory, "canonical/stage-checksums.json"),
                 new File(rawDir, "stage_checksums.json"));
         copyIfPresent(
                 new File(repositoryDirectory, "canonical/stage-checksums.json"),
-                new File(rawDir, "validation/stage_checksums.json"));
+                new File(rawValidationDir, "stage_checksums.json"));
         copyIfPresent(
                 new File(repositoryDirectory, "canonical/export-manifest.json"),
                 new File(rawDir, "export_manifest.json"));
         copyIfPresent(
                 new File(repositoryDirectory, "canonical/export-manifest.json"),
-                new File(rawDir, "validation/export_manifest.json"));
+                new File(rawValidationDir, "export_manifest.json"));
         copyIfPresent(
                 new File(repositoryDirectory, "canonical/export-validation-report.json"),
                 new File(rawDir, "validation_report.json"));
         copyIfPresent(
                 new File(repositoryDirectory, "canonical/export-validation-report.json"),
-                new File(rawDir, "validation/export-health-report.json"));
+                new File(rawValidationDir, "export-health-report.json"));
+
+        copyIfPresent(
+                new File(rawValidationDir, "export_stage_timings.json"),
+                new File(rawDir, "export_stage_timings.json"));
+        copyIfPresent(
+                new File(rawValidationDir, "stage_checkpoint.json"),
+                new File(rawDir, "stage_checkpoint.json"));
+        copyIfPresent(
+                new File(rawValidationDir, "stage_checksums.json"),
+                new File(rawDir, "stage_checksums.json"));
+        copyIfPresent(
+                new File(rawValidationDir, "export_manifest.json"),
+                new File(rawDir, "export_manifest.json"));
+        copyIfPresent(
+                new File(rawValidationDir, "export-health-report.json"),
+                new File(rawDir, "validation_report.json"));
     }
 
     private RawExportManifest buildManifest(RawExportReport report) {
@@ -245,7 +263,7 @@ public final class RawExportSidecarWriter {
         counts.renderAssets = renderAssets.size();
         counts.itemModFiles = countFiles(new File(repositoryDirectory, "items"), "items.json.gz");
         counts.recipeModFiles = countFiles(new File(repositoryDirectory, "recipes"), "recipes.json.gz");
-        counts.canonicalFiles = countFiles(new File(repositoryDirectory, "canonical"), null);
+        counts.canonicalFiles = 0L;
         report.counts = counts;
 
         report.validation.missingTextureCount = 0;
