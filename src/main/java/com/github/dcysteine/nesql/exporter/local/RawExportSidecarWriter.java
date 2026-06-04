@@ -100,6 +100,7 @@ public final class RawExportSidecarWriter {
         report.counts.neiSyntheticGroups = factCounts.neiSyntheticGroups;
         report.counts.neiGuidFilterRules = factCounts.neiGuidFilterRules;
         report.counts.neiHiddenItemRules = factCounts.neiHiddenItemRules;
+        report.counts.neiHiddenItems = factCounts.neiHiddenItems;
         report.counts.neiRepresentativeMismatches = factCounts.neiRepresentativeMismatches;
         report.counts.rawTextures = factCounts.textures;
         report.counts.rawAnimations = factCounts.animations;
@@ -423,6 +424,7 @@ public final class RawExportSidecarWriter {
             counts.neiExportOnlyItems = readLong(browserLayout, "exportOnlyItemCount", 0L);
             counts.neiBrowserItems = readLong(browserLayout, "itemCount", countArray(browserLayout, "items"));
             counts.neiDefaultEntries = readLong(browserLayout, "defaultEntryCount", order == null ? 0L : order.size());
+            counts.neiHiddenItems = readLong(browserLayout, "hiddenItemCount", 0L);
             if (counts.neiBrowserContract != null) {
                 counts.neiFallbackGroups = counts.neiBrowserContract.fallbackGroupCount;
                 counts.neiNativeGroups = counts.neiBrowserContract.nativeGroupCount;
@@ -511,7 +513,12 @@ public final class RawExportSidecarWriter {
         if (source != null) {
             contract.orderSource = readString(source, "order", null);
             contract.groupingSource = readString(source, "grouping", null);
+            contract.guidFiltersSource = readString(source, "guidFilters", null);
+            contract.hiddenItemsSource = readString(source, "hiddenItems", null);
         }
+        contract.guidFilterRuleCount = readLong(browserLayout, "guidFilterRuleCount", 0L);
+        contract.hiddenItemRuleCount = readLong(browserLayout, "hiddenItemRuleCount", 0L);
+        contract.hiddenItemCount = readLong(browserLayout, "hiddenItemCount", 0L);
         if (groups != null) {
             for (JsonElement element : groups) {
                 if (element == null || !element.isJsonObject()) {
@@ -555,6 +562,8 @@ public final class RawExportSidecarWriter {
                 + contract.groupCount
                 + ", fallbackGroups="
                 + contract.fallbackGroupCount
+                + ", hiddenItems="
+                + contract.hiddenItemCount
                 + ", representativeMismatches="
                 + contract.representativeMismatchCount
                 + ".";
@@ -2154,6 +2163,7 @@ public final class RawExportSidecarWriter {
         long neiSyntheticGroups;
         long neiGuidFilterRules;
         long neiHiddenItemRules;
+        long neiHiddenItems;
         long neiRepresentativeMismatches;
         long rawTextures;
         long rawAnimations;
@@ -2186,6 +2196,7 @@ public final class RawExportSidecarWriter {
         long neiSyntheticGroups;
         long neiGuidFilterRules;
         long neiHiddenItemRules;
+        long neiHiddenItems;
         long neiRepresentativeMismatches;
         long textures;
         long animations;
@@ -2202,6 +2213,11 @@ public final class RawExportSidecarWriter {
         boolean neiRuntimeSnapshot;
         String orderSource;
         String groupingSource;
+        String guidFiltersSource;
+        String hiddenItemsSource;
+        long guidFilterRuleCount;
+        long hiddenItemRuleCount;
+        long hiddenItemCount;
         long neiRuntimePanelItemCount;
         long exportOnlyItemCount;
         long browserItemCount;

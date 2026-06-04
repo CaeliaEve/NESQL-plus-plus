@@ -23,7 +23,6 @@ import net.minecraft.util.EnumChatFormatting;
 import java.io.BufferedReader;
 import java.io.File;
 import java.io.FileOutputStream;
-import java.io.FileReader;
 import java.io.IOException;
 import java.io.OutputStreamWriter;
 import java.io.FileInputStream;
@@ -77,12 +76,34 @@ public class CanonicalBrowserLayoutIndexWriter {
                     + exportDirectory.getAbsolutePath());
         }
 
-        BrowserLayoutIndex index = buildNeiRuntimeIndex(candidates);
+        ConfigRuleSet hiddenRules = loadFilterRuleSet(
+                "hiddenitems.cfg",
+                "nesql.hiddenItemsCfg",
+                "NESQL_HIDDEN_ITEMS_CFG",
+                "config/NEI/hiddenitems.cfg",
+                "config/notenoughitems/hiddenitems.cfg",
+                "config/hiddenitems.cfg");
+        ConfigLineSet guidFilters = loadLineRuleSet(
+                "guidfilters.cfg",
+                "nesql.guidFiltersCfg",
+                "NESQL_GUID_FILTERS_CFG",
+                "config/NEI/guidfilters.cfg",
+                "config/notenoughitems/guidfilters.cfg",
+                "config/guidfilters.cfg");
+        Set<String> hiddenItemIds = matchHiddenItems(candidates, hiddenRules.rules);
+        List<BrowserItemCandidate> visibleCandidates = filterHiddenCandidates(candidates, hiddenItemIds);
+
+        BrowserLayoutIndex index = buildNeiRuntimeIndex(visibleCandidates);
         if (index == null) {
             Logger.chatMessage(EnumChatFormatting.YELLOW
                     + "NEI runtime browser snapshot unavailable; using deterministic NESQL++ fallback ordering.");
-            index = buildFallbackIndex(candidates);
+            index = buildFallbackIndex(visibleCandidates);
         }
+        index.source.guidFilters = guidFilters.sourceFile;
+        index.source.hiddenItems = hiddenRules.sourceFile;
+        index.guidFilterRuleCount = guidFilters.ruleCount;
+        index.hiddenItemRuleCount = hiddenRules.rules.size();
+        index.hiddenItemCount = hiddenItemIds.size();
 
         writeIndex(canonicalDir, index);
     }
@@ -733,7 +754,7 @@ public class CanonicalBrowserLayoutIndexWriter {
         // GTNH NEI treats the generated WandCasting family as one collapsible browser group;
         // the fallback localized-name grouping would otherwise leave one entry per cap/core combo.
         if ("thaumcraft".equals(modId) && "wandcasting".equals(internalName)) {
-            return new SpecialFamily(modId + "::" + internalName + "::generated-wands", "法杖 / 权杖");
+            return new SpecialFamily(modId + "::" + internalName + "::generated-wands", "Thaumcraft Wands");
         }
 
         return null;
@@ -827,7 +848,9 @@ public class CanonicalBrowserLayoutIndexWriter {
         }
 
         GroupSettings pendingSettings = new GroupSettings();
-        try (BufferedReader reader = new BufferedReader(new FileReader(configFile))) {
+        try (BufferedReader reader = new BufferedReader(new InputStreamReader(
+                new FileInputStream(configFile),
+                StandardCharsets.UTF_8))) {
             String rawLine;
             while ((rawLine = reader.readLine()) != null) {
                 String line = rawLine.trim();
@@ -855,6 +878,143 @@ public class CanonicalBrowserLayoutIndexWriter {
             Logger.MOD.warn("Failed to load collapsible item rules from {}; continuing without them", configFile.getAbsolutePath(), e);
         }
         return rules;
+    }
+
+    private static ConfigRuleSet loadFilterRuleSet(
+            String label,
+            String propertyName,
+            String environmentName,
+            String... defaultPaths) {
+        ConfigRuleSet result = new ConfigRuleSet();
+        File configFile = resolveConfigPath(propertyName, environmentName, defaultPaths);
+        if (configFile == null || !configFile.exists()) {
+            Logger.MOD.warn("{} not found; browser layout will not apply these NEI filter rules", label);
+            return result;
+        }
+        result.sourceFile = toPortableSourceFile(configFile);
+
+        try (BufferedReader reader = new BufferedReader(new InputStreamReader(
+                new FileInputStream(configFile),
+                StandardCharsets.UTF_8))) {
+            String rawLine;
+            while ((rawLine = reader.readLine()) != null) {
+                String line = rawLine.trim();
+                if (line.isEmpty() || line.startsWith("#") || line.startsWith("; ")) {
+                    continue;
+                }
+                CandidateMatcher matcher = compileFilterExpression(line);
+                if (matcher == null) {
+                    continue;
+                }
+                GroupRule rule = new GroupRule();
+                rule.key = label + ":" + md5(line);
+                rule.matcher = matcher;
+                result.rules.add(rule);
+            }
+            Logger.MOD.info("Loaded {} {} rules from {}", result.rules.size(), label, configFile.getAbsolutePath());
+        } catch (Exception e) {
+            Logger.MOD.warn("Failed to load {} from {}; continuing without it", label, configFile.getAbsolutePath(), e);
+        }
+        return result;
+    }
+
+    private static ConfigLineSet loadLineRuleSet(
+            String label,
+            String propertyName,
+            String environmentName,
+            String... defaultPaths) {
+        ConfigLineSet result = new ConfigLineSet();
+        File configFile = resolveConfigPath(propertyName, environmentName, defaultPaths);
+        if (configFile == null || !configFile.exists()) {
+            Logger.MOD.warn("{} not found; browser layout will report zero source rules", label);
+            return result;
+        }
+        result.sourceFile = toPortableSourceFile(configFile);
+
+        try (BufferedReader reader = new BufferedReader(new InputStreamReader(
+                new FileInputStream(configFile),
+                StandardCharsets.UTF_8))) {
+            String rawLine;
+            while ((rawLine = reader.readLine()) != null) {
+                String line = rawLine.trim();
+                if (!line.isEmpty() && !line.startsWith("#") && !line.startsWith("; ")) {
+                    result.ruleCount++;
+                }
+            }
+            Logger.MOD.info("Loaded {} {} source rows from {}", result.ruleCount, label, configFile.getAbsolutePath());
+        } catch (Exception e) {
+            Logger.MOD.warn("Failed to load {} from {}; continuing with zero source rows", label, configFile.getAbsolutePath(), e);
+        }
+        return result;
+    }
+
+    private static Set<String> matchHiddenItems(List<BrowserItemCandidate> candidates, List<GroupRule> hiddenRules) {
+        Set<String> hiddenItemIds = new HashSet<>();
+        if (hiddenRules.isEmpty()) {
+            return hiddenItemIds;
+        }
+        for (BrowserItemCandidate candidate : candidates) {
+            for (GroupRule rule : hiddenRules) {
+                if (rule.matches(candidate)) {
+                    hiddenItemIds.add(candidate.itemId);
+                    break;
+                }
+            }
+        }
+        return hiddenItemIds;
+    }
+
+    private static List<BrowserItemCandidate> filterHiddenCandidates(
+            List<BrowserItemCandidate> candidates,
+            Set<String> hiddenItemIds) {
+        if (hiddenItemIds.isEmpty()) {
+            return candidates;
+        }
+        List<BrowserItemCandidate> visible = new ArrayList<>();
+        for (BrowserItemCandidate candidate : candidates) {
+            if (!hiddenItemIds.contains(candidate.itemId)) {
+                visible.add(candidate);
+            }
+        }
+        Logger.MOD.info("NEI hidden item filters excluded {} browser item candidates", hiddenItemIds.size());
+        return visible;
+    }
+
+    private static File resolveConfigPath(String propertyName, String environmentName, String... defaultPaths) {
+        List<File> candidates = new ArrayList<>();
+        String property = System.getProperty(propertyName);
+        if (property != null && !property.trim().isEmpty()) {
+            candidates.add(new File(property.trim()));
+        }
+        String env = System.getenv(environmentName);
+        if (env != null && !env.trim().isEmpty()) {
+            candidates.add(new File(env.trim()));
+        }
+        for (String path : defaultPaths) {
+            candidates.add(new File(path));
+        }
+        for (File candidate : candidates) {
+            if (candidate.exists()) {
+                return candidate;
+            }
+        }
+        return null;
+    }
+
+    private static String toPortableSourceFile(File file) {
+        if (file == null) {
+            return null;
+        }
+        String path = file.getPath().replace('\\', '/');
+        int configIndex = path.indexOf("config/");
+        if (configIndex >= 0) {
+            return path.substring(configIndex);
+        }
+        int assetsIndex = path.indexOf("assets/");
+        if (assetsIndex >= 0) {
+            return path.substring(assetsIndex);
+        }
+        return file.getName();
     }
 
     private static File resolveCollapsibleConfigPath() {
@@ -1147,6 +1307,9 @@ public class CanonicalBrowserLayoutIndexWriter {
         boolean neiRuntimeSnapshot;
         int neiRuntimeItemCount;
         int exportOnlyItemCount;
+        int guidFilterRuleCount;
+        int hiddenItemRuleCount;
+        int hiddenItemCount;
         int itemCount;
         int groupCount;
         int defaultEntryCount;
@@ -1158,6 +1321,8 @@ public class CanonicalBrowserLayoutIndexWriter {
     private static final class BrowserLayoutSource {
         String order;
         String grouping;
+        String guidFilters;
+        String hiddenItems;
     }
 
     private static final class BrowserItemCandidate {
@@ -1264,4 +1429,15 @@ public class CanonicalBrowserLayoutIndexWriter {
     private static final class GroupSettings {
         String displayName;
     }
+
+    private static final class ConfigRuleSet {
+        String sourceFile;
+        List<GroupRule> rules = new ArrayList<>();
+    }
+
+    private static final class ConfigLineSet {
+        String sourceFile;
+        int ruleCount;
+    }
 }
+
