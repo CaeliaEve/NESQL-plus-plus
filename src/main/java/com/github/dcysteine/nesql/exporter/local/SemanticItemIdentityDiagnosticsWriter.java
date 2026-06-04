@@ -422,8 +422,10 @@ public final class SemanticItemIdentityDiagnosticsWriter {
             increment(state.nbtKeyCounts, key);
         }
 
-        String family = SemanticItemIdentityMapper.classify(item, nbt);
-        if (family == null) {
+        SemanticItemIdentity identity = SemanticItemIdentityMapper.map(item);
+        String family = identity == null ? null : identity.family;
+        boolean classified = identity != null && "classified".equals(identity.classification);
+        if (!classified) {
             state.unclassifiedTaggedItems++;
             String unclassifiedKey = unclassifiedFamilyKey(item);
             increment(state.unclassifiedFamilyCounts, unclassifiedKey);

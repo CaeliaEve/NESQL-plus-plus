@@ -103,6 +103,8 @@ test('semantic stream writer validates one identity row per raw item', () => {
   assert.equal(writer.includes('topUnclassifiedFamilies'), true);
   assert.equal(writer.includes('unclassifiedFamilyCounts'), true);
   assert.equal(writer.includes('unclassifiedFamilySamples'), true);
+  assert.equal(writer.includes('SemanticItemIdentityMapper.map(item)'), true);
+  assert.equal(writer.includes('"classified".equals(identity.classification)'), true);
 });
 
 test('raw export health gates include semantic identity readiness', () => {
