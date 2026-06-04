@@ -124,3 +124,44 @@ test('quick semantic check refreshes raw export readiness reports', () => {
   assert.equal(quickCheck.includes('semantic-identity'), true);
   assert.equal(quickCheck.includes('semanticIdentityMapRows'), true);
 });
+
+test('semantic identity real export samples keep public variants and facets', () => {
+  const fixture = JSON.parse(readSource('test-fixtures/semantic-identity-real-samples.json').replace(/^\uFEFF/, ''));
+  const samples = Array.isArray(fixture.samples) ? fixture.samples : [];
+  const families = new Set(samples.map((sample) => sample.family));
+
+  for (const family of [
+    'facade.buildcraft',
+    'facade.ae2',
+    'thaumcraft.wand',
+    'tool.gregtech',
+    'tool.tconstruct',
+    'toolpart.tconstruct',
+    'toolpart.tgregworks',
+    'genetics.forestry',
+    'genetics.binnie-gendustry',
+    'entity_capture.generic',
+    'cosmetic.color',
+    'crop.ic2',
+    'fluid.container',
+  ]) {
+    assert.equal(families.has(family), true, `missing real exported semantic sample for ${family}`);
+  }
+
+  for (const sample of samples) {
+    assert.equal(sample.classification, 'classified', `sample is not classified: ${sample.itemId}`);
+    assert.equal(typeof sample.itemId, 'string');
+    assert.equal(sample.itemId.length > 0, true);
+    assert.equal(`${sample.publicItemId ?? ''}`.startsWith(`semantic:${sample.family}:`), true);
+    assert.equal(`${sample.variantId ?? ''}`.startsWith(`${sample.publicItemId}:variant:`), true);
+    assert.equal(`${sample.payloadHash ?? ''}`.length >= 16, true, `missing payload hash for ${sample.itemId}`);
+  }
+
+  const facetFamilies = samples
+    .filter((sample) => `${sample.facetSummary ?? ''}`.trim())
+    .map((sample) => sample.family);
+  assert.equal(facetFamilies.includes('thaumcraft.wand'), true);
+  assert.equal(facetFamilies.includes('tool.gregtech'), true);
+  assert.equal(facetFamilies.includes('fluid.container'), true);
+  assert.equal(facetFamilies.includes('facade.buildcraft'), true);
+});

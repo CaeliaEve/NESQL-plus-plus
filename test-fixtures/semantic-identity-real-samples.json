@@ -1,0 +1,150 @@
+﻿{
+  "schemaVersion": "nesqlpp/test-fixture/semantic-identity-real-samples/v1",
+  "source": "semanticnative-next",
+  "generatedAt": "2026-06-04T11:44:27Z",
+  "samples": [
+    {
+      "itemId": "i~BiomesOPlenty~bopBucket~0~0aSfgzcrNIi-Wef4NIOl0w==",
+      "publicItemId": "semantic:fluid.container:biomesoplenty~bopbucket~0",
+      "variantId": "semantic:fluid.container:biomesoplenty~bopbucket~0:variant:60cbbdda85ce47ca",
+      "family": "fluid.container",
+      "classification": "classified",
+      "facetSummary": "fluid=honey | amount=1000",
+      "payloadHash": "60cbbdda85ce47ca29b70ce48d1a2a0aa3fd2c165255b2a4b32add911ac48b0a",
+      "groupKey": null,
+      "sortKey": "fluid.container|fluid~honey~~~amount~1000|i~biomesoplenty~bopbucket~0~0asfgzcrnii-wef4niol0w~~"
+    },
+    {
+      "itemId": "i~Botania~signalFlare~0~-lbPDgWsN7yNoUoFWFROZg==",
+      "publicItemId": "semantic:cosmetic.color:botania~signalflare~0",
+      "variantId": "semantic:cosmetic.color:botania~signalflare~0:variant:50cfaecf8a4c5ec9",
+      "family": "cosmetic.color",
+      "classification": "classified",
+      "facetSummary": "color=13",
+      "payloadHash": "50cfaecf8a4c5ec9ca0615268abe932c6bc9cbe3d62d33bb9b42724bdba39989",
+      "groupKey": null,
+      "sortKey": "cosmetic.color|color~13|i~botania~signalflare~0~-lbpdgwsn7ynouofwfrozg~~"
+    },
+    {
+      "itemId": "i~BuildCraftTransport~pipeFacade~0~--lC0kNUP0qVkfM1gey9cQ==",
+      "publicItemId": "semantic:facade.buildcraft:buildcraft~transport~pipefacade~0",
+      "variantId": "semantic:facade.buildcraft:buildcraft~transport~pipefacade~0:variant:eb30da299b1c05b0",
+      "family": "facade.buildcraft",
+      "classification": "classified",
+      "facetSummary": "block=etfuturum:light | metadata=9 | hollow=0 | transparent=0 | facadeType=0",
+      "payloadHash": "eb30da299b1c05b036fd9dfb01ccf530b36b2467c27a87c99abeaefa757b1882",
+      "groupKey": null,
+      "sortKey": "facade.buildcraft|block~etfuturum~light~~~metadata~9~~~hollow~0~~~transparent~0~~~facadetype~0|i~buildcrafttransport~pipefacade~0~--lc0knup0qvkfm1gey9cq~~"
+    },
+    {
+      "itemId": "i~DraconicEvolution~mobSoul~0~-49r5AaiMp6n5Sz6pWpfdg==",
+      "publicItemId": "semantic:entity_capture.generic:draconicevolution~mobsoul~0",
+      "variantId": "semantic:entity_capture.generic:draconicevolution~mobsoul~0:variant:b027346097b791ab",
+      "family": "entity_capture.generic",
+      "classification": "classified",
+      "facetSummary": "entity=AWWayofTime.IceDemon",
+      "payloadHash": "b027346097b791ab1c22675f6e1d090aad9e836e75027b5d267702e8cd6fc298",
+      "groupKey": null,
+      "sortKey": "entity_capture.generic|entity~awwayoftime.icedemon|i~draconicevolution~mobsoul~0~-49r5aaimp6n5sz6pwpfdg~~"
+    },
+    {
+      "itemId": "i~Forestry~beeDroneGE~0~-F0RI0NHNoOUG6KjFj7RZw==",
+      "publicItemId": "semantic:genetics.forestry:forestry~beedronege~0",
+      "variantId": "semantic:genetics.forestry:forestry~beedronege~0:variant:2c034d94bc923367",
+      "family": "genetics.forestry",
+      "classification": "classified",
+      "facetSummary": "chromosomes=[0:{Slot:0",
+      "payloadHash": "2c034d94bc9233678fa2623173aa00f7a83a59673ad7fe2b8f1dd9bd5d5b1d50",
+      "groupKey": null,
+      "sortKey": "genetics.forestry|chromosomes~~0~~slot~0|i~forestry~beedronege~0~-f0ri0nhnooug6kjfj7rzw~~"
+    },
+    {
+      "itemId": "i~Genetics~sequence~0~mWbJvGzgOHeTsREVc3TflA==",
+      "publicItemId": "semantic:genetics.binnie-gendustry:genetics~sequence~0",
+      "variantId": "semantic:genetics.binnie-gendustry:genetics~sequence~0:variant:5c2c40aea3446888",
+      "family": "genetics.binnie-gendustry",
+      "classification": "classified",
+      "facetSummary": "root=rootBee | allele=forestry.speciesMeadow | chromosomes=0",
+      "payloadHash": "5c2c40aea344688898166426e733c99096ce54ef137e9753465e5c0852754465",
+      "groupKey": null,
+      "sortKey": "genetics.binnie-gendustry|root~rootbee~~~allele~forestry.speciesmeadow~~~chromosomes~0|i~genetics~sequence~0~mwbjvgzgohetsrevc3tfla~~"
+    },
+    {
+      "itemId": "i~IC2~itemCropSeed~0~-0fGX2pbPHKGo5680jBNJg==",
+      "publicItemId": "semantic:crop.ic2:ic2~itemcropseed~0",
+      "variantId": "semantic:crop.ic2:ic2~itemcropseed~0:variant:b6c03305876d3e29",
+      "family": "crop.ic2",
+      "classification": "classified",
+      "facetSummary": "crop=potato | growth=1 | gain=1 | resistance=1 | scan=4 | owner=IC2",
+      "payloadHash": "b6c03305876d3e2923353927f218392d81eb3af354dd22f18aa1d5607c072ad5",
+      "groupKey": null,
+      "sortKey": "crop.ic2|crop~potato~~~growth~1~~~gain~1~~~resistance~1~~~scan~4~~~owner~ic2|i~ic2~itemcropseed~0~-0fgx2pbphkgo5680jbnjg~~"
+    },
+    {
+      "itemId": "i~TConstruct~ArrowAmmo~0~-T6wEIcBO_6nTA9z8avRhQ==",
+      "publicItemId": "semantic:tool.tconstruct:tconstruct~arrowammo~0",
+      "variantId": "semantic:tool.tconstruct:tconstruct~arrowammo~0:variant:c065ab300c4e20bf",
+      "family": "tool.tconstruct",
+      "classification": "classified",
+      "facetSummary": "head=1660 | handle=0 | accessory=0 | durability=7680",
+      "payloadHash": "c065ab300c4e20bf2c71d4e4a7f5e2272ca49f23eb91ff6f89a2998b41f1f800",
+      "groupKey": null,
+      "sortKey": "tool.tconstruct|head~1660~~~handle~0~~~accessory~0~~~durability~7680|i~tconstruct~arrowammo~0~-t6weicbo_6nta9z8avrhq~~"
+    },
+    {
+      "itemId": "i~TConstruct~BoltPart~0~-4v6NQ_ZNem9XzezdhilCw==",
+      "publicItemId": "semantic:toolpart.tconstruct:tconstruct~boltpart~0",
+      "variantId": "semantic:toolpart.tconstruct:tconstruct~boltpart~0:variant:d421487c84c1105e",
+      "family": "toolpart.tconstruct",
+      "classification": "classified",
+      "facetSummary": "partType=BoltPart | material=0 | material2=1589",
+      "payloadHash": "d421487c84c1105ef8c0ec08cde7f73a3131a627aee5da80b9ceb2ff644b3cbf",
+      "groupKey": null,
+      "sortKey": "toolpart.tconstruct|parttype~boltpart~~~material~0~~~material2~1589|i~tconstruct~boltpart~0~-4v6nq_znem9xzezdhilcw~~"
+    },
+    {
+      "itemId": "i~TGregworks~tGregToolPartArrowHead~1500~dVD0xLrCMICa1IF-NY1HEA==",
+      "publicItemId": "semantic:toolpart.tgregworks:tgregworks~tgregtoolpartarrowhead~1500",
+      "variantId": "semantic:toolpart.tgregworks:tgregworks~tgregtoolpartarrowhead~1500:variant:79197d7a22ba5d1f",
+      "family": "toolpart.tgregworks",
+      "classification": "classified",
+      "facetSummary": "partType=tGregToolPartArrowHead | material=Aluminium",
+      "payloadHash": "79197d7a22ba5d1f220b1adc8448ec983b2a9725bd6d07eb105a7c7222321669",
+      "groupKey": null,
+      "sortKey": "toolpart.tgregworks|parttype~tgregtoolpartarrowhead~~~material~aluminium|i~tgregworks~tgregtoolpartarrowhead~1500~dvd0xlrcmica1if-ny1hea~~"
+    },
+    {
+      "itemId": "i~Thaumcraft~WandCasting~0~-0pIwQCTO86bA0Ji0emz0w==",
+      "publicItemId": "semantic:thaumcraft.wand:thaumcraft~wandcasting~0",
+      "variantId": "semantic:thaumcraft.wand:thaumcraft~wandcasting~0:variant:0256e3233963f2fe",
+      "family": "thaumcraft.wand",
+      "classification": "classified",
+      "facetSummary": "rod=reed_staf | cap=shadowmeta | kind=wand",
+      "payloadHash": "0256e3233963f2fecf042feb94dbcec7bfa8b2e7d95c81506333dc0378b69477",
+      "groupKey": null,
+      "sortKey": "thaumcraft.wand|rod~reed_staf~~~cap~shadowmeta~~~kind~wand|i~thaumcraft~wandcasting~0~-0piwqcto86ba0ji0emz0w~~"
+    },
+    {
+      "itemId": "i~appliedenergistics2~item.ItemFacade~0~OnXpoMahPb-wIWNxQTRUTA==",
+      "publicItemId": "semantic:facade.ae2:appliedenergistics2~item.itemfacade~0",
+      "variantId": "semantic:facade.ae2:appliedenergistics2~item.itemfacade~0:variant:466752a496751fd4",
+      "family": "facade.ae2",
+      "classification": "classified",
+      "facetSummary": null,
+      "payloadHash": "466752a496751fd4dc389e4c71d7a96a78addad3710423539b4c0d50f63db4f1",
+      "groupKey": null,
+      "sortKey": null
+    },
+    {
+      "itemId": "i~gregtech~gt.detrav.metatool.01~100~-2s0plpSMoGd8u1iQ9wrPA==",
+      "publicItemId": "semantic:tool.gregtech:gregtech~gt.detrav.metatool.01~100",
+      "variantId": "semantic:tool.gregtech:gregtech~gt.detrav.metatool.01~100:variant:5e8a38a35722072a",
+      "family": "tool.gregtech",
+      "classification": "classified",
+      "facetSummary": "primaryMaterial=Vinteum | secondaryMaterial=Iridium | voltage=32768 | charge=1",
+      "payloadHash": "5e8a38a35722072a9da02a30fad0d52e79efde015222e3fe524343dc18975ec0",
+      "groupKey": null,
+      "sortKey": "tool.gregtech|primarymaterial~vinteum~~~secondarymaterial~iridium~~~voltage~32768~~~charge~1|i~gregtech~gt.detrav.metatool.01~100~-2s0plpsmogd8u1iq9wrpa~~"
+    }
+  ]
+}
