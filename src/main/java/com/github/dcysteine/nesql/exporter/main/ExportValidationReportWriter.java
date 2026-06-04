@@ -181,12 +181,12 @@ final class ExportValidationReportWriter {
     }
 
     private static final PathHygieneRule[] PATH_HYGIENE_RULES = new PathHygieneRule[] {
-            new PathHygieneRule("windows-backslash-absolute", Pattern.compile("(^|[\\s\\\"'`([{:=,])[A-Za-z]:\\\\[A-Za-z0-9._ -]")),
-            new PathHygieneRule("windows-slash-absolute", Pattern.compile("(^|[\\s\\\"'`([{:=,])[A-Za-z]:/[A-Za-z0-9._ -]")),
+            new PathHygieneRule("windows-backslash-absolute", Pattern.compile("(^|[\\s\\\"'`\\(\\[\\{:=,])[A-Za-z]:\\\\[A-Za-z0-9._ -]")),
+            new PathHygieneRule("windows-slash-absolute", Pattern.compile("(^|[\\s\\\"'`\\(\\[\\{:=,])[A-Za-z]:/[A-Za-z0-9._ -]")),
             new PathHygieneRule("minecraft-version-path", Pattern.compile("\\.minecraft[\\\\/]versions", Pattern.CASE_INSENSITIVE)),
             new PathHygieneRule("local-gtnh-path", Pattern.compile("[A-Za-z]:[\\\\/]GTNH", Pattern.CASE_INSENSITIVE)),
             new PathHygieneRule("local-codex-path", Pattern.compile("[A-Za-z]:[\\\\/]codex", Pattern.CASE_INSENSITIVE)),
-            new PathHygieneRule("linux-home-absolute", Pattern.compile("(^|[\\s\\\"'`([{:=,])/(?:home|Users|mnt|opt|srv)/"))
+            new PathHygieneRule("linux-home-absolute", Pattern.compile("(^|[\\s\\\"'`\\(\\[\\{:=,])/(?:home|Users|mnt|opt|srv)/"))
     };
 
     private static void inspectExportPathHygiene(File repositoryDirectory, ValidationReport report) {
