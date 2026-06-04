@@ -5,6 +5,7 @@ import com.github.dcysteine.nesql.exporter.main.Logger;
 import com.github.dcysteine.nesql.sql.base.item.Item;
 import com.google.gson.Gson;
 import com.google.gson.GsonBuilder;
+import com.google.gson.JsonArray;
 import com.google.gson.JsonObject;
 import cpw.mods.fml.common.registry.GameRegistry;
 import jakarta.persistence.EntityManager;
@@ -67,7 +68,7 @@ final class AngelicaRenderFactsWriter {
     Counts write() throws IOException {
         ensureDirectory(new File(rawDir, "facts/render"));
         Counts counts = new Counts();
-        writeBackendFacts(new File(rawDir, "facts/render/backend.json"));
+        counts.backend = writeBackendFacts(new File(rawDir, "facts/render/backend.json"));
         counts.backendFacts = 1L;
         counts.textureSprites = writeTextureSpriteFacts(new File(rawDir, "facts/render/texture-sprites.jsonl.gz"));
         ItemRendererStreamCounts itemRendererCounts = writeItemRendererFacts(
@@ -80,12 +81,14 @@ final class AngelicaRenderFactsWriter {
         return counts;
     }
 
-    private void writeBackendFacts(File out) throws IOException {
+    private String writeBackendFacts(File out) throws IOException {
+        boolean angelicaPresent = detectAngelica();
+        String backend = angelicaPresent ? "angelica" : "minecraft-legacy";
         JsonObject root = new JsonObject();
         root.addProperty("schemaVersion", SCHEMA_ROOT + "/backend");
         root.addProperty("generatedAt", utcNow());
-        root.addProperty("backend", detectAngelica() ? "angelica" : "minecraft-legacy");
-        root.addProperty("angelicaPresent", detectAngelica());
+        root.addProperty("backend", backend);
+        root.addProperty("angelicaPresent", angelicaPresent);
         root.addProperty("irisPresent", classPresent("net.irisshaders.iris.api.v0.IrisApi"));
         root.addProperty("shaderPackInUse", detectShaderPackInUse());
         root.addProperty("shadersEnabled", detectShadersEnabled());
@@ -101,6 +104,7 @@ final class AngelicaRenderFactsWriter {
         evidence.addProperty("glsmClass", "com.gtnewhorizons.angelica.glsm.GLStateManager");
         root.add("evidence", evidence);
         writeJson(out, root);
+        return backend;
     }
 
     private long writeTextureSpriteFacts(File out) throws IOException {
@@ -141,9 +145,13 @@ final class AngelicaRenderFactsWriter {
                     if (metadata != null) {
                         row.addProperty("defaultFrameTimeTicks", metadata.getFrameTime());
                         row.addProperty("metadataFrameCount", metadata.getFrameCount());
+                        row.add("timeline", animationTimeline(metadata, Math.max(frameCount, collectionSize(frames))));
+                        row.addProperty("interpolate", booleanMethod(metadata, "isInterpolate", false));
                     } else {
                         row.addProperty("defaultFrameTimeTicks", (Number) null);
                         row.addProperty("metadataFrameCount", (Number) null);
+                        row.add("timeline", fallbackTimeline(Math.max(frameCount, collectionSize(frames))));
+                        row.addProperty("interpolate", false);
                     }
                     writer.write(GSON.toJson(row));
                     writer.write('\n');
@@ -355,6 +363,69 @@ final class AngelicaRenderFactsWriter {
             return "native-render-tick";
         }
         return "native-renderer";
+    }
+
+
+    private static JsonArray animationTimeline(AnimationMetadataSection metadata, int physicalFrameCount) {
+        JsonArray out = new JsonArray();
+        if (metadata == null) {
+            return fallbackTimeline(physicalFrameCount);
+        }
+        int metadataFrameCount = safeInt(new IntSupplier() { public int get() { return metadata.getFrameCount(); } }, 0);
+        int timelineLength = Math.max(metadataFrameCount, 0);
+        if (timelineLength == 0) {
+            timelineLength = Math.max(physicalFrameCount, 0);
+        }
+        for (int timelineIndex = 0; timelineIndex < timelineLength; timelineIndex++) {
+            final int index = timelineIndex;
+            JsonObject frame = new JsonObject();
+            frame.addProperty("timelineIndex", timelineIndex);
+            frame.addProperty("frameIndex", intMethod(metadata, "getFrameIndex", new Class[] { int.class }, new Object[] { Integer.valueOf(index) }, index));
+            frame.addProperty("durationTicks", intMethod(metadata, "getFrameTimeSingle", new Class[] { int.class }, new Object[] { Integer.valueOf(index) }, metadata.getFrameTime()));
+            frame.addProperty("durationMs", frame.get("durationTicks").getAsInt() * 50);
+            out.add(frame);
+        }
+        return out;
+    }
+
+    private static JsonArray fallbackTimeline(int physicalFrameCount) {
+        JsonArray out = new JsonArray();
+        int count = Math.max(physicalFrameCount, 0);
+        for (int index = 0; index < count; index++) {
+            JsonObject frame = new JsonObject();
+            frame.addProperty("timelineIndex", index);
+            frame.addProperty("frameIndex", index);
+            frame.addProperty("durationTicks", 1);
+            frame.addProperty("durationMs", 50);
+            out.add(frame);
+        }
+        return out;
+    }
+
+    private static int intMethod(Object target, String methodName, Class[] parameterTypes, Object[] args, int fallback) {
+        if (target == null) {
+            return fallback;
+        }
+        try {
+            Method method = target.getClass().getMethod(methodName, parameterTypes);
+            Object value = method.invoke(target, args);
+            return value instanceof Number ? ((Number) value).intValue() : fallback;
+        } catch (Throwable ignored) {
+            return fallback;
+        }
+    }
+
+    private static boolean booleanMethod(Object target, String methodName, boolean fallback) {
+        if (target == null) {
+            return fallback;
+        }
+        try {
+            Method method = target.getClass().getMethod(methodName);
+            Object value = method.invoke(target);
+            return value instanceof Boolean ? ((Boolean) value).booleanValue() : fallback;
+        } catch (Throwable ignored) {
+            return fallback;
+        }
     }
 
     private ItemStack resolveStack(Item item) {
@@ -591,6 +662,7 @@ final class AngelicaRenderFactsWriter {
     interface BooleanSupplier { boolean get(); }
 
     static final class Counts {
+        String backend;
         long backendFacts;
         long textureSprites;
         long itemRenderers;

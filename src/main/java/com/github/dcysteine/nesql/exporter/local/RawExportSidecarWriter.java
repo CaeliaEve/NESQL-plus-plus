@@ -110,6 +110,7 @@ public final class RawExportSidecarWriter {
         report.counts.rawEntities = factCounts.entities;
         report.counts.rawBrowserAtlasAssets = factCounts.browserAtlasAssets;
         report.counts.renderBackendFacts = factCounts.renderBackendFacts;
+        report.counts.renderBackendAngelica = factCounts.renderBackendAngelica;
         report.counts.renderTextureSprites = factCounts.renderTextureSprites;
         report.counts.renderItemRenderers = factCounts.renderItemRenderers;
         report.counts.renderShaderItems = factCounts.renderShaderItems;
@@ -397,9 +398,11 @@ public final class RawExportSidecarWriter {
                 "Animation metadata stream is present; zero rows is valid when no animated assets are detected."));
         gates.add(validationGate(
                 "angelica-render-facts",
-                counts.renderBackendFacts == 1 && counts.renderTextureSprites >= 0 && counts.renderItemRenderers == counts.rawItems,
+                counts.renderBackendFacts == 1 && counts.renderBackendAngelica == 1 && counts.renderTextureSprites >= 0 && counts.renderItemRenderers == counts.rawItems,
                 "Angelica render facts: backendFacts="
                         + counts.renderBackendFacts
+                        + ", backendAngelica="
+                        + counts.renderBackendAngelica
                         + ", textureSprites="
                         + counts.renderTextureSprites
                         + ", itemRenderers="
@@ -547,6 +550,7 @@ public final class RawExportSidecarWriter {
         AngelicaRenderFactsWriter.Counts renderCounts =
                 new AngelicaRenderFactsWriter(entityManager, rawDir, renderAssets).write();
         counts.renderBackendFacts = renderCounts.backendFacts;
+        counts.renderBackendAngelica = "angelica".equals(renderCounts.backend) ? 1L : 0L;
         counts.renderTextureSprites = renderCounts.textureSprites;
         counts.renderItemRenderers = renderCounts.itemRenderers;
         counts.renderShaderItems = renderCounts.shaderItems;
@@ -2458,6 +2462,7 @@ public final class RawExportSidecarWriter {
         long rawEntities;
         long rawBrowserAtlasAssets;
         long renderBackendFacts;
+        long renderBackendAngelica;
         long renderTextureSprites;
         long renderItemRenderers;
         long renderShaderItems;
@@ -2498,6 +2503,7 @@ public final class RawExportSidecarWriter {
         long entities;
         long browserAtlasAssets;
         long renderBackendFacts;
+        long renderBackendAngelica;
         long renderTextureSprites;
         long renderItemRenderers;
         long renderShaderItems;
