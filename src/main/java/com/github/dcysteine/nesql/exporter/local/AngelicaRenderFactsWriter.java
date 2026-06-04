@@ -17,6 +17,7 @@ import net.minecraft.client.resources.data.AnimationMetadataSection;
 import net.minecraft.item.ItemStack;
 import net.minecraftforge.client.IItemRenderer;
 import net.minecraftforge.client.MinecraftForgeClient;
+import net.minecraft.util.IIcon;
 import org.lwjgl.opengl.GL11;
 
 import java.io.File;
@@ -261,6 +262,7 @@ final class AngelicaRenderFactsWriter {
         row.addProperty("captureRequired", booleanValue(rendererRow, "requiresFramebufferCapture"));
         row.addProperty("preferredExport", "angelica-framebuffer-capture");
         row.addProperty("browserReimplementationAllowed", false);
+        row.add("textureHints", shaderTextureHints(item));
         row.addProperty("notes", "Native renderer requires shader/capture facts; do not replace with static fallback.");
         return row;
     }
@@ -677,6 +679,129 @@ final class AngelicaRenderFactsWriter {
         return object.get(key).getAsBoolean();
     }
 
+    private JsonObject shaderTextureHints(Item item) {
+        JsonObject hints = new JsonObject();
+        ItemStack stack = resolveStack(item);
+        if (stack == null || stack.getItem() == null) {
+            hints.addProperty("status", "stack-unresolved");
+            return hints;
+        }
+
+        hints.addProperty("status", "resolved");
+        hints.addProperty("spriteNumber", safeInt(new IntSupplier() {
+            public int get() {
+                return stack.getItem().getSpriteNumber();
+            }
+        }, -1));
+        addTextureHint(hints, "stackIcon", safeIconName(new ObjectSupplier() {
+            public Object get() {
+                return stack.getIconIndex();
+            }
+        }));
+
+        Object itemTarget = stack.getItem();
+        addTextureHint(hints, "itemMaskTexture", invokeTextureHint(
+                itemTarget,
+                "getMaskTexture",
+                new Class<?>[] { ItemStack.class, net.minecraft.entity.player.EntityPlayer.class },
+                new Object[] { stack, null }));
+        addTextureHint(hints, "itemHaloTexture", invokeTextureHint(
+                itemTarget,
+                "getHaloTexture",
+                new Class<?>[] { ItemStack.class },
+                new Object[] { stack }));
+        addTextureHint(hints, "itemOverlayIcon", invokeTextureHint(
+                itemTarget,
+                "getOverlayIcon",
+                new Class<?>[] { ItemStack.class },
+                new Object[] { stack }));
+        addTextureHint(hints, "itemMaskIcon", invokeTextureHint(
+                itemTarget,
+                "getMaskIcon",
+                new Class<?>[] { ItemStack.class },
+                new Object[] { stack }));
+        addTextureHint(hints, "itemHaloIcon", invokeTextureHint(
+                itemTarget,
+                "getHaloIcon",
+                new Class<?>[] { ItemStack.class },
+                new Object[] { stack }));
+        addTextureHint(hints, "itemGlowIcon", invokeTextureHint(
+                itemTarget,
+                "getGlowIcon",
+                new Class<?>[] { ItemStack.class },
+                new Object[] { stack }));
+        addTextureHint(hints, "itemFrameIcon", invokeTextureHint(
+                itemTarget,
+                "getFrameIcon",
+                new Class<?>[] { ItemStack.class },
+                new Object[] { stack }));
+
+        IItemRenderer renderer = null;
+        try {
+            renderer = MinecraftForgeClient.getItemRenderer(stack, IItemRenderer.ItemRenderType.INVENTORY);
+        } catch (Throwable ignored) {
+        }
+        if (renderer != null) {
+            hints.addProperty("rendererClass", renderer.getClass().getName());
+            addTextureHint(hints, "rendererMaskTexture", invokeTextureHint(
+                    renderer,
+                    "getMaskTexture",
+                    new Class<?>[] { ItemStack.class },
+                    new Object[] { stack }));
+            addTextureHint(hints, "rendererHaloTexture", invokeTextureHint(
+                    renderer,
+                    "getHaloTexture",
+                    new Class<?>[] { ItemStack.class },
+                    new Object[] { stack }));
+            addTextureHint(hints, "rendererOverlayIcon", invokeTextureHint(
+                    renderer,
+                    "getOverlayIcon",
+                    new Class<?>[] { ItemStack.class },
+                    new Object[] { stack }));
+        }
+        return hints;
+    }
+
+    private static void addTextureHint(JsonObject hints, String key, String value) {
+        if (value != null && !value.trim().isEmpty()) {
+            hints.addProperty(key, value);
+        }
+    }
+
+    private static String invokeTextureHint(
+            Object target,
+            String methodName,
+            Class<?>[] parameterTypes,
+            Object[] args) {
+        if (target == null) {
+            return null;
+        }
+        try {
+            Method method = target.getClass().getMethod(methodName, parameterTypes);
+            return textureHintValue(method.invoke(target, args));
+        } catch (Throwable ignored) {
+            return null;
+        }
+    }
+
+    private static String safeIconName(ObjectSupplier supplier) {
+        try {
+            return textureHintValue(supplier.get());
+        } catch (Throwable ignored) {
+            return null;
+        }
+    }
+
+    private static String textureHintValue(Object value) {
+        if (value == null) {
+            return null;
+        }
+        if (value instanceof IIcon) {
+            return ((IIcon) value).getIconName();
+        }
+        return String.valueOf(value);
+    }
+
     private static OutputStreamWriter createUtf8JsonlWriter(File out) throws IOException {
         FileOutputStream fos = new FileOutputStream(out, false);
         if (out.getName().endsWith(".gz")) {
@@ -706,6 +831,7 @@ final class AngelicaRenderFactsWriter {
 
     interface IntSupplier { int get(); }
     interface BooleanSupplier { boolean get(); }
+    interface ObjectSupplier { Object get(); }
 
     static final class Counts {
         String backend;
