@@ -9,15 +9,14 @@ import java.security.NoSuchAlgorithmException;
 import java.util.Locale;
 import java.util.Map;
 import java.util.LinkedHashMap;
-import java.util.regex.Matcher;
-import java.util.regex.Pattern;
 
 public final class SemanticItemIdentityMapper {
     private SemanticItemIdentityMapper() {}
 
     public static SemanticItemIdentity map(Item item) {
         String nbt = safe(item.getNbt());
-        String family = nbt.trim().length() == 0 ? null : classify(item, nbt);
+        ParsedNbt parsedNbt = ParsedNbt.parse(nbt);
+        String family = parsedNbt.isEmpty() ? null : classify(item, parsedNbt);
         String payloadHash = nbt.trim().length() == 0 ? null : sha256(nbt);
         String base = baseKey(item);
 
@@ -33,15 +32,19 @@ public final class SemanticItemIdentityMapper {
         identity.variantId = payloadHash == null
                 ? null
                 : identity.publicItemId + ":variant:" + payloadHash.substring(0, 16);
-        applyFacets(identity, item, nbt);
+        applyFacets(identity, item, parsedNbt);
         return identity;
     }
 
     public static String classify(Item item, String nbt) {
+        return classify(item, ParsedNbt.parse(nbt));
+    }
+
+    public static String classify(Item item, ParsedNbt parsedNbt) {
         String mod = lower(item.getModId());
         String internal = lower(item.getInternalName());
         String id = lower(item.getId());
-        String payload = lower(nbt);
+        String payload = parsedNbt.lower();
 
         if ((mod.contains("buildcraft") || id.contains("buildcraft")) && (internal.contains("facade") || payload.contains("transparent") || payload.contains("hollow"))) {
             return "facade.buildcraft";
@@ -104,11 +107,11 @@ public final class SemanticItemIdentityMapper {
         return safe(item.getModId()) + "|" + safe(item.getInternalName()) + "|" + item.getItemDamage();
     }
 
-    private static void applyFacets(SemanticItemIdentity identity, Item item, String nbt) {
-        if (identity == null || nbt == null || nbt.trim().length() == 0) {
+    private static void applyFacets(SemanticItemIdentity identity, Item item, ParsedNbt parsedNbt) {
+        if (identity == null || parsedNbt == null || parsedNbt.isEmpty()) {
             return;
         }
-        Map<String, String> facets = semanticFacets(identity.family, item, nbt);
+        Map<String, String> facets = semanticFacets(identity.family, item, parsedNbt);
         if (facets.isEmpty()) {
             return;
         }
@@ -123,64 +126,68 @@ public final class SemanticItemIdentityMapper {
     }
 
     public static Map<String, String> semanticFacets(String family, Item item, String nbt) {
+        return semanticFacets(family, item, ParsedNbt.parse(nbt));
+    }
+
+    public static Map<String, String> semanticFacets(String family, Item item, ParsedNbt parsedNbt) {
         LinkedHashMap<String, String> facets = new LinkedHashMap<String, String>();
         String normalizedFamily = safe(family);
         if ("facade.buildcraft".equals(normalizedFamily)
                 || "facade.ae2".equals(normalizedFamily)
                 || "facade.enderio.paint".equals(normalizedFamily)) {
-            putIfPresent(facets, "block", firstNbtValue(nbt, "block", "source_block", "sourceBlock"));
-            putIfPresent(facets, "metadata", firstNbtValue(nbt, "metadata", "meta"));
-            putIfPresent(facets, "hollow", firstNbtValue(nbt, "hollow"));
-            putIfPresent(facets, "transparent", firstNbtValue(nbt, "transparent"));
-            putIfPresent(facets, "facadeType", firstNbtValue(nbt, "type", "facadeType"));
+            putIfPresent(facets, "block", firstNbtValue(parsedNbt, "block", "source_block", "sourceBlock"));
+            putIfPresent(facets, "metadata", firstNbtValue(parsedNbt, "metadata", "meta"));
+            putIfPresent(facets, "hollow", firstNbtValue(parsedNbt, "hollow"));
+            putIfPresent(facets, "transparent", firstNbtValue(parsedNbt, "transparent"));
+            putIfPresent(facets, "facadeType", firstNbtValue(parsedNbt, "type", "facadeType"));
         } else if ("thaumcraft.wand".equals(normalizedFamily)) {
-            putIfPresent(facets, "rod", firstNbtValue(nbt, "rod"));
-            putIfPresent(facets, "cap", firstNbtValue(nbt, "cap"));
-            putIfPresent(facets, "focus", firstNbtValue(nbt, "focus", "focusId"));
+            putIfPresent(facets, "rod", firstNbtValue(parsedNbt, "rod"));
+            putIfPresent(facets, "cap", firstNbtValue(parsedNbt, "cap"));
+            putIfPresent(facets, "focus", firstNbtValue(parsedNbt, "focus", "focusId"));
             putIfPresent(facets, "kind", lower(item.getInternalName()).contains("staff") ? "staff" : lower(item.getInternalName()).contains("sceptre") ? "sceptre" : "wand");
         } else if ("toolpart.tconstruct".equals(normalizedFamily)) {
             putIfPresent(facets, "partType", item.getInternalName());
             putIfPresent(facets, "material", String.valueOf(item.getItemDamage()));
-            putIfPresent(facets, "material2", firstNbtValue(nbt, "Material2", "material2"));
+            putIfPresent(facets, "material2", firstNbtValue(parsedNbt, "Material2", "material2"));
         } else if ("toolpart.tgregworks".equals(normalizedFamily)) {
             putIfPresent(facets, "partType", item.getInternalName());
-            putIfPresent(facets, "material", firstNbtValue(nbt, "material"));
+            putIfPresent(facets, "material", firstNbtValue(parsedNbt, "material"));
         } else if ("tool.gregtech".equals(normalizedFamily) || "charge.gregtech".equals(normalizedFamily)) {
-            putIfPresent(facets, "primaryMaterial", firstNbtValue(nbt, "PrimaryMaterial", "primaryMaterial"));
-            putIfPresent(facets, "secondaryMaterial", firstNbtValue(nbt, "SecondaryMaterial", "secondaryMaterial"));
-            putIfPresent(facets, "voltage", firstNbtValue(nbt, "Voltage", "voltage"));
-            putIfPresent(facets, "charge", firstNbtValue(nbt, "Charge", "Energy", "Electric"));
+            putIfPresent(facets, "primaryMaterial", firstNbtValue(parsedNbt, "PrimaryMaterial", "primaryMaterial"));
+            putIfPresent(facets, "secondaryMaterial", firstNbtValue(parsedNbt, "SecondaryMaterial", "secondaryMaterial"));
+            putIfPresent(facets, "voltage", firstNbtValue(parsedNbt, "Voltage", "voltage"));
+            putIfPresent(facets, "charge", firstNbtValue(parsedNbt, "Charge", "Energy", "Electric"));
         } else if ("tool.tconstruct".equals(normalizedFamily)) {
-            putIfPresent(facets, "head", firstNbtValue(nbt, "RenderHead", "Head"));
-            putIfPresent(facets, "handle", firstNbtValue(nbt, "RenderHandle", "Handle"));
-            putIfPresent(facets, "accessory", firstNbtValue(nbt, "RenderAccessory", "Accessory"));
-            putIfPresent(facets, "durability", firstNbtValue(nbt, "TotalDurability", "Durability"));
+            putIfPresent(facets, "head", firstNbtValue(parsedNbt, "RenderHead", "Head"));
+            putIfPresent(facets, "handle", firstNbtValue(parsedNbt, "RenderHandle", "Handle"));
+            putIfPresent(facets, "accessory", firstNbtValue(parsedNbt, "RenderAccessory", "Accessory"));
+            putIfPresent(facets, "durability", firstNbtValue(parsedNbt, "TotalDurability", "Durability"));
         } else if (normalizedFamily.startsWith("genetics.")) {
-            putIfPresent(facets, "root", firstNbtValue(nbt, "root"));
-            putIfPresent(facets, "species", firstNbtValue(nbt, "species", "Species"));
-            putIfPresent(facets, "allele", firstNbtValue(nbt, "allele"));
-            putIfPresent(facets, "chromosomes", firstNbtValue(nbt, "Chromosomes", "chromo"));
+            putIfPresent(facets, "root", firstNbtValue(parsedNbt, "root"));
+            putIfPresent(facets, "species", firstNbtValue(parsedNbt, "species", "Species"));
+            putIfPresent(facets, "allele", firstNbtValue(parsedNbt, "allele"));
+            putIfPresent(facets, "chromosomes", firstNbtValue(parsedNbt, "Chromosomes", "chromo"));
         } else if (normalizedFamily.startsWith("entity_capture.")) {
-            putIfPresent(facets, "entity", firstNbtValue(nbt, "Name", "EntityId", "EntityID", "mobType", "MobType", "id"));
-            putIfPresent(facets, "skeletonType", firstNbtValue(nbt, "SkeletonType"));
+            putIfPresent(facets, "entity", firstNbtValue(parsedNbt, "Name", "EntityId", "EntityID", "mobType", "MobType", "id"));
+            putIfPresent(facets, "skeletonType", firstNbtValue(parsedNbt, "SkeletonType"));
         } else if ("cosmetic.color".equals(normalizedFamily)) {
-            putIfPresent(facets, "color", firstNbtValue(nbt, "color", "colour"));
-            putIfPresent(facets, "color1", firstNbtValue(nbt, "color1"));
-            putIfPresent(facets, "color2", firstNbtValue(nbt, "color2"));
+            putIfPresent(facets, "color", firstNbtValue(parsedNbt, "color", "colour"));
+            putIfPresent(facets, "color1", firstNbtValue(parsedNbt, "color1"));
+            putIfPresent(facets, "color2", firstNbtValue(parsedNbt, "color2"));
         } else if ("data_carrier.encoded-pattern".equals(normalizedFamily)) {
-            putIfPresent(facets, "encodedPattern", firstNbtValue(nbt, "encodedPattern", "EncodedPattern"));
-            putIfPresent(facets, "output", firstNbtValue(nbt, "out", "output"));
+            putIfPresent(facets, "encodedPattern", firstNbtValue(parsedNbt, "encodedPattern", "EncodedPattern"));
+            putIfPresent(facets, "output", firstNbtValue(parsedNbt, "out", "output"));
         } else if ("crop.ic2".equals(normalizedFamily)) {
-            putIfPresent(facets, "crop", firstNbtValue(nbt, "name"));
-            putIfPresent(facets, "growth", firstNbtValue(nbt, "growth"));
-            putIfPresent(facets, "gain", firstNbtValue(nbt, "gain"));
-            putIfPresent(facets, "resistance", firstNbtValue(nbt, "resistance"));
-            putIfPresent(facets, "scan", firstNbtValue(nbt, "scan"));
-            putIfPresent(facets, "owner", firstNbtValue(nbt, "owner"));
+            putIfPresent(facets, "crop", firstNbtValue(parsedNbt, "name"));
+            putIfPresent(facets, "growth", firstNbtValue(parsedNbt, "growth"));
+            putIfPresent(facets, "gain", firstNbtValue(parsedNbt, "gain"));
+            putIfPresent(facets, "resistance", firstNbtValue(parsedNbt, "resistance"));
+            putIfPresent(facets, "scan", firstNbtValue(parsedNbt, "scan"));
+            putIfPresent(facets, "owner", firstNbtValue(parsedNbt, "owner"));
         } else if ("fluid.container".equals(normalizedFamily)) {
-            putIfPresent(facets, "fluid", firstNbtValue(nbt, "FluidName", "fluidName", "Name"));
-            putIfPresent(facets, "amount", firstNbtValue(nbt, "Amount", "amount"));
-            putIfPresent(facets, "capacity", firstNbtValue(nbt, "Capacity", "capacity"));
+            putIfPresent(facets, "fluid", firstNbtValue(parsedNbt, "FluidName", "fluidName", "Name"));
+            putIfPresent(facets, "amount", firstNbtValue(parsedNbt, "Amount", "amount"));
+            putIfPresent(facets, "capacity", firstNbtValue(parsedNbt, "Capacity", "capacity"));
         }
         return facets;
     }
@@ -214,31 +221,14 @@ public final class SemanticItemIdentityMapper {
         }
     }
 
-    private static String firstNbtValue(String nbt, String... keys) {
+    private static String firstNbtValue(ParsedNbt nbt, String... keys) {
         for (String key : keys) {
-            String value = nbtValue(nbt, key);
+            String value = nbt.first(key);
             if (value != null && value.trim().length() > 0) {
                 return value.trim();
             }
         }
         return null;
-    }
-
-    private static String nbtValue(String nbt, String key) {
-        if (nbt == null || key == null || key.trim().length() == 0) {
-            return null;
-        }
-        Pattern pattern = Pattern.compile("(?i)(?:^|[,{\\s])" + Pattern.quote(key) + "\\s*:\\s*(?:\\\"([^\\\"]*)\\\"|([^,}\\]]+))");
-        Matcher matcher = pattern.matcher(nbt);
-        if (!matcher.find()) {
-            return null;
-        }
-        String quoted = matcher.group(1);
-        String raw = quoted != null ? quoted : matcher.group(2);
-        if (raw == null) {
-            return null;
-        }
-        return raw.trim().replaceAll("[bBsSlLfFdD]$", "");
     }
 
     private static String sha256(String value) {
