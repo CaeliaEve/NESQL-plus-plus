@@ -443,6 +443,18 @@ public final class SemanticItemIdentityDiagnosticsWriter {
         stats.itemCount++;
         stats.baseKeys.add(baseKey(item));
         stats.variantKeys.add(variantKey(item, nbt));
+        if (safe(identity.facetSummary).trim().length() == 0) {
+            stats.missingFacetSummaryCount++;
+            addSample(stats.missingFacetSamples, sampleItem(item));
+        }
+        if (identity.facets == null || identity.facets.entrySet().isEmpty()) {
+            stats.missingFacetObjectCount++;
+            addSample(stats.missingFacetSamples, sampleItem(item));
+        }
+        if (safe(identity.sortKey).trim().length() == 0) {
+            stats.missingSortKeyCount++;
+            addSample(stats.missingSortKeySamples, sampleItem(item));
+        }
         addSample(stats.sampleItemIds, item.getId());
         addSample(stats.sampleItems, sampleItem(item));
     }
@@ -459,6 +471,8 @@ public final class SemanticItemIdentityDiagnosticsWriter {
         root.add("topMods", topMap(state.modCounts, 40, "modId"));
         root.add("topUnclassifiedFamilies", topMap(state.unclassifiedFamilyCounts, 80, "familyKey"));
         root.add("topUnclassifiedFamilyActions", topUnclassifiedFamilyActions(state, 80));
+        root.add("missingFacetFamilies", missingFacetFamilies(state, 80));
+        root.add("missingSortKeyFamilies", missingSortKeyFamilies(state, 80));
         root.add("unclassifiedSamples", stringArray(state.unclassifiedSamples));
         root.add("unclassifiedFamilySamples", stringArray(state.unclassifiedFamilySamples));
         return root;
@@ -491,6 +505,8 @@ public final class SemanticItemIdentityDiagnosticsWriter {
         root.add("families", familyArray(state));
         root.add("topUnclassifiedFamilies", topMap(state.unclassifiedFamilyCounts, 40, "familyKey"));
         root.add("topUnclassifiedFamilyActions", topUnclassifiedFamilyActions(state, 40));
+        root.add("missingFacetFamilies", missingFacetFamilies(state, 40));
+        root.add("missingSortKeyFamilies", missingSortKeyFamilies(state, 40));
         root.add("nextActions", nextActions());
         return root;
     }
@@ -513,9 +529,72 @@ public final class SemanticItemIdentityDiagnosticsWriter {
             object.addProperty("baseItems", stats.baseKeys.size());
             object.addProperty("variantKeys", stats.variantKeys.size());
             object.addProperty("estimatedCollapsedVariants", Math.max(0, stats.variantKeys.size() - stats.baseKeys.size()));
+            object.addProperty("missingFacetSummaryItems", stats.missingFacetSummaryCount);
+            object.addProperty("missingFacetObjectItems", stats.missingFacetObjectCount);
+            object.addProperty("missingSortKeyItems", stats.missingSortKeyCount);
+            object.add("missingFacetSamples", stringArray(stats.missingFacetSamples));
+            object.add("missingSortKeySamples", stringArray(stats.missingSortKeySamples));
             object.add("exampleItemIds", stringArray(stats.sampleItemIds));
             object.add("sampleItems", stringArray(stats.sampleItems));
             array.add(object);
+        }
+        return array;
+    }
+
+    private static JsonArray missingFacetFamilies(AuditState state, int limit) {
+        List<FamilyStats> families = new ArrayList<FamilyStats>(state.families.values());
+        Collections.sort(families, new Comparator<FamilyStats>() {
+            @Override
+            public int compare(FamilyStats left, FamilyStats right) {
+                long leftMissing = left.missingFacetSummaryCount + left.missingFacetObjectCount;
+                long rightMissing = right.missingFacetSummaryCount + right.missingFacetObjectCount;
+                int byMissing = Long.compare(rightMissing, leftMissing);
+                return byMissing != 0 ? byMissing : left.family.compareTo(right.family);
+            }
+        });
+        JsonArray array = new JsonArray();
+        int count = 0;
+        for (FamilyStats stats : families) {
+            long missing = stats.missingFacetSummaryCount + stats.missingFacetObjectCount;
+            if (missing <= 0 || count >= limit) {
+                continue;
+            }
+            JsonObject object = new JsonObject();
+            object.addProperty("family", stats.family);
+            object.addProperty("items", stats.itemCount);
+            object.addProperty("missingFacetSummaryItems", stats.missingFacetSummaryCount);
+            object.addProperty("missingFacetObjectItems", stats.missingFacetObjectCount);
+            object.add("samples", stringArray(stats.missingFacetSamples));
+            object.addProperty("recommendation", "extend-family-facet-extraction");
+            array.add(object);
+            count++;
+        }
+        return array;
+    }
+
+    private static JsonArray missingSortKeyFamilies(AuditState state, int limit) {
+        List<FamilyStats> families = new ArrayList<FamilyStats>(state.families.values());
+        Collections.sort(families, new Comparator<FamilyStats>() {
+            @Override
+            public int compare(FamilyStats left, FamilyStats right) {
+                int byMissing = Long.compare(right.missingSortKeyCount, left.missingSortKeyCount);
+                return byMissing != 0 ? byMissing : left.family.compareTo(right.family);
+            }
+        });
+        JsonArray array = new JsonArray();
+        int count = 0;
+        for (FamilyStats stats : families) {
+            if (stats.missingSortKeyCount <= 0 || count >= limit) {
+                continue;
+            }
+            JsonObject object = new JsonObject();
+            object.addProperty("family", stats.family);
+            object.addProperty("items", stats.itemCount);
+            object.addProperty("missingSortKeyItems", stats.missingSortKeyCount);
+            object.add("samples", stringArray(stats.missingSortKeySamples));
+            object.addProperty("recommendation", "add-stable-family-sort-key");
+            array.add(object);
+            count++;
         }
         return array;
     }
@@ -820,6 +899,11 @@ public final class SemanticItemIdentityDiagnosticsWriter {
         long itemCount;
         final Set<String> baseKeys = new LinkedHashSet<String>();
         final Set<String> variantKeys = new LinkedHashSet<String>();
+        long missingFacetSummaryCount;
+        long missingFacetObjectCount;
+        long missingSortKeyCount;
+        final Set<String> missingFacetSamples = new LinkedHashSet<String>();
+        final Set<String> missingSortKeySamples = new LinkedHashSet<String>();
         final Set<String> sampleItemIds = new LinkedHashSet<String>();
         final Set<String> sampleItems = new LinkedHashSet<String>();
 

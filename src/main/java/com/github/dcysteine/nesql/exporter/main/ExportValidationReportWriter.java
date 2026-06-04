@@ -3,6 +3,7 @@ package com.github.dcysteine.nesql.exporter.main;
 import com.github.dcysteine.nesql.exporter.canonical.CanonicalRenderAsset;
 import com.google.gson.Gson;
 import com.google.gson.GsonBuilder;
+import com.google.gson.JsonArray;
 import com.google.gson.JsonElement;
 import com.google.gson.JsonObject;
 import com.google.gson.JsonParser;
@@ -71,6 +72,9 @@ final class ExportValidationReportWriter {
             report.entityModelEntries =
                     readArrayCount(new File(canonicalDir, "entity-models.json"), "entries");
             inspectRenderAssets(repositoryDirectory, canonicalDir, report);
+            inspectRawExportCounts(repositoryDirectory, report);
+            inspectSemanticDiagnostics(repositoryDirectory, report);
+            inspectExportPathHygiene(repositoryDirectory, report);
             report.atlasManifestCoverageRatio = ratio(report.totalAtlasManifestAssets, report.renderAssetManifestAssets);
             File reportFile = new File(validationDir, "export_validation_report.json");
             File healthReportFile = new File(validationDir, "export-health-report.json");
@@ -94,6 +98,7 @@ final class ExportValidationReportWriter {
                         report.animatedAtlasManifestAssets - previousReport.animatedAtlasManifestAssets;
             }
             collectWarnings(report);
+            determineHealthStatus(report);
 
             try (FileOutputStream fos = new FileOutputStream(reportFile);
                  OutputStreamWriter writer = new OutputStreamWriter(fos, StandardCharsets.UTF_8)) {
@@ -131,6 +136,63 @@ final class ExportValidationReportWriter {
             Logger.MOD.warn("Failed to read previous NESQL++ validation report", e);
             return null;
         }
+    }
+
+    private static void inspectRawExportCounts(File repositoryDirectory, ValidationReport report) {
+        File reportFile = new File(repositoryDirectory, "raw-export" + File.separator + "export_report.json");
+        JsonObject root = readJsonObject(reportFile);
+        if (root == null || !root.has("counts") || !root.get("counts").isJsonObject()) {
+            return;
+        }
+        JsonObject counts = root.getAsJsonObject("counts");
+        report.rawItems = readLongMember(counts, "rawItems");
+        report.rawRecipes = readLongMember(counts, "rawRecipes");
+        report.rawTextures = readLongMember(counts, "rawTextures");
+        report.rawAnimations = readLongMember(counts, "rawAnimations");
+        report.rawBrowserItems = readLongMember(counts, "neiBrowserItems");
+        report.rawBrowserGroups = readLongMember(counts, "rawGroups");
+        report.rawNativeNeiGroups = readLongMember(counts, "neiNativeGroups");
+        report.rawGuidFilterRules = readLongMember(counts, "neiGuidFilterRules");
+        report.rawHiddenItemRules = readLongMember(counts, "neiHiddenItemRules");
+        report.semanticTotalItems = readLongMember(counts, "semanticTotalItems");
+        report.semanticTaggedItems = readLongMember(counts, "semanticTaggedItems");
+        report.semanticClassifiedTaggedItems = readLongMember(counts, "semanticClassifiedTaggedItems");
+        report.semanticUnclassifiedTaggedItems = readLongMember(counts, "semanticUnclassifiedTaggedItems");
+        report.semanticFamilyCount = readLongMember(counts, "semanticFamilyCount");
+        report.semanticItems = readLongMember(counts, "semanticItems");
+        report.semanticVariants = readLongMember(counts, "semanticVariants");
+        report.semanticPayloads = readLongMember(counts, "semanticPayloads");
+        report.semanticIdentityMapRows = readLongMember(counts, "semanticIdentityMapRows");
+        report.semanticClassificationCoverageRatio = ratio(report.semanticClassifiedTaggedItems, report.semanticTaggedItems);
+    }
+
+    private static void inspectSemanticDiagnostics(File repositoryDirectory, ValidationReport report) {
+        File semanticReportFile = new File(repositoryDirectory,
+                "raw-export" + File.separator + "validation" + File.separator + "semantic"
+                        + File.separator + "identity-normalization-report.json");
+        JsonObject root = readJsonObject(semanticReportFile);
+        if (root == null) {
+            return;
+        }
+        report.semanticDiagnosticsPresent = true;
+        report.semanticTopUnclassifiedFamilyActions = copyArray(root, "topUnclassifiedFamilyActions", 20);
+        report.semanticMissingFacetFamilies = copyArray(root, "missingFacetFamilies", 20);
+        report.semanticMissingSortKeyFamilies = copyArray(root, "missingSortKeyFamilies", 20);
+        report.semanticMissingFacetFamilyCount = arraySize(root, "missingFacetFamilies");
+        report.semanticMissingSortKeyFamilyCount = arraySize(root, "missingSortKeyFamilies");
+        if (report.semanticTotalItems == 0L) {
+            report.semanticTotalItems = readLongMember(root, "beforePublicItems");
+        }
+        if (report.semanticTaggedItems == 0L) {
+            report.semanticTaggedItems = readLongMember(root, "taggedItems");
+        }
+        if (report.semanticClassifiedTaggedItems == 0L) {
+            report.semanticClassifiedTaggedItems = readLongMember(root, "classifiedTaggedItems");
+        }
+        if (report.semanticUnclassifiedTaggedItems == 0L) {
+            report.semanticUnclassifiedTaggedItems = readLongMember(root, "unclassifiedTaggedItems");
+        }
+        report.semanticClassificationCoverageRatio = ratio(report.semanticClassifiedTaggedItems, report.semanticTaggedItems);
     }
 
     private static void collectWarnings(ValidationReport report) {
@@ -178,6 +240,80 @@ final class ExportValidationReportWriter {
             report.warnings.add("Runtime export payloads contain machine-specific paths: "
                     + report.exportPathHygieneViolations);
         }
+        if (!report.semanticDiagnosticsPresent && report.rawItems > 0L) {
+            report.warnings.add("Missing raw-export semantic diagnostics report.");
+        }
+        if (report.semanticTaggedItems > 0L && report.semanticClassificationCoverageRatio != null
+                && report.semanticClassificationCoverageRatio < 0.80D) {
+            report.warnings.add("Semantic classification coverage below 80%: "
+                    + report.semanticClassificationCoverageRatio);
+        }
+        if (report.semanticMissingFacetFamilyCount > 0) {
+            report.warnings.add("Semantic families missing facet extraction: "
+                    + report.semanticMissingFacetFamilyCount);
+        }
+        if (report.semanticMissingSortKeyFamilyCount > 0) {
+            report.warnings.add("Semantic families missing stable sort keys: "
+                    + report.semanticMissingSortKeyFamilyCount);
+        }
+    }
+
+    private static void determineHealthStatus(ValidationReport report) {
+        addBlockedIf(report, report.itemsJsonGzFiles == 0 && report.rawItems == 0L, "No item facts were exported.");
+        addBlockedIf(report, report.recipeJsonGzFiles == 0 && report.rawRecipes == 0L, "No recipe facts were exported.");
+        addBlockedIf(report, report.exportPathHygieneViolations > 0, "Runtime payload contains machine-specific local paths.");
+        addBlockedIf(report,
+                report.rawItems > 0L
+                        && report.semanticTotalItems > 0L
+                        && report.semanticIdentityMapRows > 0L
+                        && report.semanticIdentityMapRows != report.rawItems,
+                "Semantic identity-map row count does not match raw item count.");
+        addBlockedIf(report,
+                report.rawItems > 0L && report.semanticDiagnosticsPresent && report.semanticTotalItems != report.rawItems,
+                "Semantic diagnostic item count does not match raw item count.");
+        addActionableIssue(report,
+                "semantic-unclassified-families",
+                report.semanticTopUnclassifiedFamilyActions,
+                "Review or intentionally classify top unclassified tagged families.");
+        addActionableIssue(report,
+                "semantic-missing-facets",
+                report.semanticMissingFacetFamilies,
+                "Add family facet extraction so NeoNEI can filter/search variants without NBT guessing.");
+        addActionableIssue(report,
+                "semantic-missing-sort-keys",
+                report.semanticMissingSortKeyFamilies,
+                "Add stable family sort keys so expanded variant order remains NEI-like.");
+        if (!report.blockedIssues.isEmpty()) {
+            report.healthStatus = "blocked";
+            report.compileReadinessStatus = "blocked";
+        } else if (!report.warnings.isEmpty() || !report.actionableIssues.isEmpty()) {
+            report.healthStatus = "warning";
+            report.compileReadinessStatus = "ready-with-warnings";
+        } else {
+            report.healthStatus = "healthy";
+            report.compileReadinessStatus = "ready";
+        }
+    }
+
+    private static void addBlockedIf(ValidationReport report, boolean condition, String message) {
+        if (condition) {
+            report.blockedIssues.add(message);
+        }
+    }
+
+    private static void addActionableIssue(
+            ValidationReport report,
+            String code,
+            JsonArray details,
+            String message) {
+        if (details == null || details.size() == 0) {
+            return;
+        }
+        JsonObject issue = new JsonObject();
+        issue.addProperty("code", code);
+        issue.addProperty("message", message);
+        issue.add("details", details);
+        report.actionableIssues.add(issue);
     }
 
     private static final PathHygieneRule[] PATH_HYGIENE_RULES = new PathHygieneRule[] {
@@ -613,6 +749,49 @@ final class ExportValidationReportWriter {
         return false;
     }
 
+    private static JsonObject readJsonObject(File file) {
+        if (file == null || !file.exists()) {
+            return null;
+        }
+        try (FileInputStream fis = new FileInputStream(file);
+             InputStreamReader reader = new InputStreamReader(fis, StandardCharsets.UTF_8)) {
+            JsonElement element = new JsonParser().parse(reader);
+            return element != null && element.isJsonObject() ? element.getAsJsonObject() : null;
+        } catch (Exception e) {
+            Logger.MOD.warn("Failed to read JSON object from {}", file.getAbsolutePath(), e);
+            return null;
+        }
+    }
+
+    private static long readLongMember(JsonObject object, String memberName) {
+        if (object != null
+                && object.has(memberName)
+                && object.get(memberName).isJsonPrimitive()
+                && object.get(memberName).getAsJsonPrimitive().isNumber()) {
+            return object.get(memberName).getAsLong();
+        }
+        return 0L;
+    }
+
+    private static JsonArray copyArray(JsonObject object, String memberName, int limit) {
+        JsonArray out = new JsonArray();
+        if (object == null || !object.has(memberName) || !object.get(memberName).isJsonArray()) {
+            return out;
+        }
+        JsonArray source = object.get(memberName).getAsJsonArray();
+        for (int i = 0; i < source.size() && i < limit; i++) {
+            out.add(source.get(i));
+        }
+        return out;
+    }
+
+    private static int arraySize(JsonObject object, String memberName) {
+        if (object != null && object.has(memberName) && object.get(memberName).isJsonArray()) {
+            return object.get(memberName).getAsJsonArray().size();
+        }
+        return 0;
+    }
+
     private static int readManifestCount(File file, String memberName) {
         if (!file.exists()) {
             return 0;
@@ -677,6 +856,13 @@ final class ExportValidationReportWriter {
         return null;
     }
 
+    private static Double ratio(long numerator, long denominator) {
+        if (denominator <= 0L) {
+            return null;
+        }
+        return Math.round((numerator / (double) denominator) * 10000.0) / 10000.0;
+    }
+
     private static Double ratio(int numerator, int denominator) {
         if (denominator <= 0) {
             return null;
@@ -719,6 +905,8 @@ final class ExportValidationReportWriter {
 
     private static final class ValidationReport {
         String schemaVersion;
+        String healthStatus = "unknown";
+        String compileReadinessStatus = "unknown";
         String repository;
         String profile;
         String selection;
@@ -766,6 +954,33 @@ final class ExportValidationReportWriter {
         int exportPathHygieneAuditedFiles;
         int exportPathHygieneViolations;
         List<PathHygieneSample> exportPathHygieneSamples = new ArrayList<PathHygieneSample>();
+        long rawItems;
+        long rawRecipes;
+        long rawTextures;
+        long rawAnimations;
+        long rawBrowserItems;
+        long rawBrowserGroups;
+        long rawNativeNeiGroups;
+        long rawGuidFilterRules;
+        long rawHiddenItemRules;
+        boolean semanticDiagnosticsPresent;
+        long semanticTotalItems;
+        long semanticTaggedItems;
+        long semanticClassifiedTaggedItems;
+        long semanticUnclassifiedTaggedItems;
+        long semanticFamilyCount;
+        long semanticItems;
+        long semanticVariants;
+        long semanticPayloads;
+        long semanticIdentityMapRows;
+        Double semanticClassificationCoverageRatio;
+        int semanticMissingFacetFamilyCount;
+        int semanticMissingSortKeyFamilyCount;
+        JsonArray semanticTopUnclassifiedFamilyActions = new JsonArray();
+        JsonArray semanticMissingFacetFamilies = new JsonArray();
+        JsonArray semanticMissingSortKeyFamilies = new JsonArray();
+        List<String> blockedIssues = new ArrayList<String>();
+        List<JsonObject> actionableIssues = new ArrayList<JsonObject>();
         PreviousSnapshot previous;
         DeltaSnapshot delta;
         List<String> warnings = new ArrayList<String>();
