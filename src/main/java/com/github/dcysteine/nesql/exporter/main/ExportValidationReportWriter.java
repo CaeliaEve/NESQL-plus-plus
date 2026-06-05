@@ -25,6 +25,7 @@ import java.util.Locale;
 import java.util.Map;
 import java.util.Set;
 import java.util.regex.Pattern;
+import java.util.zip.GZIPInputStream;
 
 /** Writes a lightweight post-export integrity summary without changing exported data contracts. */
 final class ExportValidationReportWriter {
@@ -33,8 +34,8 @@ final class ExportValidationReportWriter {
     static void write(ExportContext exportContext) {
         try {
             File repositoryDirectory = exportContext.paths.repositoryDirectory;
-            File canonicalDir = new File(repositoryDirectory, "canonical");
-            File validationDir = new File(repositoryDirectory, "raw-export" + File.separator + "validation");
+            File rawDir = new File(repositoryDirectory, "raw-export");
+            File validationDir = new File(rawDir, "validation");
             if (!validationDir.exists()) {
                 validationDir.mkdirs();
             }
@@ -50,29 +51,23 @@ final class ExportValidationReportWriter {
             report.imageGifFiles = countFiles(exportContext.paths.imageDirectory, ".gif");
             report.renderJsonFiles = countFiles(exportContext.paths.imageDirectory, ".render.json");
             report.spriteJsonFiles = countFiles(exportContext.paths.imageDirectory, ".sprite.json");
-            report.staticAtlasPngFiles = countFiles(new File(canonicalDir, "atlases"), ".png");
-            report.animatedAtlasPngFiles = countFiles(new File(canonicalDir, "animated-atlases"), ".png");
-            report.staticAtlasManifestAssets =
-                    readManifestCount(new File(canonicalDir, "atlas-manifest.json"), "assetCount");
-            report.animatedAtlasManifestAssets =
-                    readManifestCount(new File(canonicalDir, "animated-atlas-manifest.json"), "assetCount");
-            report.totalAtlasManifestAssets = report.staticAtlasManifestAssets + report.animatedAtlasManifestAssets;
-            File browserLayoutFile = new File(canonicalDir, "browser-layout-index.json");
-            report.browserLayoutPresent = browserLayoutFile.exists();
-            report.browserLayoutEntries =
-                    readArrayCount(browserLayoutFile, "entries", "items", "groups");
-            report.browserLayoutItemCount = readArrayCount(browserLayoutFile, "items");
-            report.browserLayoutGroupCount = readArrayCount(browserLayoutFile, "groups");
-            report.browserLayoutDefaultEntryCount = readArrayCount(browserLayoutFile, "defaultEntries");
-            inspectBrowserAtlasCoverage(canonicalDir, report);
-            report.multiblockBlueprints =
-                    readArrayCount(new File(canonicalDir, "multiblock-blueprints.json"), "blueprints", "entries");
-            report.entityPreviewEntries =
-                    readArrayCount(new File(canonicalDir, "entity-previews.json"), "entries");
-            report.entityModelEntries =
-                    readArrayCount(new File(canonicalDir, "entity-models.json"), "entries");
-            inspectRenderAssets(repositoryDirectory, canonicalDir, report);
             inspectRawExportCounts(repositoryDirectory, report);
+            report.staticAtlasPngFiles = countFiles(new File(rawDir, "assets/textures/atlas-assets"), ".png");
+            report.animatedAtlasPngFiles = report.staticAtlasPngFiles;
+            report.staticAtlasManifestAssets = safeInt(report.rawTextures);
+            report.animatedAtlasManifestAssets = safeInt(report.rawAnimations);
+            report.totalAtlasManifestAssets = report.staticAtlasManifestAssets + report.animatedAtlasManifestAssets;
+            report.browserLayoutPresent = new File(rawDir, "facts/nei/groups.jsonl.gz").exists()
+                    && new File(rawDir, "facts/nei/order.jsonl.gz").exists();
+            report.browserLayoutEntries = safeInt(report.rawBrowserItems);
+            report.browserLayoutItemCount = safeInt(report.rawBrowserItems);
+            report.browserLayoutGroupCount = safeInt(report.rawBrowserGroups);
+            report.browserLayoutDefaultEntryCount = safeInt(countGzipJsonl(new File(rawDir, "facts/nei/order.jsonl.gz")));
+            inspectBrowserAtlasCoverage(rawDir, report);
+            report.multiblockBlueprints = safeInt(countGzipJsonl(new File(rawDir, "models/multiblocks/index.jsonl.gz")));
+            report.entityPreviewEntries = safeInt(countGzipJsonl(new File(rawDir, "models/entities/index.jsonl.gz")));
+            report.entityModelEntries = report.entityPreviewEntries;
+            inspectRenderAssets(repositoryDirectory, rawDir, report);
             inspectSemanticDiagnostics(repositoryDirectory, report);
             inspectExportPathHygiene(repositoryDirectory, report);
             report.atlasManifestCoverageRatio = ratio(report.totalAtlasManifestAssets, report.renderAssetManifestAssets);
@@ -199,10 +194,10 @@ final class ExportValidationReportWriter {
 
     private static void collectWarnings(ValidationReport report) {
         if (!report.renderAssetManifestPresent) {
-            report.warnings.add("Missing canonical/render-assets.json.");
+            report.warnings.add("Missing raw-export/assets/textures/index.jsonl.gz.");
         }
         if (!report.browserLayoutPresent) {
-            report.warnings.add("Missing canonical/browser-layout-index.json.");
+            report.warnings.add("Missing raw-export NEI browser group/order streams.");
         }
         if (report.itemsJsonGzFiles == 0) {
             report.warnings.add("No item json.gz shards found under items/.");
@@ -333,7 +328,7 @@ final class ExportValidationReportWriter {
     private static void inspectExportPathHygiene(File repositoryDirectory, ValidationReport report) {
         List<File> files = new ArrayList<File>();
         collectRuntimeJsonFiles(new File(repositoryDirectory, "manifest.json"), files);
-        collectRuntimeJsonFiles(new File(repositoryDirectory, "canonical"), files);
+        collectRuntimeJsonFiles(new File(repositoryDirectory, "raw-export"), files);
         collectRuntimeJsonFiles(new File(repositoryDirectory, "facts"), files);
         collectRuntimeJsonFiles(new File(repositoryDirectory, "assets"), files);
         collectRuntimeJsonFiles(new File(repositoryDirectory, "special"), files);
@@ -429,7 +424,7 @@ final class ExportValidationReportWriter {
     }
 
     private static void writePathHygieneErrors(File repositoryDirectory, ValidationReport report) {
-        File validationDirectory = new File(repositoryDirectory, "validation");
+        File validationDirectory = new File(repositoryDirectory, "raw-export" + File.separator + "validation");
         if (!validationDirectory.exists() && !validationDirectory.mkdirs()) {
             Logger.MOD.warn("Failed to create NESQL validation directory: {}", validationDirectory.getAbsolutePath());
             return;
@@ -466,9 +461,9 @@ final class ExportValidationReportWriter {
             return file.getName();
         }
     }
-    private static void inspectBrowserAtlasCoverage(File canonicalDir, ValidationReport report) {
-        File browserAtlasFile = new File(canonicalDir, "browser-atlas-index.json");
-        File browserLayoutFile = new File(canonicalDir, "browser-layout-index.json");
+    private static void inspectBrowserAtlasCoverage(File rawDir, ValidationReport report) {
+        File browserAtlasFile = new File(rawDir, "assets/textures/browser_atlas_index.json");
+        File browserLayoutFile = null;
         report.browserAtlasPresent = browserAtlasFile.exists();
         if (!browserAtlasFile.exists()) {
             return;
@@ -499,10 +494,10 @@ final class ExportValidationReportWriter {
             }
             report.browserAtlasDrawableItems = drawableAtlasItemIds.size();
 
-            if (!browserLayoutFile.exists()) {
-                return;
-            }
-            inspectBrowserLayoutCoverage(browserLayoutFile, drawableAtlasItemIds, report);
+            report.browserAtlasLayoutItemCount = report.browserAtlasItems;
+            report.browserAtlasLayoutCoveredItems = report.browserAtlasDrawableItems;
+            report.browserAtlasLayoutMissingItems = Math.max(0, report.browserAtlasItems - report.browserAtlasDrawableItems);
+            report.browserAtlasLayoutCoverageRatio = ratio(report.browserAtlasLayoutCoveredItems, report.browserAtlasLayoutItemCount);
         } catch (Exception e) {
             Logger.MOD.warn("Failed to inspect browser atlas coverage", e);
         }
@@ -604,26 +599,123 @@ final class ExportValidationReportWriter {
         return aliases;
     }
 
-    private static void inspectRenderAssets(File repositoryDirectory, File canonicalDir, ValidationReport report) {
-        File manifestFile = new File(canonicalDir, "render-assets.json");
+    private static void inspectRenderAssets(File repositoryDirectory, File rawDir, ValidationReport report) {
+        File manifestFile = new File(rawDir, "assets/textures/index.jsonl.gz");
         report.renderAssetManifestPresent = manifestFile.exists();
         if (!manifestFile.exists()) {
             return;
         }
 
-        try (FileInputStream fis = new FileInputStream(manifestFile);
-             InputStreamReader reader = new InputStreamReader(fis, StandardCharsets.UTF_8)) {
-            RenderAssetManifest manifest = new Gson().fromJson(reader, RenderAssetManifest.class);
-            if (manifest == null || manifest.assets == null) {
-                return;
-            }
-            report.renderAssetManifestAssets = manifest.assets.size();
-            for (CanonicalRenderAsset asset : manifest.assets) {
-                inspectRenderAsset(repositoryDirectory, asset, report);
+        try (BufferedReader reader = openMaybeGzipUtf8(manifestFile)) {
+            String line;
+            while ((line = reader.readLine()) != null) {
+                if (line.trim().isEmpty()) {
+                    continue;
+                }
+                JsonElement parsed = new JsonParser().parse(line);
+                if (parsed != null && parsed.isJsonObject()) {
+                    report.renderAssetManifestAssets++;
+                    inspectRenderAssetRow(repositoryDirectory, parsed.getAsJsonObject(), report);
+                }
             }
         } catch (Exception e) {
-            Logger.MOD.warn("Failed to inspect render asset manifest for validation", e);
+            Logger.MOD.warn("Failed to inspect raw-export render asset stream for validation", e);
         }
+    }
+
+    private static int safeInt(long value) {
+        return value > Integer.MAX_VALUE ? Integer.MAX_VALUE : (int) Math.max(0L, value);
+    }
+
+    private static long countGzipJsonl(File file) {
+        if (file == null || !file.exists() || !file.isFile()) {
+            return 0L;
+        }
+        long count = 0L;
+        try (BufferedReader reader = openMaybeGzipUtf8(file)) {
+            while (reader.readLine() != null) {
+                count++;
+            }
+        } catch (Exception e) {
+            Logger.MOD.warn("Failed to count JSONL stream {}", file.getAbsolutePath(), e);
+        }
+        return count;
+    }
+
+    private static BufferedReader openMaybeGzipUtf8(File file) throws Exception {
+        FileInputStream fis = new FileInputStream(file);
+        if (file.getName().endsWith(".gz")) {
+            return new BufferedReader(new InputStreamReader(new GZIPInputStream(fis), StandardCharsets.UTF_8));
+        }
+        return new BufferedReader(new InputStreamReader(fis, StandardCharsets.UTF_8));
+    }
+
+    private static void inspectRenderAssetRow(
+            File repositoryDirectory,
+            JsonObject asset,
+            ValidationReport report) {
+        if (asset == null) {
+            return;
+        }
+        String primaryPath = firstNonEmpty(
+                readStringMember(asset, "primaryArtifact"),
+                readStringMember(asset, "staticFile"),
+                readStringMember(asset, "nativeSpriteAtlasFile"));
+        if (primaryPath == null || !exportFileExists(repositoryDirectory, primaryPath)) {
+            report.renderAssetMissingPrimaryArtifacts++;
+            addSample(report.renderAssetMissingPrimaryArtifactSamples,
+                    firstNonEmpty(readStringMember(asset, "assetId"), readStringMember(asset, "sourcePath"), primaryPath));
+        }
+        inspectSingularityAnimation(asset, report);
+        JsonElement timeline = asset.get("timeline");
+        if (timeline == null || !timeline.isJsonArray()) {
+            return;
+        }
+        for (JsonElement frameElement : timeline.getAsJsonArray()) {
+            if (frameElement == null || !frameElement.isJsonObject()) {
+                continue;
+            }
+            String path = readStringMember(frameElement.getAsJsonObject(), "path");
+            if (path != null && !exportFileExists(repositoryDirectory, path)) {
+                report.renderAssetMissingTimelineFrames++;
+                addSample(report.renderAssetMissingTimelineFrameSamples,
+                        firstNonEmpty(readStringMember(asset, "assetId"), readStringMember(asset, "sourcePath"), path));
+            }
+        }
+    }
+
+    private static void inspectSingularityAnimation(JsonObject asset, ValidationReport report) {
+        String haystack = joinLower(
+                readStringMember(asset, "assetId"),
+                readStringMember(asset, "variantKey"),
+                readStringMember(asset, "family"),
+                readStringMember(asset, "sourceType"),
+                readStringMember(asset, "sourcePath"),
+                readStringMember(asset, "primaryArtifact"),
+                readStringMember(asset, "staticFile"),
+                readStringMember(asset, "rendererFamily"),
+                readStringMember(asset, "captureMethod"),
+                readStringMember(asset, "captureSource"),
+                readStringMember(asset, "animationMode"),
+                readStringMember(asset, "renderMode"));
+        if (!isSingularityLike(haystack)) {
+            return;
+        }
+        report.singularityLikeRenderAssets++;
+        boolean animated = contains(haystack, ".gif")
+                || contains(haystack, "animated")
+                || contains(haystack, "timeline")
+                || arraySize(asset, "timeline") > 1
+                || arraySize(asset, "frames") > 1
+                || readIntMember(asset, "frameCount") > 1
+                || readIntMember(asset, "capturedFrameCount") > 1;
+        if (animated) {
+            report.animatedSingularityLikeRenderAssets++;
+            return;
+        }
+        report.suspiciousStaticSingularityAssets++;
+        addSample(report.suspiciousStaticSingularitySamples,
+                firstNonEmpty(readStringMember(asset, "assetId"), readStringMember(asset, "sourcePath"), readStringMember(asset, "primaryArtifact")));
     }
 
     private static void inspectRenderAsset(

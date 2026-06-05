@@ -225,8 +225,14 @@ test('atlas-backed custom renderer captures can explicitly tick sprite animation
 test('render contracts prefer captured atlas playback for custom inventory renderers even when a renderer family is known', () => {
   const contractSource = read('src/main/java/com/github/dcysteine/nesql/exporter/util/render/RenderContractMetadataExtractor.java');
 
+  const renderModeBody = contractSource.slice(
+    contractSource.indexOf('private static String determineRenderMode'),
+    contractSource.indexOf('private static String determineCaptureSource'),
+  );
   assert.equal(
-    contractSource.includes('if (hasCustomInventoryRenderer) {\n            return "captured_final_atlas";\n        }\n        if (rendererFamily != null && !rendererFamily.isEmpty()) {'),
+    renderModeBody.indexOf('if (hasCustomInventoryRenderer)') >= 0
+      && renderModeBody.indexOf('return "captured_final_atlas"') > renderModeBody.indexOf('if (hasCustomInventoryRenderer)')
+      && renderModeBody.indexOf('if (rendererFamily != null && !rendererFamily.isEmpty())') > renderModeBody.indexOf('return "captured_final_atlas"'),
     true,
     'Render contracts should make captured atlas playback primary for custom inventory renderers before renderer-family emulation',
   );
@@ -362,12 +368,12 @@ test('export health report surfaces missing contracts and samples', () => {
   const validationSource = read('src/main/java/com/github/dcysteine/nesql/exporter/main/ExportValidationReportWriter.java');
 
   assert.equal(
-    validationSource.includes('Missing canonical/render-assets.json.'),
+    validationSource.includes('Missing raw-export/assets/textures/index.jsonl.gz.'),
     true,
     'Health report should warn when render-assets is absent',
   );
   assert.equal(
-    validationSource.includes('Missing canonical/browser-layout-index.json.'),
+    validationSource.includes('Missing raw-export NEI browser group/order streams.'),
     true,
     'Health report should warn when browser layout is absent',
   );
@@ -387,7 +393,7 @@ test('export health report audits browser layout atlas residency', () => {
   const validationSource = read('src/main/java/com/github/dcysteine/nesql/exporter/main/ExportValidationReportWriter.java');
 
   assert.equal(
-    validationSource.includes('inspectBrowserAtlasCoverage(canonicalDir, report);'),
+    validationSource.includes('inspectBrowserAtlasCoverage(rawDir, report);'),
     true,
     'Validation writer should compare browser-layout-index.json against browser-atlas-index.json',
   );

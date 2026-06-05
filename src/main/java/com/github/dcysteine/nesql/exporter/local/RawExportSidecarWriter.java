@@ -158,36 +158,6 @@ public final class RawExportSidecarWriter {
         ensureDirectory(rawDir);
         File rawValidationDir = new File(rawDir, "validation");
         ensureDirectory(rawValidationDir);
-        copyIfPresent(
-                new File(repositoryDirectory, "canonical/export-stage-timings.json"),
-                new File(rawDir, "export_stage_timings.json"));
-        copyIfPresent(
-                new File(repositoryDirectory, "canonical/export-stage-timings.json"),
-                new File(rawValidationDir, "export_stage_timings.json"));
-        copyIfPresent(
-                new File(repositoryDirectory, "canonical/export-stage-checkpoint.json"),
-                new File(rawDir, "stage_checkpoint.json"));
-        copyIfPresent(
-                new File(repositoryDirectory, "canonical/export-stage-checkpoint.json"),
-                new File(rawValidationDir, "stage_checkpoint.json"));
-        copyIfPresent(
-                new File(repositoryDirectory, "canonical/stage-checksums.json"),
-                new File(rawDir, "stage_checksums.json"));
-        copyIfPresent(
-                new File(repositoryDirectory, "canonical/stage-checksums.json"),
-                new File(rawValidationDir, "stage_checksums.json"));
-        copyIfPresent(
-                new File(repositoryDirectory, "canonical/export-manifest.json"),
-                new File(rawDir, "export_manifest.json"));
-        copyIfPresent(
-                new File(repositoryDirectory, "canonical/export-manifest.json"),
-                new File(rawValidationDir, "export_manifest.json"));
-        copyIfPresent(
-                new File(repositoryDirectory, "canonical/export-validation-report.json"),
-                new File(rawDir, "validation_report.json"));
-        copyIfPresent(
-                new File(repositoryDirectory, "canonical/export-validation-report.json"),
-                new File(rawValidationDir, "export-health-report.json"));
 
         copyIfPresent(
                 new File(rawValidationDir, "export_stage_timings.json"),

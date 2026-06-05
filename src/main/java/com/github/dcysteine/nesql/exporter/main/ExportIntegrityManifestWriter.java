@@ -23,15 +23,15 @@ final class ExportIntegrityManifestWriter {
     static void write(ExportContext exportContext) {
         try {
             File repositoryDirectory = exportContext.paths.repositoryDirectory;
-            File canonicalDir = new File(repositoryDirectory, "canonical");
-            File validationDir = new File(repositoryDirectory, "raw-export" + File.separator + "validation");
+            File rawDir = new File(repositoryDirectory, "raw-export");
+            File validationDir = new File(rawDir, "validation");
             if (!validationDir.exists()) {
                 validationDir.mkdirs();
             }
 
             File checksumFile = new File(validationDir, "stage_checksums.json");
             Map<String, ArtifactChecksum> previousArtifacts = readPreviousArtifacts(checksumFile);
-            List<ArtifactChecksum> artifacts = collectArtifacts(repositoryDirectory, canonicalDir);
+            List<ArtifactChecksum> artifacts = collectArtifacts(repositoryDirectory, rawDir);
             annotateChanges(artifacts, previousArtifacts);
             ExportManifest manifest = new ExportManifest();
             manifest.schemaVersion = "nesqlpp/export-manifest/v1";
@@ -54,7 +54,9 @@ final class ExportIntegrityManifestWriter {
             checksumReport.artifacts = artifacts;
 
             writeJson(new File(validationDir, "export_manifest.json"), manifest);
+            writeJson(new File(validationDir, "export-manifest.json"), manifest);
             writeJson(checksumFile, checksumReport);
+            writeJson(new File(validationDir, "stage-checksums.json"), checksumReport);
 
             Logger.chatMessage(
                     EnumChatFormatting.GREEN
@@ -65,27 +67,25 @@ final class ExportIntegrityManifestWriter {
         }
     }
 
-    private static List<ArtifactChecksum> collectArtifacts(File repositoryDirectory, File canonicalDir) {
+    private static List<ArtifactChecksum> collectArtifacts(File repositoryDirectory, File rawDir) {
         List<ArtifactChecksum> artifacts = new ArrayList<ArtifactChecksum>();
-        addFile(artifacts, repositoryDirectory, new File(canonicalDir, "export-stage-timings.json"), "timings");
-        addFile(artifacts, repositoryDirectory, new File(canonicalDir, "export-validation-report.json"), "health");
-        addFile(artifacts, repositoryDirectory, new File(canonicalDir, "export-health-report.json"), "health");
-        addFile(artifacts, repositoryDirectory, new File(canonicalDir, "render-assets.json"), "render-assets");
-        addFile(artifacts, repositoryDirectory, new File(canonicalDir, "animation-manifest.json"), "animation");
-        addFile(artifacts, repositoryDirectory, new File(canonicalDir, "atlas-manifest.json"), "atlas");
-        addFile(artifacts, repositoryDirectory, new File(canonicalDir, "animated-atlas-manifest.json"), "animated-atlas");
-        addFile(artifacts, repositoryDirectory, new File(canonicalDir, "browser-layout-index.json"), "browser-layout");
-        addFile(artifacts, repositoryDirectory, new File(canonicalDir, "browser-atlas-index.json"), "browser-atlas");
-        addFile(artifacts, repositoryDirectory, new File(canonicalDir, "render-index.json"), "render-index");
-        addFile(artifacts, repositoryDirectory, new File(canonicalDir, "multiblock-blueprints.json"), "multiblocks");
-        addFile(artifacts, repositoryDirectory, new File(canonicalDir, "block-face-metadata.json"), "block-faces");
-        addFile(artifacts, repositoryDirectory, new File(canonicalDir, "entity-previews.json"), "entity-previews");
-        addFile(artifacts, repositoryDirectory, new File(canonicalDir, "entity-models.json"), "entity-models");
+        addFile(artifacts, repositoryDirectory, new File(rawDir, "manifest.json"), "raw-manifest");
+        addFile(artifacts, repositoryDirectory, new File(rawDir, "export_report.json"), "raw-report");
+        addFile(artifacts, repositoryDirectory, new File(rawDir, "validation/export-health-report.json"), "health");
+        addFile(artifacts, repositoryDirectory, new File(rawDir, "validation/export_manifest.json"), "manifest");
+        addFile(artifacts, repositoryDirectory, new File(rawDir, "validation/stage_checksums.json"), "checksums");
+        addFile(artifacts, repositoryDirectory, new File(rawDir, "validation/export_stage_timings.json"), "timings");
+        addFile(artifacts, repositoryDirectory, new File(rawDir, "facts/recipes/index.json"), "recipes");
+        addFile(artifacts, repositoryDirectory, new File(rawDir, "assets/textures/browser_atlas_index.json"), "browser-atlas");
+        addFile(artifacts, repositoryDirectory, new File(rawDir, "facts/render/backend.json"), "render-backend");
+        addFile(artifacts, repositoryDirectory, new File(rawDir, "special/index.json"), "special");
         addDirectorySummary(artifacts, repositoryDirectory, new File(repositoryDirectory, "items"), "items");
         addDirectorySummary(artifacts, repositoryDirectory, new File(repositoryDirectory, "recipes"), "recipes");
         addDirectorySummary(artifacts, repositoryDirectory, new File(repositoryDirectory, "image"), "images");
-        addDirectorySummary(artifacts, repositoryDirectory, new File(canonicalDir, "atlases"), "atlas-pages");
-        addDirectorySummary(artifacts, repositoryDirectory, new File(canonicalDir, "animated-atlases"), "animated-atlas-pages");
+        addDirectorySummary(artifacts, repositoryDirectory, new File(rawDir, "facts"), "raw-facts");
+        addDirectorySummary(artifacts, repositoryDirectory, new File(rawDir, "assets"), "raw-assets");
+        addDirectorySummary(artifacts, repositoryDirectory, new File(rawDir, "models"), "raw-models");
+        addDirectorySummary(artifacts, repositoryDirectory, new File(rawDir, "special"), "raw-special");
         return artifacts;
     }
 

@@ -164,6 +164,7 @@ final class ExportStageActionRegistry {
         if (!failIfExists) {
             Logger.MOD.info("Repository directory exists");
         }
+        ExportWriterSupport.deleteCanonicalStagingDirectory(exportContext.paths.repositoryDirectory);
         return true;
     }
 }

@@ -9,8 +9,8 @@ if (!gui.includes('.writeCanonicalSnapshot(false)')) {
   checks.push('ExportSelectionGui must force writeCanonicalSnapshot(false)');
 }
 const runner = readFileSync('src/main/java/com/github/dcysteine/nesql/exporter/main/ExportStageRunner.java', 'utf8').replace(/\r\n/g, '\n');
-if (!runner.includes('if (pipelineCompleted) {\n                ExportWriterSupport.deleteCanonicalStagingDirectory')) {
-  checks.push('ExportStageRunner must delete canonical staging after every successful production pipeline');
+if (!runner.includes('ExportWriterSupport.deleteCanonicalStagingDirectory(exportContext.paths.repositoryDirectory);')) {
+  checks.push('ExportStageRunner must delete canonical staging after each pipeline attempt');
 }
 const dataCommand = readFileSync('src/main/java/com/github/dcysteine/nesql/exporter/main/DataExportCommand.java', 'utf8');
 if (dataCommand.includes('canonical snapshot')) {

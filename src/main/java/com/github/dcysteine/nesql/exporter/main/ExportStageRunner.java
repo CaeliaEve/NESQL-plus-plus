@@ -113,9 +113,7 @@ final class ExportStageRunner {
             } else if (stageState.runtime != null) {
                 stageState.runtime.close();
             }
-            if (pipelineCompleted) {
-                ExportWriterSupport.deleteCanonicalStagingDirectory(exportContext.paths.repositoryDirectory);
-            }
+            ExportWriterSupport.deleteCanonicalStagingDirectory(exportContext.paths.repositoryDirectory);
         }
         strategy.announceCompletion(exportContext, repositoryDirectory);
     }
