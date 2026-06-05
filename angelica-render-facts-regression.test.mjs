@@ -17,6 +17,8 @@ for (const required of [
   'angelica-render-facts',
   'renderTextureSpritesMissingTiming',
   'renderUnknownSpecialRenderers',
+  'renderShaderItemsMissingCaptureSamples',
+  'renderFramebufferCapturesWithoutFramesSamples',
   'spritesMissingTiming',
   'unknownSpecialRenderers',
   'new AngelicaRenderFactsWriter(entityManager, rawDir, renderAssets).write()'
@@ -49,7 +51,9 @@ for (const required of [
   'native-render-tick',
   'requiresFramebufferCapture',
   'captureRequired',
-  'preferredExport'
+  'preferredExport',
+  'shaderItemsMissingCaptureSamples',
+  'framebufferCapturesWithoutFramesSamples'
 ]) {
   assert(writer.includes(required), `Angelica writer missing ${required}`);
 }

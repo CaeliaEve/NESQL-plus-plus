@@ -117,9 +117,11 @@ public final class RawExportSidecarWriter {
         report.counts.renderShaderItems = factCounts.renderShaderItems;
         report.counts.renderShaderItemsRequiringCapture = factCounts.renderShaderItemsRequiringCapture;
         report.counts.renderShaderItemsMissingCapture = factCounts.renderShaderItemsMissingCapture;
+        report.counts.renderShaderItemsMissingCaptureSamples = factCounts.renderShaderItemsMissingCaptureSamples;
         report.counts.renderUnknownSpecialRenderers = factCounts.renderUnknownSpecialRenderers;
         report.counts.renderFramebufferCaptures = factCounts.renderFramebufferCaptures;
         report.counts.renderFramebufferCapturesWithoutFrames = factCounts.renderFramebufferCapturesWithoutFrames;
+        report.counts.renderFramebufferCapturesWithoutFramesSamples = factCounts.renderFramebufferCapturesWithoutFramesSamples;
         report.counts.semanticTotalItems = semanticAudit.totalItems;
         report.counts.semanticTaggedItems = semanticAudit.taggedItems;
         report.counts.semanticClassifiedTaggedItems = semanticAudit.classifiedTaggedItems;
@@ -285,6 +287,8 @@ public final class RawExportSidecarWriter {
         report.validation.missingTextureCount = counts.rawItems > 0 && counts.rawTextures == 0 ? counts.rawItems : 0;
         report.validation.missingAnimationMetadataCount = counts.rawAnimations > 0 ? 0 : report.validation.missingAnimationMetadataCount;
         report.validation.missingGroupOrOrderCount = (counts.rawGroups == 0 || counts.rawNeiOrderEntries == 0) ? 1 : 0;
+        addRenderSampleIssues(issues, "missing-render-capture", counts.renderShaderItemsMissingCaptureSamples);
+        addRenderSampleIssues(issues, "render-capture-without-frames", counts.renderFramebufferCapturesWithoutFramesSamples);
         report.validation.failedStages = issues;
         report.validation.status = issues.isEmpty() ? "ok" : "warning";
         report.validation.gates = buildRawValidationGates(counts, issues);
@@ -453,6 +457,17 @@ public final class RawExportSidecarWriter {
         }
     }
 
+    private static void addRenderSampleIssues(List<String> issues, String label, List<String> samples) {
+        if (issues == null || samples == null || samples.isEmpty()) {
+            return;
+        }
+        for (String sample : samples) {
+            if (sample != null && !sample.trim().isEmpty()) {
+                issues.add(label + ":" + sample);
+            }
+        }
+    }
+
     private RawFactCounts writeRawFactStreams(File rawDir) throws IOException {
         RawFactCounts counts = new RawFactCounts();
         RepositoryStreamResult repository = streamRepositoryFacts(rawDir);
@@ -553,9 +568,11 @@ public final class RawExportSidecarWriter {
         counts.renderShaderItems = renderCounts.shaderItems;
         counts.renderShaderItemsRequiringCapture = renderCounts.shaderItemsRequiringCapture;
         counts.renderShaderItemsMissingCapture = renderCounts.shaderItemsMissingCapture;
+        counts.renderShaderItemsMissingCaptureSamples = new ArrayList<String>(renderCounts.shaderItemsMissingCaptureSamples);
         counts.renderUnknownSpecialRenderers = renderCounts.unknownSpecialRenderers;
         counts.renderFramebufferCaptures = renderCounts.framebufferCaptures;
         counts.renderFramebufferCapturesWithoutFrames = renderCounts.framebufferCapturesWithoutFrames;
+        counts.renderFramebufferCapturesWithoutFramesSamples = new ArrayList<String>(renderCounts.framebufferCapturesWithoutFramesSamples);
         return counts;
     }
 
@@ -2470,9 +2487,11 @@ public final class RawExportSidecarWriter {
         long renderShaderItems;
         long renderShaderItemsRequiringCapture;
         long renderShaderItemsMissingCapture;
+        List<String> renderShaderItemsMissingCaptureSamples = new ArrayList<String>();
         long renderUnknownSpecialRenderers;
         long renderFramebufferCaptures;
         long renderFramebufferCapturesWithoutFrames;
+        List<String> renderFramebufferCapturesWithoutFramesSamples = new ArrayList<String>();
         long semanticTotalItems;
         long semanticTaggedItems;
         long semanticClassifiedTaggedItems;
@@ -2516,9 +2535,11 @@ public final class RawExportSidecarWriter {
         long renderShaderItems;
         long renderShaderItemsRequiringCapture;
         long renderShaderItemsMissingCapture;
+        List<String> renderShaderItemsMissingCaptureSamples = new ArrayList<String>();
         long renderUnknownSpecialRenderers;
         long renderFramebufferCaptures;
         long renderFramebufferCapturesWithoutFrames;
+        List<String> renderFramebufferCapturesWithoutFramesSamples = new ArrayList<String>();
         NeiBrowserContract neiBrowserContract;
     }
 

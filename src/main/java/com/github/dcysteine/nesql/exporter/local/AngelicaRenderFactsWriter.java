@@ -86,7 +86,10 @@ final class AngelicaRenderFactsWriter {
                 new File(rawDir, "facts/render/framebuffer-captures.jsonl.gz"));
         counts.framebufferCaptures = captureCounts.framebufferCaptures;
         counts.framebufferCapturesWithoutFrames = captureCounts.framebufferCapturesWithoutFrames;
-        counts.shaderItemsMissingCapture = missingCaptureCount(itemRendererCounts.captureRequiredItemIds, captureCounts.captureAssetIds, captureCounts.captureVariantKeys);
+        MissingCaptureResult missingCaptureResult = missingCaptureResult(itemRendererCounts.captureRequiredItemIds, captureCounts.captureAssetIds, captureCounts.captureVariantKeys);
+        counts.shaderItemsMissingCapture = missingCaptureResult.count;
+        counts.shaderItemsMissingCaptureSamples.addAll(missingCaptureResult.samples);
+        counts.framebufferCapturesWithoutFramesSamples.addAll(captureCounts.framebufferCapturesWithoutFramesSamples);
         return counts;
     }
 
@@ -319,24 +322,30 @@ final class AngelicaRenderFactsWriter {
                 }
                 if (asset.frames == null || asset.frames.isEmpty()) {
                     counts.framebufferCapturesWithoutFrames++;
+                    if (counts.framebufferCapturesWithoutFramesSamples.size() < 20) {
+                        counts.framebufferCapturesWithoutFramesSamples.add(asset.assetId == null ? String.valueOf(asset.variantKey) : asset.assetId);
+                    }
                 }
             }
         }
         return counts;
     }
 
-    private static long missingCaptureCount(Set<String> requiredItemIds, Set<String> captureAssetIds, Set<String> captureVariantKeys) {
-        long missing = 0L;
+    private static MissingCaptureResult missingCaptureResult(Set<String> requiredItemIds, Set<String> captureAssetIds, Set<String> captureVariantKeys) {
+        MissingCaptureResult result = new MissingCaptureResult();
         for (String itemId : requiredItemIds) {
             if (itemId == null) {
                 continue;
             }
             String expectedAssetId = "nesqlpp:item/" + itemId;
             if (!captureAssetIds.contains(expectedAssetId) && !captureVariantKeys.contains(itemId)) {
-                missing++;
+                result.count++;
+                if (result.samples.size() < 20) {
+                    result.samples.add(itemId);
+                }
             }
         }
-        return missing;
+        return result;
     }
 
     static RendererClassification classifyRenderer(String rendererClass) {
@@ -935,9 +944,11 @@ final class AngelicaRenderFactsWriter {
         long shaderItems;
         long shaderItemsRequiringCapture;
         long shaderItemsMissingCapture;
+        final List<String> shaderItemsMissingCaptureSamples = new ArrayList<String>();
         long unknownSpecialRenderers;
         long framebufferCaptures;
         long framebufferCapturesWithoutFrames;
+        final List<String> framebufferCapturesWithoutFramesSamples = new ArrayList<String>();
     }
 
     private static final class TextureSpriteStreamCounts {
@@ -958,6 +969,12 @@ final class AngelicaRenderFactsWriter {
         long framebufferCapturesWithoutFrames;
         final Set<String> captureAssetIds = new LinkedHashSet<String>();
         final Set<String> captureVariantKeys = new LinkedHashSet<String>();
+        final List<String> framebufferCapturesWithoutFramesSamples = new ArrayList<String>();
+    }
+
+    private static final class MissingCaptureResult {
+        long count;
+        final List<String> samples = new ArrayList<String>();
     }
 
     static final class RendererClassification {
