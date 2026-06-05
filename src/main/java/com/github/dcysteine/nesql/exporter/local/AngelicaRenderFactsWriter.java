@@ -142,8 +142,9 @@ final class AngelicaRenderFactsWriter {
                     boolean animated = safeBoolean(new BooleanSupplier() { public boolean get() { return sprite.hasAnimationMetadata(); } }, false);
                     int frameCount = safeInt(new IntSupplier() { public int get() { return sprite.getFrameCount(); } }, 0);
                     Object frames = readField(sprite, "framesTextureData");
-                    row.addProperty("animated", animated || frameCount > 1 || collectionSize(frames) > 1);
-                    row.addProperty("frameCount", Math.max(frameCount, collectionSize(frames)));
+                    boolean nativeAnimated = animated || frameCount > 1;
+                    row.addProperty("animated", nativeAnimated);
+                    row.addProperty("frameCount", nativeAnimated ? Math.max(frameCount, collectionSize(frames)) : Math.max(1, frameCount));
                     row.addProperty("runtimeFrameCounter", intField(sprite, "frameCounter", -1));
                     row.addProperty("runtimeTickCounter", intField(sprite, "tickCounter", -1));
                     AnimationMetadataSection metadata = readAnimationMetadata(sprite);
@@ -157,8 +158,8 @@ final class AngelicaRenderFactsWriter {
                     } else {
                         row.addProperty("defaultFrameTimeTicks", (Number) null);
                         row.addProperty("metadataFrameCount", (Number) null);
-                        row.add("timeline", fallbackTimeline(Math.max(frameCount, collectionSize(frames))));
-                        missingNativeTiming = animated || frameCount > 1 || collectionSize(frames) > 1;
+                        row.add("timeline", fallbackTimeline(nativeAnimated ? Math.max(frameCount, collectionSize(frames)) : 1));
+                        missingNativeTiming = nativeAnimated;
                         row.addProperty("timelineStatus", missingNativeTiming ? "missing-native-metadata" : "static");
                         row.addProperty("interpolate", false);
                     }
@@ -925,3 +926,4 @@ final class AngelicaRenderFactsWriter {
         }
     }
 }
+
