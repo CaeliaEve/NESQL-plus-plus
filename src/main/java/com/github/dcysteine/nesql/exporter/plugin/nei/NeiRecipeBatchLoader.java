@@ -414,6 +414,11 @@ public class NeiRecipeBatchLoader {
                 return initialCount;
             }
 
+            Integer overlayCount = tryLoadOverlayRecipes(handler);
+            if (overlayCount != null && overlayCount > 0) {
+                return overlayCount;
+            }
+
             // Clear any existing recipes
             handler.arecipes.clear();
 
@@ -430,7 +435,7 @@ public class NeiRecipeBatchLoader {
     }
 
     private static Integer tryLoadOverlayRecipes(TemplateRecipeHandler handler) {
-        if (!isMobsInfoHandler(handler)) {
+        if (!shouldTryOverlayLoad(handler)) {
             return null;
         }
 
@@ -447,11 +452,11 @@ public class NeiRecipeBatchLoader {
             return loaded;
         } catch (Exception e) {
             Logger.MOD.warn("Failed overlay recipe load for handler: " + handler.getRecipeName(), e);
-            return 0;
+            return null;
         }
     }
 
-    private static boolean isMobsInfoHandler(TemplateRecipeHandler handler) {
+    private static boolean shouldTryOverlayLoad(TemplateRecipeHandler handler) {
         if (handler == null) {
             return false;
         }
@@ -466,9 +471,17 @@ public class NeiRecipeBatchLoader {
         }
 
         String combined = handlerId + " " + handlerName + " " + handlerClass + " " + overlayId;
-        return combined.contains("mobsinfo.mobhandler")
+        if (combined.contains("mobsinfo.mobhandler")
             || combined.contains("mobsinfo.mobhandlerinfernal")
-            || combined.contains("com.kuba6000.mobsinfo");
+            || combined.contains("com.kuba6000.mobsinfo")) {
+            return true;
+        }
+
+        // Many GTNH NEI handlers expose a complete category list through their overlay id.
+        // Loading that category directly avoids scanning the full 50k+ item universe while
+        // preserving the same handler-generated recipe objects. If a handler returns nothing
+        // here, the caller falls back to the full scan.
+        return overlayId != null && !overlayId.trim().isEmpty();
     }
 
     /**
