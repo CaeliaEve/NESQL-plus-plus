@@ -54,16 +54,8 @@ final class ExportStageActionRegistry {
         actions.put(ExportStage.RENDER_IMAGES, () -> {
             if (stageState.renderingImages) {
                 RenderLifecycleSupport.awaitRenderCompletion();
-                if (stageState.renderAssets == null || stageState.renderAssets.isEmpty()) {
-                    stageState.renderAssets =
-                            ExportWriterSupport.collectRenderAssets(exportContext.paths.repositoryDirectory);
-                } else {
-                    Logger.chatMessage(
-                            EnumChatFormatting.GREEN
-                                    + "Reusing "
-                                    + stageState.renderAssets.size()
-                                    + " precollected render assets.");
-                }
+                stageState.renderAssets =
+                        ExportWriterSupport.collectRenderAssets(exportContext.paths.repositoryDirectory);
             }
         });
         actions.put(ExportStage.WRITE_RENDER_ASSET_MANIFEST, () -> {
