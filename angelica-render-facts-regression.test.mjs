@@ -70,14 +70,30 @@ for (const required of [
 
 for (const [rendererClass, family] of [
   ['CosmicItemRenderer', 'avaritia.cosmic'],
+  ['CosmicBowRenderer', 'avaritia.cosmic-bow'],
   ['FancyHaloRenderer', 'avaritia.halo'],
   ['FracturedOreRenderer', 'avaritia.fractured-ore'],
+  ['EternalItemRenderer', 'eternalsingularity.combined'],
+  ['ItemRendererCompressedChest', 'avaritiaddons.compressed-chest'],
+  ['ItemRendererInfinityChest', 'avaritiaddons.infinity-chest'],
+  ['appeng.client.render.ItemRenderer', 'ae2.item-renderer'],
+  ['RendererTrophy', 'amazingtrophies.trophy'],
   ['TexturedItemRenderer', 'gtnhlib.textured-item'],
   ['ModelISBRH', 'gtnhlib.model-isbrh'],
 ]) {
   assert(writer.toLowerCase().includes(rendererClass.toLowerCase()), `Renderer classifier missing ${rendererClass}`);
   assert(writer.includes(family), `Renderer classifier missing ${family}`);
 }
+
+assert(
+  writer.includes('mapRegisteredSprites') && writer.includes('Map.class.isAssignableFrom(field.getType())'),
+  'Texture sprite export must scan TextureMap map fields when MCP names differ at runtime'
+);
+
+assert(
+  /new RendererClassification\("generic\.iitemrenderer", false, false/.test(writer),
+  'Generic IItemRenderer must not force massive framebuffer capture without a known native animation family'
+);
 
 for (const required of [
   'metadata.getFrameTime()',

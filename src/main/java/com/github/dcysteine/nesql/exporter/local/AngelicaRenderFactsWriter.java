@@ -315,11 +315,29 @@ final class AngelicaRenderFactsWriter {
         if (lower.contains("cosmicitemrenderer")) {
             return new RendererClassification("avaritia.cosmic", true, true, "Avaritia cosmic shader item.");
         }
+        if (lower.contains("cosmicbowrenderer")) {
+            return new RendererClassification("avaritia.cosmic-bow", true, true, "Avaritia infinity bow shader item.");
+        }
         if (lower.contains("fancyhalorenderer")) {
             return new RendererClassification("avaritia.halo", true, true, "Avaritia halo shader item.");
         }
         if (lower.contains("fracturedorerenderer")) {
             return new RendererClassification("avaritia.fractured-ore", true, true, "Avaritia fractured ore renderer.");
+        }
+        if (lower.contains("eternalitemrenderer")) {
+            return new RendererClassification("eternalsingularity.combined", true, true, "Eternal Singularity animated renderer.");
+        }
+        if (lower.contains("itemrenderercompressedchest")) {
+            return new RendererClassification("avaritiaddons.compressed-chest", false, true, "Avaritiaddons compressed chest renderer.");
+        }
+        if (lower.contains("itemrendererinfinitychest")) {
+            return new RendererClassification("avaritiaddons.infinity-chest", true, true, "Avaritiaddons infinity chest renderer.");
+        }
+        if (lower.contains("appeng.client.render.itemrenderer")) {
+            return new RendererClassification("ae2.item-renderer", false, true, "Applied Energistics 2 custom item renderer.");
+        }
+        if (lower.contains("renderertrophy")) {
+            return new RendererClassification("amazingtrophies.trophy", false, true, "Amazing Trophies item renderer.");
         }
         if (lower.contains("textureditemrenderer")) {
             return new RendererClassification("gtnhlib.textured-item", false, true, "GTNHLib textured item renderer.");
@@ -327,7 +345,7 @@ final class AngelicaRenderFactsWriter {
         if (lower.contains("modelisbrh")) {
             return new RendererClassification("gtnhlib.model-isbrh", false, true, "GTNHLib inventory model renderer.");
         }
-        return new RendererClassification("generic.iitemrenderer", false, true, "Custom inventory IItemRenderer.");
+        return new RendererClassification("generic.iitemrenderer", false, false, "Custom inventory IItemRenderer without known native animation requirements.");
     }
 
     private static boolean isKnownSpecialRendererGap(
@@ -366,7 +384,10 @@ final class AngelicaRenderFactsWriter {
                 && !rendererKind.equals("vanilla.atlas")
                 && (rendererKind.startsWith("avaritia.")
                         || rendererKind.startsWith("gtnhlib.")
-                        || rendererKind.equals("generic.iitemrenderer"));
+                        || rendererKind.startsWith("eternalsingularity.")
+                        || rendererKind.startsWith("avaritiaddons.")
+                        || rendererKind.startsWith("ae2.")
+                        || rendererKind.startsWith("amazingtrophies."));
     }
 
     private static boolean isFramebufferCaptureAsset(CanonicalRenderAsset asset) {
@@ -528,6 +549,41 @@ final class AngelicaRenderFactsWriter {
         Object value = readField(textureMap, "mapUploadedSprites");
         if (value instanceof Map<?, ?>) {
             return (Map<?, ?>) value;
+        }
+        value = readField(textureMap, "mapRegisteredSprites");
+        if (value instanceof Map<?, ?>) {
+            return (Map<?, ?>) value;
+        }
+        Map<?, ?> best = Collections.emptyMap();
+        Class<?> type = textureMap.getClass();
+        while (type != null && type != Object.class) {
+            for (Field field : type.getDeclaredFields()) {
+                if (!Map.class.isAssignableFrom(field.getType())) {
+                    continue;
+                }
+                try {
+                    field.setAccessible(true);
+                    Object candidate = field.get(textureMap);
+                    if (!(candidate instanceof Map<?, ?>)) {
+                        continue;
+                    }
+                    Map<?, ?> map = (Map<?, ?>) candidate;
+                    if (map.size() <= best.size()) {
+                        continue;
+                    }
+                    for (Object mapValue : map.values()) {
+                        if (mapValue instanceof TextureAtlasSprite) {
+                            best = map;
+                            break;
+                        }
+                    }
+                } catch (Throwable ignored) {
+                }
+            }
+            type = type.getSuperclass();
+        }
+        if (!best.isEmpty()) {
+            return best;
         }
         return Collections.emptyMap();
     }
