@@ -115,8 +115,11 @@ public final class RawExportSidecarWriter {
         report.counts.renderTextureSpritesMissingTiming = factCounts.renderTextureSpritesMissingTiming;
         report.counts.renderItemRenderers = factCounts.renderItemRenderers;
         report.counts.renderShaderItems = factCounts.renderShaderItems;
+        report.counts.renderShaderItemsRequiringCapture = factCounts.renderShaderItemsRequiringCapture;
+        report.counts.renderShaderItemsMissingCapture = factCounts.renderShaderItemsMissingCapture;
         report.counts.renderUnknownSpecialRenderers = factCounts.renderUnknownSpecialRenderers;
         report.counts.renderFramebufferCaptures = factCounts.renderFramebufferCaptures;
+        report.counts.renderFramebufferCapturesWithoutFrames = factCounts.renderFramebufferCapturesWithoutFrames;
         report.counts.semanticTotalItems = semanticAudit.totalItems;
         report.counts.semanticTaggedItems = semanticAudit.taggedItems;
         report.counts.semanticClassifiedTaggedItems = semanticAudit.classifiedTaggedItems;
@@ -390,20 +393,32 @@ public final class RawExportSidecarWriter {
                         + counts.renderUnknownSpecialRenderers
                         + ", shaderItems="
                         + counts.renderShaderItems
+                        + ", shaderItemsRequiringCapture="
+                        + counts.renderShaderItemsRequiringCapture
+                        + ", shaderItemsMissingCapture="
+                        + counts.renderShaderItemsMissingCapture
                         + ", framebufferCaptures="
                         + counts.renderFramebufferCaptures
+                        + ", framebufferCapturesWithoutFrames="
+                        + counts.renderFramebufferCapturesWithoutFrames
                         + ", rawItems="
                         + counts.rawItems
                         + "."));
         gates.add(validationGate(
                 "angelica-special-captures",
-                counts.renderShaderItems == 0 || counts.renderFramebufferCaptures > 0,
-                counts.renderShaderItems == 0
+                counts.renderShaderItemsRequiringCapture == 0
+                        || (counts.renderShaderItemsMissingCapture == 0
+                                && counts.renderFramebufferCapturesWithoutFrames == 0),
+                counts.renderShaderItemsRequiringCapture == 0
                         ? "No shader/custom renderer items require framebuffer capture."
                         : "Shader/custom renderer items requiring capture="
-                                + counts.renderShaderItems
+                                + counts.renderShaderItemsRequiringCapture
+                                + ", missing capture assets="
+                                + counts.renderShaderItemsMissingCapture
                                 + ", exported framebuffer capture assets="
                                 + counts.renderFramebufferCaptures
+                                + ", framebuffer captures without frames="
+                                + counts.renderFramebufferCapturesWithoutFrames
                                 + "."));
         gates.add(validationGate(
                 "entity-models",
@@ -536,8 +551,11 @@ public final class RawExportSidecarWriter {
         counts.renderTextureSpritesMissingTiming = renderCounts.textureSpritesMissingTiming;
         counts.renderItemRenderers = renderCounts.itemRenderers;
         counts.renderShaderItems = renderCounts.shaderItems;
+        counts.renderShaderItemsRequiringCapture = renderCounts.shaderItemsRequiringCapture;
+        counts.renderShaderItemsMissingCapture = renderCounts.shaderItemsMissingCapture;
         counts.renderUnknownSpecialRenderers = renderCounts.unknownSpecialRenderers;
         counts.renderFramebufferCaptures = renderCounts.framebufferCaptures;
+        counts.renderFramebufferCapturesWithoutFrames = renderCounts.framebufferCapturesWithoutFrames;
         return counts;
     }
 
@@ -2450,8 +2468,11 @@ public final class RawExportSidecarWriter {
         long renderTextureSpritesMissingTiming;
         long renderItemRenderers;
         long renderShaderItems;
+        long renderShaderItemsRequiringCapture;
+        long renderShaderItemsMissingCapture;
         long renderUnknownSpecialRenderers;
         long renderFramebufferCaptures;
+        long renderFramebufferCapturesWithoutFrames;
         long semanticTotalItems;
         long semanticTaggedItems;
         long semanticClassifiedTaggedItems;
@@ -2493,8 +2514,11 @@ public final class RawExportSidecarWriter {
         long renderTextureSpritesMissingTiming;
         long renderItemRenderers;
         long renderShaderItems;
+        long renderShaderItemsRequiringCapture;
+        long renderShaderItemsMissingCapture;
         long renderUnknownSpecialRenderers;
         long renderFramebufferCaptures;
+        long renderFramebufferCapturesWithoutFrames;
         NeiBrowserContract neiBrowserContract;
     }
 

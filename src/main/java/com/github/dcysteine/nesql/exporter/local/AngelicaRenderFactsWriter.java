@@ -80,9 +80,13 @@ final class AngelicaRenderFactsWriter {
                 new File(rawDir, "facts/render/shader-items.jsonl.gz"));
         counts.itemRenderers = itemRendererCounts.itemRenderers;
         counts.shaderItems = itemRendererCounts.shaderItems;
+        counts.shaderItemsRequiringCapture = itemRendererCounts.shaderItemsRequiringCapture;
         counts.unknownSpecialRenderers = itemRendererCounts.unknownSpecialRenderers;
-        counts.framebufferCaptures = writeFramebufferCaptureFacts(
+        CaptureStreamCounts captureCounts = writeFramebufferCaptureFacts(
                 new File(rawDir, "facts/render/framebuffer-captures.jsonl.gz"));
+        counts.framebufferCaptures = captureCounts.framebufferCaptures;
+        counts.framebufferCapturesWithoutFrames = captureCounts.framebufferCapturesWithoutFrames;
+        counts.shaderItemsMissingCapture = missingCaptureCount(itemRendererCounts.captureRequiredItemIds, captureCounts.captureAssetIds, captureCounts.captureVariantKeys);
         return counts;
     }
 
@@ -204,6 +208,10 @@ final class AngelicaRenderFactsWriter {
                         shaderWriter.write(GSON.toJson(shaderRow));
                         shaderWriter.write('\n');
                         counts.shaderItems++;
+                        if (booleanValue(shaderRow, "captureRequired")) {
+                            counts.shaderItemsRequiringCapture++;
+                            counts.captureRequiredItemIds.add(item.getId());
+                        }
                     }
                 }
                 offset += items.size();
@@ -268,8 +276,8 @@ final class AngelicaRenderFactsWriter {
         return row;
     }
 
-    private long writeFramebufferCaptureFacts(File out) throws IOException {
-        long count = 0L;
+    private CaptureStreamCounts writeFramebufferCaptureFacts(File out) throws IOException {
+        CaptureStreamCounts counts = new CaptureStreamCounts();
         ensureDirectory(out.getParentFile());
         try (OutputStreamWriter writer = createUtf8JsonlWriter(out)) {
             for (CanonicalRenderAsset asset : renderAssets) {
@@ -302,10 +310,33 @@ final class AngelicaRenderFactsWriter {
                 row.addProperty("source", "existing-render-dispatcher-capture");
                 writer.write(GSON.toJson(row));
                 writer.write('\n');
-                count++;
+                counts.framebufferCaptures++;
+                if (asset.assetId != null) {
+                    counts.captureAssetIds.add(asset.assetId);
+                }
+                if (asset.variantKey != null) {
+                    counts.captureVariantKeys.add(asset.variantKey);
+                }
+                if (asset.frames == null || asset.frames.isEmpty()) {
+                    counts.framebufferCapturesWithoutFrames++;
+                }
             }
         }
-        return count;
+        return counts;
+    }
+
+    private static long missingCaptureCount(Set<String> requiredItemIds, Set<String> captureAssetIds, Set<String> captureVariantKeys) {
+        long missing = 0L;
+        for (String itemId : requiredItemIds) {
+            if (itemId == null) {
+                continue;
+            }
+            String expectedAssetId = "nesqlpp:item/" + itemId;
+            if (!captureAssetIds.contains(expectedAssetId) && !captureVariantKeys.contains(itemId)) {
+                missing++;
+            }
+        }
+        return missing;
     }
 
     static RendererClassification classifyRenderer(String rendererClass) {
@@ -393,6 +424,11 @@ final class AngelicaRenderFactsWriter {
 
     private static boolean isFramebufferCaptureAsset(CanonicalRenderAsset asset) {
         if (asset == null) {
+            return false;
+        }
+        if (containsIgnoreCase(asset.captureMethod, "native_sprite_metadata")
+                || containsIgnoreCase(asset.captureSource, "native_sprite_metadata")
+                || containsIgnoreCase(asset.renderMode, "native_sprite")) {
             return false;
         }
         return containsIgnoreCase(asset.captureMethod, "framebuffer")
@@ -897,8 +933,11 @@ final class AngelicaRenderFactsWriter {
         long textureSpritesMissingTiming;
         long itemRenderers;
         long shaderItems;
+        long shaderItemsRequiringCapture;
+        long shaderItemsMissingCapture;
         long unknownSpecialRenderers;
         long framebufferCaptures;
+        long framebufferCapturesWithoutFrames;
     }
 
     private static final class TextureSpriteStreamCounts {
@@ -909,7 +948,16 @@ final class AngelicaRenderFactsWriter {
     private static final class ItemRendererStreamCounts {
         long itemRenderers;
         long shaderItems;
+        long shaderItemsRequiringCapture;
         long unknownSpecialRenderers;
+        final Set<String> captureRequiredItemIds = new LinkedHashSet<String>();
+    }
+
+    private static final class CaptureStreamCounts {
+        long framebufferCaptures;
+        long framebufferCapturesWithoutFrames;
+        final Set<String> captureAssetIds = new LinkedHashSet<String>();
+        final Set<String> captureVariantKeys = new LinkedHashSet<String>();
     }
 
     static final class RendererClassification {

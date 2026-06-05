@@ -68,6 +68,13 @@ for (const required of [
   assert(writer.includes(required), `Framebuffer capture fact writer missing ${required}`);
 }
 
+assert(
+  writer.includes('native_sprite_metadata')
+    && writer.includes('return false;')
+    && writer.includes('isFramebufferCaptureAsset'),
+  'Framebuffer capture fact writer must exclude native_sprite_metadata assets from the framebuffer stream'
+);
+
 for (const [rendererClass, family] of [
   ['CosmicItemRenderer', 'avaritia.cosmic'],
   ['CosmicBowRenderer', 'avaritia.cosmic-bow'],
