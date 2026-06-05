@@ -14,6 +14,7 @@ import java.security.MessageDigest;
 
 final class RenderSignatureSupport {
     private static final Gson GSON = new GsonBuilder().disableHtmlEscaping().create();
+    private static final String CACHE_DIRECTORY = ".cache/render-assets";
 
     private RenderSignatureSupport() {}
 
@@ -58,11 +59,141 @@ final class RenderSignatureSupport {
                          new OutputStreamWriter(new FileOutputStream(file, false), StandardCharsets.UTF_8)) {
                 GSON.toJson(payload, writer);
             }
+            storeCache(imageDirectory, job, payload.sha256);
         } catch (Throwable e) {
             Logger.MOD.warn(
                     "Failed to write render signature for {}",
                     job == null ? null : job.getOutputFilePath(),
                     e);
+        }
+    }
+
+    static boolean restoreFromCache(File imageDirectory, RenderJob job) {
+        try {
+            if (imageDirectory == null || job == null || job.getType() == RenderJob.JobType.ENTITY) {
+                return false;
+            }
+            String signatureHash = sha256(job.getRenderSignature());
+            File cacheDir = cacheEntryDirectory(imageDirectory, signatureHash);
+            if (cacheDir == null || !cacheDir.isDirectory()) {
+                return false;
+            }
+            File cachedSignature = new File(cacheDir, "render-signature.json");
+            if (!cachedSignature.isFile()) {
+                return false;
+            }
+            try (InputStreamReader reader =
+                         new InputStreamReader(new FileInputStream(cachedSignature), StandardCharsets.UTF_8)) {
+                SignaturePayload payload = GSON.fromJson(reader, SignaturePayload.class);
+                if (payload == null
+                        || !"nesqlpp/render-signature/v1".equals(payload.schemaVersion)
+                        || !signatureHash.equals(payload.sha256)) {
+                    return false;
+                }
+            }
+
+            if (!restoreRequiredFile(imageDirectory, cacheDir, job.getOutputFilePath(), "output")) {
+                return false;
+            }
+            restoreOptionalFile(imageDirectory, cacheDir, job.getRenderContractFilePath(), "render");
+            restoreOptionalFile(imageDirectory, cacheDir, job.getSpriteMetadataFilePath(), "sprite");
+            restoreOptionalFile(imageDirectory, cacheDir, job.getNativeSpriteAtlasFilePath(), "native-atlas");
+            restoreRequiredFile(imageDirectory, cacheDir, job.getRenderSignatureFilePath(), "signature");
+            return matches(imageDirectory, job);
+        } catch (Throwable e) {
+            Logger.MOD.debug(
+                    "Failed to restore render cache for {}",
+                    job == null ? null : job.getOutputFilePath(),
+                    e);
+            return false;
+        }
+    }
+
+    private static void storeCache(File imageDirectory, RenderJob job, String signatureHash) {
+        try {
+            if (imageDirectory == null || job == null || job.getType() == RenderJob.JobType.ENTITY) {
+                return;
+            }
+            File cacheDir = cacheEntryDirectory(imageDirectory, signatureHash);
+            if (cacheDir == null) {
+                return;
+            }
+            if (!cacheDir.exists() && !cacheDir.mkdirs()) {
+                return;
+            }
+            copyIfPresent(new File(imageDirectory, job.getOutputFilePath()), new File(cacheDir, "output"));
+            copyIfPresent(new File(imageDirectory, job.getRenderContractFilePath()), new File(cacheDir, "render"));
+            copyIfPresent(new File(imageDirectory, job.getSpriteMetadataFilePath()), new File(cacheDir, "sprite"));
+            copyIfPresent(new File(imageDirectory, job.getNativeSpriteAtlasFilePath()), new File(cacheDir, "native-atlas"));
+            copyIfPresent(new File(imageDirectory, job.getRenderSignatureFilePath()), new File(cacheDir, "signature"));
+            SignaturePayload payload = new SignaturePayload();
+            payload.schemaVersion = "nesqlpp/render-signature/v1";
+            payload.outputPath = job.getOutputFilePath();
+            payload.signature = job.getRenderSignature();
+            payload.sha256 = signatureHash;
+            try (OutputStreamWriter writer =
+                         new OutputStreamWriter(new FileOutputStream(new File(cacheDir, "render-signature.json"), false), StandardCharsets.UTF_8)) {
+                GSON.toJson(payload, writer);
+            }
+        } catch (Throwable e) {
+            Logger.MOD.debug(
+                    "Failed to store render cache for {}",
+                    job == null ? null : job.getOutputFilePath(),
+                    e);
+        }
+    }
+
+    private static File cacheEntryDirectory(File imageDirectory, String signatureHash) {
+        File exportDirectory = imageDirectory == null ? null : imageDirectory.getParentFile();
+        File nesqlDirectory = exportDirectory == null ? null : exportDirectory.getParentFile();
+        if (nesqlDirectory == null || signatureHash == null || signatureHash.length() < 4) {
+            return null;
+        }
+        return new File(new File(nesqlDirectory, CACHE_DIRECTORY), signatureHash.substring(0, 2) + File.separator + signatureHash);
+    }
+
+    private static boolean restoreRequiredFile(File imageDirectory, File cacheDir, String relativePath, String cacheName) throws Exception {
+        if (relativePath == null || relativePath.isEmpty()) {
+            return false;
+        }
+        File cached = new File(cacheDir, cacheName);
+        if (!cached.isFile() || cached.length() <= 0L) {
+            return false;
+        }
+        copyFile(cached, new File(imageDirectory, relativePath));
+        return true;
+    }
+
+    private static void restoreOptionalFile(File imageDirectory, File cacheDir, String relativePath, String cacheName) throws Exception {
+        if (relativePath == null || relativePath.isEmpty()) {
+            return;
+        }
+        File cached = new File(cacheDir, cacheName);
+        if (cached.isFile() && cached.length() > 0L) {
+            copyFile(cached, new File(imageDirectory, relativePath));
+        }
+    }
+
+    private static void copyIfPresent(File source, File target) throws Exception {
+        if (source != null && source.isFile() && source.length() > 0L) {
+            copyFile(source, target);
+        }
+    }
+
+    private static void copyFile(File source, File target) throws Exception {
+        File parent = target.getParentFile();
+        if (parent != null && !parent.exists()) {
+            parent.mkdirs();
+        }
+        byte[] buffer = new byte[1024 * 1024];
+        try (FileInputStream in = new FileInputStream(source);
+             FileOutputStream out = new FileOutputStream(target, false)) {
+            int read;
+            while ((read = in.read(buffer)) >= 0) {
+                if (read > 0) {
+                    out.write(buffer, 0, read);
+                }
+            }
         }
     }
 

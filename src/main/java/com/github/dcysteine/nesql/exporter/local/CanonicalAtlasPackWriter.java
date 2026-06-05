@@ -32,6 +32,7 @@ public class CanonicalAtlasPackWriter {
     private static final String ATLAS_DIRECTORY = "atlases";
     private static final String OUTPUT_FILE = "atlas-manifest.json";
     private static final String GROUP_DIRECTORY = "atlas-manifests-by-group";
+    private static final String RAW_CACHE_DIRECTORY = "raw-export/cache/static-atlas";
     private static final int WEBGL_SAFE_ATLAS_CHUNK_SIZE = 3000;
     private static final int WEBGL_SAFE_MAX_ATLAS_HEIGHT = 8192;
     private static final int MAX_SOURCE_IMAGES_IN_MEMORY = 768;
@@ -294,7 +295,7 @@ public class CanonicalAtlasPackWriter {
             List<CanonicalRenderAsset> assets,
             String safeName) {
         File canonicalDir = atlasDir.getParentFile();
-        File groupDir = new File(canonicalDir, GROUP_DIRECTORY);
+        File groupDir = firstExistingGroupDir(canonicalDir);
         if (!groupDir.exists()) {
             return new ArrayList<>();
         }
@@ -326,6 +327,9 @@ public class CanonicalAtlasPackWriter {
                 }
 
                 File atlasFile = resolveExportFile(manifest.atlasFile);
+                if (!atlasFile.exists() && isRawAtlasCacheDirectory(groupDir)) {
+                    restoreCachedAtlasPage(groupDir, shardFile, atlasFile);
+                }
                 if (!atlasFile.exists()) {
                     return new ArrayList<>();
                 }
@@ -451,6 +455,14 @@ public class CanonicalAtlasPackWriter {
         if (!groupDir.exists()) {
             groupDir.mkdirs();
         }
+        File rawCacheDir = new File(exportDirectory, RAW_CACHE_DIRECTORY + File.separator + GROUP_DIRECTORY);
+        if (!rawCacheDir.exists()) {
+            rawCacheDir.mkdirs();
+        }
+        File rawCacheAtlasDir = new File(exportDirectory, RAW_CACHE_DIRECTORY + File.separator + ATLAS_DIRECTORY);
+        if (!rawCacheAtlasDir.exists()) {
+            rawCacheAtlasDir.mkdirs();
+        }
 
         for (AtlasGroupManifest group : groups) {
             String safeName = group.atlasGroup.replaceAll("[^a-zA-Z0-9_-]", "_");
@@ -458,6 +470,53 @@ public class CanonicalAtlasPackWriter {
             try (FileOutputStream fos = new FileOutputStream(shardFile);
                  OutputStreamWriter writer = new OutputStreamWriter(fos, StandardCharsets.UTF_8)) {
                 gson.toJson(group, writer);
+            }
+            File rawCacheShardFile = new File(rawCacheDir, safeName + ".json");
+            try (FileOutputStream fos = new FileOutputStream(rawCacheShardFile);
+                 OutputStreamWriter writer = new OutputStreamWriter(fos, StandardCharsets.UTF_8)) {
+                gson.toJson(group, writer);
+            }
+            File atlasFile = resolveExportFile(group.atlasFile);
+            if (atlasFile.isFile()) {
+                copyFile(atlasFile, new File(rawCacheAtlasDir, safeName + ".png"));
+            }
+        }
+    }
+
+    private File firstExistingGroupDir(File canonicalDir) {
+        File canonicalGroupDir = new File(canonicalDir, GROUP_DIRECTORY);
+        if (canonicalGroupDir.exists()) {
+            return canonicalGroupDir;
+        }
+        return new File(exportDirectory, RAW_CACHE_DIRECTORY + File.separator + GROUP_DIRECTORY);
+    }
+
+    private boolean isRawAtlasCacheDirectory(File groupDir) {
+        return groupDir != null && groupDir.getAbsolutePath().contains((RAW_CACHE_DIRECTORY + File.separator + GROUP_DIRECTORY).replace('/', File.separatorChar));
+    }
+
+    private void restoreCachedAtlasPage(File groupDir, File shardFile, File atlasFile) throws IOException {
+        String pngName = shardFile.getName().replaceFirst("\\.json$", ".png");
+        File rawCacheAtlasDir = new File(groupDir.getParentFile(), ATLAS_DIRECTORY);
+        File cachedAtlasFile = new File(rawCacheAtlasDir, pngName);
+        if (cachedAtlasFile.isFile()) {
+            copyFile(cachedAtlasFile, atlasFile);
+        }
+    }
+
+    private void copyFile(File source, File target) throws IOException {
+        File parent = target.getParentFile();
+        if (parent != null && !parent.exists()) {
+            parent.mkdirs();
+        }
+        byte[] buffer = new byte[1024 * 1024];
+        try (FileInputStream in = new FileInputStream(source);
+             FileOutputStream out = new FileOutputStream(target, false)) {
+            int read;
+            while ((read = in.read(buffer)) >= 0) {
+                if (read > 0) {
+                    out.write(buffer, 0, read);
+                }
             }
         }
     }

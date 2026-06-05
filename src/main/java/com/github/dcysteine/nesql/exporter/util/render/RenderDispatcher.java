@@ -256,6 +256,10 @@ public enum RenderDispatcher {
         }
 
         File outputFile = new File(imageDirectory, outputPath);
+        if ((!outputFile.exists() || outputFile.length() <= 0L)
+                && RenderSignatureSupport.restoreFromCache(imageDirectory, job)) {
+            return true;
+        }
         if (!outputFile.exists() || outputFile.length() <= 0L) {
             return false;
         }
