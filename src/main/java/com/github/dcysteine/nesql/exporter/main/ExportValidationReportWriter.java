@@ -1,6 +1,7 @@
 package com.github.dcysteine.nesql.exporter.main;
 
 import com.github.dcysteine.nesql.exporter.canonical.CanonicalRenderAsset;
+import com.github.dcysteine.nesql.exporter.semantic.SemanticRulePack;
 import com.google.gson.Gson;
 import com.google.gson.GsonBuilder;
 import com.google.gson.JsonArray;
@@ -67,9 +68,10 @@ final class ExportValidationReportWriter {
             report.multiblockBlueprints = safeInt(countGzipJsonl(new File(rawDir, "models/multiblocks/index.jsonl.gz")));
             report.entityPreviewEntries = safeInt(countGzipJsonl(new File(rawDir, "models/entities/index.jsonl.gz")));
             report.entityModelEntries = report.entityPreviewEntries;
-            inspectRenderAssets(repositoryDirectory, rawDir, report);
-            inspectSemanticDiagnostics(repositoryDirectory, report);
-            inspectExportPathHygiene(repositoryDirectory, report);
+        inspectRenderAssets(repositoryDirectory, rawDir, report);
+        inspectSemanticDiagnostics(repositoryDirectory, report);
+        inspectSemanticRulePack(report);
+        inspectExportPathHygiene(repositoryDirectory, report);
             report.atlasManifestCoverageRatio = ratio(report.totalAtlasManifestAssets, report.renderAssetManifestAssets);
             File reportFile = new File(validationDir, "export_validation_report.json");
             File healthReportFile = new File(validationDir, "export-health-report.json");
@@ -94,6 +96,7 @@ final class ExportValidationReportWriter {
             }
             collectWarnings(report);
             determineHealthStatus(report);
+            populateHealthSections(repositoryDirectory, report);
 
             try (FileOutputStream fos = new FileOutputStream(reportFile);
                  OutputStreamWriter writer = new OutputStreamWriter(fos, StandardCharsets.UTF_8)) {
@@ -146,11 +149,20 @@ final class ExportValidationReportWriter {
         report.rawAnimations = readLongMember(counts, "rawAnimations");
         report.rawBrowserItems = readLongMember(counts, "neiBrowserItems");
         report.rawBrowserGroups = readLongMember(counts, "rawGroups");
+        report.rawNeiOrderEntries = readLongMember(counts, "rawNeiOrderEntries");
+        report.rawNeiRuntimePanelItems = readLongMember(counts, "neiRuntimePanelItems");
+        report.rawNeiExportOnlyItems = readLongMember(counts, "neiExportOnlyItems");
+        report.rawNeiDefaultEntries = readLongMember(counts, "neiDefaultEntries");
+        report.rawNeiFallbackGroups = readLongMember(counts, "neiFallbackGroups");
         report.rawNativeNeiGroups = readLongMember(counts, "neiNativeGroups");
+        report.rawNeiSyntheticGroups = readLongMember(counts, "neiSyntheticGroups");
         report.rawGuidFilterRules = readLongMember(counts, "neiGuidFilterRules");
         report.rawHiddenItemRules = readLongMember(counts, "neiHiddenItemRules");
+        report.rawHiddenItems = readLongMember(counts, "neiHiddenItems");
+        report.rawNeiRepresentativeMismatches = readLongMember(counts, "neiRepresentativeMismatches");
         report.rawNeiHandlers = readLongMember(counts, "neiHandlers");
         report.rawNeiHandlerLayouts = readLongMember(counts, "neiHandlerLayouts");
+        report.rawRecipeTypes = readLongMember(counts, "recipeTypes");
         report.semanticTotalItems = readLongMember(counts, "semanticTotalItems");
         report.semanticTaggedItems = readLongMember(counts, "semanticTaggedItems");
         report.semanticClassifiedTaggedItems = readLongMember(counts, "semanticClassifiedTaggedItems");
@@ -161,6 +173,113 @@ final class ExportValidationReportWriter {
         report.semanticPayloads = readLongMember(counts, "semanticPayloads");
         report.semanticIdentityMapRows = readLongMember(counts, "semanticIdentityMapRows");
         report.semanticClassificationCoverageRatio = ratio(report.semanticClassifiedTaggedItems, report.semanticTaggedItems);
+    }
+
+    private static void populateHealthSections(File repositoryDirectory, ValidationReport report) {
+        report.itemTotals = new ItemTotals();
+        report.itemTotals.rawItems = report.rawItems;
+        report.itemTotals.browserItems = report.rawBrowserItems;
+        report.itemTotals.hiddenItems = report.rawHiddenItems;
+        report.itemTotals.recipeOnlyItems = Math.max(0L, report.rawItems - report.rawBrowserItems);
+        report.itemTotals.neiRuntimePanelItems = report.rawNeiRuntimePanelItems;
+        report.itemTotals.neiExportOnlyItems = report.rawNeiExportOnlyItems;
+
+        report.browserGroupTotals = new BrowserGroupTotals();
+        report.browserGroupTotals.groups = report.rawBrowserGroups;
+        report.browserGroupTotals.nativeNeiGroups = report.rawNativeNeiGroups;
+        report.browserGroupTotals.guidFilterRules = report.rawGuidFilterRules;
+        report.browserGroupTotals.hiddenItemRules = report.rawHiddenItemRules;
+        report.browserGroupTotals.semanticGroups = Math.max(0L,
+                report.rawBrowserGroups - report.rawNativeNeiGroups - report.rawNeiFallbackGroups - report.rawNeiSyntheticGroups);
+        report.browserGroupTotals.fallbackGroups = report.rawNeiFallbackGroups;
+        report.browserGroupTotals.syntheticGroups = report.rawNeiSyntheticGroups;
+        report.browserGroupTotals.defaultEntries = report.rawNeiDefaultEntries;
+        report.browserGroupTotals.orderEntries = report.rawNeiOrderEntries;
+        report.browserGroupTotals.representativeMismatches = report.rawNeiRepresentativeMismatches;
+
+        report.textureTotals = new TextureTotals();
+        report.textureTotals.textures = report.rawTextures;
+        report.textureTotals.staticAtlasFiles = report.staticAtlasPngFiles;
+        report.textureTotals.atlasManifestAssets = report.staticAtlasManifestAssets;
+        report.textureTotals.missingTextures = report.renderAssetMissingPrimaryArtifacts;
+        report.textureTotals.missingAtlasEntries = report.browserAtlasLayoutMissingItems;
+        report.textureTotals.wrongRepresentativeTextureRisks = report.rawNeiRepresentativeMismatches;
+        report.textureTotals.browserAtlasItems = report.browserAtlasItems;
+        report.textureTotals.browserAtlasDrawableItems = report.browserAtlasDrawableItems;
+
+        report.animationTotals = new AnimationTotals();
+        report.animationTotals.animations = report.rawAnimations;
+        report.animationTotals.animatedAtlasFiles = report.animatedAtlasPngFiles;
+        report.animationTotals.animatedAtlasManifestAssets = report.animatedAtlasManifestAssets;
+        report.animationTotals.missingAnimatedAtlasEntries = Math.max(0,
+                report.animatedAtlasManifestAssets - report.browserAtlasAnimatedItems);
+        report.animationTotals.missingTimingData = readLongMember(
+                readCountsObject(new File(repositoryDirectory, "raw-export" + File.separator + "export_report.json")),
+                "renderTextureSpritesMissingTiming");
+        report.animationTotals.staticWhenAnimationExpected = report.suspiciousStaticSingularityAssets;
+        report.animationTotals.singularityLikeAssets = report.singularityLikeRenderAssets;
+        report.animationTotals.animatedSingularityLikeAssets = report.animatedSingularityLikeRenderAssets;
+
+        report.recipeTotals = new RecipeTotals();
+        report.recipeTotals.recipes = report.rawRecipes;
+        report.recipeTotals.recipeTypes = report.rawRecipeTypes;
+        report.recipeTotals.neiHandlers = report.rawNeiHandlers;
+        report.recipeTotals.neiHandlerLayouts = report.rawNeiHandlerLayouts;
+        inspectRecipeHandlerAnomalies(repositoryDirectory, report.recipeTotals);
+
+        report.runtimeManifestMetadata = new RuntimeManifestMetadata();
+        report.runtimeManifestMetadata.gtnhProfile = report.profile;
+        report.runtimeManifestMetadata.exportRepository = report.repository;
+        report.runtimeManifestMetadata.exportSelection = report.selection;
+        report.runtimeManifestMetadata.exporterSchemaVersion = report.schemaVersion;
+        report.runtimeManifestMetadata.exportTimestamp = readStringMember(
+                readJsonObject(new File(repositoryDirectory, "raw-export" + File.separator + "manifest.json")),
+                "generatedAt");
+        report.runtimeManifestMetadata.healthStatus = report.healthStatus;
+        report.runtimeManifestMetadata.compileReadinessStatus = report.compileReadinessStatus;
+        report.runtimeManifestMetadata.assetHash = readExportAssetHash(repositoryDirectory);
+    }
+
+    private static JsonObject readCountsObject(File reportFile) {
+        JsonObject root = readJsonObject(reportFile);
+        if (root == null || !root.has("counts") || !root.get("counts").isJsonObject()) {
+            return null;
+        }
+        return root.getAsJsonObject("counts");
+    }
+
+    private static void inspectRecipeHandlerAnomalies(File repositoryDirectory, RecipeTotals totals) {
+        JsonObject root = readJsonObject(new File(repositoryDirectory,
+                "raw-export" + File.separator + "validation" + File.separator + "nei_handler_anomalies.json"));
+        if (root == null || !root.has("summary") || !root.get("summary").isJsonObject()) {
+            return;
+        }
+        JsonObject summary = root.getAsJsonObject("summary");
+        totals.handlersWithLoadedRecipes = readLongMember(summary, "handlersWithLoadedRecipes");
+        totals.handlersWithExportedRecipes = readLongMember(summary, "handlersWithExportedRecipes");
+        totals.suspiciousZeroRecipeHandlers = readLongMember(summary, "suspiciousZeroExports");
+        totals.nativeCoveredZeroRecipeHandlers = readLongMember(summary, "nativeCoveredZeroExports");
+        totals.expectedEmptyHandlers = readLongMember(summary, "expectedEmptyHandlers");
+        totals.partialExports = readLongMember(summary, "partialExports");
+        totals.duplicateCategoryRisks = readLongMember(summary, "duplicateCategoryRisks");
+        totals.zeroRecipeStatus = readStringMember(summary, "status");
+    }
+
+    private static String readExportAssetHash(File repositoryDirectory) {
+        JsonObject root = readJsonObject(new File(repositoryDirectory,
+                "raw-export" + File.separator + "validation" + File.separator + "stage_checksums.json"));
+        if (root == null) {
+            return null;
+        }
+        String direct = readStringMember(root, "assetHash");
+        if (direct != null && !direct.isEmpty()) {
+            return direct;
+        }
+        String checksum = readStringMember(root, "checksum");
+        if (checksum != null && !checksum.isEmpty()) {
+            return checksum;
+        }
+        return readStringMember(root, "sha256");
     }
 
     private static void inspectSemanticDiagnostics(File repositoryDirectory, ValidationReport report) {
@@ -190,6 +309,10 @@ final class ExportValidationReportWriter {
             report.semanticUnclassifiedTaggedItems = readLongMember(root, "unclassifiedTaggedItems");
         }
         report.semanticClassificationCoverageRatio = ratio(report.semanticClassifiedTaggedItems, report.semanticTaggedItems);
+    }
+
+    private static void inspectSemanticRulePack(ValidationReport report) {
+        report.semanticRulePack = SemanticRulePack.loadBundled().validateAgainstRegistry();
     }
 
     private static void collectWarnings(ValidationReport report) {
@@ -252,6 +375,9 @@ final class ExportValidationReportWriter {
         if (report.semanticMissingSortKeyFamilyCount > 0) {
             report.warnings.add("Semantic families missing stable sort keys: "
                     + report.semanticMissingSortKeyFamilyCount);
+        }
+        if (report.semanticRulePack == null || !"ok".equals(report.semanticRulePack.status)) {
+            report.warnings.add("Bundled GTNH semantic rule pack does not fully match the active Java semantic plugins.");
         }
         if (report.rawRecipes > 0L && (report.rawNeiHandlers == 0L || report.rawNeiHandlerLayouts == 0L)) {
             report.warnings.add("NEI handler metadata/layout facts are missing; recipe pages will use generic categories.");
@@ -1057,11 +1183,20 @@ final class ExportValidationReportWriter {
         long rawAnimations;
         long rawBrowserItems;
         long rawBrowserGroups;
+        long rawNeiOrderEntries;
+        long rawNeiRuntimePanelItems;
+        long rawNeiExportOnlyItems;
+        long rawNeiDefaultEntries;
+        long rawNeiFallbackGroups;
         long rawNativeNeiGroups;
+        long rawNeiSyntheticGroups;
         long rawGuidFilterRules;
         long rawHiddenItemRules;
+        long rawHiddenItems;
+        long rawNeiRepresentativeMismatches;
         long rawNeiHandlers;
         long rawNeiHandlerLayouts;
+        long rawRecipeTypes;
         boolean semanticDiagnosticsPresent;
         long semanticTotalItems;
         long semanticTaggedItems;
@@ -1078,11 +1213,88 @@ final class ExportValidationReportWriter {
         JsonArray semanticTopUnclassifiedFamilyActions = new JsonArray();
         JsonArray semanticMissingFacetFamilies = new JsonArray();
         JsonArray semanticMissingSortKeyFamilies = new JsonArray();
+        SemanticRulePack.Validation semanticRulePack;
+        ItemTotals itemTotals;
+        BrowserGroupTotals browserGroupTotals;
+        TextureTotals textureTotals;
+        AnimationTotals animationTotals;
+        RecipeTotals recipeTotals;
+        RuntimeManifestMetadata runtimeManifestMetadata;
         List<String> blockedIssues = new ArrayList<String>();
         List<JsonObject> actionableIssues = new ArrayList<JsonObject>();
         PreviousSnapshot previous;
         DeltaSnapshot delta;
         List<String> warnings = new ArrayList<String>();
+    }
+
+    private static final class ItemTotals {
+        long rawItems;
+        long browserItems;
+        long hiddenItems;
+        long recipeOnlyItems;
+        long neiRuntimePanelItems;
+        long neiExportOnlyItems;
+    }
+
+    private static final class BrowserGroupTotals {
+        long groups;
+        long nativeNeiGroups;
+        long guidFilterRules;
+        long hiddenItemRules;
+        long semanticGroups;
+        long fallbackGroups;
+        long syntheticGroups;
+        long defaultEntries;
+        long orderEntries;
+        long representativeMismatches;
+    }
+
+    private static final class TextureTotals {
+        long textures;
+        int staticAtlasFiles;
+        int atlasManifestAssets;
+        int missingTextures;
+        int missingAtlasEntries;
+        long wrongRepresentativeTextureRisks;
+        int browserAtlasItems;
+        int browserAtlasDrawableItems;
+    }
+
+    private static final class AnimationTotals {
+        long animations;
+        int animatedAtlasFiles;
+        int animatedAtlasManifestAssets;
+        int missingAnimatedAtlasEntries;
+        long missingTimingData;
+        int staticWhenAnimationExpected;
+        int singularityLikeAssets;
+        int animatedSingularityLikeAssets;
+    }
+
+    private static final class RecipeTotals {
+        long recipes;
+        long recipeTypes;
+        long neiHandlers;
+        long neiHandlerLayouts;
+        long handlersWithLoadedRecipes;
+        long handlersWithExportedRecipes;
+        long suspiciousZeroRecipeHandlers;
+        long nativeCoveredZeroRecipeHandlers;
+        long expectedEmptyHandlers;
+        long partialExports;
+        long duplicateCategoryRisks;
+        String zeroRecipeStatus;
+    }
+
+    private static final class RuntimeManifestMetadata {
+        String gtnhProfile;
+        String exportRepository;
+        String exportSelection;
+        String exporterSchemaVersion;
+        String exportTimestamp;
+        String healthStatus;
+        String compileReadinessStatus;
+        String assetHash;
     }
 
     private static final class PathHygieneRule {
