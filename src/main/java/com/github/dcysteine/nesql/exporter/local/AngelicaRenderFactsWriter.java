@@ -245,11 +245,18 @@ final class AngelicaRenderFactsWriter {
         }
         String rendererClass = renderer == null ? null : renderer.getClass().getName();
         RendererClassification classification = classifyRenderer(rendererClass);
+        if (isAe2NativeSpriteOnlyRenderer(item, rendererClass)) {
+            classification = new RendererClassification(
+                    "ae2.native-sprite-item-renderer",
+                    false,
+                    false,
+                    "AE2 chargeable base item resolves to a native atlas sprite; NBT charge variants keep framebuffer captures.");
+        }
         row.addProperty("rendererClass", rendererClass);
         row.addProperty("rendererKind", classification.kind);
         row.addProperty("usesShader", classification.usesShader);
         row.addProperty("requiresFramebufferCapture", classification.requiresFramebufferCapture);
-        row.addProperty("supportsNativeAtlas", renderer == null);
+        row.addProperty("supportsNativeAtlas", renderer == null || "ae2.native-sprite-item-renderer".equals(classification.kind));
         row.addProperty("knownSpecialRendererUnclassified", isKnownSpecialRendererGap(item, rendererClass, classification));
         row.addProperty("notes", classification.notes);
         return row;
@@ -423,12 +430,33 @@ final class AngelicaRenderFactsWriter {
     private static boolean isShaderOrCaptureFamily(String rendererKind) {
         return rendererKind != null
                 && !rendererKind.equals("vanilla.atlas")
+                && !rendererKind.equals("ae2.native-sprite-item-renderer")
                 && (rendererKind.startsWith("avaritia.")
                         || rendererKind.startsWith("gtnhlib.")
                         || rendererKind.startsWith("eternalsingularity.")
                         || rendererKind.startsWith("avaritiaddons.")
                         || rendererKind.startsWith("ae2.")
                         || rendererKind.startsWith("amazingtrophies."));
+    }
+
+    private static boolean isAe2NativeSpriteOnlyRenderer(Item item, String rendererClass) {
+        if (item == null || rendererClass == null) {
+            return false;
+        }
+        String lowerRenderer = rendererClass.toLowerCase(Locale.ROOT);
+        if (!lowerRenderer.contains("appeng.client.render.itemrenderer")) {
+            return false;
+        }
+        if (item.hasNbt()) {
+            return false;
+        }
+        String modId = item.getModId() == null ? "" : item.getModId().toLowerCase(Locale.ROOT);
+        String internalName = item.getInternalName() == null ? "" : item.getInternalName();
+        if (!modId.contains("appliedenergistics2")) {
+            return false;
+        }
+        return "tile.BlockEnergyCell".equals(internalName)
+                || "tile.BlockDenseEnergyCell".equals(internalName);
     }
 
     private static boolean isFramebufferCaptureAsset(CanonicalRenderAsset asset) {
