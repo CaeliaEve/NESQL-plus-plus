@@ -2,6 +2,11 @@
   "schemaVersion": "nesqlpp/gtnh-semantic-rules/alpha1",
   "packVersionSource": "gtnh-profile-metadata",
   "description": "Source-aware semantic rule hints for GTNH-native NEI grouping and NBT-heavy item families. Java plugins remain authoritative; this pack makes expected family ids inspectable and refreshable.",
+  "generatedFrom": {
+    "sourceRoot": "GTNH multi-repository checkout",
+    "refreshCommand": "node scripts/validate-semantic-rule-pack.mjs --gtnh-root <path-to-GTNH>",
+    "policy": "Refresh this JSON and rerun validation when GTNH pack/mod versions change. Keep Java focused on parsing and normalization; keep source/config hints here."
+  },
   "families": [
     { "id": "facade.buildcraft", "source": "BuildCraft/NEI facade behavior", "requiredFacets": ["block", "blockName", "meta", "facadeType"] },
     { "id": "facade.ae2", "source": "Applied Energistics 2 facade items", "requiredFacets": ["block", "blockName", "meta", "facadeType"] },
