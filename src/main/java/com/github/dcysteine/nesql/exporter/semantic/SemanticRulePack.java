@@ -4,6 +4,9 @@ import com.google.gson.JsonArray;
 import com.google.gson.JsonElement;
 import com.google.gson.JsonObject;
 import com.google.gson.JsonParser;
+import com.google.gson.JsonPrimitive;
+import com.google.gson.Gson;
+import com.google.gson.GsonBuilder;
 
 import java.io.InputStream;
 import java.io.InputStreamReader;
@@ -13,8 +16,10 @@ import java.io.FileOutputStream;
 import java.io.IOException;
 import java.nio.charset.StandardCharsets;
 import java.util.ArrayList;
+import java.util.LinkedHashMap;
 import java.util.HashSet;
 import java.util.List;
+import java.util.Map;
 import java.util.Set;
 
 /**
@@ -49,6 +54,10 @@ public final class SemanticRulePack {
     }
 
     public static void writeBundledCopy(File out) throws IOException {
+        writeBundledCopy(out, null);
+    }
+
+    public static void writeBundledCopy(File out, RuntimeMetadata metadata) throws IOException {
         if (out == null) {
             return;
         }
@@ -65,12 +74,39 @@ public final class SemanticRulePack {
         }
         try (InputStreamReader reader = new InputStreamReader(stream, StandardCharsets.UTF_8);
              OutputStreamWriter writer = new OutputStreamWriter(new FileOutputStream(out), StandardCharsets.UTF_8)) {
-            char[] buffer = new char[8192];
-            int read;
-            while ((read = reader.read(buffer)) >= 0) {
-                writer.write(buffer, 0, read);
+            JsonElement parsed = new JsonParser().parse(reader);
+            JsonObject root = parsed != null && parsed.isJsonObject() ? parsed.getAsJsonObject() : new JsonObject();
+            root.add("validation", toJsonObject(loadBundled().validateAgainstRegistry()));
+            if (metadata != null) {
+                root.add("runtime", metadata.toJson());
             }
+            Gson gson = new GsonBuilder().setPrettyPrinting().disableHtmlEscaping().create();
+            gson.toJson(root, writer);
+            writer.write("\n");
         }
+    }
+
+    private static JsonObject toJsonObject(Validation validation) {
+        JsonObject object = new JsonObject();
+        object.addProperty("schemaVersion", validation.schemaVersion);
+        object.addProperty("packVersionSource", validation.packVersionSource);
+        object.addProperty("status", validation.status);
+        object.addProperty("familyRules", validation.familyRules);
+        object.addProperty("aliasRules", validation.aliasRules);
+        object.add("ruleIdsWithoutPlugin", toJsonArray(validation.ruleIdsWithoutPlugin));
+        object.add("pluginIdsWithoutRule", toJsonArray(validation.pluginIdsWithoutRule));
+        return object;
+    }
+
+    private static JsonArray toJsonArray(List<String> values) {
+        JsonArray array = new JsonArray();
+        if (values == null) {
+            return array;
+        }
+        for (String value : values) {
+            array.add(new JsonPrimitive(value));
+        }
+        return array;
     }
 
     public String schemaVersion() {
@@ -166,5 +202,44 @@ public final class SemanticRulePack {
         public int aliasRules;
         public List<String> ruleIdsWithoutPlugin = new ArrayList<String>();
         public List<String> pluginIdsWithoutRule = new ArrayList<String>();
+    }
+
+    /**
+     * Runtime provenance embedded into the exported rule pack.
+     *
+     * <p>This is intentionally metadata-only. Semantic behavior remains in the
+     * registry plugins plus source-derived JSON rules, while public NeoNEI can
+     * tell which GTNH/modpack fingerprint produced the rules.</p>
+     */
+    public static final class RuntimeMetadata {
+        public String repositoryName;
+        public String exportProfile;
+        public String exportSelection;
+        public String minecraftVersion;
+        public String forgeVersion;
+        public String javaVersion;
+        public String gtnhFingerprint;
+        public Map<String, String> modVersions = new LinkedHashMap<String, String>();
+
+        public JsonObject toJson() {
+            JsonObject object = new JsonObject();
+            add(object, "repositoryName", repositoryName);
+            add(object, "exportProfile", exportProfile);
+            add(object, "exportSelection", exportSelection);
+            add(object, "minecraftVersion", minecraftVersion);
+            add(object, "forgeVersion", forgeVersion);
+            add(object, "javaVersion", javaVersion);
+            add(object, "gtnhFingerprint", gtnhFingerprint);
+            JsonObject mods = new JsonObject();
+            for (Map.Entry<String, String> entry : modVersions.entrySet()) {
+                add(mods, entry.getKey(), entry.getValue());
+            }
+            object.add("modVersions", mods);
+            return object;
+        }
+
+        private static void add(JsonObject object, String key, String value) {
+            object.addProperty(key, value == null ? "" : value);
+        }
     }
 }

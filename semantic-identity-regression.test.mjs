@@ -116,6 +116,19 @@ test('raw export health gates include semantic identity readiness', () => {
   assert.equal(sidecar.includes('semanticIdentityMapRows'), true);
   assert.equal(sidecar.includes('semanticUnclassifiedTaggedItems'), true);
 });
+
+test('semantic rule pack is versioned by runtime modpack metadata', () => {
+  const rulePack = readSource('src/main/java/com/github/dcysteine/nesql/exporter/semantic/SemanticRulePack.java');
+  const sidecar = readSource('src/main/java/com/github/dcysteine/nesql/exporter/local/RawExportSidecarWriter.java');
+
+  assert.equal(rulePack.includes('RuntimeMetadata'), true);
+  assert.equal(rulePack.includes('gtnhFingerprint'), true);
+  assert.equal(rulePack.includes('validateAgainstRegistry()'), true);
+  assert.equal(sidecar.includes('buildSemanticRuleRuntimeMetadata()'), true);
+  assert.equal(sidecar.includes('Loader.instance().getIndexedModList()'), true);
+  assert.equal(sidecar.includes('SemanticRulePack.writeBundledCopy(new File(rawDir, "facts/semantic/rule-pack.json"), semanticRuleRuntime)'), true);
+  assert.equal(sidecar.includes('manifest.semanticRuleRuntime = report.semanticRuleRuntime;'), true);
+});
 test('quick semantic check refreshes raw export readiness reports', () => {
   const quickCheck = readSource('src/main/java/com/github/dcysteine/nesql/exporter/main/SemanticIdentityQuickCheckRunner.java');
 

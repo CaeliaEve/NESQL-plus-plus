@@ -19,7 +19,10 @@ import com.google.gson.JsonObject;
 import com.google.gson.JsonParser;
 import jakarta.persistence.EntityManager;
 import jakarta.persistence.TypedQuery;
+import cpw.mods.fml.common.Loader;
+import cpw.mods.fml.common.ModContainer;
 import net.minecraft.util.EnumChatFormatting;
+import net.minecraftforge.common.ForgeVersion;
 
 import java.io.File;
 import java.io.FileInputStream;
@@ -42,6 +45,8 @@ import java.util.List;
 import java.util.Map;
 import java.util.Set;
 import java.util.TimeZone;
+import java.security.MessageDigest;
+import java.security.NoSuchAlgorithmException;
 import java.util.zip.GZIPOutputStream;
 
 /**
@@ -84,11 +89,13 @@ public final class RawExportSidecarWriter {
         purgeLegacyRawExportOutputs(rawDir);
 
         RawFactCounts factCounts = writeRawFactStreams(rawDir);
-        SemanticRulePack.writeBundledCopy(new File(rawDir, "facts/semantic/rule-pack.json"));
+        SemanticRulePack.RuntimeMetadata semanticRuleRuntime = buildSemanticRuleRuntimeMetadata();
+        SemanticRulePack.writeBundledCopy(new File(rawDir, "facts/semantic/rule-pack.json"), semanticRuleRuntime);
         SemanticItemIdentityDiagnosticsWriter.SemanticAuditSummary semanticAudit =
                 new SemanticItemIdentityDiagnosticsWriter(entityManager, rawDir).write();
 
         RawExportReport report = buildReport();
+        report.semanticRuleRuntime = semanticRuleRuntime;
         report.counts.rawItems = factCounts.items;
         report.counts.rawFluids = factCounts.fluids;
         report.counts.rawRecipes = factCounts.recipes;
@@ -190,6 +197,7 @@ public final class RawExportSidecarWriter {
         manifest.repositoryName = exportContext.paths.repositoryName;
         manifest.profile = exportContext.profile.profileId;
         manifest.selection = exportContext.selection.describe();
+        manifest.semanticRuleRuntime = report.semanticRuleRuntime;
         manifest.status = "raw-export-authoritative";
         manifest.notes.add("Raw-export is the authoritative compiler input.");
         manifest.notes.add("Large fact streams are gzip-compressed JSONL and recipes are stored only as handler shards.");
@@ -245,6 +253,94 @@ public final class RawExportSidecarWriter {
         manifest.files.put("semanticRulePack", "facts/semantic/rule-pack.json");
         manifest.counts = report.counts;
         return manifest;
+    }
+
+    private SemanticRulePack.RuntimeMetadata buildSemanticRuleRuntimeMetadata() {
+        SemanticRulePack.RuntimeMetadata metadata = new SemanticRulePack.RuntimeMetadata();
+        metadata.repositoryName = exportContext.paths.repositoryName;
+        metadata.exportProfile = exportContext.profile.profileId;
+        metadata.exportSelection = exportContext.selection.describe();
+        metadata.javaVersion = System.getProperty("java.version", "");
+        metadata.minecraftVersion = safeMinecraftVersion();
+        metadata.forgeVersion = safeForgeVersion();
+        for (String modId : semanticFingerprintModIds()) {
+            String version = safeModVersion(modId);
+            if (version != null && !version.trim().isEmpty()) {
+                metadata.modVersions.put(modId, version);
+            }
+        }
+        metadata.gtnhFingerprint = semanticFingerprint(metadata.modVersions);
+        return metadata;
+    }
+
+    private static List<String> semanticFingerprintModIds() {
+        ArrayList<String> ids = new ArrayList<String>();
+        Collections.addAll(ids,
+                "gregtech",
+                "NotEnoughItems",
+                "angelica",
+                "dreamcraft",
+                "Thaumcraft",
+                "appliedenergistics2",
+                "Avaritia",
+                "EnderIO",
+                "BuildCraft|Core",
+                "Forestry",
+                "TConstruct",
+                "ExtraUtilities",
+                "OpenBlocks",
+                "GalacticraftCore");
+        return ids;
+    }
+
+    private static String safeMinecraftVersion() {
+        try {
+            ModContainer minecraft = Loader.instance().getMinecraftModContainer();
+            return minecraft == null ? "" : minecraft.getVersion();
+        } catch (Throwable ignored) {
+            return "";
+        }
+    }
+
+    private static String safeForgeVersion() {
+        try {
+            return ForgeVersion.getVersion();
+        } catch (Throwable ignored) {
+            return "";
+        }
+    }
+
+    private static String safeModVersion(String modId) {
+        try {
+            ModContainer container = Loader.instance().getIndexedModList().get(modId);
+            if (container == null) {
+                return "";
+            }
+            String version = container.getVersion();
+            return version == null ? "" : version;
+        } catch (Throwable ignored) {
+            return "";
+        }
+    }
+
+    private static String semanticFingerprint(Map<String, String> modVersions) {
+        try {
+            MessageDigest digest = MessageDigest.getInstance("SHA-256");
+            if (modVersions != null) {
+                for (Map.Entry<String, String> entry : modVersions.entrySet()) {
+                    String line = entry.getKey() + "=" + entry.getValue() + "\n";
+                    digest.update(line.getBytes(StandardCharsets.UTF_8));
+                }
+            }
+            byte[] bytes = digest.digest();
+            StringBuilder builder = new StringBuilder();
+            for (int index = 0; index < Math.min(12, bytes.length); index++) {
+                builder.append(String.format("%02x", bytes[index] & 0xff));
+            }
+            return builder.toString();
+        } catch (NoSuchAlgorithmException ignored) {
+            return "";
+        }
     }
 
     private RawExportReport buildReport() {
@@ -2434,6 +2530,7 @@ public final class RawExportSidecarWriter {
         String profile;
         String selection;
         String status;
+        SemanticRulePack.RuntimeMetadata semanticRuleRuntime;
         RawExportCounts counts;
         List<String> notes = new ArrayList<String>();
         List<String> capabilities = new ArrayList<String>();
@@ -2446,6 +2543,7 @@ public final class RawExportSidecarWriter {
         String generatedAt;
         String profile;
         String selection;
+        SemanticRulePack.RuntimeMetadata semanticRuleRuntime;
         RawExportCounts counts;
         RawExportValidation validation = new RawExportValidation();
         NeiBrowserContract neiBrowserContract;
