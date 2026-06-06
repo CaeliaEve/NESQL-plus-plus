@@ -148,6 +148,7 @@ test('GT machine catalyst preference rules stay data-driven', () => {
   }
   assert.equal(sidecar.includes('MACHINE_CATALYST_RULES'), true);
   assert.equal(sidecar.includes('gtnh-semantic-rules/machine-catalyst-rules.json'), true);
+  assert.equal(sidecar.includes('new String[] { handlerClass, itemName, family }'), true);
 });
 test('quick semantic check refreshes raw export readiness reports', () => {
   const quickCheck = readSource('src/main/java/com/github/dcysteine/nesql/exporter/main/SemanticIdentityQuickCheckRunner.java');

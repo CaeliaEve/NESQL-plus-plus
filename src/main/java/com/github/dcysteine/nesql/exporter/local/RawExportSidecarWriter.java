@@ -1176,9 +1176,11 @@ public final class RawExportSidecarWriter {
     }
 
     private static String preferredMachineItemName(String handlerClass, String itemName, String family) {
-        String explicit = MACHINE_CATALYST_RULES.get(normalizeKey(handlerClass));
-        if (explicit != null && explicit.length() > 0) {
-            return explicit;
+        for (String candidate : new String[] { handlerClass, itemName, family }) {
+            String explicit = MACHINE_CATALYST_RULES.get(normalizeKey(candidate));
+            if (explicit != null && explicit.length() > 0) {
+                return explicit;
+            }
         }
         return itemName;
     }
