@@ -163,6 +163,17 @@ final class ExportValidationReportWriter {
         report.rawNeiHandlers = readLongMember(counts, "neiHandlers");
         report.rawNeiHandlerLayouts = readLongMember(counts, "neiHandlerLayouts");
         report.rawRecipeTypes = readLongMember(counts, "recipeTypes");
+        report.renderBackendFacts = readLongMember(counts, "renderBackendFacts");
+        report.renderBackendAngelica = readLongMember(counts, "renderBackendAngelica");
+        report.renderTextureSprites = readLongMember(counts, "renderTextureSprites");
+        report.renderTextureSpritesMissingTiming = readLongMember(counts, "renderTextureSpritesMissingTiming");
+        report.renderItemRenderers = readLongMember(counts, "renderItemRenderers");
+        report.renderShaderItems = readLongMember(counts, "renderShaderItems");
+        report.renderShaderItemsRequiringCapture = readLongMember(counts, "renderShaderItemsRequiringCapture");
+        report.renderShaderItemsMissingCapture = readLongMember(counts, "renderShaderItemsMissingCapture");
+        report.renderUnknownSpecialRenderers = readLongMember(counts, "renderUnknownSpecialRenderers");
+        report.renderFramebufferCaptures = readLongMember(counts, "renderFramebufferCaptures");
+        report.renderFramebufferCapturesWithoutFrames = readLongMember(counts, "renderFramebufferCapturesWithoutFrames");
         report.semanticTotalItems = readLongMember(counts, "semanticTotalItems");
         report.semanticTaggedItems = readLongMember(counts, "semanticTaggedItems");
         report.semanticClassifiedTaggedItems = readLongMember(counts, "semanticClassifiedTaggedItems");
@@ -219,6 +230,29 @@ final class ExportValidationReportWriter {
         report.animationTotals.staticWhenAnimationExpected = report.suspiciousStaticSingularityAssets;
         report.animationTotals.singularityLikeAssets = report.singularityLikeRenderAssets;
         report.animationTotals.animatedSingularityLikeAssets = report.animatedSingularityLikeRenderAssets;
+
+        report.nativeRenderTotals = new NativeRenderTotals();
+        report.nativeRenderTotals.backendFacts = report.renderBackendFacts;
+        report.nativeRenderTotals.backendAngelica = report.renderBackendAngelica;
+        report.nativeRenderTotals.textureSprites = report.renderTextureSprites;
+        report.nativeRenderTotals.textureSpritesMissingTiming = report.renderTextureSpritesMissingTiming;
+        report.nativeRenderTotals.itemRenderers = report.renderItemRenderers;
+        report.nativeRenderTotals.shaderItems = report.renderShaderItems;
+        report.nativeRenderTotals.shaderItemsRequiringCapture = report.renderShaderItemsRequiringCapture;
+        report.nativeRenderTotals.shaderItemsMissingCapture = report.renderShaderItemsMissingCapture;
+        report.nativeRenderTotals.unknownSpecialRenderers = report.renderUnknownSpecialRenderers;
+        report.nativeRenderTotals.framebufferCaptures = report.renderFramebufferCaptures;
+        report.nativeRenderTotals.framebufferCapturesWithoutFrames = report.renderFramebufferCapturesWithoutFrames;
+        report.nativeRenderTotals.captureCompletenessRatio = ratio(
+                report.renderShaderItemsRequiringCapture - report.renderShaderItemsMissingCapture,
+                report.renderShaderItemsRequiringCapture);
+        report.nativeRenderTotals.status = report.renderBackendAngelica == 1L
+                && report.renderTextureSpritesMissingTiming == 0L
+                && report.renderUnknownSpecialRenderers == 0L
+                && report.renderShaderItemsMissingCapture == 0L
+                && report.renderFramebufferCapturesWithoutFrames == 0L
+                ? "ok"
+                : "warning";
 
         report.recipeTotals = new RecipeTotals();
         report.recipeTotals.recipes = report.rawRecipes;
@@ -378,6 +412,25 @@ final class ExportValidationReportWriter {
         }
         if (report.semanticRulePack == null || !"ok".equals(report.semanticRulePack.status)) {
             report.warnings.add("Bundled GTNH semantic rule pack does not fully match the active Java semantic plugins.");
+        }
+        if (report.renderBackendFacts > 0L && report.renderBackendAngelica == 0L) {
+            report.warnings.add("Native render export did not confirm Angelica as the active backend.");
+        }
+        if (report.renderTextureSpritesMissingTiming > 0L) {
+            report.warnings.add("Native texture sprites missing animation timing: "
+                    + report.renderTextureSpritesMissingTiming);
+        }
+        if (report.renderShaderItemsMissingCapture > 0L) {
+            report.warnings.add("Shader/custom renderer items missing native capture assets: "
+                    + report.renderShaderItemsMissingCapture);
+        }
+        if (report.renderUnknownSpecialRenderers > 0L) {
+            report.warnings.add("Unknown special item renderers need explicit Angelica/native classification: "
+                    + report.renderUnknownSpecialRenderers);
+        }
+        if (report.renderFramebufferCapturesWithoutFrames > 0L) {
+            report.warnings.add("Native framebuffer captures without frame data: "
+                    + report.renderFramebufferCapturesWithoutFrames);
         }
         if (report.rawRecipes > 0L && (report.rawNeiHandlers == 0L || report.rawNeiHandlerLayouts == 0L)) {
             report.warnings.add("NEI handler metadata/layout facts are missing; recipe pages will use generic categories.");
@@ -1197,6 +1250,17 @@ final class ExportValidationReportWriter {
         long rawNeiHandlers;
         long rawNeiHandlerLayouts;
         long rawRecipeTypes;
+        long renderBackendFacts;
+        long renderBackendAngelica;
+        long renderTextureSprites;
+        long renderTextureSpritesMissingTiming;
+        long renderItemRenderers;
+        long renderShaderItems;
+        long renderShaderItemsRequiringCapture;
+        long renderShaderItemsMissingCapture;
+        long renderUnknownSpecialRenderers;
+        long renderFramebufferCaptures;
+        long renderFramebufferCapturesWithoutFrames;
         boolean semanticDiagnosticsPresent;
         long semanticTotalItems;
         long semanticTaggedItems;
@@ -1218,6 +1282,7 @@ final class ExportValidationReportWriter {
         BrowserGroupTotals browserGroupTotals;
         TextureTotals textureTotals;
         AnimationTotals animationTotals;
+        NativeRenderTotals nativeRenderTotals;
         RecipeTotals recipeTotals;
         RuntimeManifestMetadata runtimeManifestMetadata;
         List<String> blockedIssues = new ArrayList<String>();
@@ -1269,6 +1334,22 @@ final class ExportValidationReportWriter {
         int staticWhenAnimationExpected;
         int singularityLikeAssets;
         int animatedSingularityLikeAssets;
+    }
+
+    private static final class NativeRenderTotals {
+        long backendFacts;
+        long backendAngelica;
+        long textureSprites;
+        long textureSpritesMissingTiming;
+        long itemRenderers;
+        long shaderItems;
+        long shaderItemsRequiringCapture;
+        long shaderItemsMissingCapture;
+        long unknownSpecialRenderers;
+        long framebufferCaptures;
+        long framebufferCapturesWithoutFrames;
+        Double captureCompletenessRatio;
+        String status;
     }
 
     private static final class RecipeTotals {
