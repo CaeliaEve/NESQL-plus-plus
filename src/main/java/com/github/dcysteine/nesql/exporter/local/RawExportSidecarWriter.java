@@ -64,6 +64,7 @@ public final class RawExportSidecarWriter {
     private static final int ITEM_BATCH_SIZE = 4096;
     private static final int FLUID_BATCH_SIZE = 2048;
     private static final int RECIPE_BATCH_SIZE = 512;
+    private static final Map<String, String> MACHINE_CATALYST_RULES = loadBundledMachineCatalystRules();
 
     private final EntityManager entityManager;
     private final File repositoryDirectory;
@@ -1046,6 +1047,38 @@ public final class RawExportSidecarWriter {
         }
     }
 
+    private static Map<String, String> loadBundledMachineCatalystRules() {
+        LinkedHashMap<String, String> rules = new LinkedHashMap<String, String>();
+        InputStream stream = RawExportSidecarWriter.class
+                .getClassLoader()
+                .getResourceAsStream("gtnh-semantic-rules/machine-catalyst-rules.json");
+        if (stream == null) {
+            return rules;
+        }
+        try (InputStreamReader reader = new InputStreamReader(stream, StandardCharsets.UTF_8)) {
+            JsonElement parsed = new JsonParser().parse(reader);
+            if (parsed == null || !parsed.isJsonObject()) {
+                return rules;
+            }
+            JsonObject exactHandlers = parsed.getAsJsonObject().getAsJsonObject("exactHandlers");
+            if (exactHandlers == null) {
+                return rules;
+            }
+            for (Map.Entry<String, JsonElement> entry : exactHandlers.entrySet()) {
+                String key = normalizeKey(entry.getKey());
+                String value = entry.getValue() != null && entry.getValue().isJsonPrimitive()
+                        ? trimToNull(entry.getValue().getAsString())
+                        : null;
+                if (key.length() > 0 && value != null) {
+                    rules.put(key, value);
+                }
+            }
+        } catch (Exception ignored) {
+            return rules;
+        }
+        return rules;
+    }
+
     private static String stableHandlerKey(String handlerClass, String itemName, int ordinal) {
         String base = normalizeKey(firstNonBlank(handlerClass, itemName, "handler-" + ordinal));
         return base.length() == 0 ? "handler-" + ordinal : base;
@@ -1143,8 +1176,9 @@ public final class RawExportSidecarWriter {
     }
 
     private static String preferredMachineItemName(String handlerClass, String itemName, String family) {
-        if (isLikelyGtMultiblock(handlerClass, itemName, family)) {
-            return itemName;
+        String explicit = MACHINE_CATALYST_RULES.get(normalizeKey(handlerClass));
+        if (explicit != null && explicit.length() > 0) {
+            return explicit;
         }
         return itemName;
     }

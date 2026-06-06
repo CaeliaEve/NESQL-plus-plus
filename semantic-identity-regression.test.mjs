@@ -132,6 +132,23 @@ test('semantic rule pack is versioned by runtime modpack metadata', () => {
   assert.equal(validator.includes('sourceHints'), true);
   assert.equal(validator.includes('plugin family ids missing from rule pack'), true);
 });
+
+test('GT machine catalyst preference rules stay data-driven', () => {
+  const rules = JSON.parse(readSource('src/main/resources/gtnh-semantic-rules/machine-catalyst-rules.json').replace(/^\uFEFF/, ''));
+  const sidecar = readSource('src/main/java/com/github/dcysteine/nesql/exporter/local/RawExportSidecarWriter.java');
+
+  assert.equal(rules.schemaVersion, 'nesqlpp/gtnh-machine-catalyst-rules/alpha1');
+  for (const [handler, preferred] of Object.entries({
+    'gt.recipe.alloysmelter': 'gregtech:gt.blockmachines:31023',
+    'gt.recipe.arcfurnace': 'gregtech:gt.blockmachines:862',
+    'gt.recipe.fluidsolidifier': 'gregtech:gt.blockmachines:10890',
+    'gt.recipe.macerator': 'gregtech:gt.blockmachines:797',
+  })) {
+    assert.equal(rules.exactHandlers[handler], preferred, `missing preferred catalyst for ${handler}`);
+  }
+  assert.equal(sidecar.includes('MACHINE_CATALYST_RULES'), true);
+  assert.equal(sidecar.includes('gtnh-semantic-rules/machine-catalyst-rules.json'), true);
+});
 test('quick semantic check refreshes raw export readiness reports', () => {
   const quickCheck = readSource('src/main/java/com/github/dcysteine/nesql/exporter/main/SemanticIdentityQuickCheckRunner.java');
 
