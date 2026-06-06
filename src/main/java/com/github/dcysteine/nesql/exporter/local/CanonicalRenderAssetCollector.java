@@ -893,6 +893,7 @@ public final class CanonicalRenderAssetCollector {
     private boolean isNativeSpriteSnapshot(CanonicalRenderAsset asset) {
         return asset.spriteMetadataFile != null
                 && asset.nativeSpriteAtlasFile != null
+                && shouldTreatNativeSpriteAsPrimary(asset)
                 && !isNativeSpriteAnimated(asset);
     }
 

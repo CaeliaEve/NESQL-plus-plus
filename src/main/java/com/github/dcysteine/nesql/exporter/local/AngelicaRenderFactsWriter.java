@@ -442,9 +442,13 @@ final class AngelicaRenderFactsWriter {
         }
         return containsIgnoreCase(asset.captureMethod, "framebuffer")
                 || containsIgnoreCase(asset.captureSource, "framebuffer")
+                || containsIgnoreCase(asset.captureSource, "inventory_renderer_capture")
+                || containsIgnoreCase(asset.captureSource, "inventory_renderer_family_capture")
                 || containsIgnoreCase(asset.renderMode, "framebuffer")
+                || containsIgnoreCase(asset.renderMode, "captured_final_atlas")
                 || containsIgnoreCase(asset.animationMode, "framebuffer")
                 || containsIgnoreCase(asset.mode, "framebuffer")
+                || containsIgnoreCase(asset.mode, "rendered_frames")
                 || containsIgnoreCase(asset.primaryArtifact, ".gif")
                 || asset.framePattern != null
                 || (asset.capturedFrameCount != null && asset.capturedFrameCount > 1);
