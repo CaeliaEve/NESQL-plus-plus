@@ -7,6 +7,7 @@ import com.github.dcysteine.nesql.exporter.canonical.CanonicalItem;
 import com.github.dcysteine.nesql.exporter.canonical.CanonicalRecipe;
 import com.github.dcysteine.nesql.exporter.main.ExportContext;
 import com.github.dcysteine.nesql.exporter.main.Logger;
+import com.github.dcysteine.nesql.exporter.semantic.SemanticRulePack;
 import com.github.dcysteine.nesql.sql.base.fluid.Fluid;
 import com.github.dcysteine.nesql.sql.base.recipe.Recipe;
 import com.github.dcysteine.nesql.sql.gregtech.GregTechRecipe;
@@ -83,6 +84,7 @@ public final class RawExportSidecarWriter {
         purgeLegacyRawExportOutputs(rawDir);
 
         RawFactCounts factCounts = writeRawFactStreams(rawDir);
+        SemanticRulePack.writeBundledCopy(new File(rawDir, "facts/semantic/rule-pack.json"));
         SemanticItemIdentityDiagnosticsWriter.SemanticAuditSummary semanticAudit =
                 new SemanticItemIdentityDiagnosticsWriter(entityManager, rawDir).write();
 
@@ -240,6 +242,7 @@ public final class RawExportSidecarWriter {
         manifest.files.put("semanticFamilyAudit", "validation/semantic/parametric-family-audit.json");
         manifest.files.put("semanticNbtKeyDistribution", "validation/semantic/nbt-key-distribution.json");
         manifest.files.put("semanticIdentityNormalizationReport", "validation/semantic/identity-normalization-report.json");
+        manifest.files.put("semanticRulePack", "facts/semantic/rule-pack.json");
         manifest.counts = report.counts;
         return manifest;
     }

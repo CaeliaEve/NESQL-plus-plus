@@ -7,6 +7,10 @@ import com.google.gson.JsonParser;
 
 import java.io.InputStream;
 import java.io.InputStreamReader;
+import java.io.OutputStreamWriter;
+import java.io.File;
+import java.io.FileOutputStream;
+import java.io.IOException;
 import java.nio.charset.StandardCharsets;
 import java.util.ArrayList;
 import java.util.HashSet;
@@ -41,6 +45,31 @@ public final class SemanticRulePack {
             return new SemanticRulePack(parsed != null && parsed.isJsonObject() ? parsed.getAsJsonObject() : null);
         } catch (Exception ignored) {
             return new SemanticRulePack(null);
+        }
+    }
+
+    public static void writeBundledCopy(File out) throws IOException {
+        if (out == null) {
+            return;
+        }
+        File parent = out.getParentFile();
+        if (parent != null && !parent.exists()) {
+            parent.mkdirs();
+        }
+        InputStream stream = SemanticRulePack.class.getClassLoader().getResourceAsStream(RESOURCE_PATH);
+        if (stream == null) {
+            try (OutputStreamWriter writer = new OutputStreamWriter(new FileOutputStream(out), StandardCharsets.UTF_8)) {
+                writer.write("{\"schemaVersion\":\"nesqlpp/gtnh-semantic-rules/alpha1\",\"status\":\"missing-bundled-resource\"}\n");
+            }
+            return;
+        }
+        try (InputStreamReader reader = new InputStreamReader(stream, StandardCharsets.UTF_8);
+             OutputStreamWriter writer = new OutputStreamWriter(new FileOutputStream(out), StandardCharsets.UTF_8)) {
+            char[] buffer = new char[8192];
+            int read;
+            while ((read = reader.read(buffer)) >= 0) {
+                writer.write(buffer, 0, read);
+            }
         }
     }
 
