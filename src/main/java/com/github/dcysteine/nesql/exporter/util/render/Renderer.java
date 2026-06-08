@@ -162,11 +162,13 @@ public enum Renderer {
                 }
                 try {
                     RenderDiagnosticsSupport.writeCurrentRenderJob(imageDirectory, job);
+                    if (job.needsMultipleFrames()) {
+                        advanceTextureAnimations(job);
+                    }
                     BufferedImage image = renderIsolatedFrame(job);
 
                     // Handle multi-frame GIF capture vs single-frame PNG
                     if (job.needsMultipleFrames()) {
-                        advanceTextureAnimations(job);
                         // Multi-frame: Handled by RenderDispatcher
                         RenderDispatcher.INSTANCE.completeJob(job, image);
                     } else {
@@ -251,6 +253,9 @@ public enum Renderer {
     }
     private void advanceTextureAnimations(RenderJob job) {
         if (job == null || !job.shouldAdvanceTextureAtlasBetweenFrames()) {
+            return;
+        }
+        if (job.getFrameIndex() <= 0) {
             return;
         }
 

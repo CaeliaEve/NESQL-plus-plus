@@ -222,6 +222,25 @@ test('atlas-backed custom renderer captures can explicitly tick sprite animation
   );
 });
 
+test('multi-frame framebuffer capture advances atlas animations before rendering the next frame', () => {
+  const rendererSource = read('src/main/java/com/github/dcysteine/nesql/exporter/util/render/Renderer.java');
+  const frameLoopStart = rendererSource.indexOf('RenderDiagnosticsSupport.writeCurrentRenderJob(imageDirectory, job);');
+  const advanceIndex = rendererSource.indexOf('advanceTextureAnimations(job);', frameLoopStart);
+  const renderIndex = rendererSource.indexOf('BufferedImage image = renderIsolatedFrame(job);', frameLoopStart);
+
+  assert.equal(
+    advanceIndex > frameLoopStart && advanceIndex < renderIndex,
+    true,
+    'Renderer must advance atlas-backed animation textures before framebuffer readback for frame 1+',
+  );
+
+  assert.equal(
+    rendererSource.includes('if (job.getFrameIndex() <= 0)'),
+    true,
+    'Frame 0 should remain the baseline capture; atlas advancement starts before subsequent frames',
+  );
+});
+
 test('render contracts prefer captured atlas playback for custom inventory renderers even when a renderer family is known', () => {
   const contractSource = read('src/main/java/com/github/dcysteine/nesql/exporter/util/render/RenderContractMetadataExtractor.java');
 
