@@ -293,7 +293,9 @@ final class ExportValidationReportWriter {
         totals.handlersWithExportedRecipes = readLongMember(summary, "handlersWithExportedRecipes");
         totals.suspiciousZeroRecipeHandlers = readLongMember(summary, "suspiciousZeroExports");
         totals.nativeCoveredZeroRecipeHandlers = readLongMember(summary, "nativeCoveredZeroExports");
+        totals.nonRecipeInfoZeroRecipeHandlers = readLongMember(summary, "nonRecipeInfoZeroExports");
         totals.expectedEmptyHandlers = readLongMember(summary, "expectedEmptyHandlers");
+        totals.legalZeroRecipeHandlers = readLongMember(summary, "legalZeroRecipeHandlers");
         totals.partialExports = readLongMember(summary, "partialExports");
         totals.duplicateCategoryRisks = readLongMember(summary, "duplicateCategoryRisks");
         totals.zeroRecipeStatus = readStringMember(summary, "status");
@@ -1361,7 +1363,9 @@ final class ExportValidationReportWriter {
         long handlersWithExportedRecipes;
         long suspiciousZeroRecipeHandlers;
         long nativeCoveredZeroRecipeHandlers;
+        long nonRecipeInfoZeroRecipeHandlers;
         long expectedEmptyHandlers;
+        long legalZeroRecipeHandlers;
         long partialExports;
         long duplicateCategoryRisks;
         String zeroRecipeStatus;

@@ -114,6 +114,8 @@ final class ExportPluginTimingReportWriter {
                 report.summary.partialExports++;
             } else if ("native-export-covered-zero".equals(anomaly.category)) {
                 report.summary.nativeCoveredZeroExports++;
+            } else if ("non-recipe-info-zero".equals(anomaly.category)) {
+                report.summary.nonRecipeInfoZeroExports++;
             } else if ("expected-empty".equals(anomaly.category)) {
                 report.summary.expectedEmptyHandlers++;
             }
@@ -122,6 +124,10 @@ final class ExportPluginTimingReportWriter {
             }
         }
 
+        report.summary.legalZeroRecipeHandlers =
+                report.summary.expectedEmptyHandlers
+                        + report.summary.nativeCoveredZeroExports
+                        + report.summary.nonRecipeInfoZeroExports;
         report.summary.status =
                 report.summary.suspiciousZeroExports > 0 || report.summary.partialExports > 0
                         ? "warning"
@@ -266,8 +272,10 @@ final class ExportPluginTimingReportWriter {
         int handlersWithExportedRecipes;
         int suspiciousZeroExports;
         int nativeCoveredZeroExports;
+        int nonRecipeInfoZeroExports;
         int partialExports;
         int expectedEmptyHandlers;
+        int legalZeroRecipeHandlers;
         Map<String, Integer> categories = new LinkedHashMap<String, Integer>();
         Map<String, Integer> severities = new LinkedHashMap<String, Integer>();
     }
