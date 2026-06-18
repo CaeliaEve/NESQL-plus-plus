@@ -12,6 +12,7 @@ import com.github.dcysteine.nesql.exporter.local.CanonicalBrowserAtlasIndexWrite
 import com.github.dcysteine.nesql.exporter.local.CanonicalBrowserLayoutIndexWriter;
 import com.github.dcysteine.nesql.exporter.local.CanonicalRenderAssetCollector;
 import com.github.dcysteine.nesql.exporter.local.RawExportSidecarWriter;
+import com.github.dcysteine.nesql.exporter.local.RawExportUiFamilyCensusWriter;
 import com.github.dcysteine.nesql.exporter.local.ModBasedItemExporter;
 import com.github.dcysteine.nesql.exporter.local.ModBasedRecipeExporter;
 import net.minecraft.util.EnumChatFormatting;
@@ -283,6 +284,18 @@ public final class ExportWriterSupport {
             Logger.MOD.error("Failed to write NESQL++ browser layout index", e);
             Logger.chatMessage(
                     EnumChatFormatting.RED + "Failed to write NESQL++ browser layout index: " + e.getMessage());
+            throw e;
+        }
+    }
+
+    public static void writeUiFamilyCensus(File repositoryDirectory) throws Exception {
+        Logger.chatMessage(EnumChatFormatting.AQUA + "Exporting NESQL++ NEI UI family census...");
+        try {
+            new RawExportUiFamilyCensusWriter(repositoryDirectory).export();
+        } catch (Exception e) {
+            Logger.MOD.error("Failed to write NESQL++ NEI UI family census", e);
+            Logger.chatMessage(
+                    EnumChatFormatting.RED + "Failed to write NEI UI family census: " + e.getMessage());
             throw e;
         }
     }

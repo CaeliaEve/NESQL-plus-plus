@@ -30,6 +30,9 @@ public final class ExportExecutionPlan {
         stages.add(ExportStage.INITIALIZE_DATABASE);
         stages.add(ExportStage.INITIALIZE_PLUGINS);
         stages.add(ExportStage.COLLECT_PLUGIN_DATA);
+        if (selection.includesStage(ExportStage.WRITE_UI_FAMILY_CENSUS, profile)) {
+            stages.add(ExportStage.WRITE_UI_FAMILY_CENSUS);
+        }
 
         if (profile.writeModBasedItems && selection.includesStage(ExportStage.WRITE_MOD_BASED_ITEMS, profile)) {
             stages.add(ExportStage.WRITE_MOD_BASED_ITEMS);

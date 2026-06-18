@@ -8,11 +8,13 @@ const readSource = (relativePath) => fs.readFileSync(path.join(repoRoot, relativ
 
 const metadata = readSource('src/main/java/com/github/dcysteine/nesql/exporter/main/ExportStageMetadata.java');
 const runner = readSource('src/main/java/com/github/dcysteine/nesql/exporter/main/ExportStageRunner.java');
+const selection = readSource('src/main/java/com/github/dcysteine/nesql/exporter/main/ExportSelection.java');
 const integrity = readSource('src/main/java/com/github/dcysteine/nesql/exporter/main/ExportIntegrityManifestWriter.java');
 
 test('export stages expose stable incremental families', () => {
   for (const family of [
     'data',
+    'ui-census',
     'images',
     'animated-images',
     'render-contracts',
@@ -24,8 +26,10 @@ test('export stages expose stable incremental families', () => {
   ]) {
     assert.equal(metadata.includes(`"${family}"`), true, `missing stage family ${family}`);
   }
+  assert.equal(metadata.includes('WRITE_UI_FAMILY_CENSUS'), true);
   assert.equal(runner.includes('ExportStageMetadata.family(stage)'), true);
   assert.equal(runner.includes('skippableByChecksum'), true);
+  assert.equal(selection.includes('writeUiFamilyCensus'), true);
   assert.equal(integrity.includes('String family;'), true);
 });
 

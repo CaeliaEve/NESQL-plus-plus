@@ -6,8 +6,10 @@ import com.github.dcysteine.nesql.exporter.canonical.CanonicalFluid;
 import com.github.dcysteine.nesql.exporter.canonical.CanonicalItem;
 import com.github.dcysteine.nesql.exporter.canonical.CanonicalRecipe;
 import com.github.dcysteine.nesql.exporter.main.ExportContext;
+import com.github.dcysteine.nesql.exporter.main.ExportStage;
 import com.github.dcysteine.nesql.exporter.main.Logger;
 import com.github.dcysteine.nesql.exporter.semantic.SemanticRulePack;
+import com.github.dcysteine.nesql.exporter.plugin.nei.metadata.NeiUiFamilyClassifier;
 import com.github.dcysteine.nesql.sql.base.fluid.Fluid;
 import com.github.dcysteine.nesql.sql.base.recipe.Recipe;
 import com.github.dcysteine.nesql.sql.gregtech.GregTechRecipe;
@@ -115,6 +117,8 @@ public final class RawExportSidecarWriter {
         report.counts.neiRepresentativeMismatches = factCounts.neiRepresentativeMismatches;
         report.counts.neiHandlers = factCounts.neiHandlers;
         report.counts.neiHandlerLayouts = factCounts.neiHandlerLayouts;
+        report.counts.uiFamilyCensusHandlers = factCounts.uiFamilyCensusHandlers;
+        report.counts.uiFamilyCensusFamilies = factCounts.uiFamilyCensusFamilies;
         report.counts.rawTextures = factCounts.textures;
         report.counts.rawAnimations = factCounts.animations;
         report.counts.rawEntities = factCounts.entities;
@@ -210,6 +214,9 @@ public final class RawExportSidecarWriter {
         manifest.capabilities.add("semanticIdentity");
         manifest.capabilities.add("nativeNeiRules");
         manifest.capabilities.add("nativeNeiHandlers");
+        if (exportContext.selection.includesStage(ExportStage.WRITE_UI_FAMILY_CENSUS, exportContext.profile)) {
+            manifest.capabilities.add("uiFamilyCensus");
+        }
         manifest.capabilities.add("angelicaNativeRenderFacts");
         manifest.files.put("items", "facts/items.jsonl.gz");
         manifest.files.put("semanticItems", "facts/items/semantic-items.jsonl.gz");
@@ -235,6 +242,9 @@ public final class RawExportSidecarWriter {
         manifest.files.put("browserAtlasAssets", "assets/textures/atlas-assets");
         manifest.files.put("neiHandlers", "facts/nei/handlers.jsonl.gz");
         manifest.files.put("neiHandlerLayouts", "facts/nei/handler-layouts.jsonl.gz");
+        if (exportContext.selection.includesStage(ExportStage.WRITE_UI_FAMILY_CENSUS, exportContext.profile)) {
+            manifest.files.put("uiFamilyCensus", "validation/ui-family-census.json");
+        }
         manifest.files.put("multiblocks", "models/multiblocks/index.jsonl.gz");
         manifest.files.put("entities", "models/entities/index.jsonl.gz");
         manifest.files.put("specialIndex", "special/index.json");
@@ -656,6 +666,9 @@ public final class RawExportSidecarWriter {
         HandlerMetadataCounts handlerCounts = writeHandlerMetadata(rawDir);
         counts.neiHandlers = handlerCounts.handlers;
         counts.neiHandlerLayouts = handlerCounts.layouts;
+        UiFamilyCensusCounts uiFamilyCensusCounts = readUiFamilyCensusCounts(rawDir);
+        counts.uiFamilyCensusHandlers = uiFamilyCensusCounts.handlers;
+        counts.uiFamilyCensusFamilies = uiFamilyCensusCounts.families;
         createEmptyJsonl(new File(rawDir, "models/multiblocks/index.jsonl.gz"));
         counts.entities = writeEntityModelIndex(rawDir);
         AngelicaRenderFactsWriter.Counts renderCounts =
@@ -762,6 +775,15 @@ public final class RawExportSidecarWriter {
         } catch (Exception ignored) {
             return fallback;
         }
+    }
+
+    private static UiFamilyCensusCounts readUiFamilyCensusCounts(File rawDir) {
+        UiFamilyCensusCounts counts = new UiFamilyCensusCounts();
+        JsonObject report = readObject(new File(rawDir, "validation/ui-family-census.json"));
+        JsonObject summary = report == null ? null : report.getAsJsonObject("summary");
+        counts.handlers = readLong(summary, "handlerCount", 0L);
+        counts.families = readLong(summary, "familyCount", 0L);
+        return counts;
     }
 
     private static boolean readBoolean(JsonObject object, String key, boolean fallback) {
@@ -988,8 +1010,8 @@ public final class RawExportSidecarWriter {
             int height = parseInt(readString(source, "handlerHeight", null), 65);
             int maxPerPage = parseInt(readString(source, "maxRecipesPerPage", null), 1);
             int yShift = parseInt(readString(source, "yShift", null), 0);
-            String family = classifyHandlerFamily(handlerClass, itemName, modId);
-            String layoutKind = inferLayoutKind(handlerClass, itemName, family);
+            String family = NeiUiFamilyClassifier.classifyHandlerFamily(handlerClass, itemName, modId);
+            String layoutKind = NeiUiFamilyClassifier.inferLayoutKind(handlerClass, itemName, family);
 
             JsonObject handler = new JsonObject();
             handler.addProperty("schemaVersion", SCHEMA_VERSION + "/nei-handler");
@@ -1093,51 +1115,6 @@ public final class RawExportSidecarWriter {
         }
         simple = simple.replaceAll("([a-z])([A-Z])", "$1 $2").trim();
         return simple.length() == 0 ? firstNonBlank(itemName, "NEI Handler") : simple;
-    }
-
-    private static String classifyHandlerFamily(String handlerClass, String itemName, String modId) {
-        String descriptor = (firstNonBlank(handlerClass, "") + " " + firstNonBlank(itemName, "") + " " + firstNonBlank(modId, ""))
-                .toLowerCase(java.util.Locale.ROOT);
-        if (descriptor.contains("shaped") || descriptor.contains("shapeless") || descriptor.contains("crafting")) {
-            return "crafting-table";
-        }
-        if (descriptor.contains("furnace") || descriptor.contains("smelting")) {
-            return "furnace";
-        }
-        if (descriptor.contains("brewing")) {
-            return "brewing";
-        }
-        if (descriptor.contains("gregtech") || descriptor.contains("gt.")) {
-            return "gregtech-machine";
-        }
-        if (descriptor.contains("thaum") || descriptor.contains("arcane") || descriptor.contains("crucible") || descriptor.contains("infusion")) {
-            return "thaumcraft";
-        }
-        if (descriptor.contains("botania") || descriptor.contains("mana")) {
-            return "botania";
-        }
-        if (descriptor.contains("fluid") || descriptor.contains("liquid") || descriptor.contains("chemical")) {
-            return "fluid-machine";
-        }
-        return "native-nei";
-    }
-
-    private static String inferLayoutKind(String handlerClass, String itemName, String family) {
-        String descriptor = (firstNonBlank(handlerClass, "") + " " + firstNonBlank(itemName, "") + " " + firstNonBlank(family, ""))
-                .toLowerCase(java.util.Locale.ROOT);
-        if (descriptor.contains("crafting") || descriptor.contains("shaped") || descriptor.contains("shapeless")) {
-            return "crafting-grid";
-        }
-        if (descriptor.contains("furnace") || descriptor.contains("smelting")) {
-            return "furnace";
-        }
-        if (descriptor.contains("fluid") || descriptor.contains("liquid") || descriptor.contains("chemical")) {
-            return "fluid-machine";
-        }
-        if (descriptor.contains("gregtech") || descriptor.contains("machine")) {
-            return "machine";
-        }
-        return "native-nei";
     }
 
     private static JsonArray defaultLayoutSlots(String layoutKind) {
@@ -2612,6 +2589,8 @@ public final class RawExportSidecarWriter {
         long neiRepresentativeMismatches;
         long neiHandlers;
         long neiHandlerLayouts;
+        long uiFamilyCensusHandlers;
+        long uiFamilyCensusFamilies;
         long rawTextures;
         long rawAnimations;
         long rawEntities;
@@ -2660,6 +2639,8 @@ public final class RawExportSidecarWriter {
         long neiRepresentativeMismatches;
         long neiHandlers;
         long neiHandlerLayouts;
+        long uiFamilyCensusHandlers;
+        long uiFamilyCensusFamilies;
         long textures;
         long animations;
         long entities;
@@ -2683,6 +2664,11 @@ public final class RawExportSidecarWriter {
     private static final class HandlerMetadataCounts {
         long handlers;
         long layouts;
+    }
+
+    private static final class UiFamilyCensusCounts {
+        long handlers;
+        long families;
     }
 
     private static final class NeiBrowserContract {

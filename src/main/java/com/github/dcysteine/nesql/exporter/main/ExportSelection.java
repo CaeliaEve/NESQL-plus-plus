@@ -5,6 +5,7 @@ public final class ExportSelection {
     public final boolean writeItems;
     public final boolean writeRecipes;
     public final boolean writeCanonicalSnapshot;
+    public final boolean writeUiFamilyCensus;
     public final boolean writeMultiblocks;
     public final boolean writeBlockFaces;
     public final boolean renderImages;
@@ -18,6 +19,7 @@ public final class ExportSelection {
         this.writeItems = builder.writeItems;
         this.writeRecipes = builder.writeRecipes;
         this.writeCanonicalSnapshot = builder.writeCanonicalSnapshot;
+        this.writeUiFamilyCensus = builder.writeUiFamilyCensus;
         this.writeMultiblocks = builder.writeMultiblocks;
         this.writeBlockFaces = builder.writeBlockFaces;
         this.renderImages = builder.renderImages;
@@ -46,6 +48,7 @@ public final class ExportSelection {
                 && writeAtlasPacks
                 && writeAnimatedAtlasPacks
                 && writeBrowserIndexes
+                && writeUiFamilyCensus
                 && commitDatabase;
     }
 
@@ -57,6 +60,8 @@ public final class ExportSelection {
                 return writeRecipes;
             case WRITE_CANONICAL_SNAPSHOT:
                 return writeCanonicalSnapshot;
+            case WRITE_UI_FAMILY_CENSUS:
+                return writeUiFamilyCensus;
             case WRITE_MULTIBLOCK_BLUEPRINTS:
                 return writeMultiblocks;
             case WRITE_BLOCK_FACE_METADATA:
@@ -90,6 +95,7 @@ public final class ExportSelection {
         append(builder, "items", writeItems);
         append(builder, "recipes", writeRecipes);
         append(builder, "snapshot", writeCanonicalSnapshot);
+        append(builder, "ui-census", writeUiFamilyCensus);
         append(builder, "multiblocks", writeMultiblocks);
         append(builder, "blockfaces", writeBlockFaces);
         append(builder, "images", renderImages);
@@ -112,6 +118,7 @@ public final class ExportSelection {
         private boolean writeItems = true;
         private boolean writeRecipes = true;
         private boolean writeCanonicalSnapshot = false;
+        private boolean writeUiFamilyCensus = true;
         private boolean writeMultiblocks = true;
         private boolean writeBlockFaces = true;
         private boolean renderImages = true;
@@ -133,6 +140,11 @@ public final class ExportSelection {
 
         public Builder writeCanonicalSnapshot(boolean value) {
             this.writeCanonicalSnapshot = value;
+            return this;
+        }
+
+        public Builder writeUiFamilyCensus(boolean value) {
+            this.writeUiFamilyCensus = value;
             return this;
         }
 
