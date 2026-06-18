@@ -4,13 +4,15 @@ package com.github.dcysteine.nesql.exporter.main;
  * Stable stage-family metadata consumed by timing/checksum reports and the NeoNEI importer.
  *
  * <p>The enum names remain the execution-level pipeline, while these families are the public
- * incremental-export contract: pipeline, data, ui-census, images, animated-images, render-contracts,
- * browser-layout, multiblocks, eec-models, recipe-layout-contracts, atlas-pack, and raw-export.</p>
+ * incremental-export contract: pipeline, data, ui-census, ui-template-catalog, images, animated-images,
+ * render-contracts, browser-layout, multiblocks, eec-models, recipe-layout-contracts, atlas-pack,
+ * and raw-export.</p>
  */
 final class ExportStageMetadata {
     static final String[] SUPPORTED_INCREMENTAL_FAMILIES = new String[] {
             "data",
             "ui-census",
+            "ui-template-catalog",
             "images",
             "animated-images",
             "render-contracts",
@@ -43,6 +45,8 @@ final class ExportStageMetadata {
                 return "data";
             case WRITE_UI_FAMILY_CENSUS:
                 return "ui-census";
+            case WRITE_UI_TEMPLATE_CATALOG:
+                return "ui-template-catalog";
             case RENDER_IMAGES:
                 return "images";
             case WRITE_RENDER_ASSET_MANIFEST:

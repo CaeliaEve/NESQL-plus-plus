@@ -10,11 +10,14 @@ const metadata = readSource('src/main/java/com/github/dcysteine/nesql/exporter/m
 const runner = readSource('src/main/java/com/github/dcysteine/nesql/exporter/main/ExportStageRunner.java');
 const selection = readSource('src/main/java/com/github/dcysteine/nesql/exporter/main/ExportSelection.java');
 const integrity = readSource('src/main/java/com/github/dcysteine/nesql/exporter/main/ExportIntegrityManifestWriter.java');
+const templateWriter = readSource('src/main/java/com/github/dcysteine/nesql/exporter/local/RawExportUiTemplateCatalogWriter.java');
+const templateLayoutSpecs = readSource('src/main/java/com/github/dcysteine/nesql/exporter/plugin/nei/metadata/NeiUiTemplateLayoutSpecs.java');
 
 test('export stages expose stable incremental families', () => {
   for (const family of [
     'data',
     'ui-census',
+    'ui-template-catalog',
     'images',
     'animated-images',
     'render-contracts',
@@ -27,9 +30,15 @@ test('export stages expose stable incremental families', () => {
     assert.equal(metadata.includes(`"${family}"`), true, `missing stage family ${family}`);
   }
   assert.equal(metadata.includes('WRITE_UI_FAMILY_CENSUS'), true);
+  assert.equal(metadata.includes('WRITE_UI_TEMPLATE_CATALOG'), true);
   assert.equal(runner.includes('ExportStageMetadata.family(stage)'), true);
   assert.equal(runner.includes('skippableByChecksum'), true);
   assert.equal(selection.includes('writeUiFamilyCensus'), true);
+  assert.equal(selection.includes('writeUiTemplateCatalog'), true);
+  assert.equal(templateWriter.includes('ui-template-catalog.json'), true);
+  assert.equal(templateWriter.includes('computeTemplateSignature'), true);
+  assert.equal(templateWriter.includes('templateSignature'), true);
+  assert.equal(templateLayoutSpecs.includes('defaultLayoutSlotsJson'), true);
   assert.equal(integrity.includes('String family;'), true);
 });
 

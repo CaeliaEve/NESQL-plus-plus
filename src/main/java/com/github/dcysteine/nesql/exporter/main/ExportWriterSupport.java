@@ -13,6 +13,7 @@ import com.github.dcysteine.nesql.exporter.local.CanonicalBrowserLayoutIndexWrit
 import com.github.dcysteine.nesql.exporter.local.CanonicalRenderAssetCollector;
 import com.github.dcysteine.nesql.exporter.local.RawExportSidecarWriter;
 import com.github.dcysteine.nesql.exporter.local.RawExportUiFamilyCensusWriter;
+import com.github.dcysteine.nesql.exporter.local.RawExportUiTemplateCatalogWriter;
 import com.github.dcysteine.nesql.exporter.local.ModBasedItemExporter;
 import com.github.dcysteine.nesql.exporter.local.ModBasedRecipeExporter;
 import net.minecraft.util.EnumChatFormatting;
@@ -296,6 +297,18 @@ public final class ExportWriterSupport {
             Logger.MOD.error("Failed to write NESQL++ NEI UI family census", e);
             Logger.chatMessage(
                     EnumChatFormatting.RED + "Failed to write NEI UI family census: " + e.getMessage());
+            throw e;
+        }
+    }
+
+    public static void writeUiTemplateCatalog(File repositoryDirectory) throws Exception {
+        Logger.chatMessage(EnumChatFormatting.AQUA + "Exporting NESQL++ NEI UI template catalog...");
+        try {
+            new RawExportUiTemplateCatalogWriter(repositoryDirectory).export();
+        } catch (Exception e) {
+            Logger.MOD.error("Failed to write NESQL++ NEI UI template catalog", e);
+            Logger.chatMessage(
+                    EnumChatFormatting.RED + "Failed to write NEI UI template catalog: " + e.getMessage());
             throw e;
         }
     }

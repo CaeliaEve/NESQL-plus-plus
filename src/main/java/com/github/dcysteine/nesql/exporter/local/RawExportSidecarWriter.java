@@ -10,6 +10,7 @@ import com.github.dcysteine.nesql.exporter.main.ExportStage;
 import com.github.dcysteine.nesql.exporter.main.Logger;
 import com.github.dcysteine.nesql.exporter.semantic.SemanticRulePack;
 import com.github.dcysteine.nesql.exporter.plugin.nei.metadata.NeiUiFamilyClassifier;
+import com.github.dcysteine.nesql.exporter.plugin.nei.metadata.NeiUiTemplateLayoutSpecs;
 import com.github.dcysteine.nesql.sql.base.fluid.Fluid;
 import com.github.dcysteine.nesql.sql.base.recipe.Recipe;
 import com.github.dcysteine.nesql.sql.gregtech.GregTechRecipe;
@@ -119,6 +120,9 @@ public final class RawExportSidecarWriter {
         report.counts.neiHandlerLayouts = factCounts.neiHandlerLayouts;
         report.counts.uiFamilyCensusHandlers = factCounts.uiFamilyCensusHandlers;
         report.counts.uiFamilyCensusFamilies = factCounts.uiFamilyCensusFamilies;
+        report.counts.uiTemplateCatalogHandlers = factCounts.uiTemplateCatalogHandlers;
+        report.counts.uiTemplateCatalogTemplates = factCounts.uiTemplateCatalogTemplates;
+        report.counts.uiTemplateCatalogFamilies = factCounts.uiTemplateCatalogFamilies;
         report.counts.rawTextures = factCounts.textures;
         report.counts.rawAnimations = factCounts.animations;
         report.counts.rawEntities = factCounts.entities;
@@ -217,6 +221,9 @@ public final class RawExportSidecarWriter {
         if (exportContext.selection.includesStage(ExportStage.WRITE_UI_FAMILY_CENSUS, exportContext.profile)) {
             manifest.capabilities.add("uiFamilyCensus");
         }
+        if (exportContext.selection.includesStage(ExportStage.WRITE_UI_TEMPLATE_CATALOG, exportContext.profile)) {
+            manifest.capabilities.add("uiTemplateCatalog");
+        }
         manifest.capabilities.add("angelicaNativeRenderFacts");
         manifest.files.put("items", "facts/items.jsonl.gz");
         manifest.files.put("semanticItems", "facts/items/semantic-items.jsonl.gz");
@@ -244,6 +251,9 @@ public final class RawExportSidecarWriter {
         manifest.files.put("neiHandlerLayouts", "facts/nei/handler-layouts.jsonl.gz");
         if (exportContext.selection.includesStage(ExportStage.WRITE_UI_FAMILY_CENSUS, exportContext.profile)) {
             manifest.files.put("uiFamilyCensus", "validation/ui-family-census.json");
+        }
+        if (exportContext.selection.includesStage(ExportStage.WRITE_UI_TEMPLATE_CATALOG, exportContext.profile)) {
+            manifest.files.put("uiTemplateCatalog", "validation/ui-template-catalog.json");
         }
         manifest.files.put("multiblocks", "models/multiblocks/index.jsonl.gz");
         manifest.files.put("entities", "models/entities/index.jsonl.gz");
@@ -462,6 +472,26 @@ public final class RawExportSidecarWriter {
                         + counts.semanticUnclassifiedTaggedItems
                         + "."));
         gates.add(validationGate(
+                "ui-family-census",
+                counts.uiFamilyCensusHandlers > 0 && counts.uiFamilyCensusFamilies > 0,
+                "NEI UI family census: handlers="
+                        + counts.uiFamilyCensusHandlers
+                        + ", families="
+                        + counts.uiFamilyCensusFamilies
+                        + "."));
+        gates.add(validationGate(
+                "ui-template-catalog",
+                counts.uiTemplateCatalogHandlers > 0
+                        && counts.uiTemplateCatalogTemplates > 0
+                        && counts.uiTemplateCatalogFamilies > 0,
+                "NEI UI template catalog: handlers="
+                        + counts.uiTemplateCatalogHandlers
+                        + ", templates="
+                        + counts.uiTemplateCatalogTemplates
+                        + ", families="
+                        + counts.uiTemplateCatalogFamilies
+                        + "."));
+        gates.add(validationGate(
                 "native-nei-rules",
                 counts.neiGuidFilterRules >= 0 && counts.neiHiddenItemRules >= 0,
                 "Native NEI rule streams: guidFilters="
@@ -669,6 +699,10 @@ public final class RawExportSidecarWriter {
         UiFamilyCensusCounts uiFamilyCensusCounts = readUiFamilyCensusCounts(rawDir);
         counts.uiFamilyCensusHandlers = uiFamilyCensusCounts.handlers;
         counts.uiFamilyCensusFamilies = uiFamilyCensusCounts.families;
+        UiTemplateCatalogCounts uiTemplateCatalogCounts = readUiTemplateCatalogCounts(rawDir);
+        counts.uiTemplateCatalogHandlers = uiTemplateCatalogCounts.handlers;
+        counts.uiTemplateCatalogTemplates = uiTemplateCatalogCounts.templates;
+        counts.uiTemplateCatalogFamilies = uiTemplateCatalogCounts.families;
         createEmptyJsonl(new File(rawDir, "models/multiblocks/index.jsonl.gz"));
         counts.entities = writeEntityModelIndex(rawDir);
         AngelicaRenderFactsWriter.Counts renderCounts =
@@ -782,6 +816,16 @@ public final class RawExportSidecarWriter {
         JsonObject report = readObject(new File(rawDir, "validation/ui-family-census.json"));
         JsonObject summary = report == null ? null : report.getAsJsonObject("summary");
         counts.handlers = readLong(summary, "handlerCount", 0L);
+        counts.families = readLong(summary, "familyCount", 0L);
+        return counts;
+    }
+
+    private static UiTemplateCatalogCounts readUiTemplateCatalogCounts(File rawDir) {
+        UiTemplateCatalogCounts counts = new UiTemplateCatalogCounts();
+        JsonObject report = readObject(new File(rawDir, "validation/ui-template-catalog.json"));
+        JsonObject summary = report == null ? null : report.getAsJsonObject("summary");
+        counts.handlers = readLong(summary, "handlerCount", 0L);
+        counts.templates = readLong(summary, "templateCount", 0L);
         counts.families = readLong(summary, "familyCount", 0L);
         return counts;
     }
@@ -1041,7 +1085,7 @@ public final class RawExportSidecarWriter {
             layout.addProperty("height", height);
             layout.addProperty("yShift", yShift);
             layout.addProperty("maxRecipesPerPage", maxPerPage);
-            layout.add("slots", defaultLayoutSlots(layoutKind));
+            layout.add("slots", NeiUiTemplateLayoutSpecs.defaultLayoutSlotsJson(layoutKind));
             layout.add("textOverlays", new JsonArray());
             layoutRows.add(layout);
         }
@@ -1115,41 +1159,6 @@ public final class RawExportSidecarWriter {
         }
         simple = simple.replaceAll("([a-z])([A-Z])", "$1 $2").trim();
         return simple.length() == 0 ? firstNonBlank(itemName, "NEI Handler") : simple;
-    }
-
-    private static JsonArray defaultLayoutSlots(String layoutKind) {
-        JsonArray slots = new JsonArray();
-        if ("crafting-grid".equals(layoutKind)) {
-            addSlot(slots, "item-input", 0, 3, 3, 30, 12);
-            addSlot(slots, "item-output", 9, 1, 1, 124, 30);
-        } else if ("furnace".equals(layoutKind)) {
-            addSlot(slots, "item-input", 0, 1, 1, 45, 24);
-            addSlot(slots, "item-output", 1, 1, 1, 115, 24);
-            addSlot(slots, "fuel", 2, 1, 1, 45, 46);
-        } else if ("fluid-machine".equals(layoutKind)) {
-            addSlot(slots, "item-input", 0, 3, 2, 18, 16);
-            addSlot(slots, "fluid-input", 0, 3, 2, 72, 16);
-            addSlot(slots, "item-output", 6, 3, 2, 126, 16);
-        } else if ("machine".equals(layoutKind)) {
-            addSlot(slots, "item-input", 0, 3, 3, 18, 12);
-            addSlot(slots, "fluid-input", 0, 1, 3, 76, 12);
-            addSlot(slots, "item-output", 9, 2, 2, 112, 21);
-        } else {
-            addSlot(slots, "item-input", 0, 3, 2, 24, 18);
-            addSlot(slots, "item-output", 6, 2, 2, 116, 20);
-        }
-        return slots;
-    }
-
-    private static void addSlot(JsonArray slots, String role, int startIndex, int columns, int rows, int x, int y) {
-        JsonObject slot = new JsonObject();
-        slot.addProperty("role", role);
-        slot.addProperty("startIndex", startIndex);
-        slot.addProperty("columns", columns);
-        slot.addProperty("rows", rows);
-        slot.addProperty("x", x);
-        slot.addProperty("y", y);
-        slots.add(slot);
     }
 
     private static String preferredMachineItemName(String handlerClass, String itemName, String family) {
@@ -2591,6 +2600,9 @@ public final class RawExportSidecarWriter {
         long neiHandlerLayouts;
         long uiFamilyCensusHandlers;
         long uiFamilyCensusFamilies;
+        long uiTemplateCatalogHandlers;
+        long uiTemplateCatalogTemplates;
+        long uiTemplateCatalogFamilies;
         long rawTextures;
         long rawAnimations;
         long rawEntities;
@@ -2641,6 +2653,9 @@ public final class RawExportSidecarWriter {
         long neiHandlerLayouts;
         long uiFamilyCensusHandlers;
         long uiFamilyCensusFamilies;
+        long uiTemplateCatalogHandlers;
+        long uiTemplateCatalogTemplates;
+        long uiTemplateCatalogFamilies;
         long textures;
         long animations;
         long entities;
@@ -2668,6 +2683,12 @@ public final class RawExportSidecarWriter {
 
     private static final class UiFamilyCensusCounts {
         long handlers;
+        long families;
+    }
+
+    private static final class UiTemplateCatalogCounts {
+        long handlers;
+        long templates;
         long families;
     }
 

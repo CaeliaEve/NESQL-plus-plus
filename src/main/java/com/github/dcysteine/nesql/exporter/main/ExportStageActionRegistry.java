@@ -27,6 +27,8 @@ final class ExportStageActionRegistry {
                 () -> strategy.runCollectionStage(exportContext, stageState.runtime));
         actions.put(ExportStage.WRITE_UI_FAMILY_CENSUS, () ->
                 ExportWriterSupport.writeUiFamilyCensus(exportContext.paths.repositoryDirectory));
+        actions.put(ExportStage.WRITE_UI_TEMPLATE_CATALOG, () ->
+                ExportWriterSupport.writeUiTemplateCatalog(exportContext.paths.repositoryDirectory));
         actions.put(ExportStage.WRITE_MOD_BASED_ITEMS, () -> {
             announceWritePreamble(exportContext, stageState);
             ExportWriterSupport.writeModBasedItems(stageState.runtime.entityManager, exportContext.paths.repositoryDirectory);

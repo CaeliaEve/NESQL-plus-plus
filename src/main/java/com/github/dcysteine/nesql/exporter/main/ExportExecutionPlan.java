@@ -33,6 +33,9 @@ public final class ExportExecutionPlan {
         if (selection.includesStage(ExportStage.WRITE_UI_FAMILY_CENSUS, profile)) {
             stages.add(ExportStage.WRITE_UI_FAMILY_CENSUS);
         }
+        if (selection.includesStage(ExportStage.WRITE_UI_TEMPLATE_CATALOG, profile)) {
+            stages.add(ExportStage.WRITE_UI_TEMPLATE_CATALOG);
+        }
 
         if (profile.writeModBasedItems && selection.includesStage(ExportStage.WRITE_MOD_BASED_ITEMS, profile)) {
             stages.add(ExportStage.WRITE_MOD_BASED_ITEMS);
