@@ -137,6 +137,8 @@ public final class RawExportUiTemplateCatalogWriter {
         template.slots = NeiUiTemplateLayoutSpecs.defaultLayoutSlots(family.layoutKind);
         template.slotCount = template.slots.size();
         template.textOverlays = new ArrayList<UiTemplateTextOverlay>();
+        template.hotspots = new ArrayList<UiTemplateRect>();
+        template.viewports = new ArrayList<UiTemplateRect>();
         List<RawExportUiFamilyCensusWriter.UiFamilyMember> members = family.members == null
                 ? Collections.<RawExportUiFamilyCensusWriter.UiFamilyMember>emptyList()
                 : family.members;
@@ -252,10 +254,27 @@ public final class RawExportUiTemplateCatalogWriter {
         List<String> modIds = new ArrayList<String>();
         List<UiTemplateSlot> slots = new ArrayList<UiTemplateSlot>();
         List<UiTemplateTextOverlay> textOverlays = new ArrayList<UiTemplateTextOverlay>();
+        List<UiTemplateRect> hotspots = new ArrayList<UiTemplateRect>();
+        List<UiTemplateRect> viewports = new ArrayList<UiTemplateRect>();
     }
 
     static final class UiTemplateTextOverlay {
         String text;
+        int x;
+        int y;
+        int width;
+        int height;
+    }
+
+    static final class UiTemplateRect {
+        String id;
+        String kind;
+        String role;
+        String label;
+        String tooltip;
+        String action;
+        String itemId;
+        String payloadKey;
         int x;
         int y;
         int width;

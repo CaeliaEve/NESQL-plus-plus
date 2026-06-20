@@ -15,7 +15,7 @@ final class ExportCommand implements ICommand {
 
     @Override
     public String getCommandUsage(ICommandSender unused) {
-        return "/nesql [filename suffix] [--semantic-check]";
+        return "/nesql [filename suffix] [--semantic-check|--full-export]";
     }
 
     @Override
@@ -32,10 +32,13 @@ final class ExportCommand implements ICommand {
         }
 
         boolean semanticCheck = false;
+        boolean fullExport = false;
         String repositoryName = null;
         for (String arg : args) {
             if ("--semantic-check".equalsIgnoreCase(arg) || "--semantic-only".equalsIgnoreCase(arg)) {
                 semanticCheck = true;
+            } else if ("--full-export".equalsIgnoreCase(arg) || "--full".equalsIgnoreCase(arg)) {
+                fullExport = true;
             } else if (repositoryName == null) {
                 repositoryName = arg;
             } else {
@@ -49,7 +52,20 @@ final class ExportCommand implements ICommand {
         }
 
         if (semanticCheck) {
+            if (fullExport) {
+                Logger.chatMessage("Choose either --semantic-check or --full-export, not both.");
+                return;
+            }
             startSemanticCheck(repositoryName);
+            return;
+        }
+
+        if (fullExport) {
+            Logger.chatMessage(
+                    EnumChatFormatting.AQUA
+                            + "[NESQL] Starting explicit full export for repository: "
+                            + repositoryName);
+            startSelectedExport(repositoryName, ExportSelection.full());
             return;
         }
 

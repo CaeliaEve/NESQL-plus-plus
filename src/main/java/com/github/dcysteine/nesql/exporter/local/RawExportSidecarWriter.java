@@ -1054,6 +1054,7 @@ public final class RawExportSidecarWriter {
             int height = parseInt(readString(source, "handlerHeight", null), 65);
             int maxPerPage = parseInt(readString(source, "maxRecipesPerPage", null), 1);
             int yShift = parseInt(readString(source, "yShift", null), 0);
+            String imageResource = firstNonBlank(readString(source, "imageResource", null), "");
             String family = NeiUiFamilyClassifier.classifyHandlerFamily(handlerClass, itemName, modId);
             String layoutKind = NeiUiFamilyClassifier.inferLayoutKind(handlerClass, itemName, family);
 
@@ -1073,6 +1074,7 @@ public final class RawExportSidecarWriter {
             handler.addProperty("handlerWidth", width);
             handler.addProperty("handlerHeight", height);
             handler.addProperty("yShift", yShift);
+            handler.addProperty("imageResource", imageResource);
             handler.add("source", new JsonParser().parse(source.toString()));
             handlerRows.add(handler);
 
@@ -1080,13 +1082,22 @@ public final class RawExportSidecarWriter {
             layout.addProperty("schemaVersion", SCHEMA_VERSION + "/nei-handler-layout");
             layout.addProperty("handlerKey", handlerKey);
             layout.addProperty("handlerClass", handlerClass);
+            layout.addProperty("canonicalMachineFamily", family);
             layout.addProperty("layoutKind", layoutKind);
             layout.addProperty("width", width);
             layout.addProperty("height", height);
             layout.addProperty("yShift", yShift);
             layout.addProperty("maxRecipesPerPage", maxPerPage);
+            layout.addProperty("imageResource", imageResource);
+            addImageRegion(layout, source);
             layout.add("slots", NeiUiTemplateLayoutSpecs.defaultLayoutSlotsJson(layoutKind));
             layout.add("textOverlays", new JsonArray());
+            layout.add("dynamicPrimitives", new JsonArray());
+            layout.add("progressBars", NeiUiTemplateLayoutSpecs.defaultProgressBarsJson(family, layoutKind));
+            layout.add("fluidBars", new JsonArray());
+            layout.add("energyBars", new JsonArray());
+            layout.add("hotspots", new JsonArray());
+            layout.add("viewports", new JsonArray());
             layoutRows.add(layout);
         }
 
@@ -1094,6 +1105,20 @@ public final class RawExportSidecarWriter {
         counts.handlers = writeArrayAsJsonl(handlerRows, new File(rawDir, "facts/nei/handlers.jsonl.gz"));
         counts.layouts = writeArrayAsJsonl(layoutRows, new File(rawDir, "facts/nei/handler-layouts.jsonl.gz"));
         return counts;
+    }
+
+    private static void addImageRegion(JsonObject layout, JsonObject source) {
+        int imageWidth = parseInt(readString(source, "imageWidth", null), 0);
+        int imageHeight = parseInt(readString(source, "imageHeight", null), 0);
+        if (imageWidth <= 0 || imageHeight <= 0) {
+            return;
+        }
+        JsonObject region = new JsonObject();
+        region.addProperty("x", parseInt(readString(source, "imageX", null), 0));
+        region.addProperty("y", parseInt(readString(source, "imageY", null), 0));
+        region.addProperty("width", imageWidth);
+        region.addProperty("height", imageHeight);
+        layout.add("imageRegion", region);
     }
 
     private static JsonArray loadBundledHandlerMetadata() throws IOException {

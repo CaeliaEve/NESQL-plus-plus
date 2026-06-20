@@ -38,8 +38,29 @@ test('export stages expose stable incremental families', () => {
   assert.equal(templateWriter.includes('ui-template-catalog.json'), true);
   assert.equal(templateWriter.includes('computeTemplateSignature'), true);
   assert.equal(templateWriter.includes('templateSignature'), true);
+  assert.equal(templateWriter.includes('List<UiTemplateRect> hotspots'), true);
+  assert.equal(templateWriter.includes('List<UiTemplateRect> viewports'), true);
+  assert.equal(templateWriter.includes('String action;'), true);
+  assert.equal(templateWriter.includes('String itemId;'), true);
+  assert.equal(templateWriter.includes('String payloadKey;'), true);
   assert.equal(templateLayoutSpecs.includes('defaultLayoutSlotsJson'), true);
   assert.equal(integrity.includes('String family;'), true);
+});
+
+test('native NEI handler layouts export GT dynamic primitives and background regions at the source', () => {
+  const sidecar = readSource('src/main/java/com/github/dcysteine/nesql/exporter/local/RawExportSidecarWriter.java');
+  assert.equal(templateLayoutSpecs.includes('defaultProgressBarsJson'), true);
+  assert.equal(templateLayoutSpecs.includes('gtnh-basic-ui-properties-default'), true);
+  assert.equal(templateLayoutSpecs.includes('"gt-progress"'), true);
+  assert.equal(sidecar.includes('layout.add("dynamicPrimitives"'), true);
+  assert.equal(sidecar.includes('layout.add("progressBars"'), true);
+  assert.equal(sidecar.includes('layout.add("fluidBars"'), true);
+  assert.equal(sidecar.includes('layout.add("energyBars"'), true);
+  assert.equal(sidecar.includes('layout.add("hotspots"'), true);
+  assert.equal(sidecar.includes('layout.add("viewports"'), true);
+  assert.equal(sidecar.includes('layout.addProperty("canonicalMachineFamily", family)'), true);
+  assert.equal(sidecar.includes('addImageRegion(layout, source)'), true);
+  assert.equal(sidecar.includes('handler.addProperty("imageResource", imageResource)'), true);
 });
 
 test('export checksums carry previous-run reuse signals without mtime dependence', () => {
@@ -154,6 +175,8 @@ test('runtime command surface is limited to guided export and Thaumcraft aspect 
   assert.equal(main.includes('new ThaumcraftUnlockAspectsCommand()'), true);
   assert.equal(exportCommand.includes('return "nesql";'), true);
   assert.equal(exportCommand.includes('ClientGuiScheduler.open(new ExportSelectionGui(finalRepositoryName))'), true);
+  assert.equal(exportCommand.includes('"--full-export".equalsIgnoreCase(arg)'), true);
+  assert.equal(exportCommand.includes('startSelectedExport(repositoryName, ExportSelection.full())'), true);
   for (const legacyCommand of [
     'new DataExportCommand()',
     'new ImageExportCommand()',
@@ -190,6 +213,7 @@ test('guided export GUI exposes selectable lanes and keeps command entrypoint co
   assert.equal(gui.includes('raw-export is authoritative'), true);
   assert.equal(gui.includes('normalizeDependencies();'), true);
   assert.equal(command.includes('ClientGuiScheduler.open(new ExportSelectionGui(finalRepositoryName))'), true);
+  assert.equal(command.includes('Choose either --semantic-check or --full-export, not both.'), true);
   assert.equal(command.includes('new Exporter(repositoryName, selection)'), true);
 });
 

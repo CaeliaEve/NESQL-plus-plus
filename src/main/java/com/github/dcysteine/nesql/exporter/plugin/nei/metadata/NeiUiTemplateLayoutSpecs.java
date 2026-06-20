@@ -44,6 +44,31 @@ public final class NeiUiTemplateLayoutSpecs {
         return slots;
     }
 
+    public static JsonArray defaultProgressBarsJson(String canonicalMachineFamily, String layoutKind) {
+        JsonArray bars = new JsonArray();
+        if (!isGregTechMachineLayout(canonicalMachineFamily, layoutKind)) {
+            return bars;
+        }
+        JsonObject bar = new JsonObject();
+        bar.addProperty("kind", "progress-bar");
+        bar.addProperty("role", "gt-progress");
+        bar.addProperty("x", 78);
+        bar.addProperty("y", 24);
+        bar.addProperty("width", 20);
+        bar.addProperty("height", 18);
+        bar.addProperty("orientation", "horizontal");
+        bar.addProperty("source", "gtnh-basic-ui-properties-default");
+        bars.add(bar);
+        return bars;
+    }
+
+    private static boolean isGregTechMachineLayout(String canonicalMachineFamily, String layoutKind) {
+        String family = canonicalMachineFamily == null ? "" : canonicalMachineFamily.trim().toLowerCase(java.util.Locale.ROOT);
+        String kind = layoutKind == null ? "" : layoutKind.trim().toLowerCase(java.util.Locale.ROOT);
+        return "gregtech-machine".equals(family)
+                && ("machine".equals(kind) || "fluid-machine".equals(kind));
+    }
+
     public static UiTemplateSlot slot(
             String role,
             int startIndex,
