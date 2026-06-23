@@ -109,6 +109,22 @@ public class NeiHandlerMetadataEntry {
         return parseInt(maxRecipesPerPage);
     }
 
+    public Integer getImageXInt() {
+        return parseInt(imageX);
+    }
+
+    public Integer getImageYInt() {
+        return parseInt(imageY);
+    }
+
+    public Integer getImageWidthInt() {
+        return parseInt(imageWidth);
+    }
+
+    public Integer getImageHeightInt() {
+        return parseInt(imageHeight);
+    }
+
     public boolean hasItemIcon() {
         return itemName != null && !itemName.trim().isEmpty();
     }

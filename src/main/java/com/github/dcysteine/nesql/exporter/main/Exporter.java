@@ -21,6 +21,18 @@ public final class Exporter {
         this.exportContext = ExportContext.forProfile(ExportProfile.FULL_V104, selection, repositoryName);
     }
 
+    public static Exporter nativeUiExport(String repositoryName) {
+        return new Exporter(
+                ExportContext.forProfile(
+                        ExportProfile.DATA_ONLY_V104,
+                        ExportSelection.nativeUiExport(),
+                        repositoryName));
+    }
+
+    private Exporter(ExportContext exportContext) {
+        this.exportContext = exportContext;
+    }
+
     /**
      * Wrapper for {@link #export()} which will report exceptions to chat.
      *

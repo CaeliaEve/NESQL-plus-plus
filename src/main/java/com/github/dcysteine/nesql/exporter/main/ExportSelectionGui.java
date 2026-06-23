@@ -171,6 +171,8 @@ public final class ExportSelectionGui extends GuiScreen {
                 .writeItems(options.get(0).enabled)
                 .writeRecipes(options.get(1).enabled)
                 .writeCanonicalSnapshot(false)
+                .writeUiFamilyCensus(true)
+                .writeUiTemplateCatalog(true)
                 .writeMultiblocks(options.get(2).enabled)
                 .writeBlockFaces(options.get(3).enabled)
                 .renderImages(options.get(4).enabled)
@@ -180,6 +182,10 @@ public final class ExportSelectionGui extends GuiScreen {
                 .writeBrowserIndexes(options.get(8).enabled)
                 .commitDatabase(options.get(9).enabled)
                 .build();
+        if (selection.isNativeUiExport()) {
+            ExportCommand.startNativeUiExport(repositoryName);
+            return;
+        }
         ExportCommand.startSelectedExport(repositoryName, selection, this);
     }
 

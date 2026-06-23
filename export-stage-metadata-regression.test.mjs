@@ -9,6 +9,8 @@ const readSource = (relativePath) => fs.readFileSync(path.join(repoRoot, relativ
 const metadata = readSource('src/main/java/com/github/dcysteine/nesql/exporter/main/ExportStageMetadata.java');
 const runner = readSource('src/main/java/com/github/dcysteine/nesql/exporter/main/ExportStageRunner.java');
 const selection = readSource('src/main/java/com/github/dcysteine/nesql/exporter/main/ExportSelection.java');
+const executionPlan = readSource('src/main/java/com/github/dcysteine/nesql/exporter/main/ExportExecutionPlan.java');
+const exporter = readSource('src/main/java/com/github/dcysteine/nesql/exporter/main/Exporter.java');
 const integrity = readSource('src/main/java/com/github/dcysteine/nesql/exporter/main/ExportIntegrityManifestWriter.java');
 const templateWriter = readSource('src/main/java/com/github/dcysteine/nesql/exporter/local/RawExportUiTemplateCatalogWriter.java');
 const templateLayoutSpecs = readSource('src/main/java/com/github/dcysteine/nesql/exporter/plugin/nei/metadata/NeiUiTemplateLayoutSpecs.java');
@@ -61,6 +63,20 @@ test('native NEI handler layouts export GT dynamic primitives and background reg
   assert.equal(sidecar.includes('layout.addProperty("canonicalMachineFamily", family)'), true);
   assert.equal(sidecar.includes('addImageRegion(layout, source)'), true);
   assert.equal(sidecar.includes('handler.addProperty("imageResource", imageResource)'), true);
+  assert.equal(sidecar.includes('GT_NEI_BACKGROUND_ASSET_REF'), true);
+  assert.equal(sidecar.includes('GT_NEI_BACKGROUND_RESOURCE'), true);
+  assert.equal(sidecar.includes('materializeGtNeiBackgroundAsset(rawDir)'), true);
+  assert.equal(sidecar.includes('background.addProperty("kind", "gt-modular-ui")'), true);
+  assert.equal(sidecar.includes('background.addProperty("scaling", "nine-slice")'), true);
+  assert.equal(sidecar.includes('background.addProperty("captureRequired", false)'), true);
+  assert.equal(sidecar.includes('GTNEIDefaultHandler.drawUI(ModularWindow.getBackground)'), true);
+  assert.equal(sidecar.includes('String imageResource = trimToEmpty(readString(source, "imageResource", null));'), true);
+  assert.equal(sidecar.includes('String imageResource = firstNonBlank(readString(source, "imageResource", null), "");'), false);
+  assert.equal(sidecar.includes('throw new IOException("Failed to materialize required GT NEI ModularUI background asset: " + location, e)'), true);
+  assert.equal(sidecar.includes('Logger.MOD.warn("Could not materialize GT NEI ModularUI background asset'), false);
+  assert.equal(sidecar.includes('StandardCopyOption.ATOMIC_MOVE'), true);
+  assert.equal(sidecar.includes('manifest.files.put("uiBackgrounds", "assets/ui-backgrounds")'), true);
+  assert.equal(templateWriter.includes('template.nativeBackground.assetRef'), true);
 });
 
 test('export checksums carry previous-run reuse signals without mtime dependence', () => {
@@ -176,7 +192,9 @@ test('runtime command surface is limited to guided export and Thaumcraft aspect 
   assert.equal(exportCommand.includes('return "nesql";'), true);
   assert.equal(exportCommand.includes('ClientGuiScheduler.open(new ExportSelectionGui(finalRepositoryName))'), true);
   assert.equal(exportCommand.includes('"--full-export".equalsIgnoreCase(arg)'), true);
+  assert.equal(exportCommand.includes('"--native-ui-export".equalsIgnoreCase(arg)'), true);
   assert.equal(exportCommand.includes('startSelectedExport(repositoryName, ExportSelection.full())'), true);
+  assert.equal(exportCommand.includes('startNativeUiExport(repositoryName)'), true);
   for (const legacyCommand of [
     'new DataExportCommand()',
     'new ImageExportCommand()',
@@ -213,8 +231,32 @@ test('guided export GUI exposes selectable lanes and keeps command entrypoint co
   assert.equal(gui.includes('raw-export is authoritative'), true);
   assert.equal(gui.includes('normalizeDependencies();'), true);
   assert.equal(command.includes('ClientGuiScheduler.open(new ExportSelectionGui(finalRepositoryName))'), true);
-  assert.equal(command.includes('Choose either --semantic-check or --full-export, not both.'), true);
+  assert.equal(command.includes('Choose only one of --semantic-check, --full-export, or --native-ui-export.'), true);
   assert.equal(command.includes('new Exporter(repositoryName, selection)'), true);
+  assert.equal(gui.includes('selection.isNativeUiExport()'), true);
+  assert.equal(gui.includes('ExportCommand.startNativeUiExport(repositoryName)'), true);
+});
+
+test('native UI export has an explicit fast stage plan while full export remains complete', () => {
+  const command = readSource('src/main/java/com/github/dcysteine/nesql/exporter/main/ExportCommand.java');
+  assert.equal(selection.includes('ExportSelection nativeUiExport()'), true);
+  assert.equal(selection.includes('boolean isNativeUiExport()'), true);
+  assert.equal(selection.includes('.renderImages(false)'), true);
+  assert.equal(selection.includes('.writeAtlasPacks(false)'), true);
+  assert.equal(selection.includes('.writeAnimatedAtlasPacks(false)'), true);
+  assert.equal(selection.includes('.commitDatabase(false)'), true);
+  assert.equal(exporter.includes('static Exporter nativeUiExport(String repositoryName)'), true);
+  assert.equal(exporter.includes('ExportProfile.DATA_ONLY_V104'), true);
+  assert.equal(command.includes('Native UI Fast Export / v1.04-data /'), true);
+  assert.equal(command.includes('Skipping render/atlas/database-commit lanes'), true);
+
+  assert.equal(executionPlan.includes('if (profile.renderImages && selection.includesStage(ExportStage.RENDER_IMAGES, profile))'), true);
+  assert.equal(executionPlan.includes('addIfSelected(stages, ExportStage.WRITE_ATLAS_PACKS, profile, selection)'), true);
+  assert.equal(executionPlan.includes('addIfSelected(stages, ExportStage.WRITE_ANIMATED_ATLAS_PACKS, profile, selection)'), true);
+  assert.equal(selection.includes('public static ExportSelection full()'), true);
+  assert.equal(selection.includes('return new Builder().build();'), true);
+  assert.equal(selection.includes('&& renderImages\n                && writeRenderManifests'), true);
+  assert.equal(selection.includes('&& writeAtlasPacks\n                && writeAnimatedAtlasPacks'), true);
 });
 
 test('canonical output is opt-in debug staging after raw-export migration', () => {

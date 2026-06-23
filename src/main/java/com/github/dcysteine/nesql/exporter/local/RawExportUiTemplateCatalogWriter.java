@@ -134,6 +134,7 @@ public final class RawExportUiTemplateCatalogWriter {
         template.yShift = family.yShift;
         template.maxRecipesPerPage = family.maxRecipesPerPage;
         template.imageResource = family.imageResource;
+        template.nativeBackground = family.nativeBackground;
         template.slots = NeiUiTemplateLayoutSpecs.defaultLayoutSlots(family.layoutKind);
         template.slotCount = template.slots.size();
         template.textOverlays = new ArrayList<UiTemplateTextOverlay>();
@@ -177,6 +178,22 @@ public final class RawExportUiTemplateCatalogWriter {
             canonical.append(template.width).append('x').append(template.height).append('@').append(template.yShift).append('\n');
             canonical.append(template.maxRecipesPerPage).append('\n');
             canonical.append(nullToEmpty(template.imageResource)).append('\n');
+            if (template.nativeBackground != null) {
+                canonical.append(nullToEmpty(template.nativeBackground.status)).append(':')
+                        .append(nullToEmpty(template.nativeBackground.kind)).append(':')
+                        .append(nullToEmpty(template.nativeBackground.assetRef)).append(':')
+                        .append(nullToEmpty(template.nativeBackground.resource)).append(':')
+                        .append(nullToEmpty(template.nativeBackground.drawable)).append(':')
+                        .append(nullToEmpty(template.nativeBackground.scaling));
+                if (template.nativeBackground.texture != null) {
+                    canonical.append(':')
+                            .append(template.nativeBackground.texture.width).append('x')
+                            .append(template.nativeBackground.texture.height).append('@')
+                            .append(template.nativeBackground.texture.borderU).append('x')
+                            .append(template.nativeBackground.texture.borderV);
+                }
+                canonical.append('\n');
+            }
             for (UiTemplateSlot slot : template.slots) {
                 canonical.append(nullToEmpty(slot.role))
                         .append(':').append(slot.startIndex)
@@ -247,6 +264,7 @@ public final class RawExportUiTemplateCatalogWriter {
         int yShift;
         int maxRecipesPerPage;
         String imageResource;
+        RawExportUiFamilyCensusWriter.UiNativeBackground nativeBackground;
         long handlerCount;
         long slotCount;
         List<String> handlerIds = new ArrayList<String>();

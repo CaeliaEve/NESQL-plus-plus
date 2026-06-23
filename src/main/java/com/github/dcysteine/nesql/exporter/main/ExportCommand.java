@@ -15,7 +15,7 @@ final class ExportCommand implements ICommand {
 
     @Override
     public String getCommandUsage(ICommandSender unused) {
-        return "/nesql [filename suffix] [--semantic-check|--full-export]";
+        return "/nesql [filename suffix] [--semantic-check|--full-export|--native-ui-export]";
     }
 
     @Override
@@ -33,12 +33,15 @@ final class ExportCommand implements ICommand {
 
         boolean semanticCheck = false;
         boolean fullExport = false;
+        boolean nativeUiExport = false;
         String repositoryName = null;
         for (String arg : args) {
             if ("--semantic-check".equalsIgnoreCase(arg) || "--semantic-only".equalsIgnoreCase(arg)) {
                 semanticCheck = true;
             } else if ("--full-export".equalsIgnoreCase(arg) || "--full".equalsIgnoreCase(arg)) {
                 fullExport = true;
+            } else if ("--native-ui-export".equalsIgnoreCase(arg) || "--native-ui".equalsIgnoreCase(arg)) {
+                nativeUiExport = true;
             } else if (repositoryName == null) {
                 repositoryName = arg;
             } else {
@@ -51,11 +54,13 @@ final class ExportCommand implements ICommand {
             repositoryName = com.github.dcysteine.nesql.exporter.main.config.ConfigOptions.REPOSITORY_NAME.get();
         }
 
+        int modeCount = (semanticCheck ? 1 : 0) + (fullExport ? 1 : 0) + (nativeUiExport ? 1 : 0);
+        if (modeCount > 1) {
+            Logger.chatMessage("Choose only one of --semantic-check, --full-export, or --native-ui-export.");
+            return;
+        }
+
         if (semanticCheck) {
-            if (fullExport) {
-                Logger.chatMessage("Choose either --semantic-check or --full-export, not both.");
-                return;
-            }
             startSemanticCheck(repositoryName);
             return;
         }
@@ -66,6 +71,18 @@ final class ExportCommand implements ICommand {
                             + "[NESQL] Starting explicit full export for repository: "
                             + repositoryName);
             startSelectedExport(repositoryName, ExportSelection.full());
+            return;
+        }
+
+        if (nativeUiExport) {
+            Logger.chatMessage(
+                    EnumChatFormatting.AQUA
+                            + "[NESQL] Starting fast native UI export for repository: "
+                            + repositoryName);
+            Logger.chatMessage(
+                    EnumChatFormatting.YELLOW
+                            + "[NESQL] Skipping render/atlas/database-commit lanes; use --full-export for full assets.");
+            startNativeUiExport(repositoryName);
             return;
         }
 
@@ -95,13 +112,21 @@ final class ExportCommand implements ICommand {
         thread.start();
     }
 
+    static void startNativeUiExport(String repositoryName) {
+        startExport(repositoryName, Exporter.nativeUiExport(repositoryName), "Native UI Fast Export / v1.04-data / ");
+    }
+
     static void startSelectedExport(String repositoryName, ExportSelection selection, ExportSelectionGui selectionGui) {
         Exporter exporter = new Exporter(repositoryName, selection);
+        startExport(repositoryName, exporter, "Selected Export / v1.04 / ");
+    }
+
+    private static void startExport(String repositoryName, Exporter exporter, String subtitlePrefix) {
         ExportProgressGui gui = new ExportProgressGui();
         gui.clear();
         gui.setTitle("NESQL++ 1.04");
-        gui.setSubtitle("Selected Export / v1.04 / " + repositoryName);
-        gui.addMessage("Starting export with selection: " + selection.describe());
+        gui.setSubtitle(subtitlePrefix + repositoryName);
+        gui.addMessage("Starting export...");
 
         ClientGuiScheduler.open(gui);
 

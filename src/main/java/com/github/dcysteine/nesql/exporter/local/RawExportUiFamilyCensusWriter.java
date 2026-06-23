@@ -30,6 +30,8 @@ public final class RawExportUiFamilyCensusWriter {
     private static final String OUTPUT_DIRECTORY = "raw-export";
     private static final String OUTPUT_FILE = "validation/ui-family-census.json";
     private static final String SCHEMA_VERSION = "nesqlpp/raw-export/alpha1/ui-family-census";
+    private static final String GT_NEI_BACKGROUND_ASSET_REF = "assets/ui-backgrounds/gregtech/nei_single_recipe.png";
+    private static final String GT_NEI_BACKGROUND_RESOURCE = "gregtech:textures/gui/background/nei_single_recipe.png";
 
     private final File repositoryDirectory;
 
@@ -84,6 +86,7 @@ public final class RawExportUiFamilyCensusWriter {
                     ? 1
                     : entry.getMaxRecipesPerPageInt().intValue();
             String imageResource = trimToEmpty(entry.getImageResource());
+            UiNativeBackground nativeBackground = buildNativeBackground(entry, family, layoutKind, width, height, yShift);
 
             String familyKey = buildFamilyKey(family, layoutKind, width, height, yShift, maxRecipesPerPage, imageResource);
             UiFamilyBucket bucket = families.get(familyKey);
@@ -97,6 +100,7 @@ public final class RawExportUiFamilyCensusWriter {
                 bucket.yShift = yShift;
                 bucket.maxRecipesPerPage = maxRecipesPerPage;
                 bucket.imageResource = imageResource;
+                bucket.nativeBackground = nativeBackground;
                 families.put(familyKey, bucket);
             }
 
@@ -113,6 +117,7 @@ public final class RawExportUiFamilyCensusWriter {
             member.handlerHeight = height;
             member.yShift = yShift;
             member.maxRecipesPerPage = maxRecipesPerPage;
+            member.nativeBackground = nativeBackground;
             bucket.members.add(member);
 
             if (!modId.isEmpty()) {
@@ -186,6 +191,62 @@ public final class RawExportUiFamilyCensusWriter {
                 + normalizeKeyPart(imageResource);
     }
 
+    private static UiNativeBackground buildNativeBackground(
+            NeiHandlerMetadataEntry entry,
+            String family,
+            String layoutKind,
+            int width,
+            int height,
+            int yShift) {
+        UiNativeBackground background = new UiNativeBackground();
+        background.schemaVersion = SCHEMA_VERSION + "/native-ui-background";
+        background.width = width;
+        background.height = height;
+        background.yShift = yShift;
+        background.layoutKind = layoutKind;
+        background.canonicalMachineFamily = family;
+        String imageResource = trimToEmpty(entry.getImageResource());
+        Integer imageWidth = entry.getImageWidthInt();
+        Integer imageHeight = entry.getImageHeightInt();
+        if (!imageResource.isEmpty() && imageWidth != null && imageHeight != null && imageWidth.intValue() > 0 && imageHeight.intValue() > 0) {
+            background.status = "captured";
+            background.kind = "texture-region";
+            background.resource = imageResource;
+            background.region = new UiRect();
+            background.region.x = entry.getImageXInt() == null ? 0 : entry.getImageXInt().intValue();
+            background.region.y = entry.getImageYInt() == null ? 0 : entry.getImageYInt().intValue();
+            background.region.width = imageWidth.intValue();
+            background.region.height = imageHeight.intValue();
+            return background;
+        }
+        if ("gregtech-machine".equals(family)) {
+            background.status = "captured";
+            background.kind = "gt-modular-ui";
+            background.assetRef = GT_NEI_BACKGROUND_ASSET_REF;
+            background.resource = GT_NEI_BACKGROUND_RESOURCE;
+            background.source = "GTNEIDefaultHandler.drawUI(ModularWindow.getBackground)";
+            background.drawable = "GTUITextures.BACKGROUND_NEI_SINGLE_RECIPE";
+            background.scaling = "nine-slice";
+            background.texture = new UiTexture();
+            background.texture.width = 64;
+            background.texture.height = 64;
+            background.texture.borderU = 2;
+            background.texture.borderV = 2;
+            background.recipeBackgroundOffset = new UiPoint();
+            background.recipeBackgroundOffset.x = 3;
+            background.recipeBackgroundOffset.y = 3;
+            background.recipeBackgroundSize = new UiSize();
+            background.recipeBackgroundSize.width = Math.max(0, width - 6);
+            background.recipeBackgroundSize.height = Math.max(0, height - yShift - 6);
+            background.captureRequired = false;
+            return background;
+        }
+        background.status = "missing";
+        background.kind = "unknown";
+        background.captureRequired = true;
+        return background;
+    }
+
     private static String normalizeKeyPart(String value) {
         String trimmed = trimToEmpty(value);
         if (trimmed.isEmpty()) {
@@ -244,6 +305,7 @@ public final class RawExportUiFamilyCensusWriter {
         int yShift;
         int maxRecipesPerPage;
         String imageResource;
+        UiNativeBackground nativeBackground;
         List<UiFamilyMember> members = new ArrayList<UiFamilyMember>();
     }
 
@@ -260,5 +322,51 @@ public final class RawExportUiFamilyCensusWriter {
         int handlerHeight;
         int yShift;
         int maxRecipesPerPage;
+        UiNativeBackground nativeBackground;
+    }
+
+    static final class UiNativeBackground {
+        String schemaVersion;
+        String status;
+        String kind;
+        String assetRef;
+        String resource;
+        String source;
+        String drawable;
+        String scaling;
+        String canonicalMachineFamily;
+        String layoutKind;
+        int width;
+        int height;
+        int yShift;
+        UiTexture texture;
+        UiRect region;
+        UiPoint recipeBackgroundOffset;
+        UiSize recipeBackgroundSize;
+        boolean captureRequired;
+    }
+
+    static final class UiTexture {
+        int width;
+        int height;
+        int borderU;
+        int borderV;
+    }
+
+    static final class UiRect {
+        int x;
+        int y;
+        int width;
+        int height;
+    }
+
+    static final class UiPoint {
+        int x;
+        int y;
+    }
+
+    static final class UiSize {
+        int width;
+        int height;
     }
 }

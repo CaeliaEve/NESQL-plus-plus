@@ -25,6 +25,7 @@ import jakarta.persistence.TypedQuery;
 import cpw.mods.fml.common.Loader;
 import cpw.mods.fml.common.ModContainer;
 import net.minecraft.util.EnumChatFormatting;
+import net.minecraft.util.ResourceLocation;
 import net.minecraftforge.common.ForgeVersion;
 
 import java.io.File;
@@ -37,6 +38,9 @@ import java.io.Writer;
 import java.io.BufferedReader;
 import java.io.InputStreamReader;
 import java.nio.charset.StandardCharsets;
+import java.nio.file.AtomicMoveNotSupportedException;
+import java.nio.file.Files;
+import java.nio.file.StandardCopyOption;
 import java.text.SimpleDateFormat;
 import java.util.ArrayList;
 import java.util.Collections;
@@ -64,6 +68,8 @@ import java.util.zip.GZIPOutputStream;
 public final class RawExportSidecarWriter {
     private static final String OUTPUT_DIRECTORY = "raw-export";
     private static final String SCHEMA_VERSION = "nesqlpp/raw-export/alpha1";
+    private static final String GT_NEI_BACKGROUND_ASSET_REF = "assets/ui-backgrounds/gregtech/nei_single_recipe.png";
+    private static final String GT_NEI_BACKGROUND_RESOURCE = "gregtech:textures/gui/background/nei_single_recipe.png";
     private static final int ITEM_BATCH_SIZE = 4096;
     private static final int FLUID_BATCH_SIZE = 2048;
     private static final int RECIPE_BATCH_SIZE = 512;
@@ -237,6 +243,7 @@ public final class RawExportSidecarWriter {
         manifest.files.put("neiGuidFilters", "facts/nei/guidfilters.jsonl.gz");
         manifest.files.put("neiHiddenItems", "facts/nei/hiddenitems.jsonl.gz");
         manifest.files.put("textures", "assets/textures/index.jsonl.gz");
+        manifest.files.put("uiBackgrounds", "assets/ui-backgrounds");
         manifest.files.put("animations", "assets/animations/index.jsonl.gz");
         manifest.files.put("nativeSprites", "assets/animations/native-sprites.jsonl.gz");
         manifest.files.put("renderedGifs", "assets/animations/rendered-gifs.jsonl.gz");
@@ -1034,6 +1041,7 @@ public final class RawExportSidecarWriter {
         JsonArray handlerRows = new JsonArray();
         JsonArray layoutRows = new JsonArray();
         Set<String> seenHandlers = new LinkedHashSet<String>();
+        boolean requiresGtNeiBackgroundAsset = false;
         int ordinal = 0;
         for (JsonElement element : sourceEntries) {
             if (element == null || !element.isJsonObject()) {
@@ -1054,9 +1062,12 @@ public final class RawExportSidecarWriter {
             int height = parseInt(readString(source, "handlerHeight", null), 65);
             int maxPerPage = parseInt(readString(source, "maxRecipesPerPage", null), 1);
             int yShift = parseInt(readString(source, "yShift", null), 0);
-            String imageResource = firstNonBlank(readString(source, "imageResource", null), "");
+            String imageResource = trimToEmpty(readString(source, "imageResource", null));
             String family = NeiUiFamilyClassifier.classifyHandlerFamily(handlerClass, itemName, modId);
             String layoutKind = NeiUiFamilyClassifier.inferLayoutKind(handlerClass, itemName, family);
+            JsonObject nativeBackground = buildNativeBackground(source, family, layoutKind, width, height, yShift);
+            requiresGtNeiBackgroundAsset = requiresGtNeiBackgroundAsset
+                    || isGtModularUiBackground(nativeBackground);
 
             JsonObject handler = new JsonObject();
             handler.addProperty("schemaVersion", SCHEMA_VERSION + "/nei-handler");
@@ -1075,6 +1086,7 @@ public final class RawExportSidecarWriter {
             handler.addProperty("handlerHeight", height);
             handler.addProperty("yShift", yShift);
             handler.addProperty("imageResource", imageResource);
+            handler.add("nativeBackground", cloneJsonObject(nativeBackground));
             handler.add("source", new JsonParser().parse(source.toString()));
             handlerRows.add(handler);
 
@@ -1090,6 +1102,7 @@ public final class RawExportSidecarWriter {
             layout.addProperty("maxRecipesPerPage", maxPerPage);
             layout.addProperty("imageResource", imageResource);
             addImageRegion(layout, source);
+            layout.add("nativeBackground", cloneJsonObject(nativeBackground));
             layout.add("slots", NeiUiTemplateLayoutSpecs.defaultLayoutSlotsJson(layoutKind));
             layout.add("textOverlays", new JsonArray());
             layout.add("dynamicPrimitives", new JsonArray());
@@ -1102,9 +1115,119 @@ public final class RawExportSidecarWriter {
         }
 
         HandlerMetadataCounts counts = new HandlerMetadataCounts();
+        if (requiresGtNeiBackgroundAsset) {
+            materializeGtNeiBackgroundAsset(rawDir);
+        }
         counts.handlers = writeArrayAsJsonl(handlerRows, new File(rawDir, "facts/nei/handlers.jsonl.gz"));
         counts.layouts = writeArrayAsJsonl(layoutRows, new File(rawDir, "facts/nei/handler-layouts.jsonl.gz"));
         return counts;
+    }
+
+    private static boolean isGtModularUiBackground(JsonObject background) {
+        return background != null
+                && "gt-modular-ui".equals(readString(background, "kind", ""))
+                && ("captured".equals(readString(background, "status", ""))
+                || "semantic".equals(readString(background, "status", "")));
+    }
+
+    private static JsonObject buildNativeBackground(
+            JsonObject source,
+            String family,
+            String layoutKind,
+            int width,
+            int height,
+            int yShift) {
+        String imageResource = trimToEmpty(readString(source, "imageResource", null));
+        int imageWidth = parseInt(readString(source, "imageWidth", null), 0);
+        int imageHeight = parseInt(readString(source, "imageHeight", null), 0);
+        JsonObject background = new JsonObject();
+        background.addProperty("schemaVersion", SCHEMA_VERSION + "/native-ui-background");
+        background.addProperty("width", width);
+        background.addProperty("height", height);
+        background.addProperty("yShift", yShift);
+        background.addProperty("layoutKind", layoutKind);
+        background.addProperty("canonicalMachineFamily", family);
+        if (!imageResource.trim().isEmpty() && imageWidth > 0 && imageHeight > 0) {
+            background.addProperty("status", "captured");
+            background.addProperty("kind", "texture-region");
+            background.addProperty("resource", imageResource);
+            JsonObject region = new JsonObject();
+            region.addProperty("x", parseInt(readString(source, "imageX", null), 0));
+            region.addProperty("y", parseInt(readString(source, "imageY", null), 0));
+            region.addProperty("width", imageWidth);
+            region.addProperty("height", imageHeight);
+            background.add("region", region);
+            return background;
+        }
+        if ("gregtech-machine".equals(family)) {
+            background.addProperty("status", "captured");
+            background.addProperty("kind", "gt-modular-ui");
+            background.addProperty("source", "GTNEIDefaultHandler.drawUI(ModularWindow.getBackground)");
+            background.addProperty("drawable", "GTUITextures.BACKGROUND_NEI_SINGLE_RECIPE");
+            background.addProperty("assetRef", GT_NEI_BACKGROUND_ASSET_REF);
+            background.addProperty("resource", GT_NEI_BACKGROUND_RESOURCE);
+            background.addProperty("scaling", "nine-slice");
+            JsonObject texture = new JsonObject();
+            texture.addProperty("width", 64);
+            texture.addProperty("height", 64);
+            texture.addProperty("borderU", 2);
+            texture.addProperty("borderV", 2);
+            background.add("texture", texture);
+            JsonObject offset = new JsonObject();
+            offset.addProperty("x", 3);
+            offset.addProperty("y", 3);
+            background.add("recipeBackgroundOffset", offset);
+            JsonObject size = new JsonObject();
+            size.addProperty("width", Math.max(0, width - 6));
+            size.addProperty("height", Math.max(0, height - yShift - 6));
+            background.add("recipeBackgroundSize", size);
+            background.addProperty("captureRequired", false);
+            return background;
+        }
+        background.addProperty("status", "missing");
+        background.addProperty("kind", "unknown");
+        background.addProperty("captureRequired", true);
+        return background;
+    }
+
+    private static JsonObject cloneJsonObject(JsonObject source) {
+        return new JsonParser().parse(source.toString()).getAsJsonObject();
+    }
+
+    private static void materializeGtNeiBackgroundAsset(File rawDir) throws IOException {
+        File target = new File(rawDir, GT_NEI_BACKGROUND_ASSET_REF.replace('/', File.separatorChar));
+        File parent = target.getParentFile();
+        if (parent != null) {
+            ensureDirectory(parent);
+        }
+        File temporary = new File(parent, target.getName() + ".tmp");
+        deleteIfExists(temporary);
+        ResourceLocation location = new ResourceLocation(GT_NEI_BACKGROUND_RESOURCE);
+        try (InputStream input = net.minecraft.client.Minecraft.getMinecraft()
+                .getResourceManager()
+                .getResource(location)
+                .getInputStream();
+             FileOutputStream output = new FileOutputStream(temporary)) {
+            byte[] buffer = new byte[64 * 1024];
+            int read;
+            while ((read = input.read(buffer)) >= 0) {
+                if (read > 0) {
+                    output.write(buffer, 0, read);
+                }
+            }
+        } catch (Exception e) {
+            deleteIfExists(temporary);
+            throw new IOException("Failed to materialize required GT NEI ModularUI background asset: " + location, e);
+        }
+        if (!temporary.isFile() || temporary.length() <= 0L) {
+            deleteIfExists(temporary);
+            throw new IOException("Materialized GT NEI ModularUI background asset is empty: " + location);
+        }
+        try {
+            Files.move(temporary.toPath(), target.toPath(), StandardCopyOption.REPLACE_EXISTING, StandardCopyOption.ATOMIC_MOVE);
+        } catch (AtomicMoveNotSupportedException ignored) {
+            Files.move(temporary.toPath(), target.toPath(), StandardCopyOption.REPLACE_EXISTING);
+        }
     }
 
     private static void addImageRegion(JsonObject layout, JsonObject source) {
@@ -1235,6 +1358,10 @@ public final class RawExportSidecarWriter {
         }
         String trimmed = value.trim();
         return trimmed.length() == 0 ? null : trimmed;
+    }
+
+    private static String trimToEmpty(String value) {
+        return value == null ? "" : value.trim();
     }
 
     private static File resolveNativeNeiRulePath(

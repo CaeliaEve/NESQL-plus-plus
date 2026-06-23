@@ -36,6 +36,31 @@ public final class ExportSelection {
         return new Builder().build();
     }
 
+    /**
+     * Fast export lane for NeoNEI native recipe UI capture.
+     *
+     * <p>This intentionally keeps the data/UI facts needed by the native UI compiler while skipping
+     * heavyweight render, atlas, multiblock/block-face, and legacy database-commit work. It is not a
+     * compatibility shortcut for {@link #full()}; callers choose it explicitly when they only need a
+     * raw-export for the native UI pack pipeline.</p>
+     */
+    public static ExportSelection nativeUiExport() {
+        return new Builder()
+                .writeItems(true)
+                .writeRecipes(true)
+                .writeUiFamilyCensus(true)
+                .writeUiTemplateCatalog(true)
+                .writeMultiblocks(false)
+                .writeBlockFaces(false)
+                .renderImages(false)
+                .writeRenderManifests(false)
+                .writeAtlasPacks(false)
+                .writeAnimatedAtlasPacks(false)
+                .writeBrowserIndexes(true)
+                .commitDatabase(false)
+                .build();
+    }
+
     public static Builder builder() {
         return new Builder();
     }
@@ -53,6 +78,22 @@ public final class ExportSelection {
                 && writeUiFamilyCensus
                 && writeUiTemplateCatalog
                 && commitDatabase;
+    }
+
+    public boolean isNativeUiExport() {
+        return writeItems
+                && writeRecipes
+                && writeUiFamilyCensus
+                && writeUiTemplateCatalog
+                && !writeCanonicalSnapshot
+                && !writeMultiblocks
+                && !writeBlockFaces
+                && !renderImages
+                && !writeRenderManifests
+                && !writeAtlasPacks
+                && !writeAnimatedAtlasPacks
+                && writeBrowserIndexes
+                && !commitDatabase;
     }
 
     public boolean includesStage(ExportStage stage, ExportProfile profile) {
