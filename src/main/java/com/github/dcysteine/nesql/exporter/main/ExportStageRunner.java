@@ -1,5 +1,9 @@
 package com.github.dcysteine.nesql.exporter.main;
 
+import com.github.dcysteine.nesql.elysium.kernel.ExportKernel;
+import com.github.dcysteine.nesql.elysium.kernel.ExportKernelContext;
+import com.github.dcysteine.nesql.elysium.kernel.ExportModuleRegistry;
+import com.google.gson.GsonBuilder;
 import net.minecraft.util.EnumChatFormatting;
 
 import java.io.File;
@@ -9,7 +13,6 @@ import java.nio.charset.StandardCharsets;
 import java.util.ArrayList;
 import java.util.List;
 import java.util.Map;
-import com.google.gson.GsonBuilder;
 
 final class ExportStageRunner {
 
@@ -18,10 +21,13 @@ final class ExportStageRunner {
     static void run(ExportContext exportContext, ExportExecutionStrategy strategy) throws Exception {
         File repositoryDirectory = exportContext.paths.repositoryDirectory;
         ExportStageState stageState = new ExportStageState();
+        ExportKernel kernel = new ExportKernel(ExportModuleRegistry.defaultModules());
+        ExportKernelContext kernelContext = new ExportKernelContext(exportContext);
         boolean pipelineCompleted = false;
 
         strategy.announceStartup(exportContext, repositoryDirectory);
         try {
+            kernel.init(kernelContext);
             Map<ExportStage, ExportStageAction> stageActions =
                     ExportStageActionRegistry.build(exportContext, strategy, stageState);
             int totalStages = exportContext.executionPlan.stages.size();
@@ -39,6 +45,7 @@ final class ExportStageRunner {
                 long stageStartedAt = System.currentTimeMillis();
                 action.run();
                 long stageElapsedMs = System.currentTimeMillis() - stageStartedAt;
+                kernelContext.trace("export.stage.run", stage.name(), "ok", stageElapsedMs);
                 timings.add(new StageTiming(index, totalStages, stage, stageElapsedMs));
                 writeCheckpointReport(
                         exportContext,
@@ -79,6 +86,9 @@ final class ExportStageRunner {
         } catch (RepositoryPreparationStoppedException ignored) {
             return;
         } catch (Exception e) {
+            if (stageState.currentStage != null) {
+                kernelContext.trace("export.stage.run", stageState.currentStage.name(), "failed", 0L);
+            }
             File reportFile =
                     ExportDiagnosticsSupport.writeFailureReport(
                             exportContext, stageState.currentStage, e);
@@ -112,6 +122,11 @@ final class ExportStageRunner {
                 ExportLifecycleSupport.closeSession(stageState.session, strategy.shouldLogEntityManagerClose());
             } else if (stageState.runtime != null) {
                 stageState.runtime.close();
+            }
+            try {
+                kernel.exit(kernelContext);
+            } finally {
+                kernel.writeTrace(kernelContext);
             }
             ExportWriterSupport.deleteCanonicalStagingDirectory(exportContext.paths.repositoryDirectory);
         }
