@@ -158,17 +158,10 @@ public final class RawExportSidecarWriter {
         report.counts.semanticIdentityMapRows = semanticAudit.identityMapRows;
         report.neiBrowserContract = factCounts.neiBrowserContract;
         RawExportValidationSupport.apply(report);
-        RawExportManifest manifest = buildManifest(report);
+        String generatedAt = utcNow();
+        RawExportManifest manifest = RawExportManifestBuilder.build(SCHEMA_VERSION, generatedAt, exportContext, report);
 
-        Gson gson = new GsonBuilder().setPrettyPrinting().serializeNulls().create();
-        writeJson(gson, new File(rawDir, "manifest.json"), manifest);
-        writeJson(gson, new File(rawDir, "export_report.json"), report);
-        writeJson(gson, new File(rawDir, "validation/export_report.json"), report);
-        if (report.neiBrowserContract != null) {
-            writeJson(gson, new File(rawDir, "validation/nei_browser_contract.json"), report.neiBrowserContract);
-        }
-        writeSizeReport(gson, rawDir);
-        createEmptyJsonlIfMissing(new File(rawDir, "validation/errors.jsonl"));
+        RawExportReportWriter.write(SCHEMA_VERSION, generatedAt, rawDir, manifest, report);
 
         Logger.MOD.info(
                 "Semantic item identity audit written: totalItems={}, taggedItems={}, classifiedTaggedItems={}, semanticItems={}, variants={}, payloads={}",
@@ -203,84 +196,6 @@ public final class RawExportSidecarWriter {
         copyIfPresent(
                 new File(rawValidationDir, "export-health-report.json"),
                 new File(rawDir, "validation_report.json"));
-    }
-
-    private RawExportManifest buildManifest(RawExportReport report) {
-        RawExportManifest manifest = new RawExportManifest();
-        manifest.schemaVersion = SCHEMA_VERSION;
-        manifest.generatedAt = utcNow();
-        manifest.repositoryName = exportContext.paths.repositoryName;
-        manifest.profile = exportContext.profile.profileId;
-        manifest.selection = exportContext.selection.describe();
-        manifest.semanticRuleRuntime = report.semanticRuleRuntime;
-        manifest.status = "raw-export-authoritative";
-        manifest.notes.add("Raw-export is the authoritative compiler input.");
-        manifest.notes.add("Large fact streams are gzip-compressed JSONL and recipes are stored only as handler shards.");
-        manifest.capabilities.add("facts");
-        manifest.capabilities.add("assets");
-        manifest.capabilities.add("models");
-        manifest.capabilities.add("validation");
-        manifest.capabilities.add("special");
-        manifest.capabilities.add("semanticIdentity");
-        manifest.capabilities.add("nativeNeiRules");
-        manifest.capabilities.add("nativeNeiHandlers");
-        if (exportContext.selection.includesStage(ExportStage.WRITE_UI_FAMILY_CENSUS, exportContext.profile)) {
-            manifest.capabilities.add("uiFamilyCensus");
-        }
-        if (exportContext.selection.includesStage(ExportStage.WRITE_UI_TEMPLATE_CATALOG, exportContext.profile)) {
-            manifest.capabilities.add("uiTemplateCatalog");
-        }
-        manifest.capabilities.add("angelicaNativeRenderFacts");
-        manifest.files.put("items", "facts/items.jsonl.gz");
-        manifest.files.put("semanticItems", "facts/items/semantic-items.jsonl.gz");
-        manifest.files.put("itemVariants", "facts/items/variants.jsonl.gz");
-        manifest.files.put("itemPayloads", "facts/items/payloads.jsonl.gz");
-        manifest.files.put("itemIdentityMap", "facts/items/identity-map.jsonl.gz");
-        manifest.files.put("fluids", "facts/fluids.jsonl.gz");
-        manifest.files.put("recipeIndex", "facts/recipes/index.json");
-        manifest.files.put("groups", "facts/nei/groups.jsonl.gz");
-        manifest.files.put("neiOrder", "facts/nei/order.jsonl.gz");
-        manifest.files.put("neiGuidFilters", "facts/nei/guidfilters.jsonl.gz");
-        manifest.files.put("neiHiddenItems", "facts/nei/hiddenitems.jsonl.gz");
-        manifest.files.put("textures", "assets/textures/index.jsonl.gz");
-        manifest.files.put("uiBackgrounds", "assets/ui-backgrounds");
-        manifest.files.put("animations", "assets/animations/index.jsonl.gz");
-        manifest.files.put("nativeSprites", "assets/animations/native-sprites.jsonl.gz");
-        manifest.files.put("renderedGifs", "assets/animations/rendered-gifs.jsonl.gz");
-        manifest.files.put("renderBackend", "facts/render/backend.json");
-        manifest.files.put("renderTextureSprites", "facts/render/texture-sprites.jsonl.gz");
-        manifest.files.put("renderItemRenderers", "facts/render/item-renderers.jsonl.gz");
-        manifest.files.put("renderShaderItems", "facts/render/shader-items.jsonl.gz");
-        manifest.files.put("renderFramebufferCaptures", "facts/render/framebuffer-captures.jsonl.gz");
-        manifest.files.put("browserAtlasIndex", "assets/textures/browser_atlas_index.json");
-        manifest.files.put("browserAtlasAssets", "assets/textures/atlas-assets");
-        manifest.files.put("neiHandlers", "facts/nei/handlers.jsonl.gz");
-        manifest.files.put("neiHandlerLayouts", "facts/nei/handler-layouts.jsonl.gz");
-        if (exportContext.selection.includesStage(ExportStage.WRITE_UI_FAMILY_CENSUS, exportContext.profile)) {
-            manifest.files.put("uiFamilyCensus", "validation/ui-family-census.json");
-        }
-        if (exportContext.selection.includesStage(ExportStage.WRITE_UI_TEMPLATE_CATALOG, exportContext.profile)) {
-            manifest.files.put("uiTemplateCatalog", "validation/ui-template-catalog.json");
-        }
-        manifest.files.put("multiblocks", "models/multiblocks/index.jsonl.gz");
-        manifest.files.put("entities", "models/entities/index.jsonl.gz");
-        manifest.files.put("specialIndex", "special/index.json");
-        manifest.files.put("exportReport", "validation/export_report.json");
-        manifest.files.put("exportHealthReport", "validation/export-health-report.json");
-        manifest.files.put("errors", "validation/errors.jsonl");
-        manifest.files.put("neiHandlerAnomalies", "validation/nei_handler_anomalies.json");
-        manifest.files.put("pluginTimings", "validation/export-plugin-timings.json");
-        manifest.files.put("stageTimings", "validation/export_stage_timings.json");
-        manifest.files.put("stageCheckpoint", "validation/stage_checkpoint.json");
-        manifest.files.put("stageChecksums", "validation/stage_checksums.json");
-        manifest.files.put("sizeReport", "validation/size_report.json");
-        manifest.files.put("neiBrowserContract", "validation/nei_browser_contract.json");
-        manifest.files.put("semanticFamilyAudit", "validation/semantic/parametric-family-audit.json");
-        manifest.files.put("semanticNbtKeyDistribution", "validation/semantic/nbt-key-distribution.json");
-        manifest.files.put("semanticIdentityNormalizationReport", "validation/semantic/identity-normalization-report.json");
-        manifest.files.put("semanticRulePack", "facts/semantic/rule-pack.json");
-        manifest.counts = report.counts;
-        return manifest;
     }
 
     private SemanticRulePack.RuntimeMetadata buildSemanticRuleRuntimeMetadata() {
@@ -2260,13 +2175,6 @@ public final class RawExportSidecarWriter {
         }
     }
 
-    private static void createEmptyJsonlIfMissing(File out) throws IOException {
-        if (out.exists()) {
-            return;
-        }
-        createEmptyJsonl(out);
-    }
-
     private static JsonObject readObject(File file) {
         if (file == null || !file.exists()) {
             return null;
@@ -2382,32 +2290,6 @@ public final class RawExportSidecarWriter {
         }
     }
 
-    private static void writeSizeReport(Gson gson, File rawDir) throws IOException {
-        JsonObject report = new JsonObject();
-        report.addProperty("schemaVersion", SCHEMA_VERSION + "/size-report");
-        report.addProperty("generatedAt", utcNow());
-        report.addProperty("strategy", "raw-export-only");
-        report.addProperty("totalBytes", directorySize(rawDir));
-
-        JsonArray prohibited = new JsonArray();
-        addProhibitedFile(prohibited, rawDir, "recipes.jsonl");
-        addProhibitedFile(prohibited, rawDir, "items.jsonl");
-        addProhibitedFile(prohibited, rawDir, "fluids.jsonl");
-        addProhibitedFile(prohibited, rawDir, "entities.jsonl");
-        addProhibitedFile(prohibited, rawDir, "facts/items.jsonl");
-        addProhibitedFile(prohibited, rawDir, "facts/fluids.jsonl");
-        addProhibitedFile(prohibited, rawDir, "facts/recipes/all.jsonl");
-        addProhibitedFile(prohibited, rawDir, "special/gregtech/recipes.jsonl");
-        addProhibitedFile(prohibited, rawDir, "special/thaumcraft/recipes.jsonl");
-        addProhibitedFile(prohibited, rawDir, "special/botania/recipes.jsonl");
-        addProhibitedFile(prohibited, rawDir, "special/bloodmagic/recipes.jsonl");
-        addProhibitedFile(prohibited, rawDir, "special/forestry/recipes.jsonl");
-        addProhibitedFile(prohibited, rawDir, "special/eec/recipes.jsonl");
-        report.add("prohibitedOutputs", prohibited);
-        report.addProperty("status", prohibited.size() == 0 ? "pass" : "fail");
-        writeJson(gson, new File(rawDir, "validation/size_report.json"), report);
-    }
-
     private static void purgeLegacyRawExportOutputs(File rawDir) throws IOException {
         deleteIfExists(new File(rawDir, "recipes.jsonl"));
         deleteIfExists(new File(rawDir, "items.jsonl"));
@@ -2436,35 +2318,6 @@ public final class RawExportSidecarWriter {
         if (!file.delete() && file.exists()) {
             throw new IOException("Failed to delete legacy raw-export output: " + file.getAbsolutePath());
         }
-    }
-
-    private static void addProhibitedFile(JsonArray out, File rawDir, String relativePath) {
-        File file = new File(rawDir, relativePath.replace('/', File.separatorChar));
-        if (!file.exists()) {
-            return;
-        }
-        JsonObject entry = new JsonObject();
-        entry.addProperty("path", relativePath);
-        entry.addProperty("bytes", file.isFile() ? file.length() : directorySize(file));
-        out.add(entry);
-    }
-
-    private static long directorySize(File file) {
-        if (file == null || !file.exists()) {
-            return 0L;
-        }
-        if (file.isFile()) {
-            return file.length();
-        }
-        long total = 0L;
-        File[] children = file.listFiles();
-        if (children == null) {
-            return 0L;
-        }
-        for (File child : children) {
-            total += directorySize(child);
-        }
-        return total;
     }
 
     private static OutputStreamWriter createUtf8Writer(File out) throws IOException {
@@ -2589,7 +2442,3 @@ public final class RawExportSidecarWriter {
 
 
 }
-
-
-
-
