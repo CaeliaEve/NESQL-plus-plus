@@ -10,5 +10,5 @@ final class RawExportReport {
     SemanticRulePack.RuntimeMetadata semanticRuleRuntime;
     RawExportCounts counts;
     RawExportValidation validation = new RawExportValidation();
-    RawExportSidecarWriter.NeiBrowserContract neiBrowserContract;
+    NeiBrowserContract neiBrowserContract;
 }

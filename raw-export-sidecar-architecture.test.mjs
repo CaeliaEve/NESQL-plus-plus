@@ -8,6 +8,9 @@ const manifestBuilderUrl = new URL('./src/main/java/com/github/dcysteine/nesql/e
 const reportWriterUrl = new URL('./src/main/java/com/github/dcysteine/nesql/exporter/local/RawExportReportWriter.java', import.meta.url);
 const repositoryFactStreamerUrl = new URL('./src/main/java/com/github/dcysteine/nesql/exporter/local/RawExportRepositoryFactStreamer.java', import.meta.url);
 const repositoryFactResultUrl = new URL('./src/main/java/com/github/dcysteine/nesql/exporter/local/RawRepositoryFactStreamResult.java', import.meta.url);
+const neiFactWriterUrl = new URL('./src/main/java/com/github/dcysteine/nesql/exporter/local/RawExportNeiFactWriter.java', import.meta.url);
+const neiFactCountsUrl = new URL('./src/main/java/com/github/dcysteine/nesql/exporter/local/RawNeiFactCounts.java', import.meta.url);
+const neiBrowserContractUrl = new URL('./src/main/java/com/github/dcysteine/nesql/exporter/local/NeiBrowserContract.java', import.meta.url);
 const dtoFiles = [
   'RawExportManifest.java',
   'RawExportReport.java',
@@ -22,6 +25,7 @@ const validation = readFileSync(validationUrl, 'utf8');
 const manifestBuilder = readFileSync(manifestBuilderUrl, 'utf8');
 const reportWriter = readFileSync(reportWriterUrl, 'utf8');
 const repositoryFactStreamer = readFileSync(repositoryFactStreamerUrl, 'utf8');
+const neiFactWriter = readFileSync(neiFactWriterUrl, 'utf8');
 
 test('raw export validation logic lives outside RawExportSidecarWriter', () => {
   assert.match(sidecar, /RawExportValidationSupport\.apply\(report\)/);
@@ -82,4 +86,28 @@ test('raw repository fact streaming is split from sidecar orchestration', () => 
   assert.match(repositoryFactStreamer, /class RecipeShardState/);
   assert.match(repositoryFactStreamer, /class SpecialDomainStreamState/);
   assert.match(repositoryFactStreamer, /class JsonlWriter/);
+});
+
+
+test('raw NEI browser and handler facts are split from sidecar orchestration', () => {
+  assert.equal(existsSync(neiFactWriterUrl), true, 'RawExportNeiFactWriter must exist');
+  assert.equal(existsSync(neiFactCountsUrl), true, 'RawNeiFactCounts must exist');
+  assert.equal(existsSync(neiBrowserContractUrl), true, 'NeiBrowserContract must exist as a top-level DTO');
+  assert.match(sidecar, /new RawExportNeiFactWriter\(repositoryDirectory, rawDir, SCHEMA_VERSION\)\.write\(\)/);
+  assert.match(sidecar, /RawNeiFactCounts nei =/);
+  assert.doesNotMatch(sidecar, /buildNeiBrowserContract/);
+  assert.doesNotMatch(sidecar, /writeGuidFilterRules/);
+  assert.doesNotMatch(sidecar, /writeHiddenItemRules/);
+  assert.doesNotMatch(sidecar, /writeHandlerMetadata/);
+  assert.doesNotMatch(sidecar, /loadBundledHandlerMetadata/);
+  assert.doesNotMatch(sidecar, /materializeGtNeiBackgroundAsset/);
+  assert.doesNotMatch(sidecar, /class HandlerMetadataCounts/);
+  assert.doesNotMatch(sidecar, /class UiFamilyCensusCounts/);
+  assert.doesNotMatch(sidecar, /class UiTemplateCatalogCounts/);
+  assert.doesNotMatch(sidecar, /class BrowserContractMismatch/);
+  assert.match(neiFactWriter, /buildNeiBrowserContract/);
+  assert.match(neiFactWriter, /writeGuidFilterRules/);
+  assert.match(neiFactWriter, /writeHiddenItemRules/);
+  assert.match(neiFactWriter, /writeHandlerMetadata/);
+  assert.match(neiFactWriter, /materializeGtNeiBackgroundAsset/);
 });
