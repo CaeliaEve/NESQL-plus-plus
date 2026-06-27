@@ -108,12 +108,12 @@ test('Angelica item renderer and shader facts live outside the render fact coord
   assert.doesNotMatch(renderFacts, /MinecraftForgeClient\.getItemRenderer/);
 });
 
-test('Angelica item renderer writer owns renderer registry probing and shader classification', () => {
+test('Angelica item renderer writer owns renderer registry probing and shader stream rows', () => {
   assert.match(itemRendererFacts, /final class AngelicaRenderItemRendererFactsWriter/);
   assert.match(itemRendererFacts, /TypedQuery<Item>/);
   assert.match(itemRendererFacts, /toItemRendererRow\(/);
   assert.match(itemRendererFacts, /toShaderItemRow\(/);
-  assert.match(itemRendererFacts, /classifyRenderer\(/);
+  assert.match(itemRendererFacts, /AngelicaRendererClassificationCatalog\.classifyItemRenderer\(item, rendererClass\)/);
   assert.match(itemRendererFacts, /shaderTextureHints\(/);
   assert.match(itemRendererFacts, /MinecraftForgeClient\.getItemRenderer/);
   assert.match(itemRendererFacts, /preferredExport", "angelica-framebuffer-capture"/);

@@ -19,7 +19,6 @@ import java.io.OutputStreamWriter;
 import java.lang.reflect.Method;
 import java.nio.charset.StandardCharsets;
 import java.util.List;
-import java.util.Locale;
 import java.util.zip.GZIPOutputStream;
 
 /** Streams native item renderer and shader item facts from the live Minecraft renderer registry. */
@@ -97,27 +96,21 @@ final class AngelicaRenderItemRendererFactsWriter {
             }
         }
         String rendererClass = renderer == null ? null : renderer.getClass().getName();
-        AngelicaRendererClassification classification = classifyRenderer(rendererClass);
-        if (isAe2NativeSpriteOnlyRenderer(item, rendererClass)) {
-            classification = new AngelicaRendererClassification(
-                    "ae2.native-sprite-item-renderer",
-                    false,
-                    false,
-                    "AE2 chargeable base item resolves to a native atlas sprite; NBT charge variants keep framebuffer captures.");
-        }
+        AngelicaRendererClassification classification = AngelicaRendererClassificationCatalog.classifyItemRenderer(item, rendererClass);
         row.addProperty("rendererClass", rendererClass);
         row.addProperty("rendererKind", classification.kind);
         row.addProperty("usesShader", classification.usesShader);
         row.addProperty("requiresFramebufferCapture", classification.requiresFramebufferCapture);
         row.addProperty("supportsNativeAtlas", renderer == null || "ae2.native-sprite-item-renderer".equals(classification.kind));
-        row.addProperty("knownSpecialRendererUnclassified", isKnownSpecialRendererGap(item, rendererClass, classification));
+        row.addProperty("knownSpecialRendererUnclassified", AngelicaRendererClassificationCatalog.isKnownSpecialRendererGap(item, rendererClass, classification));
         row.addProperty("notes", classification.notes);
         return row;
     }
 
     private JsonObject toShaderItemRow(Item item, JsonObject rendererRow) {
         String rendererKind = stringValue(rendererRow, "rendererKind");
-        if (!isShaderOrCaptureFamily(rendererKind)) {
+        AngelicaRendererClassification classification = AngelicaRendererClassificationCatalog.byKind(rendererKind);
+        if (classification == null || !classification.shaderExportEligible) {
             return null;
         }
         JsonObject row = new JsonObject();
@@ -129,144 +122,14 @@ final class AngelicaRenderItemRendererFactsWriter {
         row.addProperty("localizedName", item.getLocalizedName());
         row.addProperty("rendererClass", stringValue(rendererRow, "rendererClass"));
         row.addProperty("rendererKind", rendererKind);
-        row.addProperty("shaderFamily", shaderFamily(rendererKind));
-        row.addProperty("timeSource", shaderTimeSource(rendererKind));
+        row.addProperty("shaderFamily", classification.shaderFamily);
+        row.addProperty("timeSource", classification.shaderTimeSource);
         row.addProperty("captureRequired", booleanValue(rendererRow, "requiresFramebufferCapture"));
         row.addProperty("preferredExport", "angelica-framebuffer-capture");
         row.addProperty("browserReimplementationAllowed", false);
         row.add("textureHints", shaderTextureHints(item));
         row.addProperty("notes", "Native renderer requires shader/capture facts; do not replace with static fallback.");
         return row;
-    }
-
-    static AngelicaRendererClassification classifyRenderer(String rendererClass) {
-        if (rendererClass == null || rendererClass.trim().isEmpty()) {
-            return new AngelicaRendererClassification("vanilla.atlas", false, false, "No inventory IItemRenderer registered.");
-        }
-        String lower = rendererClass.toLowerCase(Locale.ROOT);
-        if (lower.contains("cosmicitemrenderer")) {
-            return new AngelicaRendererClassification("avaritia.cosmic", true, true, "Avaritia cosmic shader item.");
-        }
-        if (lower.contains("cosmicbowrenderer")) {
-            return new AngelicaRendererClassification("avaritia.cosmic-bow", true, true, "Avaritia infinity bow shader item.");
-        }
-        if (lower.contains("fancyhalorenderer")) {
-            return new AngelicaRendererClassification("avaritia.halo", true, true, "Avaritia halo shader item.");
-        }
-        if (lower.contains("fracturedorerenderer")) {
-            return new AngelicaRendererClassification("avaritia.fractured-ore", true, true, "Avaritia fractured ore renderer.");
-        }
-        if (lower.contains("eternalitemrenderer")) {
-            return new AngelicaRendererClassification("eternalsingularity.combined", true, true, "Eternal Singularity animated renderer.");
-        }
-        if (lower.contains("itemrenderercompressedchest")) {
-            return new AngelicaRendererClassification("avaritiaddons.compressed-chest", false, true, "Avaritiaddons compressed chest renderer.");
-        }
-        if (lower.contains("itemrendererinfinitychest")) {
-            return new AngelicaRendererClassification("avaritiaddons.infinity-chest", true, true, "Avaritiaddons infinity chest renderer.");
-        }
-        if (lower.contains("appeng.client.render.itemrenderer")) {
-            return new AngelicaRendererClassification("ae2.item-renderer", false, true, "Applied Energistics 2 custom item renderer.");
-        }
-        if (lower.contains("renderertrophy")) {
-            return new AngelicaRendererClassification("amazingtrophies.trophy", false, true, "Amazing Trophies item renderer.");
-        }
-        if (lower.contains("textureditemrenderer")) {
-            return new AngelicaRendererClassification("gtnhlib.textured-item", false, true, "GTNHLib textured item renderer.");
-        }
-        if (lower.contains("modelisbrh")) {
-            return new AngelicaRendererClassification("gtnhlib.model-isbrh", false, true, "GTNHLib inventory model renderer.");
-        }
-        return new AngelicaRendererClassification("generic.iitemrenderer", false, false, "Custom inventory IItemRenderer without known native animation requirements.");
-    }
-
-    private static boolean isKnownSpecialRendererGap(
-            Item item,
-            String rendererClass,
-            AngelicaRendererClassification classification) {
-        if (classification == null || !"generic.iitemrenderer".equals(classification.kind)) {
-            return false;
-        }
-        StringBuilder haystack = new StringBuilder();
-        if (rendererClass != null) {
-            haystack.append(rendererClass).append('|');
-        }
-        if (item != null) {
-            haystack.append(item.getModId()).append('|')
-                    .append(item.getInternalName()).append('|')
-                    .append(item.getLocalizedName());
-        }
-        String lower = haystack.toString().toLowerCase(Locale.ROOT);
-        return lower.contains("avaritia")
-                || lower.contains("gtnhlib")
-                || lower.contains("cosmic")
-                || lower.contains("halo")
-                || lower.contains("singular")
-                || lower.contains("universium")
-                || lower.contains("infinity")
-                || lower.contains("transcendent")
-                || lower.contains("glitch")
-                || lower.contains("wireframe")
-                || lower.contains("rainbow")
-                || lower.contains("gaia");
-    }
-
-    private static boolean isShaderOrCaptureFamily(String rendererKind) {
-        return rendererKind != null
-                && !rendererKind.equals("vanilla.atlas")
-                && !rendererKind.equals("ae2.native-sprite-item-renderer")
-                && (rendererKind.startsWith("avaritia.")
-                        || rendererKind.startsWith("gtnhlib.")
-                        || rendererKind.startsWith("eternalsingularity.")
-                        || rendererKind.startsWith("avaritiaddons.")
-                        || rendererKind.startsWith("ae2.")
-                        || rendererKind.startsWith("amazingtrophies."));
-    }
-
-    private static boolean isAe2NativeSpriteOnlyRenderer(Item item, String rendererClass) {
-        if (item == null || rendererClass == null) {
-            return false;
-        }
-        String lowerRenderer = rendererClass.toLowerCase(Locale.ROOT);
-        if (!lowerRenderer.contains("appeng.client.render.itemrenderer")) {
-            return false;
-        }
-        if (item.hasNbt()) {
-            return false;
-        }
-        String modId = item.getModId() == null ? "" : item.getModId().toLowerCase(Locale.ROOT);
-        String internalName = item.getInternalName() == null ? "" : item.getInternalName();
-        if (!modId.contains("appliedenergistics2")) {
-            return false;
-        }
-        return "tile.BlockEnergyCell".equals(internalName)
-                || "tile.BlockDenseEnergyCell".equals(internalName);
-    }
-
-    private static String shaderFamily(String rendererKind) {
-        if (rendererKind == null) {
-            return "unknown";
-        }
-        if (rendererKind.equals("avaritia.cosmic")) {
-            return "avaritia.cosmic";
-        }
-        if (rendererKind.equals("avaritia.halo")) {
-            return "avaritia.halo";
-        }
-        if (rendererKind.equals("avaritia.fractured-ore")) {
-            return "avaritia.fractured-ore";
-        }
-        if (rendererKind.startsWith("gtnhlib.")) {
-            return rendererKind;
-        }
-        return "custom.inventory-renderer";
-    }
-
-    private static String shaderTimeSource(String rendererKind) {
-        if (rendererKind != null && rendererKind.startsWith("avaritia.")) {
-            return "native-render-tick";
-        }
-        return "native-renderer";
     }
 
     private ItemStack resolveStack(Item item) {
