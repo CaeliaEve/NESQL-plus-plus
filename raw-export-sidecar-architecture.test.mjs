@@ -4,6 +4,13 @@ import test from 'node:test';
 
 const sidecarUrl = new URL('./src/main/java/com/github/dcysteine/nesql/exporter/local/RawExportSidecarWriter.java', import.meta.url);
 const factStreamPipelineUrl = new URL('./src/main/java/com/github/dcysteine/nesql/exporter/local/RawExportFactStreamPipeline.java', import.meta.url);
+const factStreamContextUrl = new URL('./src/main/java/com/github/dcysteine/nesql/exporter/local/RawExportFactStreamContext.java', import.meta.url);
+const factStreamProviderUrl = new URL('./src/main/java/com/github/dcysteine/nesql/exporter/local/RawExportFactStreamProvider.java', import.meta.url);
+const factStreamRegistryUrl = new URL('./src/main/java/com/github/dcysteine/nesql/exporter/local/RawExportFactStreamRegistry.java', import.meta.url);
+const repositoryProviderUrl = new URL('./src/main/java/com/github/dcysteine/nesql/exporter/local/RawRepositoryFactStreamProvider.java', import.meta.url);
+const neiProviderUrl = new URL('./src/main/java/com/github/dcysteine/nesql/exporter/local/RawNeiFactStreamProvider.java', import.meta.url);
+const renderAssetProviderUrl = new URL('./src/main/java/com/github/dcysteine/nesql/exporter/local/RawRenderAssetFactStreamProvider.java', import.meta.url);
+const entityRenderProviderUrl = new URL('./src/main/java/com/github/dcysteine/nesql/exporter/local/RawEntityAndRenderBackendFactStreamProvider.java', import.meta.url);
 const reportPipelineUrl = new URL('./src/main/java/com/github/dcysteine/nesql/exporter/local/RawExportSidecarReportPipeline.java', import.meta.url);
 const validationUrl = new URL('./src/main/java/com/github/dcysteine/nesql/exporter/local/RawExportValidationSupport.java', import.meta.url);
 const manifestBuilderUrl = new URL('./src/main/java/com/github/dcysteine/nesql/exporter/local/RawExportManifestBuilder.java', import.meta.url);
@@ -33,6 +40,13 @@ const dtoFiles = [
 
 const sidecar = readFileSync(sidecarUrl, 'utf8');
 const factStreamPipeline = readFileSync(factStreamPipelineUrl, 'utf8');
+const factStreamContext = readFileSync(factStreamContextUrl, 'utf8');
+const factStreamProvider = readFileSync(factStreamProviderUrl, 'utf8');
+const factStreamRegistry = readFileSync(factStreamRegistryUrl, 'utf8');
+const repositoryProvider = readFileSync(repositoryProviderUrl, 'utf8');
+const neiProvider = readFileSync(neiProviderUrl, 'utf8');
+const renderAssetProvider = readFileSync(renderAssetProviderUrl, 'utf8');
+const entityRenderProvider = readFileSync(entityRenderProviderUrl, 'utf8');
 const reportPipeline = readFileSync(reportPipelineUrl, 'utf8');
 const validation = readFileSync(validationUrl, 'utf8');
 const manifestBuilder = readFileSync(manifestBuilderUrl, 'utf8');
@@ -95,12 +109,26 @@ test('raw export manifest and report output are split from sidecar orchestration
 
 test('raw repository fact streaming is split from sidecar orchestration', () => {
   assert.equal(existsSync(factStreamPipelineUrl), true, 'RawExportFactStreamPipeline must exist');
+  assert.equal(existsSync(factStreamContextUrl), true, 'RawExportFactStreamContext must exist');
+  assert.equal(existsSync(factStreamProviderUrl), true, 'RawExportFactStreamProvider must exist');
+  assert.equal(existsSync(factStreamRegistryUrl), true, 'RawExportFactStreamRegistry must exist');
+  assert.equal(existsSync(repositoryProviderUrl), true, 'RawRepositoryFactStreamProvider must exist');
   assert.equal(existsSync(repositoryFactStreamerUrl), true, 'RawExportRepositoryFactStreamer must exist');
   assert.equal(existsSync(repositoryFactResultUrl), true, 'RawRepositoryFactStreamResult must exist');
   assert.match(sidecar, /new RawExportFactStreamPipeline\(/);
   assert.match(sidecar, /\.write\(\)/);
-  assert.match(factStreamPipeline, /new RawExportRepositoryFactStreamer\(entityManager, rawDir, schemaVersion\)\.write\(\)/);
-  assert.match(factStreamPipeline, /RawRepositoryFactStreamResult repository = streamRepositoryFacts\(\)/);
+  assert.match(factStreamPipeline, /RawExportFactStreamRegistry\.defaultProviders\(\)/);
+  assert.match(factStreamPipeline, /for \(RawExportFactStreamProvider provider : providers\)/);
+  assert.match(factStreamProvider, /interface RawExportFactStreamProvider/);
+  assert.match(factStreamProvider, /String id\(\)/);
+  assert.match(factStreamProvider, /void write\(RawExportFactStreamContext context, RawFactCounts counts\) throws IOException/);
+  assert.match(factStreamContext, /final EntityManager entityManager/);
+  assert.match(factStreamContext, /final File repositoryDirectory/);
+  assert.match(factStreamContext, /final File rawDir/);
+  assert.match(factStreamContext, /final String schemaVersion/);
+  assert.match(repositoryProvider, /new RawExportRepositoryFactStreamer\(context\.entityManager, context\.rawDir, context\.schemaVersion\)\.write\(\)/);
+  assert.match(repositoryProvider, /RawRepositoryFactStreamResult repository =/);
+  assert.doesNotMatch(factStreamPipeline, /new RawExportRepositoryFactStreamer/);
   assert.doesNotMatch(sidecar, /new RawExportRepositoryFactStreamer/);
   assert.doesNotMatch(sidecar, /RawRepositoryFactStreamResult repository/);
   assert.doesNotMatch(sidecar, /streamDatabaseRepositoryFacts/);
@@ -121,11 +149,13 @@ test('raw repository fact streaming is split from sidecar orchestration', () => 
 
 
 test('raw NEI browser and handler facts are split from sidecar orchestration', () => {
+  assert.equal(existsSync(neiProviderUrl), true, 'RawNeiFactStreamProvider must exist');
   assert.equal(existsSync(neiFactWriterUrl), true, 'RawExportNeiFactWriter must exist');
   assert.equal(existsSync(neiFactCountsUrl), true, 'RawNeiFactCounts must exist');
   assert.equal(existsSync(neiBrowserContractUrl), true, 'NeiBrowserContract must exist as a top-level DTO');
-  assert.match(factStreamPipeline, /new RawExportNeiFactWriter\(repositoryDirectory, rawDir, schemaVersion\)\.write\(\)/);
-  assert.match(factStreamPipeline, /RawNeiFactCounts nei =/);
+  assert.match(neiProvider, /new RawExportNeiFactWriter\(context\.repositoryDirectory, context\.rawDir, context\.schemaVersion\)\.write\(\)/);
+  assert.match(neiProvider, /RawNeiFactCounts nei =/);
+  assert.doesNotMatch(factStreamPipeline, /new RawExportNeiFactWriter/);
   assert.doesNotMatch(sidecar, /new RawExportNeiFactWriter/);
   assert.doesNotMatch(sidecar, /RawNeiFactCounts nei =/);
   assert.doesNotMatch(sidecar, /buildNeiBrowserContract/);
@@ -147,14 +177,23 @@ test('raw NEI browser and handler facts are split from sidecar orchestration', (
 
 
 test('raw render asset catalog and entity model facts are split from sidecar orchestration', () => {
+  assert.equal(existsSync(renderAssetProviderUrl), true, 'RawRenderAssetFactStreamProvider must exist');
+  assert.equal(existsSync(entityRenderProviderUrl), true, 'RawEntityAndRenderBackendFactStreamProvider must exist');
   assert.equal(existsSync(renderAssetCatalogWriterUrl), true, 'RawExportRenderAssetCatalogWriter must exist');
   assert.equal(existsSync(renderAssetCatalogCountsUrl), true, 'RawRenderAssetCatalogCounts must exist');
   assert.equal(existsSync(entityModelWriterUrl), true, 'RawExportEntityModelWriter must exist');
   assert.equal(existsSync(emptyJsonlWriterUrl), true, 'RawExportEmptyJsonlWriter must exist');
-  assert.match(factStreamPipeline, /new RawExportRenderAssetCatalogWriter\(repositoryDirectory, rawDir, renderAssets\)\.write\(\)/);
-  assert.match(factStreamPipeline, /new RawExportEntityModelWriter\(repositoryDirectory, rawDir, schemaVersion\)\.write\(\)/);
-  assert.match(factStreamPipeline, /RawExportEmptyJsonlWriter\.write\(new File\(rawDir, "models\/multiblocks\/index\.jsonl\.gz"\)\)/);
-  assert.match(factStreamPipeline, /new AngelicaRenderFactsWriter\(entityManager, rawDir, renderAssets\)\.write\(\)/);
+  assert.match(renderAssetProvider, /new RawExportRenderAssetCatalogWriter\(/);
+  assert.match(renderAssetProvider, /context\.repositoryDirectory/);
+  assert.match(renderAssetProvider, /context\.renderAssets/);
+  assert.match(entityRenderProvider, /new RawExportEntityModelWriter\(/);
+  assert.match(entityRenderProvider, /context\.repositoryDirectory/);
+  assert.match(entityRenderProvider, /context\.schemaVersion/);
+  assert.match(entityRenderProvider, /RawExportEmptyJsonlWriter\.write\(new File\(context\.rawDir, "models\/multiblocks\/index\.jsonl\.gz"\)\)/);
+  assert.match(entityRenderProvider, /new AngelicaRenderFactsWriter\(context\.entityManager, context\.rawDir, context\.renderAssets\)\.write\(\)/);
+  assert.doesNotMatch(factStreamPipeline, /new RawExportRenderAssetCatalogWriter/);
+  assert.doesNotMatch(factStreamPipeline, /new RawExportEntityModelWriter/);
+  assert.doesNotMatch(factStreamPipeline, /new AngelicaRenderFactsWriter/);
   assert.doesNotMatch(sidecar, /new RawExportRenderAssetCatalogWriter/);
   assert.doesNotMatch(sidecar, /new RawExportEntityModelWriter/);
   assert.doesNotMatch(sidecar, /RawExportEmptyJsonlWriter\.write/);
@@ -170,6 +209,29 @@ test('raw render asset catalog and entity model facts are split from sidecar orc
   assert.match(renderAssetCatalogWriter, /toRenderAssetRow/);
   assert.match(entityModelWriter, /long write\(\) throws IOException/);
   assert.match(entityModelWriter, /entityRow/);
+});
+
+test('raw fact stream registry owns provider order and identity validation', () => {
+  for (const provider of [
+    'RawRepositoryFactStreamProvider',
+    'RawNeiFactStreamProvider',
+    'RawRenderAssetFactStreamProvider',
+    'RawEntityAndRenderBackendFactStreamProvider',
+  ]) {
+    assert.match(factStreamRegistry, new RegExp(`new ${provider}\\(\\)`));
+  }
+  assert.match(factStreamRegistry, /validateAndFreeze/);
+  assert.match(factStreamRegistry, /Raw export fact stream provider id must be non-empty/);
+  assert.match(factStreamRegistry, /Duplicate raw export fact stream provider id/);
+  for (const [source, id] of [
+    [repositoryProvider, 'raw.repository-facts'],
+    [neiProvider, 'raw.nei-facts'],
+    [renderAssetProvider, 'raw.render-asset-facts'],
+    [entityRenderProvider, 'raw.entity-render-backend-facts'],
+  ]) {
+    assert.match(source, /implements RawExportFactStreamProvider/);
+    assert.equal(source.includes(`return "${id}";`), true, `provider missing id ${id}`);
+  }
 });
 
 
