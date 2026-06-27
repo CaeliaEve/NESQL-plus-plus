@@ -3,6 +3,7 @@ import { existsSync, readFileSync } from 'node:fs';
 import test from 'node:test';
 
 const sidecarUrl = new URL('./src/main/java/com/github/dcysteine/nesql/exporter/local/RawExportSidecarWriter.java', import.meta.url);
+const factStreamPipelineUrl = new URL('./src/main/java/com/github/dcysteine/nesql/exporter/local/RawExportFactStreamPipeline.java', import.meta.url);
 const reportPipelineUrl = new URL('./src/main/java/com/github/dcysteine/nesql/exporter/local/RawExportSidecarReportPipeline.java', import.meta.url);
 const validationUrl = new URL('./src/main/java/com/github/dcysteine/nesql/exporter/local/RawExportValidationSupport.java', import.meta.url);
 const manifestBuilderUrl = new URL('./src/main/java/com/github/dcysteine/nesql/exporter/local/RawExportManifestBuilder.java', import.meta.url);
@@ -31,6 +32,7 @@ const dtoFiles = [
 ];
 
 const sidecar = readFileSync(sidecarUrl, 'utf8');
+const factStreamPipeline = readFileSync(factStreamPipelineUrl, 'utf8');
 const reportPipeline = readFileSync(reportPipelineUrl, 'utf8');
 const validation = readFileSync(validationUrl, 'utf8');
 const manifestBuilder = readFileSync(manifestBuilderUrl, 'utf8');
@@ -92,10 +94,15 @@ test('raw export manifest and report output are split from sidecar orchestration
 
 
 test('raw repository fact streaming is split from sidecar orchestration', () => {
+  assert.equal(existsSync(factStreamPipelineUrl), true, 'RawExportFactStreamPipeline must exist');
   assert.equal(existsSync(repositoryFactStreamerUrl), true, 'RawExportRepositoryFactStreamer must exist');
   assert.equal(existsSync(repositoryFactResultUrl), true, 'RawRepositoryFactStreamResult must exist');
-  assert.match(sidecar, /new RawExportRepositoryFactStreamer\(entityManager, rawDir, SCHEMA_VERSION\)\.write\(\)/);
-  assert.match(sidecar, /RawRepositoryFactStreamResult repository = streamRepositoryFacts\(rawDir\)/);
+  assert.match(sidecar, /new RawExportFactStreamPipeline\(/);
+  assert.match(sidecar, /\.write\(\)/);
+  assert.match(factStreamPipeline, /new RawExportRepositoryFactStreamer\(entityManager, rawDir, schemaVersion\)\.write\(\)/);
+  assert.match(factStreamPipeline, /RawRepositoryFactStreamResult repository = streamRepositoryFacts\(\)/);
+  assert.doesNotMatch(sidecar, /new RawExportRepositoryFactStreamer/);
+  assert.doesNotMatch(sidecar, /RawRepositoryFactStreamResult repository/);
   assert.doesNotMatch(sidecar, /streamDatabaseRepositoryFacts/);
   assert.doesNotMatch(sidecar, /streamDatabaseItems/);
   assert.doesNotMatch(sidecar, /streamDatabaseFluids/);
@@ -117,8 +124,10 @@ test('raw NEI browser and handler facts are split from sidecar orchestration', (
   assert.equal(existsSync(neiFactWriterUrl), true, 'RawExportNeiFactWriter must exist');
   assert.equal(existsSync(neiFactCountsUrl), true, 'RawNeiFactCounts must exist');
   assert.equal(existsSync(neiBrowserContractUrl), true, 'NeiBrowserContract must exist as a top-level DTO');
-  assert.match(sidecar, /new RawExportNeiFactWriter\(repositoryDirectory, rawDir, SCHEMA_VERSION\)\.write\(\)/);
-  assert.match(sidecar, /RawNeiFactCounts nei =/);
+  assert.match(factStreamPipeline, /new RawExportNeiFactWriter\(repositoryDirectory, rawDir, schemaVersion\)\.write\(\)/);
+  assert.match(factStreamPipeline, /RawNeiFactCounts nei =/);
+  assert.doesNotMatch(sidecar, /new RawExportNeiFactWriter/);
+  assert.doesNotMatch(sidecar, /RawNeiFactCounts nei =/);
   assert.doesNotMatch(sidecar, /buildNeiBrowserContract/);
   assert.doesNotMatch(sidecar, /writeGuidFilterRules/);
   assert.doesNotMatch(sidecar, /writeHiddenItemRules/);
@@ -142,9 +151,14 @@ test('raw render asset catalog and entity model facts are split from sidecar orc
   assert.equal(existsSync(renderAssetCatalogCountsUrl), true, 'RawRenderAssetCatalogCounts must exist');
   assert.equal(existsSync(entityModelWriterUrl), true, 'RawExportEntityModelWriter must exist');
   assert.equal(existsSync(emptyJsonlWriterUrl), true, 'RawExportEmptyJsonlWriter must exist');
-  assert.match(sidecar, /new RawExportRenderAssetCatalogWriter\(repositoryDirectory, rawDir, renderAssets\)\.write\(\)/);
-  assert.match(sidecar, /new RawExportEntityModelWriter\(repositoryDirectory, rawDir, SCHEMA_VERSION\)\.write\(\)/);
-  assert.match(sidecar, /RawExportEmptyJsonlWriter\.write\(new File\(rawDir, "models\/multiblocks\/index\.jsonl\.gz"\)\)/);
+  assert.match(factStreamPipeline, /new RawExportRenderAssetCatalogWriter\(repositoryDirectory, rawDir, renderAssets\)\.write\(\)/);
+  assert.match(factStreamPipeline, /new RawExportEntityModelWriter\(repositoryDirectory, rawDir, schemaVersion\)\.write\(\)/);
+  assert.match(factStreamPipeline, /RawExportEmptyJsonlWriter\.write\(new File\(rawDir, "models\/multiblocks\/index\.jsonl\.gz"\)\)/);
+  assert.match(factStreamPipeline, /new AngelicaRenderFactsWriter\(entityManager, rawDir, renderAssets\)\.write\(\)/);
+  assert.doesNotMatch(sidecar, /new RawExportRenderAssetCatalogWriter/);
+  assert.doesNotMatch(sidecar, /new RawExportEntityModelWriter/);
+  assert.doesNotMatch(sidecar, /RawExportEmptyJsonlWriter\.write/);
+  assert.doesNotMatch(sidecar, /new AngelicaRenderFactsWriter/);
   assert.doesNotMatch(sidecar, /writeBrowserAtlasIndexAndAssets/);
   assert.doesNotMatch(sidecar, /materializeBrowserAtlasAsset/);
   assert.doesNotMatch(sidecar, /rewriteBrowserAtlasPlacement/);

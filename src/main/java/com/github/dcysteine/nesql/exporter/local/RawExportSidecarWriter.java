@@ -8,7 +8,6 @@ import net.minecraft.util.EnumChatFormatting;
 
 import java.io.File;
 import java.io.IOException;
-import java.util.ArrayList;
 import java.util.List;
 
 /**
@@ -47,7 +46,12 @@ public final class RawExportSidecarWriter {
         RawExportSidecarFileOps.ensureDirectory(rawDir);
         RawExportSidecarFileOps.purgeLegacyRawExportOutputs(rawDir);
 
-        RawFactCounts factCounts = writeRawFactStreams(rawDir);
+        RawFactCounts factCounts = new RawExportFactStreamPipeline(
+                entityManager,
+                repositoryDirectory,
+                rawDir,
+                renderAssets,
+                SCHEMA_VERSION).write();
         RawExportSidecarReportPipeline.RawExportSidecarReportResult reportResult =
                 new RawExportSidecarReportPipeline(
                         entityManager,
@@ -92,63 +96,4 @@ public final class RawExportSidecarWriter {
                 new File(rawDir, "validation_report.json"));
     }
 
-    private RawFactCounts writeRawFactStreams(File rawDir) throws IOException {
-        RawFactCounts counts = new RawFactCounts();
-        RawRepositoryFactStreamResult repository = streamRepositoryFacts(rawDir);
-        counts.items = repository.items;
-        counts.fluids = repository.fluids;
-        counts.recipes = repository.recipes;
-
-        RawNeiFactCounts nei = new RawExportNeiFactWriter(repositoryDirectory, rawDir, SCHEMA_VERSION).write();
-        counts.groups = nei.groups;
-        counts.neiOrderEntries = nei.neiOrderEntries;
-        counts.neiBrowserContract = nei.neiBrowserContract;
-        counts.neiRuntimePanelItems = nei.neiRuntimePanelItems;
-        counts.neiExportOnlyItems = nei.neiExportOnlyItems;
-        counts.neiBrowserItems = nei.neiBrowserItems;
-        counts.neiDefaultEntries = nei.neiDefaultEntries;
-        counts.neiFallbackGroups = nei.neiFallbackGroups;
-        counts.neiNativeGroups = nei.neiNativeGroups;
-        counts.neiSyntheticGroups = nei.neiSyntheticGroups;
-        counts.neiGuidFilterRules = nei.neiGuidFilterRules;
-        counts.neiHiddenItemRules = nei.neiHiddenItemRules;
-        counts.neiHiddenItems = nei.neiHiddenItems;
-        counts.neiRepresentativeMismatches = nei.neiRepresentativeMismatches;
-        counts.neiHandlers = nei.neiHandlers;
-        counts.neiHandlerLayouts = nei.neiHandlerLayouts;
-        counts.uiFamilyCensusHandlers = nei.uiFamilyCensusHandlers;
-        counts.uiFamilyCensusFamilies = nei.uiFamilyCensusFamilies;
-        counts.uiTemplateCatalogHandlers = nei.uiTemplateCatalogHandlers;
-        counts.uiTemplateCatalogTemplates = nei.uiTemplateCatalogTemplates;
-        counts.uiTemplateCatalogFamilies = nei.uiTemplateCatalogFamilies;
-
-        RawRenderAssetCatalogCounts renderAssetCatalog =
-                new RawExportRenderAssetCatalogWriter(repositoryDirectory, rawDir, renderAssets).write();
-        counts.textures = renderAssetCatalog.textures;
-        counts.animations = renderAssetCatalog.animations;
-        counts.browserAtlasAssets = renderAssetCatalog.browserAtlasAssets;
-
-        RawExportEmptyJsonlWriter.write(new File(rawDir, "models/multiblocks/index.jsonl.gz"));
-        counts.entities = new RawExportEntityModelWriter(repositoryDirectory, rawDir, SCHEMA_VERSION).write();
-        AngelicaRenderFactsWriter.Counts renderCounts =
-                new AngelicaRenderFactsWriter(entityManager, rawDir, renderAssets).write();
-        counts.renderBackendFacts = renderCounts.backendFacts;
-        counts.renderBackendAngelica = "angelica".equals(renderCounts.backend) ? 1L : 0L;
-        counts.renderTextureSprites = renderCounts.textureSprites;
-        counts.renderTextureSpritesMissingTiming = renderCounts.textureSpritesMissingTiming;
-        counts.renderItemRenderers = renderCounts.itemRenderers;
-        counts.renderShaderItems = renderCounts.shaderItems;
-        counts.renderShaderItemsRequiringCapture = renderCounts.shaderItemsRequiringCapture;
-        counts.renderShaderItemsMissingCapture = renderCounts.shaderItemsMissingCapture;
-        counts.renderShaderItemsMissingCaptureSamples = new ArrayList<String>(renderCounts.shaderItemsMissingCaptureSamples);
-        counts.renderUnknownSpecialRenderers = renderCounts.unknownSpecialRenderers;
-        counts.renderFramebufferCaptures = renderCounts.framebufferCaptures;
-        counts.renderFramebufferCapturesWithoutFrames = renderCounts.framebufferCapturesWithoutFrames;
-        counts.renderFramebufferCapturesWithoutFramesSamples = new ArrayList<String>(renderCounts.framebufferCapturesWithoutFramesSamples);
-        return counts;
-    }
-
-    private RawRepositoryFactStreamResult streamRepositoryFacts(File rawDir) throws IOException {
-        return new RawExportRepositoryFactStreamer(entityManager, rawDir, SCHEMA_VERSION).write();
-    }
 }
