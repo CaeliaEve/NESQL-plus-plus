@@ -15,6 +15,8 @@ const renderAssetCatalogWriterUrl = new URL('./src/main/java/com/github/dcystein
 const renderAssetCatalogCountsUrl = new URL('./src/main/java/com/github/dcysteine/nesql/exporter/local/RawRenderAssetCatalogCounts.java', import.meta.url);
 const entityModelWriterUrl = new URL('./src/main/java/com/github/dcysteine/nesql/exporter/local/RawExportEntityModelWriter.java', import.meta.url);
 const emptyJsonlWriterUrl = new URL('./src/main/java/com/github/dcysteine/nesql/exporter/local/RawExportEmptyJsonlWriter.java', import.meta.url);
+const rawFactCountsUrl = new URL('./src/main/java/com/github/dcysteine/nesql/exporter/local/RawFactCounts.java', import.meta.url);
+const reportAssemblerUrl = new URL('./src/main/java/com/github/dcysteine/nesql/exporter/local/RawExportReportAssembler.java', import.meta.url);
 const dtoFiles = [
   'RawExportManifest.java',
   'RawExportReport.java',
@@ -32,6 +34,7 @@ const repositoryFactStreamer = readFileSync(repositoryFactStreamerUrl, 'utf8');
 const neiFactWriter = readFileSync(neiFactWriterUrl, 'utf8');
 const renderAssetCatalogWriter = readFileSync(renderAssetCatalogWriterUrl, 'utf8');
 const entityModelWriter = readFileSync(entityModelWriterUrl, 'utf8');
+const reportAssembler = readFileSync(reportAssemblerUrl, 'utf8');
 
 test('raw export validation logic lives outside RawExportSidecarWriter', () => {
   assert.match(sidecar, /RawExportValidationSupport\.apply\(report\)/);
@@ -138,4 +141,19 @@ test('raw render asset catalog and entity model facts are split from sidecar orc
   assert.match(renderAssetCatalogWriter, /toRenderAssetRow/);
   assert.match(entityModelWriter, /long write\(\) throws IOException/);
   assert.match(entityModelWriter, /entityRow/);
+});
+
+
+test('raw export aggregate report mapping is split from sidecar orchestration', () => {
+  assert.equal(existsSync(rawFactCountsUrl), true, 'RawFactCounts must exist as a top-level orchestration DTO');
+  assert.equal(existsSync(reportAssemblerUrl), true, 'RawExportReportAssembler must exist');
+  assert.match(sidecar, /RawExportReportAssembler\.apply\(report, factCounts, semanticRuleRuntime, semanticAudit\)/);
+  assert.doesNotMatch(sidecar, /class RawFactCounts/);
+  assert.doesNotMatch(sidecar, /report\.counts\.rawItems\s*=/);
+  assert.doesNotMatch(sidecar, /report\.counts\.renderBackendFacts\s*=/);
+  assert.doesNotMatch(sidecar, /report\.counts\.semanticTotalItems\s*=/);
+  assert.match(reportAssembler, /report\.counts\.rawItems = factCounts\.items/);
+  assert.match(reportAssembler, /report\.counts\.renderBackendFacts = factCounts\.renderBackendFacts/);
+  assert.match(reportAssembler, /report\.counts\.semanticTotalItems = semanticAudit\.totalItems/);
+  assert.match(reportAssembler, /report\.neiBrowserContract = factCounts\.neiBrowserContract/);
 });

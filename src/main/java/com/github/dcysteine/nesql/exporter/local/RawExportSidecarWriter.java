@@ -70,58 +70,7 @@ public final class RawExportSidecarWriter {
                 new SemanticItemIdentityDiagnosticsWriter(entityManager, rawDir).write();
 
         RawExportReport report = buildReport();
-        report.semanticRuleRuntime = semanticRuleRuntime;
-        report.counts.rawItems = factCounts.items;
-        report.counts.rawFluids = factCounts.fluids;
-        report.counts.rawRecipes = factCounts.recipes;
-        report.counts.rawGroups = factCounts.groups;
-        report.counts.rawNeiOrderEntries = factCounts.neiOrderEntries;
-        report.counts.neiRuntimePanelItems = factCounts.neiRuntimePanelItems;
-        report.counts.neiExportOnlyItems = factCounts.neiExportOnlyItems;
-        report.counts.neiBrowserItems = factCounts.neiBrowserItems;
-        report.counts.neiDefaultEntries = factCounts.neiDefaultEntries;
-        report.counts.neiFallbackGroups = factCounts.neiFallbackGroups;
-        report.counts.neiNativeGroups = factCounts.neiNativeGroups;
-        report.counts.neiSyntheticGroups = factCounts.neiSyntheticGroups;
-        report.counts.neiGuidFilterRules = factCounts.neiGuidFilterRules;
-        report.counts.neiHiddenItemRules = factCounts.neiHiddenItemRules;
-        report.counts.neiHiddenItems = factCounts.neiHiddenItems;
-        report.counts.neiRepresentativeMismatches = factCounts.neiRepresentativeMismatches;
-        report.counts.neiHandlers = factCounts.neiHandlers;
-        report.counts.neiHandlerLayouts = factCounts.neiHandlerLayouts;
-        report.counts.uiFamilyCensusHandlers = factCounts.uiFamilyCensusHandlers;
-        report.counts.uiFamilyCensusFamilies = factCounts.uiFamilyCensusFamilies;
-        report.counts.uiTemplateCatalogHandlers = factCounts.uiTemplateCatalogHandlers;
-        report.counts.uiTemplateCatalogTemplates = factCounts.uiTemplateCatalogTemplates;
-        report.counts.uiTemplateCatalogFamilies = factCounts.uiTemplateCatalogFamilies;
-        report.counts.rawTextures = factCounts.textures;
-        report.counts.rawAnimations = factCounts.animations;
-        report.counts.rawEntities = factCounts.entities;
-        report.counts.rawBrowserAtlasAssets = factCounts.browserAtlasAssets;
-        report.counts.renderBackendFacts = factCounts.renderBackendFacts;
-        report.counts.renderBackendAngelica = factCounts.renderBackendAngelica;
-        report.counts.renderTextureSprites = factCounts.renderTextureSprites;
-        report.counts.renderTextureSpritesMissingTiming = factCounts.renderTextureSpritesMissingTiming;
-        report.counts.renderItemRenderers = factCounts.renderItemRenderers;
-        report.counts.renderShaderItems = factCounts.renderShaderItems;
-        report.counts.renderShaderItemsRequiringCapture = factCounts.renderShaderItemsRequiringCapture;
-        report.counts.renderShaderItemsMissingCapture = factCounts.renderShaderItemsMissingCapture;
-        report.counts.renderShaderItemsMissingCaptureSamples = factCounts.renderShaderItemsMissingCaptureSamples;
-        report.counts.renderUnknownSpecialRenderers = factCounts.renderUnknownSpecialRenderers;
-        report.counts.renderFramebufferCaptures = factCounts.renderFramebufferCaptures;
-        report.counts.renderFramebufferCapturesWithoutFrames = factCounts.renderFramebufferCapturesWithoutFrames;
-        report.counts.renderFramebufferCapturesWithoutFramesSamples = factCounts.renderFramebufferCapturesWithoutFramesSamples;
-        report.counts.semanticTotalItems = semanticAudit.totalItems;
-        report.counts.semanticTaggedItems = semanticAudit.taggedItems;
-        report.counts.semanticClassifiedTaggedItems = semanticAudit.classifiedTaggedItems;
-        report.counts.semanticUnclassifiedTaggedItems = semanticAudit.unclassifiedTaggedItems;
-        report.counts.semanticEstimatedPublicItems = semanticAudit.estimatedPublicItemsAfterNormalization;
-        report.counts.semanticFamilyCount = semanticAudit.familyCount;
-        report.counts.semanticItems = semanticAudit.semanticItems;
-        report.counts.semanticVariants = semanticAudit.variants;
-        report.counts.semanticPayloads = semanticAudit.payloads;
-        report.counts.semanticIdentityMapRows = semanticAudit.identityMapRows;
-        report.neiBrowserContract = factCounts.neiBrowserContract;
+        RawExportReportAssembler.apply(report, factCounts, semanticRuleRuntime, semanticAudit);
         RawExportValidationSupport.apply(report);
         String generatedAt = utcNow();
         RawExportManifest manifest = RawExportManifestBuilder.build(SCHEMA_VERSION, generatedAt, exportContext, report);
@@ -448,48 +397,5 @@ public final class RawExportSidecarWriter {
 
 
 
-    private static final class RawFactCounts {
-        long items;
-        long fluids;
-        long recipes;
-        long groups;
-        long neiOrderEntries;
-        long neiRuntimePanelItems;
-        long neiExportOnlyItems;
-        long neiBrowserItems;
-        long neiDefaultEntries;
-        long neiFallbackGroups;
-        long neiNativeGroups;
-        long neiSyntheticGroups;
-        long neiGuidFilterRules;
-        long neiHiddenItemRules;
-        long neiHiddenItems;
-        long neiRepresentativeMismatches;
-        long neiHandlers;
-        long neiHandlerLayouts;
-        long uiFamilyCensusHandlers;
-        long uiFamilyCensusFamilies;
-        long uiTemplateCatalogHandlers;
-        long uiTemplateCatalogTemplates;
-        long uiTemplateCatalogFamilies;
-        long textures;
-        long animations;
-        long entities;
-        long browserAtlasAssets;
-        long renderBackendFacts;
-        long renderBackendAngelica;
-        long renderTextureSprites;
-        long renderTextureSpritesMissingTiming;
-        long renderItemRenderers;
-        long renderShaderItems;
-        long renderShaderItemsRequiringCapture;
-        long renderShaderItemsMissingCapture;
-        List<String> renderShaderItemsMissingCaptureSamples = new ArrayList<String>();
-        long renderUnknownSpecialRenderers;
-        long renderFramebufferCaptures;
-        long renderFramebufferCapturesWithoutFrames;
-        List<String> renderFramebufferCapturesWithoutFramesSamples = new ArrayList<String>();
-        NeiBrowserContract neiBrowserContract;
-    }
 
 }
