@@ -11,6 +11,10 @@ const repositoryFactResultUrl = new URL('./src/main/java/com/github/dcysteine/ne
 const neiFactWriterUrl = new URL('./src/main/java/com/github/dcysteine/nesql/exporter/local/RawExportNeiFactWriter.java', import.meta.url);
 const neiFactCountsUrl = new URL('./src/main/java/com/github/dcysteine/nesql/exporter/local/RawNeiFactCounts.java', import.meta.url);
 const neiBrowserContractUrl = new URL('./src/main/java/com/github/dcysteine/nesql/exporter/local/NeiBrowserContract.java', import.meta.url);
+const renderAssetCatalogWriterUrl = new URL('./src/main/java/com/github/dcysteine/nesql/exporter/local/RawExportRenderAssetCatalogWriter.java', import.meta.url);
+const renderAssetCatalogCountsUrl = new URL('./src/main/java/com/github/dcysteine/nesql/exporter/local/RawRenderAssetCatalogCounts.java', import.meta.url);
+const entityModelWriterUrl = new URL('./src/main/java/com/github/dcysteine/nesql/exporter/local/RawExportEntityModelWriter.java', import.meta.url);
+const emptyJsonlWriterUrl = new URL('./src/main/java/com/github/dcysteine/nesql/exporter/local/RawExportEmptyJsonlWriter.java', import.meta.url);
 const dtoFiles = [
   'RawExportManifest.java',
   'RawExportReport.java',
@@ -26,6 +30,8 @@ const manifestBuilder = readFileSync(manifestBuilderUrl, 'utf8');
 const reportWriter = readFileSync(reportWriterUrl, 'utf8');
 const repositoryFactStreamer = readFileSync(repositoryFactStreamerUrl, 'utf8');
 const neiFactWriter = readFileSync(neiFactWriterUrl, 'utf8');
+const renderAssetCatalogWriter = readFileSync(renderAssetCatalogWriterUrl, 'utf8');
+const entityModelWriter = readFileSync(entityModelWriterUrl, 'utf8');
 
 test('raw export validation logic lives outside RawExportSidecarWriter', () => {
   assert.match(sidecar, /RawExportValidationSupport\.apply\(report\)/);
@@ -110,4 +116,26 @@ test('raw NEI browser and handler facts are split from sidecar orchestration', (
   assert.match(neiFactWriter, /writeHiddenItemRules/);
   assert.match(neiFactWriter, /writeHandlerMetadata/);
   assert.match(neiFactWriter, /materializeGtNeiBackgroundAsset/);
+});
+
+
+test('raw render asset catalog and entity model facts are split from sidecar orchestration', () => {
+  assert.equal(existsSync(renderAssetCatalogWriterUrl), true, 'RawExportRenderAssetCatalogWriter must exist');
+  assert.equal(existsSync(renderAssetCatalogCountsUrl), true, 'RawRenderAssetCatalogCounts must exist');
+  assert.equal(existsSync(entityModelWriterUrl), true, 'RawExportEntityModelWriter must exist');
+  assert.equal(existsSync(emptyJsonlWriterUrl), true, 'RawExportEmptyJsonlWriter must exist');
+  assert.match(sidecar, /new RawExportRenderAssetCatalogWriter\(repositoryDirectory, rawDir, renderAssets\)\.write\(\)/);
+  assert.match(sidecar, /new RawExportEntityModelWriter\(repositoryDirectory, rawDir, SCHEMA_VERSION\)\.write\(\)/);
+  assert.match(sidecar, /RawExportEmptyJsonlWriter\.write\(new File\(rawDir, "models\/multiblocks\/index\.jsonl\.gz"\)\)/);
+  assert.doesNotMatch(sidecar, /writeBrowserAtlasIndexAndAssets/);
+  assert.doesNotMatch(sidecar, /materializeBrowserAtlasAsset/);
+  assert.doesNotMatch(sidecar, /rewriteBrowserAtlasPlacement/);
+  assert.doesNotMatch(sidecar, /toRenderAssetRow/);
+  assert.doesNotMatch(sidecar, /writeEntityModelIndex/);
+  assert.doesNotMatch(sidecar, /entityRow/);
+  assert.match(renderAssetCatalogWriter, /writeBrowserAtlasIndexAndAssets/);
+  assert.match(renderAssetCatalogWriter, /materializeBrowserAtlasAsset/);
+  assert.match(renderAssetCatalogWriter, /toRenderAssetRow/);
+  assert.match(entityModelWriter, /long write\(\) throws IOException/);
+  assert.match(entityModelWriter, /entityRow/);
 });

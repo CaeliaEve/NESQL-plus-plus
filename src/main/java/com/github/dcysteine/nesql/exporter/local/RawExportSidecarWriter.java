@@ -5,12 +5,6 @@ import com.github.dcysteine.nesql.exporter.main.ExportContext;
 import com.github.dcysteine.nesql.exporter.main.ExportStage;
 import com.github.dcysteine.nesql.exporter.main.Logger;
 import com.github.dcysteine.nesql.exporter.semantic.SemanticRulePack;
-import com.google.gson.Gson;
-import com.google.gson.GsonBuilder;
-import com.google.gson.JsonArray;
-import com.google.gson.JsonElement;
-import com.google.gson.JsonObject;
-import com.google.gson.JsonParser;
 import jakarta.persistence.EntityManager;
 import cpw.mods.fml.common.Loader;
 import cpw.mods.fml.common.ModContainer;
@@ -21,26 +15,17 @@ import java.io.File;
 import java.io.FileInputStream;
 import java.io.FileOutputStream;
 import java.io.IOException;
-import java.io.OutputStreamWriter;
-import java.io.Writer;
 import java.nio.charset.StandardCharsets;
-import java.nio.file.AtomicMoveNotSupportedException;
-import java.nio.file.Files;
-import java.nio.file.StandardCopyOption;
 import java.text.SimpleDateFormat;
 import java.util.ArrayList;
 import java.util.Collections;
 import java.util.Comparator;
 import java.util.Date;
-import java.util.LinkedHashMap;
-import java.util.LinkedHashSet;
 import java.util.List;
 import java.util.Map;
-import java.util.Set;
 import java.util.TimeZone;
 import java.security.MessageDigest;
 import java.security.NoSuchAlgorithmException;
-import java.util.zip.GZIPOutputStream;
 
 /**
  * Writes the first raw-export sidecar without replacing the current canonical
@@ -324,60 +309,14 @@ public final class RawExportSidecarWriter {
         counts.uiTemplateCatalogTemplates = nei.uiTemplateCatalogTemplates;
         counts.uiTemplateCatalogFamilies = nei.uiTemplateCatalogFamilies;
 
-        JsonArray textureRows = new JsonArray();
-        JsonArray animationRows = new JsonArray();
-        JsonArray nativeSpriteRows = new JsonArray();
-        JsonArray renderedGifRows = new JsonArray();
-        for (CanonicalRenderAsset asset : renderAssets) {
-            JsonObject row = toRenderAssetRow(asset);
-            textureRows.add(row);
-            if (isAnimated(asset)) {
-                animationRows.add(row);
-                if (isNativeSpriteAnimation(asset)) {
-                    nativeSpriteRows.add(row);
-                } else if (isRenderedGifAnimation(asset)) {
-                    renderedGifRows.add(row);
-                }
-            }
-        }
-        if (textureRows.size() == 0) {
-            JsonObject renderManifest = readObject(new File(repositoryDirectory, "canonical/render-assets.json"));
-            if (renderManifest != null && renderManifest.has("assets") && renderManifest.get("assets").isJsonArray()) {
-                JsonArray assets = renderManifest.getAsJsonArray("assets");
-                counts.textures = writeArrayAsJsonl(assets, new File(rawDir, "assets/textures/index.jsonl.gz"));
-                JsonArray animated = new JsonArray();
-                JsonArray nativeSprites = new JsonArray();
-                JsonArray renderedGifs = new JsonArray();
-                for (JsonElement element : assets) {
-                    if (element.isJsonObject() && isAnimated(element.getAsJsonObject())) {
-                        JsonObject asset = element.getAsJsonObject();
-                        animated.add(element);
-                        if (isNativeSpriteAnimation(asset)) {
-                            nativeSprites.add(element);
-                        } else if (isRenderedGifAnimation(asset)) {
-                            renderedGifs.add(element);
-                        }
-                    }
-                }
-                counts.animations = writeArrayAsJsonl(animated, new File(rawDir, "assets/animations/index.jsonl.gz"));
-                writeArrayAsJsonl(nativeSprites, new File(rawDir, "assets/animations/native-sprites.jsonl.gz"));
-                writeArrayAsJsonl(renderedGifs, new File(rawDir, "assets/animations/rendered-gifs.jsonl.gz"));
-            } else {
-                createEmptyJsonl(new File(rawDir, "assets/textures/index.jsonl.gz"));
-                createEmptyJsonl(new File(rawDir, "assets/animations/index.jsonl.gz"));
-                createEmptyJsonl(new File(rawDir, "assets/animations/native-sprites.jsonl.gz"));
-                createEmptyJsonl(new File(rawDir, "assets/animations/rendered-gifs.jsonl.gz"));
-            }
-        } else {
-            counts.textures = writeArrayAsJsonl(textureRows, new File(rawDir, "assets/textures/index.jsonl.gz"));
-            counts.animations = writeArrayAsJsonl(animationRows, new File(rawDir, "assets/animations/index.jsonl.gz"));
-            writeArrayAsJsonl(nativeSpriteRows, new File(rawDir, "assets/animations/native-sprites.jsonl.gz"));
-            writeArrayAsJsonl(renderedGifRows, new File(rawDir, "assets/animations/rendered-gifs.jsonl.gz"));
-        }
-        counts.browserAtlasAssets = writeBrowserAtlasIndexAndAssets(rawDir);
+        RawRenderAssetCatalogCounts renderAssetCatalog =
+                new RawExportRenderAssetCatalogWriter(repositoryDirectory, rawDir, renderAssets).write();
+        counts.textures = renderAssetCatalog.textures;
+        counts.animations = renderAssetCatalog.animations;
+        counts.browserAtlasAssets = renderAssetCatalog.browserAtlasAssets;
 
-        createEmptyJsonl(new File(rawDir, "models/multiblocks/index.jsonl.gz"));
-        counts.entities = writeEntityModelIndex(rawDir);
+        RawExportEmptyJsonlWriter.write(new File(rawDir, "models/multiblocks/index.jsonl.gz"));
+        counts.entities = new RawExportEntityModelWriter(repositoryDirectory, rawDir, SCHEMA_VERSION).write();
         AngelicaRenderFactsWriter.Counts renderCounts =
                 new AngelicaRenderFactsWriter(entityManager, rawDir, renderAssets).write();
         counts.renderBackendFacts = renderCounts.backendFacts;
@@ -394,394 +333,6 @@ public final class RawExportSidecarWriter {
         counts.renderFramebufferCapturesWithoutFrames = renderCounts.framebufferCapturesWithoutFrames;
         counts.renderFramebufferCapturesWithoutFramesSamples = new ArrayList<String>(renderCounts.framebufferCapturesWithoutFramesSamples);
         return counts;
-    }
-
-    private long writeEntityModelIndex(File rawDir) throws IOException {
-        JsonObject previews = readObject(new File(repositoryDirectory, "canonical/entity-previews.json"));
-        JsonObject models = readObject(new File(repositoryDirectory, "canonical/entity-models.json"));
-        JsonArray previewEntries = previews == null ? null : previews.getAsJsonArray("entries");
-        JsonArray modelEntries = models == null ? null : models.getAsJsonArray("entries");
-
-        Map<String, JsonObject> byMobName = new LinkedHashMap<String, JsonObject>();
-        if (previewEntries != null) {
-            for (JsonElement element : previewEntries) {
-                if (element == null || !element.isJsonObject()) {
-                    continue;
-                }
-                JsonObject preview = element.getAsJsonObject();
-                String mobName = stringAt(preview, "mobName");
-                if (mobName == null || mobName.trim().length() == 0) {
-                    continue;
-                }
-                JsonObject row = entityRow(byMobName, mobName.trim());
-                copyElement(row, "preview", preview, "");
-                copyString(row, "entityId", preview, "mobName");
-                copyString(row, "displayName", preview, "localizedName");
-                copyString(row, "modId", preview, "modId");
-                copyString(row, "previewImage", preview, "relativeGifPath");
-                copyFirstNumber(row, "frameCount", preview, "frameCount");
-                copyFirstNumber(row, "frameDurationMs", preview, "frameDurationMs");
-                copyFirstNumber(row, "width", preview, "width");
-                copyFirstNumber(row, "height", preview, "height");
-                copyString(row, "previewRenderMode", preview, "renderMode");
-            }
-        }
-        if (modelEntries != null) {
-            for (JsonElement element : modelEntries) {
-                if (element == null || !element.isJsonObject()) {
-                    continue;
-                }
-                JsonObject model = element.getAsJsonObject();
-                String mobName = stringAt(model, "mobName");
-                if (mobName == null || mobName.trim().length() == 0) {
-                    continue;
-                }
-                JsonObject row = entityRow(byMobName, mobName.trim());
-                copyElement(row, "model", model, "");
-                copyString(row, "entityId", model, "mobName");
-                copyString(row, "displayName", model, "localizedName");
-                copyString(row, "modId", model, "modId");
-                copyString(row, "modelPath", model, "relativeModelPath");
-                copyFirstNumber(row, "componentCount", model, "componentCount");
-                copyString(row, "modelRenderMode", model, "renderMode");
-            }
-        }
-
-        JsonArray rows = new JsonArray();
-        for (JsonObject row : byMobName.values()) {
-            row.addProperty("schemaVersion", SCHEMA_VERSION + "/entity-model");
-            rows.add(row);
-        }
-        return writeArrayAsJsonl(rows, new File(rawDir, "models/entities/index.jsonl.gz"));
-    }
-
-    private long writeBrowserAtlasIndexAndAssets(File rawDir) throws IOException {
-        JsonObject atlasIndex = readObject(new File(repositoryDirectory, "canonical/browser-atlas-index.json"));
-        if (atlasIndex == null) {
-            return 0L;
-        }
-
-        LinkedHashSet<String> copiedAssets = new LinkedHashSet<String>();
-        JsonArray items = atlasIndex.getAsJsonArray("items");
-        if (items != null) {
-            for (JsonElement element : items) {
-                if (element == null || !element.isJsonObject()) {
-                    continue;
-                }
-                JsonObject item = element.getAsJsonObject();
-                rewriteBrowserAtlasPlacement(rawDir, objectAt(item, "staticAtlas"), copiedAssets);
-                rewriteBrowserAtlasPlacement(rawDir, objectAt(item, "animatedAtlas"), copiedAssets);
-            }
-        }
-        atlasIndex.addProperty("rawExportMaterializedAtlasAssets", copiedAssets.size());
-        writeJson(new GsonBuilder().setPrettyPrinting().serializeNulls().create(),
-                new File(rawDir, "assets/textures/browser_atlas_index.json"),
-                atlasIndex);
-        return copiedAssets.size();
-    }
-
-    private void rewriteBrowserAtlasPlacement(
-            File rawDir,
-            JsonObject placement,
-            Set<String> copiedAssets) throws IOException {
-        if (placement == null || !placement.has("atlasFile")) {
-            return;
-        }
-        String atlasFile = stringAt(placement, "atlasFile");
-        String rawAtlasPath = materializeBrowserAtlasAsset(rawDir, atlasFile);
-        if (rawAtlasPath != null) {
-            placement.addProperty("atlasFile", rawAtlasPath);
-            copiedAssets.add(rawAtlasPath);
-        }
-    }
-
-    private JsonObject objectAt(JsonObject object, String key) {
-        if (object == null || key == null || !object.has(key)) {
-            return null;
-        }
-        JsonElement element = object.get(key);
-        if (element == null || !element.isJsonObject()) {
-            return null;
-        }
-        return element.getAsJsonObject();
-    }
-
-    private String materializeBrowserAtlasAsset(File rawDir, String atlasFile) throws IOException {
-        String normalized = normalizeRelativePath(atlasFile);
-        if (normalized == null) {
-            return null;
-        }
-        String rawRelative = "assets/textures/atlas-assets/" + stripCanonicalPrefix(normalized);
-        File source = resolveRepositoryRelativeFile(normalized);
-        if (source == null || !source.isFile()) {
-            Logger.MOD.warn("Missing browser atlas asset for raw-export: " + normalized);
-            return normalized;
-        }
-        copyIfPresent(source, new File(rawDir, rawRelative.replace('/', File.separatorChar)));
-        return rawRelative;
-    }
-
-    private File resolveRepositoryRelativeFile(String relativePath) {
-        File direct = new File(repositoryDirectory, relativePath.replace('/', File.separatorChar));
-        if (direct.isFile()) {
-            return direct;
-        }
-        String stripped = stripCanonicalPrefix(relativePath);
-        File canonical = new File(new File(repositoryDirectory, "canonical"), stripped.replace('/', File.separatorChar));
-        if (canonical.isFile()) {
-            return canonical;
-        }
-        return direct;
-    }
-
-    private static String stripCanonicalPrefix(String relativePath) {
-        return relativePath != null && relativePath.startsWith("canonical/")
-                ? relativePath.substring("canonical/".length())
-                : relativePath;
-    }
-
-    private static String normalizeRelativePath(String relativePath) {
-        if (relativePath == null) {
-            return null;
-        }
-        String normalized = relativePath.trim().replace('\\', '/');
-        while (normalized.startsWith("/")) {
-            normalized = normalized.substring(1);
-        }
-        if (normalized.length() == 0
-                || normalized.indexOf('\0') >= 0
-                || normalized.contains("://")
-                || normalized.startsWith("../")
-                || normalized.contains("/../")
-                || normalized.matches("^[A-Za-z]:/.*")) {
-            return null;
-        }
-        return normalized;
-    }
-
-    private static JsonObject entityRow(Map<String, JsonObject> rows, String mobName) {
-        JsonObject row = rows.get(mobName);
-        if (row == null) {
-            row = new JsonObject();
-            row.addProperty("entityId", mobName);
-            row.addProperty("mobName", mobName);
-            rows.put(mobName, row);
-        }
-        return row;
-    }
-
-    private static void copyString(JsonObject target, String to, JsonObject source, String dottedPath) {
-        String value = stringAt(source, dottedPath);
-        if (value != null && value.trim().length() > 0) {
-            target.addProperty(to, value.trim());
-        }
-    }
-
-    private static void copyElement(JsonObject target, String to, JsonObject source, String dottedPath) {
-        JsonElement value = elementAt(source, dottedPath);
-        if (value != null && !value.isJsonNull()) {
-            target.add(to, cloneJson(value));
-        }
-    }
-
-    private static void copyFirstNumber(JsonObject target, String to, JsonObject source, String... dottedPaths) {
-        for (String dottedPath : dottedPaths) {
-            JsonElement value = elementAt(source, dottedPath);
-            if (value == null || value.isJsonNull() || !value.isJsonPrimitive()) {
-                continue;
-            }
-            try {
-                target.add(to, cloneJson(value));
-                return;
-            } catch (Exception ignored) {
-                // Try the next candidate.
-            }
-        }
-    }
-
-    private static JsonElement cloneJson(JsonElement value) {
-        return value == null ? null : new JsonParser().parse(value.toString());
-    }
-
-    private static void addCount(JsonObject target, String to, JsonObject source, String dottedPath) {
-        JsonElement value = elementAt(source, dottedPath);
-        if (value != null && value.isJsonArray()) {
-            target.addProperty(to, value.getAsJsonArray().size());
-        }
-    }
-
-    private static void addCollectedStrings(
-            JsonObject target,
-            String to,
-            JsonObject source,
-            String arrayPath,
-            String nestedArrayName,
-            String valueKey,
-            int limit) {
-        JsonElement value = elementAt(source, arrayPath);
-        if (value == null || !value.isJsonArray()) {
-            return;
-        }
-        JsonArray out = new JsonArray();
-        Set<String> seen = new LinkedHashSet<String>();
-        for (JsonElement row : value.getAsJsonArray()) {
-            if (out.size() >= limit || row == null || !row.isJsonObject()) {
-                continue;
-            }
-            if (nestedArrayName == null) {
-                addStringIfPresent(out, seen, row.getAsJsonObject().get(valueKey));
-            } else {
-                JsonElement nested = row.getAsJsonObject().get(nestedArrayName);
-                if (nested == null || !nested.isJsonArray()) {
-                    continue;
-                }
-                for (JsonElement nestedRow : nested.getAsJsonArray()) {
-                    if (out.size() >= limit || nestedRow == null || !nestedRow.isJsonObject()) {
-                        continue;
-                    }
-                    addStringIfPresent(out, seen, nestedRow.getAsJsonObject().get(valueKey));
-                }
-            }
-        }
-        if (out.size() > 0) {
-            target.add(to, out);
-        }
-    }
-
-    private static void addStringIfPresent(JsonArray target, Set<String> seen, JsonElement value) {
-        if (value == null || value.isJsonNull() || !value.isJsonPrimitive()) {
-            return;
-        }
-        try {
-            String text = value.getAsString();
-            if (text != null && text.trim().length() > 0 && !seen.contains(text.trim())) {
-                seen.add(text.trim());
-                target.add(new com.google.gson.JsonPrimitive(text.trim()));
-            }
-        } catch (Exception ignored) {
-            // Ignore non-string primitives.
-        }
-    }
-
-    private static JsonElement elementAt(JsonObject object, String dottedPath) {
-        if (dottedPath == null || dottedPath.length() == 0) {
-            return object;
-        }
-        JsonElement current = object;
-        for (String part : dottedPath.split("\\.")) {
-            if (current == null || !current.isJsonObject()) {
-                return null;
-            }
-            current = current.getAsJsonObject().get(part);
-        }
-        return current;
-    }
-
-    private static String stringAt(JsonObject object, String dottedPath) {
-        JsonElement current = object;
-        for (String part : dottedPath.split("\\.")) {
-            if (current == null || !current.isJsonObject()) {
-                return null;
-            }
-            current = current.getAsJsonObject().get(part);
-        }
-        if (current == null || current.isJsonNull()) {
-            return null;
-        }
-        try {
-            return current.isJsonPrimitive() ? current.getAsString() : null;
-        } catch (Exception ignored) {
-            return null;
-        }
-    }
-
-    private static String firstNonBlank(String... values) {
-        for (String value : values) {
-            if (value != null && value.trim().length() > 0) {
-                return value.trim();
-            }
-        }
-        return null;
-    }
-
-    private static JsonObject toRenderAssetRow(CanonicalRenderAsset asset) {
-        JsonObject row = new JsonObject();
-        add(row, "assetId", asset.assetId);
-        add(row, "variantKey", asset.variantKey);
-        add(row, "family", asset.family);
-        add(row, "sourceType", asset.sourceType);
-        add(row, "contentHash", asset.contentHash);
-        add(row, "mode", asset.mode);
-        add(row, "renderMode", asset.renderMode);
-        add(row, "animationMode", asset.animationMode);
-        add(row, "playbackHint", asset.playbackHint);
-        add(row, "primaryArtifact", asset.primaryArtifact);
-        add(row, "staticFile", asset.staticFile);
-        add(row, "framePattern", asset.framePattern);
-        add(row, "frameCount", asset.frameCount);
-        add(row, "configuredFrameCount", asset.configuredFrameCount);
-        add(row, "capturedFrameCount", asset.capturedFrameCount);
-        add(row, "frameDurationMs", asset.frameDurationMs);
-        add(row, "frameDurationSource", asset.frameDurationSource);
-        add(row, "frames", asset.frames);
-        add(row, "timeline", asset.timeline);
-        add(row, "loopMode", asset.loopMode);
-        add(row, "loop", asset.loop);
-        add(row, "baseSize", asset.baseSize);
-        add(row, "rect", asset.rect);
-        add(row, "atlasGroup", asset.atlasGroup);
-        add(row, "atlasFile", asset.atlasFile);
-        add(row, "atlasTexture", asset.atlasTexture);
-        add(row, "atlasExportFile", asset.atlasExportFile);
-        add(row, "spriteMetadataFile", asset.spriteMetadataFile);
-        add(row, "nativeSpriteAtlasFile", asset.nativeSpriteAtlasFile);
-        return row;
-    }
-
-    private static boolean isAnimated(CanonicalRenderAsset asset) {
-        return (asset.frameCount != null && asset.frameCount > 1)
-                || (asset.capturedFrameCount != null && asset.capturedFrameCount > 1)
-                || (asset.configuredFrameCount != null && asset.configuredFrameCount > 1)
-                || containsIgnoreCase(asset.mode, "animated")
-                || containsIgnoreCase(asset.animationMode, "animated")
-                || asset.framePattern != null;
-    }
-
-
-    private static boolean isNativeSpriteAnimation(CanonicalRenderAsset asset) {
-        return "native_sprite_animation".equals(asset.mode)
-                || "native_sprite".equals(asset.animationMode)
-                || "native_sprite_aux".equals(asset.animationMode)
-                || asset.spriteMetadataFile != null;
-    }
-
-    private static boolean isNativeSpriteAnimation(JsonObject asset) {
-        return "native_sprite_animation".equals(stringValue(asset, "mode"))
-                || "native_sprite".equals(stringValue(asset, "animationMode"))
-                || "native_sprite_aux".equals(stringValue(asset, "animationMode"))
-                || stringValue(asset, "spriteMetadataFile") != null;
-    }
-
-    private static boolean isRenderedGifAnimation(CanonicalRenderAsset asset) {
-        return containsIgnoreCase(asset.animationMode, "gif")
-                || containsIgnoreCase(asset.mode, "gif")
-                || containsIgnoreCase(asset.primaryArtifact, ".gif")
-                || containsIgnoreCase(asset.staticFile, ".gif");
-    }
-
-    private static boolean isRenderedGifAnimation(JsonObject asset) {
-        return containsIgnoreCase(stringValue(asset, "animationMode"), "gif")
-                || containsIgnoreCase(stringValue(asset, "mode"), "gif")
-                || containsIgnoreCase(stringValue(asset, "primaryArtifact"), ".gif")
-                || containsIgnoreCase(stringValue(asset, "staticFile"), ".gif");
-    }
-    private static boolean isAnimated(JsonObject asset) {
-        return intValue(asset, "frameCount") > 1
-                || intValue(asset, "capturedFrameCount") > 1
-                || intValue(asset, "configuredFrameCount") > 1
-                || containsIgnoreCase(stringValue(asset, "mode"), "animated")
-                || containsIgnoreCase(stringValue(asset, "animationMode"), "animated")
-                || stringValue(asset, "framePattern") != null;
     }
 
     private long countQuery(String query) {
@@ -807,97 +358,8 @@ public final class RawExportSidecarWriter {
         return ref;
     }
 
-    private static long writeArrayAsJsonl(JsonArray array, File out) throws IOException {
-        long count = 0L;
-        Gson gson = new GsonBuilder().serializeNulls().create();
-        File parent = out.getParentFile();
-        if (parent != null) {
-            ensureDirectory(parent);
-        }
-        try (OutputStreamWriter writer = createUtf8Writer(out)) {
-            if (array != null) {
-                for (JsonElement element : array) {
-                    gson.toJson(element, writer);
-                    writer.write('\n');
-                    count++;
-                }
-            }
-        }
-        return count;
-    }
-
     private RawRepositoryFactStreamResult streamRepositoryFacts(File rawDir) throws IOException {
         return new RawExportRepositoryFactStreamer(entityManager, rawDir, SCHEMA_VERSION).write();
-    }
-
-    private static void createEmptyJsonl(File out) throws IOException {
-        File parent = out.getParentFile();
-        if (parent != null) {
-            ensureDirectory(parent);
-        }
-        try (Writer ignored = createUtf8Writer(out)) {
-            // Empty JSONL remains valid when a source is unavailable for this run.
-        }
-    }
-
-    private static JsonObject readObject(File file) {
-        if (file == null || !file.exists()) {
-            return null;
-        }
-        try (java.io.FileInputStream fis = new java.io.FileInputStream(file);
-             java.io.InputStreamReader reader = new java.io.InputStreamReader(fis, StandardCharsets.UTF_8)) {
-            JsonElement element = new JsonParser().parse(reader);
-            return element != null && element.isJsonObject() ? element.getAsJsonObject() : null;
-        } catch (Exception e) {
-            Logger.MOD.warn("Failed to read raw-export source file: " + file.getAbsolutePath(), e);
-            return null;
-        }
-    }
-
-    private static void add(JsonObject object, String key, String value) {
-        if (value != null) {
-            object.addProperty(key, value);
-        }
-    }
-
-    private static void add(JsonObject object, String key, Number value) {
-        if (value != null) {
-            object.addProperty(key, value);
-        }
-    }
-
-
-    private static void add(JsonObject object, String key, Boolean value) {
-        if (value != null) {
-            object.addProperty(key, value);
-        }
-    }
-
-    private static void add(JsonObject object, String key, Object value) {
-        if (value != null) {
-            object.add(key, new GsonBuilder().serializeNulls().create().toJsonTree(value));
-        }
-    }
-    private static boolean containsIgnoreCase(String value, String token) {
-        return value != null && token != null && value.toLowerCase(java.util.Locale.ROOT).contains(token.toLowerCase(java.util.Locale.ROOT));
-    }
-
-    private static int intValue(JsonObject object, String key) {
-        try {
-            JsonElement element = object.get(key);
-            return element == null || element.isJsonNull() ? 0 : element.getAsInt();
-        } catch (Exception ignored) {
-            return 0;
-        }
-    }
-
-    private static String stringValue(JsonObject object, String key) {
-        try {
-            JsonElement element = object.get(key);
-            return element == null || element.isJsonNull() ? null : element.getAsString();
-        } catch (Exception ignored) {
-            return null;
-        }
     }
 
     private static long countFiles(File root, String requiredName) {
@@ -944,17 +406,6 @@ public final class RawExportSidecarWriter {
         }
     }
 
-    private static void writeJson(Gson gson, File out, Object value) throws IOException {
-        File parent = out.getParentFile();
-        if (parent != null) {
-            ensureDirectory(parent);
-        }
-        try (FileOutputStream fos = new FileOutputStream(out);
-             OutputStreamWriter writer = new OutputStreamWriter(fos, StandardCharsets.UTF_8)) {
-            gson.toJson(value, writer);
-        }
-    }
-
     private static void purgeLegacyRawExportOutputs(File rawDir) throws IOException {
         deleteIfExists(new File(rawDir, "recipes.jsonl"));
         deleteIfExists(new File(rawDir, "items.jsonl"));
@@ -983,14 +434,6 @@ public final class RawExportSidecarWriter {
         if (!file.delete() && file.exists()) {
             throw new IOException("Failed to delete legacy raw-export output: " + file.getAbsolutePath());
         }
-    }
-
-    private static OutputStreamWriter createUtf8Writer(File out) throws IOException {
-        FileOutputStream fos = new FileOutputStream(out);
-        if (out.getName().endsWith(".gz")) {
-            return new OutputStreamWriter(new GZIPOutputStream(fos), StandardCharsets.UTF_8);
-        }
-        return new OutputStreamWriter(fos, StandardCharsets.UTF_8);
     }
 
     private static String utcNow() {
