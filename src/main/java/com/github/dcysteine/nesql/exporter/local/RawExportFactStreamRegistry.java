@@ -17,6 +17,17 @@ final class RawExportFactStreamRegistry {
                 new RawEntityAndRenderBackendFactStreamProvider()));
     }
 
+    static List<RawExportFactStreamDescriptor> describe(List<RawExportFactStreamProvider> providers) {
+        List<RawExportFactStreamDescriptor> descriptors = new ArrayList<RawExportFactStreamDescriptor>();
+        for (RawExportFactStreamProvider provider : providers) {
+            descriptors.add(new RawExportFactStreamDescriptor(
+                    provider.id(),
+                    provider.capabilities(),
+                    provider.outputFamilies()));
+        }
+        return Collections.unmodifiableList(descriptors);
+    }
+
     private static List<RawExportFactStreamProvider> providerList(RawExportFactStreamProvider... providers) {
         List<RawExportFactStreamProvider> list = new ArrayList<RawExportFactStreamProvider>();
         Collections.addAll(list, providers);
@@ -35,6 +46,12 @@ final class RawExportFactStreamRegistry {
             }
             if (!ids.add(id)) {
                 throw new IllegalArgumentException("Duplicate raw export fact stream provider id: " + id);
+            }
+            if (provider.capabilities() == null || provider.capabilities().isEmpty()) {
+                throw new IllegalArgumentException("Raw export fact stream provider capabilities must be non-empty: " + id);
+            }
+            if (provider.outputFamilies() == null || provider.outputFamilies().isEmpty()) {
+                throw new IllegalArgumentException("Raw export fact stream provider output families must be non-empty: " + id);
             }
         }
         return Collections.unmodifiableList(new ArrayList<RawExportFactStreamProvider>(providers));

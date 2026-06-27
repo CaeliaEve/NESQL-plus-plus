@@ -10,6 +10,7 @@ import java.util.List;
 final class RawExportFactStreamPipeline {
     private final RawExportFactStreamContext context;
     private final List<RawExportFactStreamProvider> providers;
+    private final List<RawExportFactStreamDescriptor> descriptors;
 
     RawExportFactStreamPipeline(
             EntityManager entityManager,
@@ -24,6 +25,11 @@ final class RawExportFactStreamPipeline {
                 renderAssets,
                 schemaVersion);
         this.providers = RawExportFactStreamRegistry.defaultProviders();
+        this.descriptors = RawExportFactStreamRegistry.describe(providers);
+    }
+
+    List<RawExportFactStreamDescriptor> descriptors() {
+        return descriptors;
     }
 
     RawFactCounts write() throws IOException {

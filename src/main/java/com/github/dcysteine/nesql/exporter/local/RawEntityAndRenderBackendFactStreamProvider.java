@@ -3,11 +3,28 @@ package com.github.dcysteine.nesql.exporter.local;
 import java.io.File;
 import java.io.IOException;
 import java.util.ArrayList;
+import java.util.List;
 
 final class RawEntityAndRenderBackendFactStreamProvider implements RawExportFactStreamProvider {
     @Override
     public String id() {
         return "raw.entity-render-backend-facts";
+    }
+
+    @Override
+    public List<String> capabilities() {
+        return RawExportFactStreamProvider.list(
+                "raw.entities",
+                "raw.render.angelica-backend",
+                "raw.render.framebuffer-captures");
+    }
+
+    @Override
+    public List<String> outputFamilies() {
+        return RawExportFactStreamProvider.list(
+                "models/entities",
+                "models/multiblocks",
+                "facts/render-backend");
     }
 
     @Override
