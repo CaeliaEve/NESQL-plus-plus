@@ -8,6 +8,7 @@ const factStreamContextUrl = new URL('./src/main/java/com/github/dcysteine/nesql
 const factStreamProviderUrl = new URL('./src/main/java/com/github/dcysteine/nesql/exporter/local/RawExportFactStreamProvider.java', import.meta.url);
 const factStreamRegistryUrl = new URL('./src/main/java/com/github/dcysteine/nesql/exporter/local/RawExportFactStreamRegistry.java', import.meta.url);
 const factStreamDescriptorUrl = new URL('./src/main/java/com/github/dcysteine/nesql/exporter/local/RawExportFactStreamDescriptor.java', import.meta.url);
+const factStreamDescriptorWriterUrl = new URL('./src/main/java/com/github/dcysteine/nesql/exporter/local/RawExportFactStreamDescriptorWriter.java', import.meta.url);
 const repositoryProviderUrl = new URL('./src/main/java/com/github/dcysteine/nesql/exporter/local/RawRepositoryFactStreamProvider.java', import.meta.url);
 const neiProviderUrl = new URL('./src/main/java/com/github/dcysteine/nesql/exporter/local/RawNeiFactStreamProvider.java', import.meta.url);
 const renderAssetProviderUrl = new URL('./src/main/java/com/github/dcysteine/nesql/exporter/local/RawRenderAssetFactStreamProvider.java', import.meta.url);
@@ -45,6 +46,7 @@ const factStreamContext = readFileSync(factStreamContextUrl, 'utf8');
 const factStreamProvider = readFileSync(factStreamProviderUrl, 'utf8');
 const factStreamRegistry = readFileSync(factStreamRegistryUrl, 'utf8');
 const factStreamDescriptor = readFileSync(factStreamDescriptorUrl, 'utf8');
+const factStreamDescriptorWriter = readFileSync(factStreamDescriptorWriterUrl, 'utf8');
 const repositoryProvider = readFileSync(repositoryProviderUrl, 'utf8');
 const neiProvider = readFileSync(neiProviderUrl, 'utf8');
 const renderAssetProvider = readFileSync(renderAssetProviderUrl, 'utf8');
@@ -115,6 +117,7 @@ test('raw repository fact streaming is split from sidecar orchestration', () => 
   assert.equal(existsSync(factStreamProviderUrl), true, 'RawExportFactStreamProvider must exist');
   assert.equal(existsSync(factStreamRegistryUrl), true, 'RawExportFactStreamRegistry must exist');
   assert.equal(existsSync(factStreamDescriptorUrl), true, 'RawExportFactStreamDescriptor must exist');
+  assert.equal(existsSync(factStreamDescriptorWriterUrl), true, 'RawExportFactStreamDescriptorWriter must exist');
   assert.equal(existsSync(repositoryProviderUrl), true, 'RawRepositoryFactStreamProvider must exist');
   assert.equal(existsSync(repositoryFactStreamerUrl), true, 'RawExportRepositoryFactStreamer must exist');
   assert.equal(existsSync(repositoryFactResultUrl), true, 'RawRepositoryFactStreamResult must exist');
@@ -235,9 +238,15 @@ test('raw fact stream registry owns provider order and identity validation', () 
   assert.match(factStreamPipeline, /private final List<RawExportFactStreamDescriptor> descriptors/);
   assert.match(factStreamPipeline, /this\.descriptors = RawExportFactStreamRegistry\.describe\(providers\)/);
   assert.match(factStreamPipeline, /List<RawExportFactStreamDescriptor> descriptors\(\)/);
+  assert.match(factStreamPipeline, /RawExportFactStreamDescriptorWriter\.write\(context\.rawDir, descriptors\)/);
   assert.match(factStreamDescriptor, /final String id/);
   assert.match(factStreamDescriptor, /final List<String> capabilities/);
   assert.match(factStreamDescriptor, /final List<String> outputFamilies/);
+  assert.match(factStreamDescriptorWriter, /nesqlpp\/raw-fact-stream-providers\/v1/);
+  assert.match(factStreamDescriptorWriter, /raw_fact_stream_providers\.json/);
+  assert.match(factStreamDescriptorWriter, /report\.providerCount = descriptors\.size\(\)/);
+  assert.match(factStreamDescriptorWriter, /report\.providers = descriptors/);
+  assert.match(factStreamDescriptorWriter, /RawExportSidecarFileOps\.ensureDirectory\(validationDir\)/);
   for (const [source, id] of [
     [repositoryProvider, 'raw.repository-facts'],
     [neiProvider, 'raw.nei-facts'],

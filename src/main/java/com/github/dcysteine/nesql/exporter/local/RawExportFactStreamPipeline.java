@@ -34,6 +34,7 @@ final class RawExportFactStreamPipeline {
 
     RawFactCounts write() throws IOException {
         RawFactCounts counts = new RawFactCounts();
+        RawExportFactStreamDescriptorWriter.write(context.rawDir, descriptors);
         for (RawExportFactStreamProvider provider : providers) {
             provider.write(context, counts);
         }
