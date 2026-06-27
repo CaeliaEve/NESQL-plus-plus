@@ -18,10 +18,32 @@ const textureSpriteCountsUrl = new URL(
   './src/main/java/com/github/dcysteine/nesql/exporter/local/AngelicaTextureSpriteStreamCounts.java',
   import.meta.url,
 );
+const itemRendererFactsUrl = new URL(
+  './src/main/java/com/github/dcysteine/nesql/exporter/local/AngelicaRenderItemRendererFactsWriter.java',
+  import.meta.url,
+);
+const itemRendererCountsUrl = new URL(
+  './src/main/java/com/github/dcysteine/nesql/exporter/local/AngelicaItemRendererStreamCounts.java',
+  import.meta.url,
+);
+const framebufferCaptureFactsUrl = new URL(
+  './src/main/java/com/github/dcysteine/nesql/exporter/local/AngelicaFramebufferCaptureFactsWriter.java',
+  import.meta.url,
+);
+const framebufferCaptureCountsUrl = new URL(
+  './src/main/java/com/github/dcysteine/nesql/exporter/local/AngelicaFramebufferCaptureStreamCounts.java',
+  import.meta.url,
+);
+const rendererClassificationUrl = new URL(
+  './src/main/java/com/github/dcysteine/nesql/exporter/local/AngelicaRendererClassification.java',
+  import.meta.url,
+);
 
 const renderFacts = readFileSync(renderFactsUrl, 'utf8');
 const backendFacts = readFileSync(backendFactsUrl, 'utf8');
 const textureSpriteFacts = readFileSync(textureSpriteFactsUrl, 'utf8');
+const itemRendererFacts = readFileSync(itemRendererFactsUrl, 'utf8');
+const framebufferCaptureFacts = readFileSync(framebufferCaptureFactsUrl, 'utf8');
 
 test('Angelica render backend facts live outside the render fact coordinator', () => {
   assert.equal(existsSync(backendFactsUrl), true, 'AngelicaRenderBackendFactsWriter must exist');
@@ -70,4 +92,50 @@ test('Angelica texture sprite writer owns atlas discovery and timeline reconstru
   assert.match(textureSpriteFacts, /readAnimationMetadata\(/);
   assert.match(textureSpriteFacts, /Minecraft\.getMinecraft\(\)/);
   assert.match(textureSpriteFacts, /TextureAtlasSprite/);
+});
+
+test('Angelica item renderer and shader facts live outside the render fact coordinator', () => {
+  assert.equal(existsSync(itemRendererFactsUrl), true, 'AngelicaRenderItemRendererFactsWriter must exist');
+  assert.equal(existsSync(itemRendererCountsUrl), true, 'AngelicaItemRendererStreamCounts must exist');
+  assert.equal(existsSync(rendererClassificationUrl), true, 'AngelicaRendererClassification must exist');
+  assert.match(renderFacts, /new AngelicaRenderItemRendererFactsWriter\(entityManager, SCHEMA_ROOT\)\s*\.write\(/);
+  assert.match(renderFacts, /AngelicaItemRendererStreamCounts itemRendererCounts/);
+  assert.doesNotMatch(renderFacts, /writeItemRendererFacts\(/);
+  assert.doesNotMatch(renderFacts, /toItemRendererRow\(/);
+  assert.doesNotMatch(renderFacts, /toShaderItemRow\(/);
+  assert.doesNotMatch(renderFacts, /classifyRenderer\(/);
+  assert.doesNotMatch(renderFacts, /shaderTextureHints\(/);
+  assert.doesNotMatch(renderFacts, /MinecraftForgeClient\.getItemRenderer/);
+});
+
+test('Angelica item renderer writer owns renderer registry probing and shader classification', () => {
+  assert.match(itemRendererFacts, /final class AngelicaRenderItemRendererFactsWriter/);
+  assert.match(itemRendererFacts, /TypedQuery<Item>/);
+  assert.match(itemRendererFacts, /toItemRendererRow\(/);
+  assert.match(itemRendererFacts, /toShaderItemRow\(/);
+  assert.match(itemRendererFacts, /classifyRenderer\(/);
+  assert.match(itemRendererFacts, /shaderTextureHints\(/);
+  assert.match(itemRendererFacts, /MinecraftForgeClient\.getItemRenderer/);
+  assert.match(itemRendererFacts, /preferredExport", "angelica-framebuffer-capture"/);
+});
+
+test('Angelica framebuffer capture facts live outside the render fact coordinator', () => {
+  assert.equal(existsSync(framebufferCaptureFactsUrl), true, 'AngelicaFramebufferCaptureFactsWriter must exist');
+  assert.equal(existsSync(framebufferCaptureCountsUrl), true, 'AngelicaFramebufferCaptureStreamCounts must exist');
+  assert.match(renderFacts, /new AngelicaFramebufferCaptureFactsWriter\(SCHEMA_ROOT, renderAssets\)\s*\.write\(/);
+  assert.match(renderFacts, /AngelicaFramebufferCaptureStreamCounts captureCounts/);
+  assert.doesNotMatch(renderFacts, /writeFramebufferCaptureFacts\(/);
+  assert.doesNotMatch(renderFacts, /isFramebufferCaptureAsset\(/);
+  assert.doesNotMatch(renderFacts, /existing-render-dispatcher-capture/);
+  assert.doesNotMatch(renderFacts, /rendererContract/);
+});
+
+test('Angelica framebuffer capture writer owns capture filtering and capture stream rows', () => {
+  assert.match(framebufferCaptureFacts, /final class AngelicaFramebufferCaptureFactsWriter/);
+  assert.match(framebufferCaptureFacts, /isFramebufferCaptureAsset\(/);
+  assert.match(framebufferCaptureFacts, /schemaRoot \+ "\/framebuffer-capture"/);
+  assert.match(framebufferCaptureFacts, /existing-render-dispatcher-capture/);
+  assert.match(framebufferCaptureFacts, /rendererContract/);
+  assert.match(framebufferCaptureFacts, /captureAssetIds/);
+  assert.match(framebufferCaptureFacts, /framebufferCapturesWithoutFramesSamples/);
 });
