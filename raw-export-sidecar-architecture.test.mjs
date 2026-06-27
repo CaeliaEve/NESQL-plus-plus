@@ -17,6 +17,9 @@ const entityModelWriterUrl = new URL('./src/main/java/com/github/dcysteine/nesql
 const emptyJsonlWriterUrl = new URL('./src/main/java/com/github/dcysteine/nesql/exporter/local/RawExportEmptyJsonlWriter.java', import.meta.url);
 const rawFactCountsUrl = new URL('./src/main/java/com/github/dcysteine/nesql/exporter/local/RawFactCounts.java', import.meta.url);
 const reportAssemblerUrl = new URL('./src/main/java/com/github/dcysteine/nesql/exporter/local/RawExportReportAssembler.java', import.meta.url);
+const semanticRuntimeBuilderUrl = new URL('./src/main/java/com/github/dcysteine/nesql/exporter/local/RawExportSemanticRuntimeBuilder.java', import.meta.url);
+const reportFactoryUrl = new URL('./src/main/java/com/github/dcysteine/nesql/exporter/local/RawExportReportFactory.java', import.meta.url);
+const sidecarFileOpsUrl = new URL('./src/main/java/com/github/dcysteine/nesql/exporter/local/RawExportSidecarFileOps.java', import.meta.url);
 const dtoFiles = [
   'RawExportManifest.java',
   'RawExportReport.java',
@@ -35,6 +38,9 @@ const neiFactWriter = readFileSync(neiFactWriterUrl, 'utf8');
 const renderAssetCatalogWriter = readFileSync(renderAssetCatalogWriterUrl, 'utf8');
 const entityModelWriter = readFileSync(entityModelWriterUrl, 'utf8');
 const reportAssembler = readFileSync(reportAssemblerUrl, 'utf8');
+const semanticRuntimeBuilder = readFileSync(semanticRuntimeBuilderUrl, 'utf8');
+const reportFactory = readFileSync(reportFactoryUrl, 'utf8');
+const sidecarFileOps = readFileSync(sidecarFileOpsUrl, 'utf8');
 
 test('raw export validation logic lives outside RawExportSidecarWriter', () => {
   assert.match(sidecar, /RawExportValidationSupport\.apply\(report\)/);
@@ -156,4 +162,27 @@ test('raw export aggregate report mapping is split from sidecar orchestration', 
   assert.match(reportAssembler, /report\.counts\.renderBackendFacts = factCounts\.renderBackendFacts/);
   assert.match(reportAssembler, /report\.counts\.semanticTotalItems = semanticAudit\.totalItems/);
   assert.match(reportAssembler, /report\.neiBrowserContract = factCounts\.neiBrowserContract/);
+});
+
+
+test('raw export semantic runtime report factory and file ops are split from sidecar', () => {
+  assert.equal(existsSync(semanticRuntimeBuilderUrl), true, 'RawExportSemanticRuntimeBuilder must exist');
+  assert.equal(existsSync(reportFactoryUrl), true, 'RawExportReportFactory must exist');
+  assert.equal(existsSync(sidecarFileOpsUrl), true, 'RawExportSidecarFileOps must exist');
+  assert.match(sidecar, /new RawExportSemanticRuntimeBuilder\(exportContext\)\.build\(\)/);
+  assert.match(sidecar, /new RawExportReportFactory\(/);
+  assert.match(sidecar, /RawExportSidecarFileOps\.purgeLegacyRawExportOutputs\(rawDir\)/);
+  assert.match(sidecar, /RawExportSidecarFileOps\.copyIfPresent\(/);
+  assert.doesNotMatch(sidecar, /buildSemanticRuleRuntimeMetadata/);
+  assert.doesNotMatch(sidecar, /safeMinecraftVersion/);
+  assert.doesNotMatch(sidecar, /safeForgeVersion/);
+  assert.doesNotMatch(sidecar, /safeModVersion/);
+  assert.doesNotMatch(sidecar, /semanticFingerprint\(/);
+  assert.doesNotMatch(sidecar, /RawExportReport buildReport/);
+  assert.doesNotMatch(sidecar, /countQuery/);
+  assert.doesNotMatch(sidecar, /countFiles/);
+  assert.doesNotMatch(sidecar, /deleteIfExists/);
+  assert.match(semanticRuntimeBuilder, /SemanticRulePack\.RuntimeMetadata/);
+  assert.match(reportFactory, /RawExportReport build\(\)/);
+  assert.match(sidecarFileOps, /purgeLegacyRawExportOutputs/);
 });

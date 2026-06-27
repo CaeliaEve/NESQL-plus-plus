@@ -2,30 +2,18 @@ package com.github.dcysteine.nesql.exporter.local;
 
 import com.github.dcysteine.nesql.exporter.canonical.CanonicalRenderAsset;
 import com.github.dcysteine.nesql.exporter.main.ExportContext;
-import com.github.dcysteine.nesql.exporter.main.ExportStage;
 import com.github.dcysteine.nesql.exporter.main.Logger;
 import com.github.dcysteine.nesql.exporter.semantic.SemanticRulePack;
 import jakarta.persistence.EntityManager;
-import cpw.mods.fml.common.Loader;
-import cpw.mods.fml.common.ModContainer;
 import net.minecraft.util.EnumChatFormatting;
-import net.minecraftforge.common.ForgeVersion;
 
 import java.io.File;
-import java.io.FileInputStream;
-import java.io.FileOutputStream;
 import java.io.IOException;
-import java.nio.charset.StandardCharsets;
 import java.text.SimpleDateFormat;
 import java.util.ArrayList;
-import java.util.Collections;
-import java.util.Comparator;
 import java.util.Date;
 import java.util.List;
-import java.util.Map;
 import java.util.TimeZone;
-import java.security.MessageDigest;
-import java.security.NoSuchAlgorithmException;
 
 /**
  * Writes the first raw-export sidecar without replacing the current canonical
@@ -60,16 +48,17 @@ public final class RawExportSidecarWriter {
 
     public void export() throws IOException {
         File rawDir = new File(repositoryDirectory, OUTPUT_DIRECTORY);
-        ensureDirectory(rawDir);
-        purgeLegacyRawExportOutputs(rawDir);
+        RawExportSidecarFileOps.ensureDirectory(rawDir);
+        RawExportSidecarFileOps.purgeLegacyRawExportOutputs(rawDir);
 
         RawFactCounts factCounts = writeRawFactStreams(rawDir);
-        SemanticRulePack.RuntimeMetadata semanticRuleRuntime = buildSemanticRuleRuntimeMetadata();
+        SemanticRulePack.RuntimeMetadata semanticRuleRuntime = new RawExportSemanticRuntimeBuilder(exportContext).build();
         SemanticRulePack.writeBundledCopy(new File(rawDir, "facts/semantic/rule-pack.json"), semanticRuleRuntime);
         SemanticItemIdentityDiagnosticsWriter.SemanticAuditSummary semanticAudit =
                 new SemanticItemIdentityDiagnosticsWriter(entityManager, rawDir).write();
 
-        RawExportReport report = buildReport();
+        RawExportReport report = new RawExportReportFactory(
+                entityManager, repositoryDirectory, exportContext, renderAssets, SCHEMA_VERSION).build();
         RawExportReportAssembler.apply(report, factCounts, semanticRuleRuntime, semanticAudit);
         RawExportValidationSupport.apply(report);
         String generatedAt = utcNow();
@@ -91,141 +80,25 @@ public final class RawExportSidecarWriter {
 
     public static void syncFinalReports(File repositoryDirectory) throws IOException {
         File rawDir = new File(repositoryDirectory, OUTPUT_DIRECTORY);
-        ensureDirectory(rawDir);
+        RawExportSidecarFileOps.ensureDirectory(rawDir);
         File rawValidationDir = new File(rawDir, "validation");
-        ensureDirectory(rawValidationDir);
+        RawExportSidecarFileOps.ensureDirectory(rawValidationDir);
 
-        copyIfPresent(
+        RawExportSidecarFileOps.copyIfPresent(
                 new File(rawValidationDir, "export_stage_timings.json"),
                 new File(rawDir, "export_stage_timings.json"));
-        copyIfPresent(
+        RawExportSidecarFileOps.copyIfPresent(
                 new File(rawValidationDir, "stage_checkpoint.json"),
                 new File(rawDir, "stage_checkpoint.json"));
-        copyIfPresent(
+        RawExportSidecarFileOps.copyIfPresent(
                 new File(rawValidationDir, "stage_checksums.json"),
                 new File(rawDir, "stage_checksums.json"));
-        copyIfPresent(
+        RawExportSidecarFileOps.copyIfPresent(
                 new File(rawValidationDir, "export_manifest.json"),
                 new File(rawDir, "export_manifest.json"));
-        copyIfPresent(
+        RawExportSidecarFileOps.copyIfPresent(
                 new File(rawValidationDir, "export-health-report.json"),
                 new File(rawDir, "validation_report.json"));
-    }
-
-    private SemanticRulePack.RuntimeMetadata buildSemanticRuleRuntimeMetadata() {
-        SemanticRulePack.RuntimeMetadata metadata = new SemanticRulePack.RuntimeMetadata();
-        metadata.repositoryName = exportContext.paths.repositoryName;
-        metadata.exportProfile = exportContext.profile.profileId;
-        metadata.exportSelection = exportContext.selection.describe();
-        metadata.javaVersion = System.getProperty("java.version", "");
-        metadata.minecraftVersion = safeMinecraftVersion();
-        metadata.forgeVersion = safeForgeVersion();
-        for (String modId : semanticFingerprintModIds()) {
-            String version = safeModVersion(modId);
-            if (version != null && !version.trim().isEmpty()) {
-                metadata.modVersions.put(modId, version);
-            }
-        }
-        metadata.gtnhFingerprint = semanticFingerprint(metadata.modVersions);
-        return metadata;
-    }
-
-    private static List<String> semanticFingerprintModIds() {
-        ArrayList<String> ids = new ArrayList<String>();
-        Collections.addAll(ids,
-                "gregtech",
-                "NotEnoughItems",
-                "angelica",
-                "dreamcraft",
-                "Thaumcraft",
-                "appliedenergistics2",
-                "Avaritia",
-                "EnderIO",
-                "BuildCraft|Core",
-                "Forestry",
-                "TConstruct",
-                "ExtraUtilities",
-                "OpenBlocks",
-                "GalacticraftCore");
-        return ids;
-    }
-
-    private static String safeMinecraftVersion() {
-        try {
-            ModContainer minecraft = Loader.instance().getMinecraftModContainer();
-            return minecraft == null ? "" : minecraft.getVersion();
-        } catch (Throwable ignored) {
-            return "";
-        }
-    }
-
-    private static String safeForgeVersion() {
-        try {
-            return ForgeVersion.getVersion();
-        } catch (Throwable ignored) {
-            return "";
-        }
-    }
-
-    private static String safeModVersion(String modId) {
-        try {
-            ModContainer container = Loader.instance().getIndexedModList().get(modId);
-            if (container == null) {
-                return "";
-            }
-            String version = container.getVersion();
-            return version == null ? "" : version;
-        } catch (Throwable ignored) {
-            return "";
-        }
-    }
-
-    private static String semanticFingerprint(Map<String, String> modVersions) {
-        try {
-            MessageDigest digest = MessageDigest.getInstance("SHA-256");
-            if (modVersions != null) {
-                for (Map.Entry<String, String> entry : modVersions.entrySet()) {
-                    String line = entry.getKey() + "=" + entry.getValue() + "\n";
-                    digest.update(line.getBytes(StandardCharsets.UTF_8));
-                }
-            }
-            byte[] bytes = digest.digest();
-            StringBuilder builder = new StringBuilder();
-            for (int index = 0; index < Math.min(12, bytes.length); index++) {
-                builder.append(String.format("%02x", bytes[index] & 0xff));
-            }
-            return builder.toString();
-        } catch (NoSuchAlgorithmException ignored) {
-            return "";
-        }
-    }
-
-    private RawExportReport buildReport() {
-        RawExportReport report = new RawExportReport();
-        report.schemaVersion = SCHEMA_VERSION + "/report";
-        report.generatedAt = utcNow();
-        report.profile = exportContext.profile.profileId;
-        report.selection = exportContext.selection.describe();
-
-        RawExportCounts counts = new RawExportCounts();
-        counts.items = countQuery("SELECT COUNT(i) FROM Item i");
-        counts.fluids = countQuery("SELECT COUNT(f) FROM Fluid f");
-        counts.recipes = countQuery("SELECT COUNT(r) FROM Recipe r");
-        counts.recipeTypes = countQuery("SELECT COUNT(rt) FROM RecipeType rt");
-        counts.renderAssets = renderAssets.size();
-        counts.itemModFiles = countFiles(new File(repositoryDirectory, "items"), "items.json.gz");
-        counts.recipeModFiles = countFiles(new File(repositoryDirectory, "recipes"), "recipes.json.gz");
-        counts.canonicalFiles = 0L;
-        report.counts = counts;
-
-        report.validation.missingTextureCount = 0;
-        report.validation.missingAnimationMetadataCount = 0;
-        report.validation.missingGroupOrOrderCount = 0;
-        report.validation.failedStages = new ArrayList<String>();
-        report.validation.gates = new ArrayList<RawValidationGate>();
-        report.validation.status = "not-yet-enforced";
-        report.validation.readinessStatus = "blocked";
-        return report;
     }
 
     private RawFactCounts writeRawFactStreams(File rawDir) throws IOException {
@@ -284,105 +157,8 @@ public final class RawExportSidecarWriter {
         return counts;
     }
 
-    private long countQuery(String query) {
-        if (entityManager == null) {
-            return -1L;
-        }
-        try {
-            Object value = entityManager.createQuery(query).getSingleResult();
-            if (value instanceof Number) {
-                return ((Number) value).longValue();
-            }
-        } catch (Exception e) {
-            Logger.MOD.warn("Failed to calculate raw-export count for query: " + query, e);
-        }
-        return -1L;
-    }
-
-    private static RawExportFileRef fileRef(String logicalName, String path, String kind) {
-        RawExportFileRef ref = new RawExportFileRef();
-        ref.logicalName = logicalName;
-        ref.path = path;
-        ref.kind = kind;
-        return ref;
-    }
-
     private RawRepositoryFactStreamResult streamRepositoryFacts(File rawDir) throws IOException {
         return new RawExportRepositoryFactStreamer(entityManager, rawDir, SCHEMA_VERSION).write();
-    }
-
-    private static long countFiles(File root, String requiredName) {
-        if (root == null || !root.exists()) {
-            return 0L;
-        }
-        if (root.isFile()) {
-            return requiredName == null || requiredName.equals(root.getName()) ? 1L : 0L;
-        }
-        long count = 0L;
-        File[] children = root.listFiles();
-        if (children == null) {
-            return 0L;
-        }
-        for (File child : children) {
-            count += countFiles(child, requiredName);
-        }
-        return count;
-    }
-
-    private static void ensureDirectory(File directory) throws IOException {
-        if (!directory.exists() && !directory.mkdirs()) {
-            throw new IOException("Failed to create directory: " + directory.getAbsolutePath());
-        }
-    }
-
-    private static void copyIfPresent(File source, File target) throws IOException {
-        if (source == null || !source.exists() || !source.isFile()) {
-            return;
-        }
-        File parent = target.getParentFile();
-        if (parent != null) {
-            ensureDirectory(parent);
-        }
-        byte[] buffer = new byte[1024 * 1024];
-        try (FileInputStream in = new FileInputStream(source);
-             FileOutputStream out = new FileOutputStream(target)) {
-            int read;
-            while ((read = in.read(buffer)) >= 0) {
-                if (read > 0) {
-                    out.write(buffer, 0, read);
-                }
-            }
-        }
-    }
-
-    private static void purgeLegacyRawExportOutputs(File rawDir) throws IOException {
-        deleteIfExists(new File(rawDir, "recipes.jsonl"));
-        deleteIfExists(new File(rawDir, "items.jsonl"));
-        deleteIfExists(new File(rawDir, "fluids.jsonl"));
-        deleteIfExists(new File(rawDir, "entities.jsonl"));
-        deleteIfExists(new File(rawDir, "facts/items.jsonl"));
-        deleteIfExists(new File(rawDir, "facts/fluids.jsonl"));
-        deleteIfExists(new File(rawDir, "facts/recipes/all.jsonl"));
-        for (String domainId : RawExportRepositoryFactStreamer.specialDomainIds()) {
-            deleteIfExists(new File(rawDir, "special/" + domainId + "/recipes.jsonl"));
-        }
-    }
-
-    private static void deleteIfExists(File file) throws IOException {
-        if (file == null || !file.exists()) {
-            return;
-        }
-        if (file.isDirectory()) {
-            File[] children = file.listFiles();
-            if (children != null) {
-                for (File child : children) {
-                    deleteIfExists(child);
-                }
-            }
-        }
-        if (!file.delete() && file.exists()) {
-            throw new IOException("Failed to delete legacy raw-export output: " + file.getAbsolutePath());
-        }
     }
 
     private static String utcNow() {
