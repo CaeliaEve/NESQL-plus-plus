@@ -6,6 +6,8 @@ const sidecarUrl = new URL('./src/main/java/com/github/dcysteine/nesql/exporter/
 const validationUrl = new URL('./src/main/java/com/github/dcysteine/nesql/exporter/local/RawExportValidationSupport.java', import.meta.url);
 const manifestBuilderUrl = new URL('./src/main/java/com/github/dcysteine/nesql/exporter/local/RawExportManifestBuilder.java', import.meta.url);
 const reportWriterUrl = new URL('./src/main/java/com/github/dcysteine/nesql/exporter/local/RawExportReportWriter.java', import.meta.url);
+const repositoryFactStreamerUrl = new URL('./src/main/java/com/github/dcysteine/nesql/exporter/local/RawExportRepositoryFactStreamer.java', import.meta.url);
+const repositoryFactResultUrl = new URL('./src/main/java/com/github/dcysteine/nesql/exporter/local/RawRepositoryFactStreamResult.java', import.meta.url);
 const dtoFiles = [
   'RawExportManifest.java',
   'RawExportReport.java',
@@ -19,6 +21,7 @@ const sidecar = readFileSync(sidecarUrl, 'utf8');
 const validation = readFileSync(validationUrl, 'utf8');
 const manifestBuilder = readFileSync(manifestBuilderUrl, 'utf8');
 const reportWriter = readFileSync(reportWriterUrl, 'utf8');
+const repositoryFactStreamer = readFileSync(repositoryFactStreamerUrl, 'utf8');
 
 test('raw export validation logic lives outside RawExportSidecarWriter', () => {
   assert.match(sidecar, /RawExportValidationSupport\.apply\(report\)/);
@@ -57,4 +60,26 @@ test('raw export manifest and report output are split from sidecar orchestration
   assert.match(manifestBuilder, /manifest\.files\.put\("exportReport", "validation\/export_report\.json"\)/);
   assert.match(reportWriter, /writeJson\(gson, new File\(rawDir, "validation\/export_report\.json"\), report\)/);
   assert.match(reportWriter, /writeSizeReport\(gson, schemaVersion, generatedAt, rawDir\)/);
+});
+
+
+test('raw repository fact streaming is split from sidecar orchestration', () => {
+  assert.equal(existsSync(repositoryFactStreamerUrl), true, 'RawExportRepositoryFactStreamer must exist');
+  assert.equal(existsSync(repositoryFactResultUrl), true, 'RawRepositoryFactStreamResult must exist');
+  assert.match(sidecar, /new RawExportRepositoryFactStreamer\(entityManager, rawDir, SCHEMA_VERSION\)\.write\(\)/);
+  assert.match(sidecar, /RawRepositoryFactStreamResult repository = streamRepositoryFacts\(rawDir\)/);
+  assert.doesNotMatch(sidecar, /streamDatabaseRepositoryFacts/);
+  assert.doesNotMatch(sidecar, /streamDatabaseItems/);
+  assert.doesNotMatch(sidecar, /streamDatabaseFluids/);
+  assert.doesNotMatch(sidecar, /streamDatabaseRecipes/);
+  assert.doesNotMatch(sidecar, /class RecipeShardState/);
+  assert.doesNotMatch(sidecar, /class SpecialDomainStreamState/);
+  assert.doesNotMatch(sidecar, /class JsonlWriter/);
+  assert.doesNotMatch(sidecar, /loadGregTechRecipeBatch/);
+  assert.match(repositoryFactStreamer, /streamDatabaseItems/);
+  assert.match(repositoryFactStreamer, /streamDatabaseFluids/);
+  assert.match(repositoryFactStreamer, /streamDatabaseRecipes/);
+  assert.match(repositoryFactStreamer, /class RecipeShardState/);
+  assert.match(repositoryFactStreamer, /class SpecialDomainStreamState/);
+  assert.match(repositoryFactStreamer, /class JsonlWriter/);
 });
