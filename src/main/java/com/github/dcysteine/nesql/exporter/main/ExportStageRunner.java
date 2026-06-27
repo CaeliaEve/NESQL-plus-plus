@@ -2,7 +2,7 @@ package com.github.dcysteine.nesql.exporter.main;
 
 import com.github.dcysteine.nesql.elysium.kernel.ExportKernel;
 import com.github.dcysteine.nesql.elysium.kernel.ExportKernelContext;
-import com.github.dcysteine.nesql.elysium.kernel.ExportModuleRegistry;
+import com.github.dcysteine.nesql.elysium.kernel.ExportModule;
 import com.google.gson.GsonBuilder;
 import net.minecraft.util.EnumChatFormatting;
 
@@ -21,7 +21,8 @@ final class ExportStageRunner {
     static void run(ExportContext exportContext, ExportExecutionStrategy strategy) throws Exception {
         File repositoryDirectory = exportContext.paths.repositoryDirectory;
         ExportStageState stageState = new ExportStageState();
-        ExportKernel kernel = new ExportKernel(ExportModuleRegistry.defaultModules());
+        List<ExportModule> modules = ExportStageModules.defaultModules();
+        ExportKernel kernel = new ExportKernel(modules);
         ExportKernelContext kernelContext = new ExportKernelContext(exportContext);
         boolean pipelineCompleted = false;
 
@@ -29,7 +30,7 @@ final class ExportStageRunner {
         try {
             kernel.init(kernelContext);
             Map<ExportStage, ExportStageAction> stageActions =
-                    ExportStageActionRegistry.build(exportContext, strategy, stageState);
+                    ExportStageActionRegistry.build(exportContext, strategy, stageState, modules);
             int totalStages = exportContext.executionPlan.stages.size();
             int index = 0;
             long exportStartedAt = System.currentTimeMillis();

@@ -8,4 +8,8 @@ public interface ExportModule {
     default void init(ExportKernelContext context) throws Exception {}
 
     default void exit(ExportKernelContext context) throws Exception {}
+
+    default ExportStageActionRegistrar<?, ?> stageActionRegistrar() {
+        return null;
+    }
 }

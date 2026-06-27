@@ -1,6 +1,8 @@
 package com.github.dcysteine.nesql.exporter.main;
 
-import java.util.Arrays;
+import com.github.dcysteine.nesql.elysium.kernel.ExportModule;
+import com.github.dcysteine.nesql.elysium.kernel.ExportStageActionRegistrar;
+
 import java.util.EnumMap;
 import java.util.List;
 import java.util.Map;
@@ -12,20 +14,25 @@ final class ExportStageActionRegistry {
     static Map<ExportStage, ExportStageAction> build(
             ExportContext exportContext,
             ExportExecutionStrategy strategy,
-            ExportStageState stageState) {
+            ExportStageState stageState,
+            List<ExportModule> modules) {
         EnumMap<ExportStage, ExportStageAction> actions = new EnumMap<>(ExportStage.class);
         ExportStageActionContext context = new ExportStageActionContext(exportContext, strategy, stageState);
-        for (ExportStageActionProvider provider : providers()) {
-            provider.register(actions, context);
+        for (ExportModule module : modules) {
+            ExportStageActionRegistrar<?, ?> registrar = module.stageActionRegistrar();
+            if (registrar != null) {
+                register(registrar, actions, context);
+            }
         }
         return actions;
     }
 
-    private static List<ExportStageActionProvider> providers() {
-        return Arrays.<ExportStageActionProvider>asList(
-                new LifecycleStageActionProvider(),
-                new RawFactStageActionProvider(),
-                new RenderStageActionProvider(),
-                new NativeUiStageActionProvider());
+    @SuppressWarnings("unchecked")
+    private static void register(
+            ExportStageActionRegistrar<?, ?> registrar,
+            EnumMap<ExportStage, ExportStageAction> actions,
+            ExportStageActionContext context) {
+        ((ExportStageActionRegistrar<EnumMap<ExportStage, ExportStageAction>, ExportStageActionContext>) registrar)
+                .register(actions, context);
     }
 }
