@@ -3,17 +3,13 @@ package com.github.dcysteine.nesql.exporter.local;
 import com.github.dcysteine.nesql.exporter.canonical.CanonicalRenderAsset;
 import com.github.dcysteine.nesql.exporter.main.ExportContext;
 import com.github.dcysteine.nesql.exporter.main.Logger;
-import com.github.dcysteine.nesql.exporter.semantic.SemanticRulePack;
 import jakarta.persistence.EntityManager;
 import net.minecraft.util.EnumChatFormatting;
 
 import java.io.File;
 import java.io.IOException;
-import java.text.SimpleDateFormat;
 import java.util.ArrayList;
-import java.util.Date;
 import java.util.List;
-import java.util.TimeZone;
 
 /**
  * Writes the first raw-export sidecar without replacing the current canonical
@@ -52,28 +48,23 @@ public final class RawExportSidecarWriter {
         RawExportSidecarFileOps.purgeLegacyRawExportOutputs(rawDir);
 
         RawFactCounts factCounts = writeRawFactStreams(rawDir);
-        SemanticRulePack.RuntimeMetadata semanticRuleRuntime = new RawExportSemanticRuntimeBuilder(exportContext).build();
-        SemanticRulePack.writeBundledCopy(new File(rawDir, "facts/semantic/rule-pack.json"), semanticRuleRuntime);
-        SemanticItemIdentityDiagnosticsWriter.SemanticAuditSummary semanticAudit =
-                new SemanticItemIdentityDiagnosticsWriter(entityManager, rawDir).write();
-
-        RawExportReport report = new RawExportReportFactory(
-                entityManager, repositoryDirectory, exportContext, renderAssets, SCHEMA_VERSION).build();
-        RawExportReportAssembler.apply(report, factCounts, semanticRuleRuntime, semanticAudit);
-        RawExportValidationSupport.apply(report);
-        String generatedAt = utcNow();
-        RawExportManifest manifest = RawExportManifestBuilder.build(SCHEMA_VERSION, generatedAt, exportContext, report);
-
-        RawExportReportWriter.write(SCHEMA_VERSION, generatedAt, rawDir, manifest, report);
+        RawExportSidecarReportPipeline.RawExportSidecarReportResult reportResult =
+                new RawExportSidecarReportPipeline(
+                        entityManager,
+                        repositoryDirectory,
+                        rawDir,
+                        exportContext,
+                        renderAssets,
+                        SCHEMA_VERSION).write(factCounts);
 
         Logger.MOD.info(
                 "Semantic item identity audit written: totalItems={}, taggedItems={}, classifiedTaggedItems={}, semanticItems={}, variants={}, payloads={}",
-                semanticAudit.totalItems,
-                semanticAudit.taggedItems,
-                semanticAudit.classifiedTaggedItems,
-                semanticAudit.semanticItems,
-                semanticAudit.variants,
-                semanticAudit.payloads);
+                reportResult.semanticAudit.totalItems,
+                reportResult.semanticAudit.taggedItems,
+                reportResult.semanticAudit.classifiedTaggedItems,
+                reportResult.semanticAudit.semanticItems,
+                reportResult.semanticAudit.variants,
+                reportResult.semanticAudit.payloads);
         Logger.chatMessage(EnumChatFormatting.GREEN + "Raw-export sidecar written:");
         Logger.chatMessage(EnumChatFormatting.YELLOW + "  " + rawDir.getAbsolutePath());
     }
@@ -160,18 +151,4 @@ public final class RawExportSidecarWriter {
     private RawRepositoryFactStreamResult streamRepositoryFacts(File rawDir) throws IOException {
         return new RawExportRepositoryFactStreamer(entityManager, rawDir, SCHEMA_VERSION).write();
     }
-
-    private static String utcNow() {
-        SimpleDateFormat format = new SimpleDateFormat("yyyy-MM-dd'T'HH:mm:ss'Z'");
-        format.setTimeZone(TimeZone.getTimeZone("UTC"));
-        return format.format(new Date());
-    }
-
-
-
-
-
-
-
-
 }

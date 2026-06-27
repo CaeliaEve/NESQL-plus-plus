@@ -3,6 +3,7 @@ import { existsSync, readFileSync } from 'node:fs';
 import test from 'node:test';
 
 const sidecarUrl = new URL('./src/main/java/com/github/dcysteine/nesql/exporter/local/RawExportSidecarWriter.java', import.meta.url);
+const reportPipelineUrl = new URL('./src/main/java/com/github/dcysteine/nesql/exporter/local/RawExportSidecarReportPipeline.java', import.meta.url);
 const validationUrl = new URL('./src/main/java/com/github/dcysteine/nesql/exporter/local/RawExportValidationSupport.java', import.meta.url);
 const manifestBuilderUrl = new URL('./src/main/java/com/github/dcysteine/nesql/exporter/local/RawExportManifestBuilder.java', import.meta.url);
 const reportWriterUrl = new URL('./src/main/java/com/github/dcysteine/nesql/exporter/local/RawExportReportWriter.java', import.meta.url);
@@ -30,6 +31,7 @@ const dtoFiles = [
 ];
 
 const sidecar = readFileSync(sidecarUrl, 'utf8');
+const reportPipeline = readFileSync(reportPipelineUrl, 'utf8');
 const validation = readFileSync(validationUrl, 'utf8');
 const manifestBuilder = readFileSync(manifestBuilderUrl, 'utf8');
 const reportWriter = readFileSync(reportWriterUrl, 'utf8');
@@ -43,7 +45,8 @@ const reportFactory = readFileSync(reportFactoryUrl, 'utf8');
 const sidecarFileOps = readFileSync(sidecarFileOpsUrl, 'utf8');
 
 test('raw export validation logic lives outside RawExportSidecarWriter', () => {
-  assert.match(sidecar, /RawExportValidationSupport\.apply\(report\)/);
+  assert.match(reportPipeline, /RawExportValidationSupport\.apply\(report\)/);
+  assert.doesNotMatch(sidecar, /RawExportValidationSupport\.apply\(report\)/);
   assert.doesNotMatch(sidecar, /buildRawValidationGates/);
   assert.doesNotMatch(sidecar, /rawValidationReady/);
   assert.doesNotMatch(sidecar, /addCountMismatch/);
@@ -68,10 +71,16 @@ test('raw export report DTOs are top-level local components', () => {
 
 
 test('raw export manifest and report output are split from sidecar orchestration', () => {
+  assert.equal(existsSync(reportPipelineUrl), true, 'RawExportSidecarReportPipeline must exist');
   assert.equal(existsSync(manifestBuilderUrl), true, 'RawExportManifestBuilder must exist');
   assert.equal(existsSync(reportWriterUrl), true, 'RawExportReportWriter must exist');
-  assert.match(sidecar, /RawExportManifestBuilder\.build\(SCHEMA_VERSION, generatedAt, exportContext, report\)/);
-  assert.match(sidecar, /RawExportReportWriter\.write\(SCHEMA_VERSION, generatedAt, rawDir, manifest, report\)/);
+  assert.match(sidecar, /new RawExportSidecarReportPipeline\(/);
+  assert.match(sidecar, /\.write\(factCounts\)/);
+  assert.match(reportPipeline, /RawExportManifestBuilder\.build\(schemaVersion, generatedAt, exportContext, report\)/);
+  assert.match(reportPipeline, /RawExportReportWriter\.write\(schemaVersion, generatedAt, rawDir, manifest, report\)/);
+  assert.doesNotMatch(sidecar, /RawExportManifestBuilder\.build/);
+  assert.doesNotMatch(sidecar, /RawExportReportWriter\.write/);
+  assert.doesNotMatch(sidecar, /utcNow\(/);
   assert.doesNotMatch(sidecar, /private\s+RawExportManifest\s+buildManifest/);
   assert.doesNotMatch(sidecar, /writeSizeReport\(/);
   assert.doesNotMatch(sidecar, /createEmptyJsonlIfMissing\(/);
@@ -153,7 +162,8 @@ test('raw render asset catalog and entity model facts are split from sidecar orc
 test('raw export aggregate report mapping is split from sidecar orchestration', () => {
   assert.equal(existsSync(rawFactCountsUrl), true, 'RawFactCounts must exist as a top-level orchestration DTO');
   assert.equal(existsSync(reportAssemblerUrl), true, 'RawExportReportAssembler must exist');
-  assert.match(sidecar, /RawExportReportAssembler\.apply\(report, factCounts, semanticRuleRuntime, semanticAudit\)/);
+  assert.match(reportPipeline, /RawExportReportAssembler\.apply\(report, factCounts, semanticRuleRuntime, semanticAudit\)/);
+  assert.doesNotMatch(sidecar, /RawExportReportAssembler\.apply/);
   assert.doesNotMatch(sidecar, /class RawFactCounts/);
   assert.doesNotMatch(sidecar, /report\.counts\.rawItems\s*=/);
   assert.doesNotMatch(sidecar, /report\.counts\.renderBackendFacts\s*=/);
@@ -169,8 +179,10 @@ test('raw export semantic runtime report factory and file ops are split from sid
   assert.equal(existsSync(semanticRuntimeBuilderUrl), true, 'RawExportSemanticRuntimeBuilder must exist');
   assert.equal(existsSync(reportFactoryUrl), true, 'RawExportReportFactory must exist');
   assert.equal(existsSync(sidecarFileOpsUrl), true, 'RawExportSidecarFileOps must exist');
-  assert.match(sidecar, /new RawExportSemanticRuntimeBuilder\(exportContext\)\.build\(\)/);
-  assert.match(sidecar, /new RawExportReportFactory\(/);
+  assert.match(reportPipeline, /new RawExportSemanticRuntimeBuilder\(exportContext\)\.build\(\)/);
+  assert.match(reportPipeline, /new RawExportReportFactory\(/);
+  assert.doesNotMatch(sidecar, /new RawExportSemanticRuntimeBuilder/);
+  assert.doesNotMatch(sidecar, /new RawExportReportFactory/);
   assert.match(sidecar, /RawExportSidecarFileOps\.purgeLegacyRawExportOutputs\(rawDir\)/);
   assert.match(sidecar, /RawExportSidecarFileOps\.copyIfPresent\(/);
   assert.doesNotMatch(sidecar, /buildSemanticRuleRuntimeMetadata/);
