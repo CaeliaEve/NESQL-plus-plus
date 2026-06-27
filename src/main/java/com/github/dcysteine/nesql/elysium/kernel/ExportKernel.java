@@ -6,17 +6,19 @@ import java.io.File;
 import java.io.FileOutputStream;
 import java.io.OutputStreamWriter;
 import java.nio.charset.StandardCharsets;
-import java.util.ArrayList;
-import java.util.Comparator;
 import java.util.EnumMap;
 import java.util.List;
 
 public final class ExportKernel {
+    private final ExportModuleCatalog catalog;
     private final List<ExportModule> modules;
 
-    public ExportKernel(List<ExportModule> modules) {
-        this.modules = new ArrayList<ExportModule>(modules);
-        this.modules.sort(Comparator.comparing(ExportModule::level).thenComparing(ExportModule::id));
+    public ExportKernel(ExportModuleCatalog catalog) {
+        if (catalog == null) {
+            throw new IllegalArgumentException("Export module catalog is required");
+        }
+        this.catalog = catalog;
+        this.modules = catalog.modules();
     }
 
     public void init(ExportKernelContext context) throws Exception {
@@ -82,6 +84,7 @@ public final class ExportKernel {
             report.schemaVersion = "nesqlpp/export-kernel-trace/v1";
             report.profile = context.exportContext().profile.profileId;
             report.selection = context.exportContext().selection.describe();
+            report.modules = catalog.descriptors();
             report.events = context.traceEvents();
             try (FileOutputStream fos = new FileOutputStream(traceFile);
                  OutputStreamWriter writer = new OutputStreamWriter(fos, StandardCharsets.UTF_8)) {
@@ -96,6 +99,7 @@ public final class ExportKernel {
         String schemaVersion;
         String profile;
         String selection;
+        List<ExportModuleCatalog.ModuleDescriptor> modules;
         List<ExportTraceEvent> events;
     }
 }
