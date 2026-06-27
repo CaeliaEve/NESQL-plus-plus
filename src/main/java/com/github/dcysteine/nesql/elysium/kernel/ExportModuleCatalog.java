@@ -63,7 +63,9 @@ public final class ExportModuleCatalog {
             descriptors.add(new ModuleDescriptor(
                     module.id(),
                     module.level().name(),
-                    module.stageActionRegistrar() != null));
+                    module.stageActionRegistrar() != null,
+                    module.capabilities(),
+                    module.stageIds()));
         }
         return descriptors;
     }
@@ -87,11 +89,20 @@ public final class ExportModuleCatalog {
         public final String id;
         public final String level;
         public final boolean stageActionRegistrar;
+        public final List<String> capabilities;
+        public final List<String> stages;
 
-        private ModuleDescriptor(String id, String level, boolean stageActionRegistrar) {
+        private ModuleDescriptor(
+                String id,
+                String level,
+                boolean stageActionRegistrar,
+                List<String> capabilities,
+                List<String> stages) {
             this.id = id;
             this.level = level;
             this.stageActionRegistrar = stageActionRegistrar;
+            this.capabilities = Collections.unmodifiableList(new ArrayList<String>(capabilities));
+            this.stages = Collections.unmodifiableList(new ArrayList<String>(stages));
         }
     }
 }

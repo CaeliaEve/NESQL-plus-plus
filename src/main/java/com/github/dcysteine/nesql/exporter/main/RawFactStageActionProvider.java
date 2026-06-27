@@ -1,11 +1,37 @@
 package com.github.dcysteine.nesql.exporter.main;
 
 import java.util.EnumMap;
+import java.util.List;
 
 final class RawFactStageActionProvider implements ExportStageActionProvider {
+    private static final List<ExportStage> STAGES = ExportStageActionProvider.stageList(
+            ExportStage.WRITE_UI_FAMILY_CENSUS,
+            ExportStage.WRITE_UI_TEMPLATE_CATALOG,
+            ExportStage.WRITE_MOD_BASED_ITEMS,
+            ExportStage.WRITE_MOD_BASED_RECIPES,
+            ExportStage.WRITE_MULTIBLOCK_BLUEPRINTS,
+            ExportStage.WRITE_BLOCK_FACE_METADATA,
+            ExportStage.WRITE_CANONICAL_SNAPSHOT);
+    private static final List<String> CAPABILITIES = ExportStageActionProvider.capabilityList(
+            "export.raw.ui-family-census",
+            "export.raw.ui-template-catalog",
+            "export.raw.item-facts",
+            "export.raw.recipe-facts",
+            "export.raw.canonical-snapshot");
+
     @Override
     public String id() {
         return "nesqlpp.export.raw-facts";
+    }
+
+    @Override
+    public List<ExportStage> stages() {
+        return STAGES;
+    }
+
+    @Override
+    public List<String> capabilities() {
+        return CAPABILITIES;
     }
 
     @Override

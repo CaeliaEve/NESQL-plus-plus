@@ -1,11 +1,36 @@
 package com.github.dcysteine.nesql.exporter.main;
 
 import java.util.EnumMap;
+import java.util.List;
 
 final class LifecycleStageActionProvider implements ExportStageActionProvider {
+    private static final List<ExportStage> STAGES = ExportStageActionProvider.stageList(
+            ExportStage.INITIALIZE_REPOSITORY,
+            ExportStage.INITIALIZE_DATABASE,
+            ExportStage.INITIALIZE_PLUGINS,
+            ExportStage.COLLECT_PLUGIN_DATA,
+            ExportStage.COMMIT_DATABASE,
+            ExportStage.ROLLBACK_DATABASE,
+            ExportStage.COMPLETE);
+    private static final List<String> CAPABILITIES = ExportStageActionProvider.capabilityList(
+            "export.lifecycle.repository",
+            "export.lifecycle.database",
+            "export.lifecycle.plugins",
+            "export.lifecycle.transaction");
+
     @Override
     public String id() {
         return "nesqlpp.export.lifecycle";
+    }
+
+    @Override
+    public List<ExportStage> stages() {
+        return STAGES;
+    }
+
+    @Override
+    public List<String> capabilities() {
+        return CAPABILITIES;
     }
 
     @Override

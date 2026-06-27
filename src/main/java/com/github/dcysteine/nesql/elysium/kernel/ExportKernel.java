@@ -7,7 +7,9 @@ import java.io.FileOutputStream;
 import java.io.OutputStreamWriter;
 import java.nio.charset.StandardCharsets;
 import java.util.EnumMap;
+import java.util.LinkedHashSet;
 import java.util.List;
+import java.util.Set;
 
 public final class ExportKernel {
     private final ExportModuleCatalog catalog;
@@ -59,7 +61,9 @@ public final class ExportKernel {
         for (ExportModule module : modules) {
             ExportStageActionRegistrar<?, ?> registrar = module.stageActionRegistrar();
             if (registrar != null) {
+                Set<S> beforeStages = new LinkedHashSet<S>(actions.keySet());
                 register(registrar, actions, stageActionContext);
+                validateDeclaredStageActions(stageType, module, beforeStages, actions);
             }
         }
         return actions;
@@ -71,6 +75,37 @@ public final class ExportKernel {
             EnumMap<S, A> actions,
             C context) {
         ((ExportStageActionRegistrar<EnumMap<S, A>, C>) registrar).register(actions, context);
+    }
+
+    private static <S extends Enum<S>, A> void validateDeclaredStageActions(
+            Class<S> stageType,
+            ExportModule module,
+            Set<S> beforeStages,
+            EnumMap<S, A> actions) {
+        Set<String> declaredStages = new LinkedHashSet<String>(module.stageIds());
+        Set<S> registeredStages = new LinkedHashSet<S>(actions.keySet());
+        registeredStages.removeAll(beforeStages);
+
+        for (S stage : registeredStages) {
+            if (!declaredStages.contains(stage.name())) {
+                throw new IllegalStateException(
+                        "Export module " + module.id() + " registered undeclared export stage: " + stage.name());
+            }
+        }
+
+        for (String stageId : declaredStages) {
+            S stage;
+            try {
+                stage = Enum.valueOf(stageType, stageId);
+            } catch (IllegalArgumentException e) {
+                throw new IllegalStateException(
+                        "Export module " + module.id() + " declares unknown export stage: " + stageId, e);
+            }
+            if (!registeredStages.contains(stage)) {
+                throw new IllegalStateException(
+                        "Export module " + module.id() + " declared export stage without registering action: " + stageId);
+            }
+        }
     }
 
     public void writeTrace(ExportKernelContext context) {
