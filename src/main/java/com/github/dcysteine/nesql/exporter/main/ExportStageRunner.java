@@ -29,8 +29,10 @@ final class ExportStageRunner {
         strategy.announceStartup(exportContext, repositoryDirectory);
         try {
             kernel.init(kernelContext);
+            ExportStageActionContext stageActionContext =
+                    new ExportStageActionContext(exportContext, strategy, stageState);
             Map<ExportStage, ExportStageAction> stageActions =
-                    ExportStageActionRegistry.build(exportContext, strategy, stageState, modules);
+                    kernel.buildStageActions(ExportStage.class, stageActionContext);
             int totalStages = exportContext.executionPlan.stages.size();
             int index = 0;
             long exportStartedAt = System.currentTimeMillis();

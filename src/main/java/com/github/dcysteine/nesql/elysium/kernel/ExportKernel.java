@@ -8,6 +8,7 @@ import java.io.OutputStreamWriter;
 import java.nio.charset.StandardCharsets;
 import java.util.ArrayList;
 import java.util.Comparator;
+import java.util.EnumMap;
 import java.util.List;
 
 public final class ExportKernel {
@@ -47,6 +48,27 @@ public final class ExportKernel {
         if (failure != null) {
             throw failure;
         }
+    }
+
+    public <S extends Enum<S>, A, C> EnumMap<S, A> buildStageActions(
+            Class<S> stageType,
+            C stageActionContext) {
+        EnumMap<S, A> actions = new EnumMap<S, A>(stageType);
+        for (ExportModule module : modules) {
+            ExportStageActionRegistrar<?, ?> registrar = module.stageActionRegistrar();
+            if (registrar != null) {
+                register(registrar, actions, stageActionContext);
+            }
+        }
+        return actions;
+    }
+
+    @SuppressWarnings("unchecked")
+    private static <S extends Enum<S>, A, C> void register(
+            ExportStageActionRegistrar<?, ?> registrar,
+            EnumMap<S, A> actions,
+            C context) {
+        ((ExportStageActionRegistrar<EnumMap<S, A>, C>) registrar).register(actions, context);
     }
 
     public void writeTrace(ExportKernelContext context) {

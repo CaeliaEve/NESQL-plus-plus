@@ -1,9 +1,10 @@
 import assert from 'node:assert/strict';
-import { readFileSync } from 'node:fs';
+import { existsSync, readFileSync } from 'node:fs';
 import test from 'node:test';
 
-const registry = readFileSync(
-  new URL('./src/main/java/com/github/dcysteine/nesql/exporter/main/ExportStageActionRegistry.java', import.meta.url),
+const registryUrl = new URL('./src/main/java/com/github/dcysteine/nesql/exporter/main/ExportStageActionRegistry.java', import.meta.url);
+const kernel = readFileSync(
+  new URL('./src/main/java/com/github/dcysteine/nesql/elysium/kernel/ExportKernel.java', import.meta.url),
   'utf8',
 );
 const modules = readFileSync(
@@ -23,13 +24,11 @@ test('export stage modules own subsystem providers', () => {
   assert.match(modules, /new ExportStageActionModule/);
 });
 
-test('export stage registry delegates through module registrars only', () => {
-  assert.match(registry, /module\.stageActionRegistrar\(\)/);
-  assert.doesNotMatch(registry, /new LifecycleStageActionProvider/);
-  assert.doesNotMatch(registry, /new RawFactStageActionProvider/);
-  assert.doesNotMatch(registry, /new RenderStageActionProvider/);
-  assert.doesNotMatch(registry, /new NativeUiStageActionProvider/);
-  assert.doesNotMatch(registry, /ExportWriterSupport\./);
-  assert.doesNotMatch(registry, /RenderLifecycleSupport\./);
-  assert.doesNotMatch(registry, /EnumChatFormatting/);
+test('export kernel directly dispatches stage registrars', () => {
+  assert.equal(existsSync(registryUrl), false, 'ExportStageActionRegistry must stay deleted');
+  assert.match(kernel, /buildStageActions/);
+  assert.match(kernel, /module\.stageActionRegistrar\(\)/);
+  assert.doesNotMatch(kernel, /new LifecycleStageActionProvider/);
+  assert.doesNotMatch(kernel, /ExportWriterSupport\./);
+  assert.doesNotMatch(kernel, /RenderLifecycleSupport\./);
 });
