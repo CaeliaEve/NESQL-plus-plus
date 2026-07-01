@@ -11,6 +11,9 @@ const runner = readSource('src/main/java/com/github/dcysteine/nesql/exporter/mai
 const selection = readSource('src/main/java/com/github/dcysteine/nesql/exporter/main/ExportSelection.java');
 const executionPlan = readSource('src/main/java/com/github/dcysteine/nesql/exporter/main/ExportExecutionPlan.java');
 const exporter = readSource('src/main/java/com/github/dcysteine/nesql/exporter/main/Exporter.java');
+const commandModeSpec = readSource('src/main/java/com/github/dcysteine/nesql/exporter/main/ExportCommandModeSpec.java');
+const commandParser = readSource('src/main/java/com/github/dcysteine/nesql/exporter/main/ExportCommandParser.java');
+const commandDispatcher = readSource('src/main/java/com/github/dcysteine/nesql/exporter/main/ExportCommandDispatcher.java');
 const integrity = readSource('src/main/java/com/github/dcysteine/nesql/exporter/main/ExportIntegrityManifestWriter.java');
 const templateWriter = readSource('src/main/java/com/github/dcysteine/nesql/exporter/local/RawExportUiTemplateCatalogWriter.java');
 const templateLayoutSpecs = readSource('src/main/java/com/github/dcysteine/nesql/exporter/plugin/nei/metadata/NeiUiTemplateLayoutSpecs.java');
@@ -190,11 +193,20 @@ test('runtime command surface is limited to guided export and Thaumcraft aspect 
   assert.equal(main.includes('new ExportCommand()'), true);
   assert.equal(main.includes('new ThaumcraftUnlockAspectsCommand()'), true);
   assert.equal(exportCommand.includes('return "nesql";'), true);
-  assert.equal(exportCommand.includes('ClientGuiScheduler.open(new ExportSelectionGui(finalRepositoryName))'), true);
-  assert.equal(exportCommand.includes('"--full-export".equalsIgnoreCase(arg)'), true);
-  assert.equal(exportCommand.includes('"--native-ui-export".equalsIgnoreCase(arg)'), true);
-  assert.equal(exportCommand.includes('startSelectedExport(repositoryName, ExportSelection.full())'), true);
-  assert.equal(exportCommand.includes('startNativeUiExport(repositoryName)'), true);
+  assert.equal(exportCommand.includes('ExportCommandParser.USAGE'), true);
+  assert.equal(exportCommand.includes('ExportCommandDispatcher.dispatch(sender, args)'), true);
+  assert.equal(exportCommand.includes('ClientGuiScheduler.open('), false);
+  assert.equal(exportCommand.includes('"--full-export".equalsIgnoreCase(arg)'), false);
+  assert.equal(exportCommand.includes('"--native-ui-export".equalsIgnoreCase(arg)'), false);
+  assert.equal(commandModeSpec.includes('ExportCommandMode.FULL_EXPORT'), true);
+  assert.equal(commandModeSpec.includes('"--full-export"'), true);
+  assert.equal(commandModeSpec.includes('"--native-ui-export"'), true);
+  assert.equal(commandModeSpec.includes('"--semantic-check"'), true);
+  assert.equal(commandParser.includes('ExportCommandModeSpec.fromFlag(arg)'), true);
+  assert.equal(commandParser.includes('MODE_CONFLICT_MESSAGE'), true);
+  assert.equal(commandDispatcher.includes('ClientGuiScheduler.open(new ExportSelectionGui(request.repositoryName))'), true);
+  assert.equal(commandDispatcher.includes('startSelectedExport(request.repositoryName, ExportSelection.full())'), true);
+  assert.equal(commandDispatcher.includes('startNativeUiExport(request.repositoryName)'), true);
   for (const legacyCommand of [
     'new DataExportCommand()',
     'new ImageExportCommand()',
@@ -230,15 +242,18 @@ test('guided export GUI exposes selectable lanes and keeps command entrypoint co
   assert.equal(gui.includes('Data Only'), true);
   assert.equal(gui.includes('raw-export is authoritative'), true);
   assert.equal(gui.includes('normalizeDependencies();'), true);
-  assert.equal(command.includes('ClientGuiScheduler.open(new ExportSelectionGui(finalRepositoryName))'), true);
-  assert.equal(command.includes('Choose only one of --semantic-check, --full-export, or --native-ui-export.'), true);
-  assert.equal(command.includes('new Exporter(repositoryName, selection)'), true);
+  assert.equal(command.includes('ClientGuiScheduler.open('), false);
+  assert.equal(command.includes('Choose only one of --semantic-check, --full-export, or --native-ui-export.'), false);
+  assert.equal(command.includes('new Exporter(repositoryName, selection)'), false);
+  assert.equal(commandDispatcher.includes('ClientGuiScheduler.open(new ExportSelectionGui(request.repositoryName))'), true);
+  assert.equal(commandParser.includes('Choose only one of --semantic-check, --full-export, or --native-ui-export.'), true);
+  assert.equal(commandDispatcher.includes('new Exporter(repositoryName, selection)'), true);
   assert.equal(gui.includes('selection.isNativeUiExport()'), true);
-  assert.equal(gui.includes('ExportCommand.startNativeUiExport(repositoryName)'), true);
+  assert.equal(gui.includes('ExportCommandDispatcher.startNativeUiExport(repositoryName)'), true);
+  assert.equal(gui.includes('ExportCommandDispatcher.startSelectedExport(repositoryName, selection)'), true);
 });
 
 test('native UI export has an explicit fast stage plan while full export remains complete', () => {
-  const command = readSource('src/main/java/com/github/dcysteine/nesql/exporter/main/ExportCommand.java');
   assert.equal(selection.includes('ExportSelection nativeUiExport()'), true);
   assert.equal(selection.includes('boolean isNativeUiExport()'), true);
   assert.equal(selection.includes('.renderImages(false)'), true);
@@ -247,8 +262,8 @@ test('native UI export has an explicit fast stage plan while full export remains
   assert.equal(selection.includes('.commitDatabase(false)'), true);
   assert.equal(exporter.includes('static Exporter nativeUiExport(String repositoryName)'), true);
   assert.equal(exporter.includes('ExportProfile.DATA_ONLY_V104'), true);
-  assert.equal(command.includes('Native UI Fast Export / v1.04-data /'), true);
-  assert.equal(command.includes('Skipping render/atlas/database-commit lanes'), true);
+  assert.equal(commandDispatcher.includes('Native UI Fast Export / v1.04-data /'), true);
+  assert.equal(commandDispatcher.includes('Skipping render/atlas/database-commit lanes'), true);
 
   assert.equal(executionPlan.includes('if (profile.renderImages && selection.includesStage(ExportStage.RENDER_IMAGES, profile))'), true);
   assert.equal(executionPlan.includes('addIfSelected(stages, ExportStage.WRITE_ATLAS_PACKS, profile, selection)'), true);

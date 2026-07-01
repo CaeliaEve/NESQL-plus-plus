@@ -183,10 +183,10 @@ public final class ExportSelectionGui extends GuiScreen {
                 .commitDatabase(options.get(9).enabled)
                 .build();
         if (selection.isNativeUiExport()) {
-            ExportCommand.startNativeUiExport(repositoryName);
+            ExportCommandDispatcher.startNativeUiExport(repositoryName);
             return;
         }
-        ExportCommand.startSelectedExport(repositoryName, selection, this);
+        ExportCommandDispatcher.startSelectedExport(repositoryName, selection);
     }
 
     private void setAll(boolean value) {
