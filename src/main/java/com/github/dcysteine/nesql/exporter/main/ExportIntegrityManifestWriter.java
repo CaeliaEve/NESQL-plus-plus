@@ -3,6 +3,7 @@ package com.github.dcysteine.nesql.exporter.main;
 import com.github.dcysteine.nesql.elysium.kernel.ExportControlFile;
 import com.github.dcysteine.nesql.elysium.kernel.ExportDebugFile;
 import com.github.dcysteine.nesql.elysium.kernel.ExportSchemaCatalog;
+import com.github.dcysteine.nesql.exporter.nativeui.NativeUiExportAbi;
 import com.google.gson.Gson;
 import com.google.gson.GsonBuilder;
 import net.minecraft.util.EnumChatFormatting;
@@ -78,6 +79,9 @@ final class ExportIntegrityManifestWriter {
         addFile(artifacts, repositoryDirectory, new File(rawDir, "validation/export_manifest.json"), "manifest");
         addFile(artifacts, repositoryDirectory, new File(rawDir, "validation/stage_checksums.json"), "checksums");
         addFile(artifacts, repositoryDirectory, new File(rawDir, "validation/export_stage_timings.json"), "timings");
+        addFile(artifacts, repositoryDirectory,
+                new File(rawDir, NativeUiExportAbi.NATIVE_UI_VALIDATION_FILE.replace('/', File.separatorChar)),
+                "native-ui-validation");
         addControlFile(artifacts, repositoryDirectory, rawDir, ExportControlFile.INDEX, "control");
         addControlFile(artifacts, repositoryDirectory, rawDir, ExportControlFile.ABI, "control-abi");
         addControlFile(artifacts, repositoryDirectory, rawDir, ExportControlFile.CAPABILITIES, "control-capabilities");

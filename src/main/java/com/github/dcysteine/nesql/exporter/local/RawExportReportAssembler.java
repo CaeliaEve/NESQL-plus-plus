@@ -34,6 +34,16 @@ final class RawExportReportAssembler {
         report.counts.uiTemplateCatalogHandlers = factCounts.uiTemplateCatalogHandlers;
         report.counts.uiTemplateCatalogTemplates = factCounts.uiTemplateCatalogTemplates;
         report.counts.uiTemplateCatalogFamilies = factCounts.uiTemplateCatalogFamilies;
+        report.counts.nativeUiLayouts = factCounts.nativeUiLayouts;
+        report.counts.nativeUiSlots = factCounts.nativeUiSlots;
+        report.counts.nativeUiMissingSurfaces = factCounts.nativeUiMissingSurfaces;
+        report.counts.nativeUiSlotBoundsViolations = factCounts.nativeUiSlotBoundsViolations;
+        report.counts.nativeUiBackgroundBoundsViolations = factCounts.nativeUiBackgroundBoundsViolations;
+        report.counts.nativeUiCoordinateContractViolations = factCounts.nativeUiCoordinateContractViolations;
+        report.counts.nativeUiMissingSurfaceSamples = factCounts.nativeUiMissingSurfaceSamples;
+        report.counts.nativeUiSlotBoundsViolationSamples = factCounts.nativeUiSlotBoundsViolationSamples;
+        report.counts.nativeUiBackgroundBoundsViolationSamples = factCounts.nativeUiBackgroundBoundsViolationSamples;
+        report.counts.nativeUiCoordinateContractViolationSamples = factCounts.nativeUiCoordinateContractViolationSamples;
         report.counts.rawTextures = factCounts.textures;
         report.counts.rawAnimations = factCounts.animations;
         report.counts.rawEntities = factCounts.entities;

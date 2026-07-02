@@ -20,8 +20,12 @@ const integrity = readSource('src/main/java/com/github/dcysteine/nesql/exporter/
 const templateWriter = readSource('src/main/java/com/github/dcysteine/nesql/exporter/local/RawExportUiTemplateCatalogWriter.java');
 const templateLayoutSpecs = readSource('src/main/java/com/github/dcysteine/nesql/exporter/plugin/nei/metadata/NeiUiTemplateLayoutSpecs.java');
 const nativeUiAbi = readSource('src/main/java/com/github/dcysteine/nesql/exporter/nativeui/NativeUiExportAbi.java');
+const nativeUiValidator = readSource('src/main/java/com/github/dcysteine/nesql/exporter/nativeui/NativeUiExportValidator.java');
 const rawManifestBuilder = readSource('src/main/java/com/github/dcysteine/nesql/exporter/local/RawExportManifestBuilder.java');
 const rawNeiFactWriter = readSource('src/main/java/com/github/dcysteine/nesql/exporter/local/RawExportNeiFactWriter.java');
+const rawValidationSupport = readSource('src/main/java/com/github/dcysteine/nesql/exporter/local/RawExportValidationSupport.java');
+const validationReportWriter = readSource('src/main/java/com/github/dcysteine/nesql/exporter/main/ExportValidationReportWriter.java');
+const validationHealthPolicy = readSource('src/main/java/com/github/dcysteine/nesql/exporter/main/ExportValidationHealthPolicy.java');
 const rawRepositoryFactStreamer = readSource('src/main/java/com/github/dcysteine/nesql/exporter/local/RawExportRepositoryFactStreamer.java');
 const rawRenderAssetCatalogWriter = readSource('src/main/java/com/github/dcysteine/nesql/exporter/local/RawExportRenderAssetCatalogWriter.java');
 
@@ -80,6 +84,7 @@ test('native NEI handler layouts export GT dynamic primitives and background reg
   assert.equal(nativeUiAbi.includes('COORDINATE_SPACE = "nei_pixels"'), true);
   assert.equal(nativeUiAbi.includes('SCALE_MODE = "uniform-scale"'), true);
   assert.equal(nativeUiAbi.includes('SLOT_SIZE = 18'), true);
+  assert.equal(nativeUiAbi.includes('NATIVE_UI_VALIDATION_FILE = "validation/native-ui-abi.json"'), true);
   assert.equal(rawNeiFactWriter.includes('materializeGtNeiBackgroundAsset(rawDir)'), true);
   assert.equal(rawNeiFactWriter.includes('background.addProperty("kind", NativeUiExportAbi.BACKGROUND_KIND_GT_MODULAR_UI)'), true);
   assert.equal(rawNeiFactWriter.includes('background.addProperty("scaling", NativeUiExportAbi.BACKGROUND_SCALING_NINE_SLICE)'), true);
@@ -93,9 +98,18 @@ test('native NEI handler layouts export GT dynamic primitives and background reg
   assert.equal(rawNeiFactWriter.includes('Logger.MOD.warn("Could not materialize GT NEI ModularUI background asset'), false);
   assert.equal(rawNeiFactWriter.includes('StandardCopyOption.ATOMIC_MOVE'), true);
   assert.equal(rawManifestBuilder.includes('manifest.files.put("uiBackgrounds", NativeUiExportAbi.UI_BACKGROUNDS_DIRECTORY)'), true);
+  assert.equal(rawManifestBuilder.includes('manifest.files.put("nativeUiValidation", NativeUiExportAbi.NATIVE_UI_VALIDATION_FILE)'), true);
+  assert.equal(integrity.includes('NativeUiExportAbi.NATIVE_UI_VALIDATION_FILE'), true);
+  assert.equal(integrity.includes('"native-ui-validation"'), true);
   assert.equal(templateWriter.includes('template.nativeBackground.assetRef'), true);
   assert.equal(templateWriter.includes('template.coordinateSpace = NativeUiExportAbi.COORDINATE_SPACE'), true);
   assert.equal(templateWriter.includes('template.scaleMode = NativeUiExportAbi.SCALE_MODE'), true);
+  assert.equal(nativeUiValidator.includes('validateSlot'), true);
+  assert.equal(nativeUiValidator.includes('validateBackground'), true);
+  assert.equal(nativeUiValidator.includes('finish(rawDir, result)'), true);
+  assert.equal(rawValidationSupport.includes('"native-ui-abi"'), true);
+  assert.equal(validationReportWriter.includes('nativeUiTotals'), true);
+  assert.equal(validationHealthPolicy.includes('Native UI ABI validation is blocked'), true);
 });
 
 test('export checksums carry previous-run reuse signals without mtime dependence', () => {

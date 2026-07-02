@@ -1,5 +1,7 @@
 package com.github.dcysteine.nesql.exporter.local;
 
+import com.github.dcysteine.nesql.exporter.nativeui.NativeUiExportValidator;
+
 import java.io.IOException;
 import java.util.List;
 
@@ -50,5 +52,16 @@ final class RawNeiFactStreamProvider implements RawExportFactStreamProvider {
         counts.uiTemplateCatalogHandlers = nei.uiTemplateCatalogHandlers;
         counts.uiTemplateCatalogTemplates = nei.uiTemplateCatalogTemplates;
         counts.uiTemplateCatalogFamilies = nei.uiTemplateCatalogFamilies;
+        NativeUiExportValidator.Result nativeUi = NativeUiExportValidator.validate(context.rawDir);
+        counts.nativeUiLayouts = nativeUi.layoutCount;
+        counts.nativeUiSlots = nativeUi.slotCount;
+        counts.nativeUiMissingSurfaces = nativeUi.missingSurfaceCount;
+        counts.nativeUiSlotBoundsViolations = nativeUi.slotBoundsViolationCount;
+        counts.nativeUiBackgroundBoundsViolations = nativeUi.backgroundBoundsViolationCount;
+        counts.nativeUiCoordinateContractViolations = nativeUi.coordinateContractViolationCount;
+        counts.nativeUiMissingSurfaceSamples = nativeUi.missingSurfaceSamples;
+        counts.nativeUiSlotBoundsViolationSamples = nativeUi.slotBoundsSamples;
+        counts.nativeUiBackgroundBoundsViolationSamples = nativeUi.backgroundBoundsSamples;
+        counts.nativeUiCoordinateContractViolationSamples = nativeUi.coordinateContractSamples;
     }
 }

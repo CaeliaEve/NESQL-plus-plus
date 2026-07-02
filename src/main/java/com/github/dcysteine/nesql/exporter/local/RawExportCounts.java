@@ -35,6 +35,16 @@ final class RawExportCounts {
     long uiTemplateCatalogHandlers;
     long uiTemplateCatalogTemplates;
     long uiTemplateCatalogFamilies;
+    long nativeUiLayouts;
+    long nativeUiSlots;
+    long nativeUiMissingSurfaces;
+    long nativeUiSlotBoundsViolations;
+    long nativeUiBackgroundBoundsViolations;
+    long nativeUiCoordinateContractViolations;
+    List<String> nativeUiMissingSurfaceSamples = new ArrayList<String>();
+    List<String> nativeUiSlotBoundsViolationSamples = new ArrayList<String>();
+    List<String> nativeUiBackgroundBoundsViolationSamples = new ArrayList<String>();
+    List<String> nativeUiCoordinateContractViolationSamples = new ArrayList<String>();
     long rawTextures;
     long rawAnimations;
     long rawEntities;

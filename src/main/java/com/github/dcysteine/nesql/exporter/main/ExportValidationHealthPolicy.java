@@ -98,6 +98,19 @@ final class ExportValidationHealthPolicy {
         if (report.rawRecipes > 0L && (report.rawNeiHandlers == 0L || report.rawNeiHandlerLayouts == 0L)) {
             report.warnings.add("NEI handler metadata/layout facts are missing; recipe pages will use generic categories.");
         }
+        if (report.nativeUiMissingSurfaces > 0L) {
+            report.warnings.add("Native UI surfaces missing captured backgrounds: " + report.nativeUiMissingSurfaces);
+        }
+        if (report.nativeUiSlotBoundsViolations > 0L || report.nativeUiBackgroundBoundsViolations > 0L) {
+            report.warnings.add("Native UI geometry bounds violations: slots="
+                    + report.nativeUiSlotBoundsViolations
+                    + ", backgrounds="
+                    + report.nativeUiBackgroundBoundsViolations);
+        }
+        if (report.nativeUiCoordinateContractViolations > 0L) {
+            report.warnings.add("Native UI coordinate contract violations: "
+                    + report.nativeUiCoordinateContractViolations);
+        }
     }
 
     private static void determineHealthStatus(ExportValidationReportWriter.ValidationReport report) {
@@ -113,6 +126,14 @@ final class ExportValidationHealthPolicy {
         addBlockedIf(report,
                 report.rawItems > 0L && report.semanticDiagnosticsPresent && report.semanticTotalItems != report.rawItems,
                 "Semantic diagnostic item count does not match raw item count.");
+        addBlockedIf(report,
+                report.nativeUiLayouts > 0L
+                        && (report.nativeUiSlots == 0L
+                                || report.nativeUiMissingSurfaces > 0L
+                                || report.nativeUiSlotBoundsViolations > 0L
+                                || report.nativeUiBackgroundBoundsViolations > 0L
+                                || report.nativeUiCoordinateContractViolations > 0L),
+                "Native UI ABI validation is blocked by missing surfaces, bounds errors, or coordinate contract drift.");
         addActionableIssue(report,
                 "semantic-unclassified-families",
                 report.semanticTopUnclassifiedFamilyActions,

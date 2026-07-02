@@ -20,6 +20,8 @@ const reportWriterUrl = new URL('./src/main/java/com/github/dcysteine/nesql/expo
 const repositoryFactStreamerUrl = new URL('./src/main/java/com/github/dcysteine/nesql/exporter/local/RawExportRepositoryFactStreamer.java', import.meta.url);
 const repositoryFactResultUrl = new URL('./src/main/java/com/github/dcysteine/nesql/exporter/local/RawRepositoryFactStreamResult.java', import.meta.url);
 const neiFactWriterUrl = new URL('./src/main/java/com/github/dcysteine/nesql/exporter/local/RawExportNeiFactWriter.java', import.meta.url);
+const nativeUiAbiUrl = new URL('./src/main/java/com/github/dcysteine/nesql/exporter/nativeui/NativeUiExportAbi.java', import.meta.url);
+const nativeUiValidatorUrl = new URL('./src/main/java/com/github/dcysteine/nesql/exporter/nativeui/NativeUiExportValidator.java', import.meta.url);
 const neiFactCountsUrl = new URL('./src/main/java/com/github/dcysteine/nesql/exporter/local/RawNeiFactCounts.java', import.meta.url);
 const neiBrowserContractUrl = new URL('./src/main/java/com/github/dcysteine/nesql/exporter/local/NeiBrowserContract.java', import.meta.url);
 const renderAssetCatalogWriterUrl = new URL('./src/main/java/com/github/dcysteine/nesql/exporter/local/RawExportRenderAssetCatalogWriter.java', import.meta.url);
@@ -57,6 +59,8 @@ const manifestBuilder = readFileSync(manifestBuilderUrl, 'utf8');
 const reportWriter = readFileSync(reportWriterUrl, 'utf8');
 const repositoryFactStreamer = readFileSync(repositoryFactStreamerUrl, 'utf8');
 const neiFactWriter = readFileSync(neiFactWriterUrl, 'utf8');
+const nativeUiAbi = readFileSync(nativeUiAbiUrl, 'utf8');
+const nativeUiValidator = readFileSync(nativeUiValidatorUrl, 'utf8');
 const renderAssetCatalogWriter = readFileSync(renderAssetCatalogWriterUrl, 'utf8');
 const entityModelWriter = readFileSync(entityModelWriterUrl, 'utf8');
 const reportAssembler = readFileSync(reportAssemblerUrl, 'utf8');
@@ -182,6 +186,33 @@ test('raw NEI browser and handler facts are split from sidecar orchestration', (
   assert.match(neiFactWriter, /writeHiddenItemRules/);
   assert.match(neiFactWriter, /writeHandlerMetadata/);
   assert.match(neiFactWriter, /materializeGtNeiBackgroundAsset/);
+});
+
+test('native UI ABI validator owns bounds and missing-surface validation', () => {
+  assert.equal(existsSync(nativeUiAbiUrl), true, 'NativeUiExportAbi must exist as a public ABI catalog');
+  assert.equal(existsSync(nativeUiValidatorUrl), true, 'NativeUiExportValidator must exist');
+  assert.match(nativeUiAbi, /NATIVE_UI_VALIDATION_SCHEMA/);
+  assert.match(nativeUiAbi, /NATIVE_UI_VALIDATION_FILE = "validation\/native-ui-abi\.json"/);
+  assert.match(nativeUiAbi, /COORDINATE_SPACE = "nei_pixels"/);
+  assert.match(nativeUiAbi, /SCALE_MODE = "uniform-scale"/);
+  assert.match(nativeUiAbi, /SLOT_SIZE = 18/);
+  assert.match(nativeUiValidator, /Validates Native UI export ABI geometry/);
+  assert.match(nativeUiValidator, /NEI_HANDLER_LAYOUTS_FILE/);
+  assert.match(nativeUiValidator, /validateSlot/);
+  assert.match(nativeUiValidator, /validateBackground/);
+  assert.match(nativeUiValidator, /missingSurfaceCount/);
+  assert.match(nativeUiValidator, /slotBoundsViolationCount/);
+  assert.match(nativeUiValidator, /backgroundBoundsViolationCount/);
+  assert.match(nativeUiValidator, /coordinateContractViolationCount/);
+  assert.match(nativeUiValidator, /NATIVE_UI_VALIDATION_FILE/);
+  assert.match(neiProvider, /NativeUiExportValidator\.validate\(context\.rawDir\)/);
+  assert.match(neiProvider, /counts\.nativeUiMissingSurfaces = nativeUi\.missingSurfaceCount/);
+  assert.match(validation, /"native-ui-abi"/);
+  assert.match(validation, /nativeUiMissingSurfaces == 0/);
+  assert.match(validation, /nativeUiSlotBoundsViolations == 0/);
+  assert.match(validation, /nativeUiBackgroundBoundsViolations == 0/);
+  assert.match(validation, /nativeUiCoordinateContractViolations == 0/);
+  assert.doesNotMatch(sidecar, /NativeUiExportValidator/);
 });
 
 

@@ -23,6 +23,7 @@ final class RawExportValidationSupport {
         report.validation.missingGroupOrOrderCount = (counts.rawGroups == 0 || counts.rawNeiOrderEntries == 0) ? 1 : 0;
         addRenderSampleIssues(issues, "missing-render-capture", counts.renderShaderItemsMissingCaptureSamples);
         addRenderSampleIssues(issues, "render-capture-without-frames", counts.renderFramebufferCapturesWithoutFramesSamples);
+        addNativeUiIssues(issues, counts);
         report.validation.failedStages = issues;
         report.validation.status = issues.isEmpty() ? "ok" : "warning";
         report.validation.gates = buildRawValidationGates(counts, issues);
@@ -106,6 +107,27 @@ final class RawExportValidationSupport {
                         + counts.uiTemplateCatalogTemplates
                         + ", families="
                         + counts.uiTemplateCatalogFamilies
+                        + "."));
+        gates.add(validationGate(
+                "native-ui-abi",
+                counts.nativeUiLayouts > 0
+                        && counts.nativeUiSlots > 0
+                        && counts.nativeUiMissingSurfaces == 0
+                        && counts.nativeUiSlotBoundsViolations == 0
+                        && counts.nativeUiBackgroundBoundsViolations == 0
+                        && counts.nativeUiCoordinateContractViolations == 0,
+                "Native UI ABI: layouts="
+                        + counts.nativeUiLayouts
+                        + ", slots="
+                        + counts.nativeUiSlots
+                        + ", missingSurfaces="
+                        + counts.nativeUiMissingSurfaces
+                        + ", slotBoundsViolations="
+                        + counts.nativeUiSlotBoundsViolations
+                        + ", backgroundBoundsViolations="
+                        + counts.nativeUiBackgroundBoundsViolations
+                        + ", coordinateContractViolations="
+                        + counts.nativeUiCoordinateContractViolations
                         + "."));
         gates.add(validationGate(
                 "native-nei-rules",
@@ -221,6 +243,25 @@ final class RawExportValidationSupport {
             if (sample != null && !sample.trim().isEmpty()) {
                 issues.add(label + ":" + sample);
             }
+        }
+    }
+
+    private static void addNativeUiIssues(List<String> issues, RawExportCounts counts) {
+        if (counts.nativeUiMissingSurfaces > 0) {
+            issues.add("native-ui-missing-surfaces:" + counts.nativeUiMissingSurfaces);
+            addRenderSampleIssues(issues, "native-ui-missing-surface", counts.nativeUiMissingSurfaceSamples);
+        }
+        if (counts.nativeUiSlotBoundsViolations > 0) {
+            issues.add("native-ui-slot-bounds:" + counts.nativeUiSlotBoundsViolations);
+            addRenderSampleIssues(issues, "native-ui-slot-bounds", counts.nativeUiSlotBoundsViolationSamples);
+        }
+        if (counts.nativeUiBackgroundBoundsViolations > 0) {
+            issues.add("native-ui-background-bounds:" + counts.nativeUiBackgroundBoundsViolations);
+            addRenderSampleIssues(issues, "native-ui-background-bounds", counts.nativeUiBackgroundBoundsViolationSamples);
+        }
+        if (counts.nativeUiCoordinateContractViolations > 0) {
+            issues.add("native-ui-coordinate-contract:" + counts.nativeUiCoordinateContractViolations);
+            addRenderSampleIssues(issues, "native-ui-coordinate-contract", counts.nativeUiCoordinateContractViolationSamples);
         }
     }
 }

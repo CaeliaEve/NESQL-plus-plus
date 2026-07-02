@@ -73,6 +73,7 @@ final class RawExportManifestBuilder {
         manifest.files.put("exportHealthReport", "validation/export-health-report.json");
         manifest.files.put("errors", "validation/errors.jsonl");
         manifest.files.put("neiHandlerAnomalies", "validation/nei_handler_anomalies.json");
+        manifest.files.put("nativeUiValidation", NativeUiExportAbi.NATIVE_UI_VALIDATION_FILE);
         manifest.files.put("pluginTimings", "validation/export-plugin-timings.json");
         manifest.files.put("stageTimings", "validation/export_stage_timings.json");
         manifest.files.put("stageCheckpoint", "validation/stage_checkpoint.json");

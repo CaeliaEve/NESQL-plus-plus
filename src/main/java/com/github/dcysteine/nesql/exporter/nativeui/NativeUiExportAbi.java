@@ -7,9 +7,11 @@ public final class NativeUiExportAbi {
     public static final String RAW_EXPORT_SCHEMA = ExportSchemaCatalog.RAW_EXPORT_ABI;
     public static final String UI_FAMILY_CENSUS_SCHEMA = RAW_EXPORT_SCHEMA + "/ui-family-census";
     public static final String UI_TEMPLATE_CATALOG_SCHEMA = RAW_EXPORT_SCHEMA + "/ui-template-catalog";
+    public static final String NATIVE_UI_VALIDATION_SCHEMA = RAW_EXPORT_SCHEMA + "/native-ui-validation";
 
     public static final String UI_FAMILY_CENSUS_FILE = "validation/ui-family-census.json";
     public static final String UI_TEMPLATE_CATALOG_FILE = "validation/ui-template-catalog.json";
+    public static final String NATIVE_UI_VALIDATION_FILE = "validation/native-ui-abi.json";
     public static final String NEI_HANDLERS_FILE = "facts/nei/handlers.jsonl.gz";
     public static final String NEI_HANDLER_LAYOUTS_FILE = "facts/nei/handler-layouts.jsonl.gz";
     public static final String UI_BACKGROUNDS_DIRECTORY = "assets/ui-backgrounds";

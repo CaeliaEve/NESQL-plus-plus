@@ -120,6 +120,12 @@ final class ExportValidationReportWriter {
         report.rawNeiRepresentativeMismatches = readLongMember(counts, "neiRepresentativeMismatches");
         report.rawNeiHandlers = readLongMember(counts, "neiHandlers");
         report.rawNeiHandlerLayouts = readLongMember(counts, "neiHandlerLayouts");
+        report.nativeUiLayouts = readLongMember(counts, "nativeUiLayouts");
+        report.nativeUiSlots = readLongMember(counts, "nativeUiSlots");
+        report.nativeUiMissingSurfaces = readLongMember(counts, "nativeUiMissingSurfaces");
+        report.nativeUiSlotBoundsViolations = readLongMember(counts, "nativeUiSlotBoundsViolations");
+        report.nativeUiBackgroundBoundsViolations = readLongMember(counts, "nativeUiBackgroundBoundsViolations");
+        report.nativeUiCoordinateContractViolations = readLongMember(counts, "nativeUiCoordinateContractViolations");
         report.rawRecipeTypes = readLongMember(counts, "recipeTypes");
         report.renderBackendFacts = readLongMember(counts, "renderBackendFacts");
         report.renderBackendAngelica = readLongMember(counts, "renderBackendAngelica");
@@ -218,6 +224,22 @@ final class ExportValidationReportWriter {
         report.recipeTotals.neiHandlers = report.rawNeiHandlers;
         report.recipeTotals.neiHandlerLayouts = report.rawNeiHandlerLayouts;
         inspectRecipeHandlerAnomalies(repositoryDirectory, report.recipeTotals);
+
+        report.nativeUiTotals = new NativeUiTotals();
+        report.nativeUiTotals.layouts = report.nativeUiLayouts;
+        report.nativeUiTotals.slots = report.nativeUiSlots;
+        report.nativeUiTotals.missingSurfaces = report.nativeUiMissingSurfaces;
+        report.nativeUiTotals.slotBoundsViolations = report.nativeUiSlotBoundsViolations;
+        report.nativeUiTotals.backgroundBoundsViolations = report.nativeUiBackgroundBoundsViolations;
+        report.nativeUiTotals.coordinateContractViolations = report.nativeUiCoordinateContractViolations;
+        report.nativeUiTotals.status = report.nativeUiLayouts > 0L
+                && report.nativeUiSlots > 0L
+                && report.nativeUiMissingSurfaces == 0L
+                && report.nativeUiSlotBoundsViolations == 0L
+                && report.nativeUiBackgroundBoundsViolations == 0L
+                && report.nativeUiCoordinateContractViolations == 0L
+                ? "ok"
+                : "blocked";
 
         report.runtimeManifestMetadata = new RuntimeManifestMetadata();
         report.runtimeManifestMetadata.gtnhProfile = report.profile;
@@ -1063,6 +1085,12 @@ final class ExportValidationReportWriter {
         long rawNeiRepresentativeMismatches;
         long rawNeiHandlers;
         long rawNeiHandlerLayouts;
+        long nativeUiLayouts;
+        long nativeUiSlots;
+        long nativeUiMissingSurfaces;
+        long nativeUiSlotBoundsViolations;
+        long nativeUiBackgroundBoundsViolations;
+        long nativeUiCoordinateContractViolations;
         long rawRecipeTypes;
         long renderBackendFacts;
         long renderBackendAngelica;
@@ -1097,6 +1125,7 @@ final class ExportValidationReportWriter {
         TextureTotals textureTotals;
         AnimationTotals animationTotals;
         NativeRenderTotals nativeRenderTotals;
+        NativeUiTotals nativeUiTotals;
         RecipeTotals recipeTotals;
         RuntimeManifestMetadata runtimeManifestMetadata;
         List<String> blockedIssues = new ArrayList<String>();
@@ -1181,6 +1210,16 @@ final class ExportValidationReportWriter {
         long partialExports;
         long duplicateCategoryRisks;
         String zeroRecipeStatus;
+    }
+
+    private static final class NativeUiTotals {
+        long layouts;
+        long slots;
+        long missingSurfaces;
+        long slotBoundsViolations;
+        long backgroundBoundsViolations;
+        long coordinateContractViolations;
+        String status;
     }
 
     private static final class RuntimeManifestMetadata {
