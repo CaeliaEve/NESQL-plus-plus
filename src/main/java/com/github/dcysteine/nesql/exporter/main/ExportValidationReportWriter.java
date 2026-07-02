@@ -19,6 +19,8 @@ final class ExportValidationReportWriter {
             for (ExportValidationProbe probe : ExportValidationProbeCatalog.defaultProbes()) {
                 probe.inspect(context, report);
             }
+            report.validationProbes = ExportValidationProbeCatalog.descriptors();
+            report.validationProbeCount = report.validationProbes.size();
 
             ExportValidationReportStore.ReportFiles reportFiles =
                     ExportValidationReportStore.write(context.validationDir, report);
@@ -46,6 +48,8 @@ final class ExportValidationReportWriter {
         String repository;
         String profile;
         String selection;
+        int validationProbeCount;
+        List<ExportValidationProbeDescriptor> validationProbes = new ArrayList<ExportValidationProbeDescriptor>();
         int itemsJsonGzFiles;
         int recipeJsonGzFiles;
         int imagePngFiles;

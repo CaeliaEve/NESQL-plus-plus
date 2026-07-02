@@ -20,6 +20,7 @@ public final class ExportSchemaCatalog {
     public static final String CONTROL_CAPABILITIES = CONTROL_ROOT + "/capabilities";
     public static final String CONTROL_MODULES = CONTROL_ROOT + "/modules";
     public static final String CONTROL_DRIVERS = CONTROL_ROOT + "/drivers";
+    public static final String CONTROL_VALIDATION_PROBES = CONTROL_ROOT + "/validation-probes";
     public static final String CONTROL_HEALTH = CONTROL_ROOT + "/health";
     public static final String CONTROL_VERSION = CONTROL_ROOT + "/version";
 
@@ -38,6 +39,7 @@ public final class ExportSchemaCatalog {
             CONTROL_CAPABILITIES,
             CONTROL_MODULES,
             CONTROL_DRIVERS,
+            CONTROL_VALIDATION_PROBES,
             CONTROL_HEALTH,
             CONTROL_VERSION));
 

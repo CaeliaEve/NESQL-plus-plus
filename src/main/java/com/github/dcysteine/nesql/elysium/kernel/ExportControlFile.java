@@ -10,6 +10,7 @@ public enum ExportControlFile {
     CAPABILITIES("controlCapabilities", "capabilities", "capabilities.json", ExportSchemaCatalog.CONTROL_CAPABILITIES),
     MODULES("controlModules", "modules", "modules.json", ExportSchemaCatalog.CONTROL_MODULES),
     DRIVERS("controlDrivers", "drivers", "drivers.json", ExportSchemaCatalog.CONTROL_DRIVERS),
+    VALIDATION_PROBES("controlValidationProbes", "validationProbes", "validation-probes.json", ExportSchemaCatalog.CONTROL_VALIDATION_PROBES),
     HEALTH("controlHealth", "health", "health.json", ExportSchemaCatalog.CONTROL_HEALTH),
     VERSION("controlVersion", "version", "version.json", ExportSchemaCatalog.CONTROL_VERSION);
 

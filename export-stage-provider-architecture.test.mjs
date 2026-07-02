@@ -390,6 +390,7 @@ test('export control and debug planes have explicit filesystem ownership', () =>
   assert.match(schemaCatalog, /public final class ExportSchemaCatalog/);
   assert.match(schemaCatalog, /RAW_EXPORT_ABI = "nesqlpp\/raw-export\/alpha1"/);
   assert.match(schemaCatalog, /CONTROL_ROOT = "nesqlpp\/export-control-plane\/v1"/);
+  assert.match(schemaCatalog, /CONTROL_VALIDATION_PROBES = CONTROL_ROOT \+ "\/validation-probes"/);
   assert.match(schemaCatalog, /DEBUG_KERNEL_TRACE = "nesqlpp\/export-debug-kernel-trace\/v1"/);
   assert.match(schemaCatalog, /EXPORT_VALIDATION = "nesqlpp\/export-validation\/v1"/);
   assert.match(schemaCatalog, /EXPORT_ERROR = "nesqlpp\/export-error\/v1"/);
@@ -404,6 +405,7 @@ test('export control and debug planes have explicit filesystem ownership', () =>
     ['CAPABILITIES', 'controlCapabilities', 'capabilities.json'],
     ['MODULES', 'controlModules', 'modules.json'],
     ['DRIVERS', 'controlDrivers', 'drivers.json'],
+    ['VALIDATION_PROBES', 'controlValidationProbes', 'validation-probes.json'],
     ['HEALTH', 'controlHealth', 'health.json'],
     ['VERSION', 'controlVersion', 'version.json'],
   ]) {
@@ -436,10 +438,15 @@ test('export control and debug planes have explicit filesystem ownership', () =>
   assert.match(controlPlaneWriter, /ExportControlFile\.CAPABILITIES/);
   assert.match(controlPlaneWriter, /ExportControlFile\.MODULES/);
   assert.match(controlPlaneWriter, /ExportControlFile\.DRIVERS/);
+  assert.match(controlPlaneWriter, /ExportControlFile\.VALIDATION_PROBES/);
   assert.match(controlPlaneWriter, /ExportControlFile\.HEALTH/);
   assert.match(controlPlaneWriter, /ExportControlFile\.VERSION/);
   assert.match(controlPlaneWriter, /ExportControlFile\.indexedFiles\(\)/);
   assert.match(controlPlaneWriter, /ExportSchemaCatalog\.RAW_EXPORT_ABI/);
+  assert.match(controlPlaneWriter, /validationProbeControlSchema = ExportControlFile\.VALIDATION_PROBES\.schemaVersion\(\)/);
+  assert.match(controlPlaneWriter, /validationProbesReport\(\)/);
+  assert.match(controlPlaneWriter, /ExportValidationProbeCatalog\.descriptors\(\)/);
+  assert.match(controlPlaneWriter, /report\.validationProbeCount = ExportValidationProbeCatalog\.descriptors\(\)\.size\(\)/);
   assert.match(controlPlaneWriter, /ExportDebugFile\.KERNEL_TRACE\.schemaVersion\(\)/);
   assert.match(controlPlaneWriter, /stability = "stable"/);
   assert.match(controlPlaneWriter, /catalog\.descriptors\(\)/);
@@ -519,6 +526,8 @@ test('export validation probe catalog owns report collection order and capabilit
   assert.match(validationReportWriter, /ExportValidationProbeContext\.from\(exportContext\)/);
   assert.match(validationReportWriter, /for \(ExportValidationProbe probe : ExportValidationProbeCatalog\.defaultProbes\(\)\)/);
   assert.match(validationReportWriter, /probe\.inspect\(context, report\)/);
+  assert.match(validationReportWriter, /report\.validationProbes = ExportValidationProbeCatalog\.descriptors\(\)/);
+  assert.match(validationReportWriter, /report\.validationProbeCount = report\.validationProbes\.size\(\)/);
   assert.match(validationReportWriter, /static final class ValidationReport/);
   assert.match(validationRepositoryProbe, /ExportValidationAbiCatalog\.EXPORT_VALIDATION_SCHEMA/);
   assert.match(validationRepositoryProbe, /new File\(context\.repositoryDirectory, "items"\)/);

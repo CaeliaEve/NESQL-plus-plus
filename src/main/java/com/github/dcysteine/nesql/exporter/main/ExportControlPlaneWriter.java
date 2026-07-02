@@ -38,6 +38,9 @@ final class ExportControlPlaneWriter {
             writeJson(controlFile(controlDir, ExportControlFile.CAPABILITIES), capabilitiesReport(catalog));
             writeJson(controlFile(controlDir, ExportControlFile.MODULES), modulesReport(catalog));
             writeJson(controlFile(controlDir, ExportControlFile.DRIVERS), driversReport(catalog));
+            writeJson(
+                    controlFile(controlDir, ExportControlFile.VALIDATION_PROBES),
+                    validationProbesReport());
             writeJson(controlFile(controlDir, ExportControlFile.HEALTH), healthReport(exportContext));
             writeJson(controlFile(controlDir, ExportControlFile.VERSION), versionReport(exportContext));
         } catch (Exception e) {
@@ -63,9 +66,12 @@ final class ExportControlPlaneWriter {
         report.profile = exportContext.profile.profileId;
         report.selection = exportContext.selection.describe();
         report.rawExportAbi = ExportSchemaCatalog.RAW_EXPORT_ABI;
+        report.exportValidationSchema = ExportSchemaCatalog.EXPORT_VALIDATION;
+        report.validationProbeControlSchema = ExportControlFile.VALIDATION_PROBES.schemaVersion();
         report.kernelTraceDebugSchema = ExportDebugFile.KERNEL_TRACE.schemaVersion();
         report.stageTimingDebugSchema = ExportDebugFile.STAGE_TIMING.schemaVersion();
         report.stageCheckpointDebugSchema = ExportDebugFile.STAGE_CHECKPOINT.schemaVersion();
+        report.controlSchemas = ExportSchemaCatalog.controlSchemas();
         report.tracepoints = ExportTracepoint.all();
         return report;
     }
@@ -77,10 +83,14 @@ final class ExportControlPlaneWriter {
         for (ExportModuleCatalog.ModuleDescriptor module : catalog.descriptors()) {
             capabilities.addAll(module.capabilities);
         }
+        for (ExportValidationProbeDescriptor probe : ExportValidationProbeCatalog.descriptors()) {
+            capabilities.addAll(probe.capabilities);
+        }
         report.capabilities.addAll(capabilities);
         report.moduleCount = catalog.descriptors().size();
         report.deviceCount = catalog.devices().size();
         report.driverCount = catalog.drivers().size();
+        report.validationProbeCount = ExportValidationProbeCatalog.descriptors().size();
         return report;
     }
 
@@ -100,6 +110,15 @@ final class ExportControlPlaneWriter {
         for (ExportDriver driver : catalog.drivers()) {
             report.drivers.add(new DriverRecord(driver));
         }
+        return report;
+    }
+
+    private static ValidationProbesReport validationProbesReport() {
+        ValidationProbesReport report = new ValidationProbesReport();
+        report.schemaVersion = ExportControlFile.VALIDATION_PROBES.schemaVersion();
+        report.policy = "ordered-fail-closed-validation-probe-catalog";
+        report.probes = ExportValidationProbeCatalog.descriptors();
+        report.probeCount = report.probes.size();
         return report;
     }
 
@@ -162,9 +181,12 @@ final class ExportControlPlaneWriter {
         String profile;
         String selection;
         String rawExportAbi;
+        String exportValidationSchema;
+        String validationProbeControlSchema;
         String kernelTraceDebugSchema;
         String stageTimingDebugSchema;
         String stageCheckpointDebugSchema;
+        List<String> controlSchemas = Collections.emptyList();
         List<String> tracepoints = Collections.emptyList();
     }
 
@@ -173,6 +195,7 @@ final class ExportControlPlaneWriter {
         int moduleCount;
         int deviceCount;
         int driverCount;
+        int validationProbeCount;
         List<String> capabilities = new ArrayList<String>();
     }
 
@@ -185,6 +208,13 @@ final class ExportControlPlaneWriter {
         String schemaVersion;
         List<DeviceRecord> devices = new ArrayList<DeviceRecord>();
         List<DriverRecord> drivers = new ArrayList<DriverRecord>();
+    }
+
+    private static final class ValidationProbesReport {
+        String schemaVersion;
+        String policy;
+        int probeCount;
+        List<ExportValidationProbeDescriptor> probes;
     }
 
     private static final class DeviceRecord {
