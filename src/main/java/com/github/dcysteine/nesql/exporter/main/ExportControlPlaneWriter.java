@@ -1,8 +1,11 @@
 package com.github.dcysteine.nesql.exporter.main;
 
 import com.github.dcysteine.nesql.elysium.kernel.ExportDevice;
+import com.github.dcysteine.nesql.elysium.kernel.ExportControlFile;
+import com.github.dcysteine.nesql.elysium.kernel.ExportDebugFile;
 import com.github.dcysteine.nesql.elysium.kernel.ExportDriver;
 import com.github.dcysteine.nesql.elysium.kernel.ExportModuleCatalog;
+import com.github.dcysteine.nesql.elysium.kernel.ExportSchemaCatalog;
 import com.github.dcysteine.nesql.elysium.kernel.ExportTracepoint;
 import com.google.gson.Gson;
 import com.google.gson.GsonBuilder;
@@ -21,7 +24,6 @@ import java.util.Set;
 
 /** Writes stable ControlFS-style export descriptors for downstream tooling. */
 final class ExportControlPlaneWriter {
-    private static final String SCHEMA_ROOT = "nesqlpp/export-control-plane/v1";
     private static final Gson GSON = new GsonBuilder().setPrettyPrinting().create();
 
     private ExportControlPlaneWriter() {}
@@ -30,13 +32,13 @@ final class ExportControlPlaneWriter {
         try {
             File controlDir = controlDirectory(exportContext);
             ensureDirectory(controlDir);
-            writeJson(new File(controlDir, "index.json"), indexReport(exportContext));
-            writeJson(new File(controlDir, "abi.json"), abiReport(exportContext));
-            writeJson(new File(controlDir, "capabilities.json"), capabilitiesReport(catalog));
-            writeJson(new File(controlDir, "modules.json"), modulesReport(catalog));
-            writeJson(new File(controlDir, "drivers.json"), driversReport(catalog));
-            writeJson(new File(controlDir, "health.json"), healthReport(exportContext));
-            writeJson(new File(controlDir, "version.json"), versionReport(exportContext));
+            writeJson(controlFile(controlDir, ExportControlFile.INDEX), indexReport(exportContext));
+            writeJson(controlFile(controlDir, ExportControlFile.ABI), abiReport(exportContext));
+            writeJson(controlFile(controlDir, ExportControlFile.CAPABILITIES), capabilitiesReport(catalog));
+            writeJson(controlFile(controlDir, ExportControlFile.MODULES), modulesReport(catalog));
+            writeJson(controlFile(controlDir, ExportControlFile.DRIVERS), driversReport(catalog));
+            writeJson(controlFile(controlDir, ExportControlFile.HEALTH), healthReport(exportContext));
+            writeJson(controlFile(controlDir, ExportControlFile.VERSION), versionReport(exportContext));
         } catch (Exception e) {
             Logger.MOD.warn("Failed to write NESQL++ export control plane", e);
         }
@@ -44,37 +46,32 @@ final class ExportControlPlaneWriter {
 
     private static ControlIndex indexReport(ExportContext exportContext) {
         ControlIndex report = new ControlIndex();
-        report.schemaVersion = SCHEMA_ROOT + "/index";
+        report.schemaVersion = ExportControlFile.INDEX.schemaVersion();
         report.repository = exportContext.paths.repositoryName;
         report.profile = exportContext.profile.profileId;
         report.selection = exportContext.selection.describe();
         report.stability = "stable";
-        report.files.put("abi", "control/abi.json");
-        report.files.put("capabilities", "control/capabilities.json");
-        report.files.put("modules", "control/modules.json");
-        report.files.put("drivers", "control/drivers.json");
-        report.files.put("health", "control/health.json");
-        report.files.put("version", "control/version.json");
+        report.files.putAll(ExportControlFile.indexedFiles());
         return report;
     }
 
     private static AbiReport abiReport(ExportContext exportContext) {
         AbiReport report = new AbiReport();
-        report.schemaVersion = SCHEMA_ROOT + "/abi";
+        report.schemaVersion = ExportControlFile.ABI.schemaVersion();
         report.repository = exportContext.paths.repositoryName;
         report.profile = exportContext.profile.profileId;
         report.selection = exportContext.selection.describe();
-        report.rawExportAbi = "nesqlpp/raw-export/alpha1";
-        report.kernelTraceDebugSchema = "nesqlpp/export-debug-kernel-trace/v1";
-        report.stageTimingDebugSchema = "nesqlpp/export-debug-stage-timing/v1";
-        report.stageCheckpointDebugSchema = "nesqlpp/export-debug-stage-checkpoint/v1";
+        report.rawExportAbi = ExportSchemaCatalog.RAW_EXPORT_ABI;
+        report.kernelTraceDebugSchema = ExportDebugFile.KERNEL_TRACE.schemaVersion();
+        report.stageTimingDebugSchema = ExportDebugFile.STAGE_TIMING.schemaVersion();
+        report.stageCheckpointDebugSchema = ExportDebugFile.STAGE_CHECKPOINT.schemaVersion();
         report.tracepoints = ExportTracepoint.all();
         return report;
     }
 
     private static CapabilitiesReport capabilitiesReport(ExportModuleCatalog catalog) {
         CapabilitiesReport report = new CapabilitiesReport();
-        report.schemaVersion = SCHEMA_ROOT + "/capabilities";
+        report.schemaVersion = ExportControlFile.CAPABILITIES.schemaVersion();
         Set<String> capabilities = new LinkedHashSet<String>();
         for (ExportModuleCatalog.ModuleDescriptor module : catalog.descriptors()) {
             capabilities.addAll(module.capabilities);
@@ -88,14 +85,14 @@ final class ExportControlPlaneWriter {
 
     private static ModulesReport modulesReport(ExportModuleCatalog catalog) {
         ModulesReport report = new ModulesReport();
-        report.schemaVersion = SCHEMA_ROOT + "/modules";
+        report.schemaVersion = ExportControlFile.MODULES.schemaVersion();
         report.modules = catalog.descriptors();
         return report;
     }
 
     private static DriversReport driversReport(ExportModuleCatalog catalog) {
         DriversReport report = new DriversReport();
-        report.schemaVersion = SCHEMA_ROOT + "/drivers";
+        report.schemaVersion = ExportControlFile.DRIVERS.schemaVersion();
         for (ExportDevice device : catalog.devices()) {
             report.devices.add(new DeviceRecord(device));
         }
@@ -107,7 +104,7 @@ final class ExportControlPlaneWriter {
 
     private static HealthReport healthReport(ExportContext exportContext) {
         HealthReport report = new HealthReport();
-        report.schemaVersion = SCHEMA_ROOT + "/health";
+        report.schemaVersion = ExportControlFile.HEALTH.schemaVersion();
         report.repository = exportContext.paths.repositoryName;
         report.profile = exportContext.profile.profileId;
         report.selection = exportContext.selection.describe();
@@ -117,7 +114,7 @@ final class ExportControlPlaneWriter {
 
     private static VersionReport versionReport(ExportContext exportContext) {
         VersionReport report = new VersionReport();
-        report.schemaVersion = SCHEMA_ROOT + "/version";
+        report.schemaVersion = ExportControlFile.VERSION.schemaVersion();
         report.repository = exportContext.paths.repositoryName;
         report.exporter = Main.MOD_NAME;
         report.profile = exportContext.profile.profileId;
@@ -127,6 +124,10 @@ final class ExportControlPlaneWriter {
 
     private static File controlDirectory(ExportContext exportContext) {
         return new File(exportContext.paths.repositoryDirectory, "raw-export" + File.separator + "control");
+    }
+
+    private static File controlFile(File controlDir, ExportControlFile file) {
+        return new File(controlDir, file.fileName());
     }
 
     private static void ensureDirectory(File directory) throws Exception {

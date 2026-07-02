@@ -35,6 +35,18 @@ const tracepointCatalog = readFileSync(
   new URL('./src/main/java/com/github/dcysteine/nesql/elysium/kernel/ExportTracepoint.java', import.meta.url),
   'utf8',
 );
+const schemaCatalog = readFileSync(
+  new URL('./src/main/java/com/github/dcysteine/nesql/elysium/kernel/ExportSchemaCatalog.java', import.meta.url),
+  'utf8',
+);
+const controlFileCatalog = readFileSync(
+  new URL('./src/main/java/com/github/dcysteine/nesql/elysium/kernel/ExportControlFile.java', import.meta.url),
+  'utf8',
+);
+const debugFileCatalog = readFileSync(
+  new URL('./src/main/java/com/github/dcysteine/nesql/elysium/kernel/ExportDebugFile.java', import.meta.url),
+  'utf8',
+);
 const resourceManager = readFileSync(
   new URL('./src/main/java/com/github/dcysteine/nesql/elysium/kernel/ExportResourceManager.java', import.meta.url),
   'utf8',
@@ -286,27 +298,69 @@ test('export tracepoints are declared through a stable kernel catalog', () => {
 });
 
 test('export control and debug planes have explicit filesystem ownership', () => {
+  assert.match(schemaCatalog, /public final class ExportSchemaCatalog/);
+  assert.match(schemaCatalog, /RAW_EXPORT_ABI = "nesqlpp\/raw-export\/alpha1"/);
+  assert.match(schemaCatalog, /CONTROL_ROOT = "nesqlpp\/export-control-plane\/v1"/);
+  assert.match(schemaCatalog, /DEBUG_KERNEL_TRACE = "nesqlpp\/export-debug-kernel-trace\/v1"/);
+  assert.match(schemaCatalog, /EXPORT_VALIDATION = "nesqlpp\/export-validation\/v1"/);
+  assert.match(schemaCatalog, /EXPORT_MANIFEST = "nesqlpp\/export-manifest\/v1"/);
+  assert.match(schemaCatalog, /STAGE_CHECKSUMS = "nesqlpp\/stage-checksums\/v1"/);
+  assert.match(schemaCatalog, /public static List<String> controlSchemas\(\)/);
+  assert.match(schemaCatalog, /public static List<String> debugSchemas\(\)/);
+
+  for (const [constant, manifestKey, fileName] of [
+    ['INDEX', 'controlIndex', 'index.json'],
+    ['ABI', 'controlAbi', 'abi.json'],
+    ['CAPABILITIES', 'controlCapabilities', 'capabilities.json'],
+    ['MODULES', 'controlModules', 'modules.json'],
+    ['DRIVERS', 'controlDrivers', 'drivers.json'],
+    ['HEALTH', 'controlHealth', 'health.json'],
+    ['VERSION', 'controlVersion', 'version.json'],
+  ]) {
+    assert.match(controlFileCatalog, new RegExp(`${constant}\\("${manifestKey}"`));
+    assert.match(controlFileCatalog, new RegExp(`"${fileName.replace('.', '\\.')}"`));
+  }
+  assert.match(controlFileCatalog, /public String rawExportPath\(\)/);
+  assert.match(controlFileCatalog, /public static Map<String, String> indexedFiles\(\)/);
+
+  for (const [constant, manifestKey, path, alias] of [
+    ['STAGE_TIMING', 'debugStageTimings', 'export/timing.json', 'validation/export_stage_timings.json'],
+    ['STAGE_CHECKPOINT', 'debugStageCheckpoint', 'export/checkpoint.json', 'validation/stage_checkpoint.json'],
+    ['KERNEL_TRACE', 'debugTraceLatest', 'trace/latest.json', 'validation/export_kernel_trace.json'],
+  ]) {
+    assert.match(debugFileCatalog, new RegExp(`${constant}\\(`));
+    assert.match(debugFileCatalog, new RegExp(`"${manifestKey}"`));
+    assert.match(debugFileCatalog, new RegExp(`"${path.replaceAll('/', '\\/').replace('.', '\\.')}"`));
+    assert.match(debugFileCatalog, new RegExp(`"${alias.replaceAll('/', '\\/').replace('.', '\\.')}"`));
+  }
+  assert.match(debugFileCatalog, /public String rawExportDebugPath\(\)/);
+
   assert.match(controlPlaneWriter, /Writes stable ControlFS-style export descriptors/);
   assert.match(controlPlaneWriter, /raw-export" \+ File\.separator \+ "control"/);
-  assert.match(controlPlaneWriter, /index\.json/);
-  assert.match(controlPlaneWriter, /abi\.json/);
-  assert.match(controlPlaneWriter, /capabilities\.json/);
-  assert.match(controlPlaneWriter, /modules\.json/);
-  assert.match(controlPlaneWriter, /drivers\.json/);
-  assert.match(controlPlaneWriter, /health\.json/);
-  assert.match(controlPlaneWriter, /version\.json/);
+  assert.match(controlPlaneWriter, /ExportControlFile\.INDEX/);
+  assert.match(controlPlaneWriter, /ExportControlFile\.ABI/);
+  assert.match(controlPlaneWriter, /ExportControlFile\.CAPABILITIES/);
+  assert.match(controlPlaneWriter, /ExportControlFile\.MODULES/);
+  assert.match(controlPlaneWriter, /ExportControlFile\.DRIVERS/);
+  assert.match(controlPlaneWriter, /ExportControlFile\.HEALTH/);
+  assert.match(controlPlaneWriter, /ExportControlFile\.VERSION/);
+  assert.match(controlPlaneWriter, /ExportControlFile\.indexedFiles\(\)/);
+  assert.match(controlPlaneWriter, /ExportSchemaCatalog\.RAW_EXPORT_ABI/);
+  assert.match(controlPlaneWriter, /ExportDebugFile\.KERNEL_TRACE\.schemaVersion\(\)/);
   assert.match(controlPlaneWriter, /stability = "stable"/);
   assert.match(controlPlaneWriter, /catalog\.descriptors\(\)/);
   assert.match(controlPlaneWriter, /catalog\.drivers\(\)/);
+  assert.doesNotMatch(controlPlaneWriter, /nesqlpp\/export-control-plane\/v1/);
+  assert.doesNotMatch(controlPlaneWriter, /nesqlpp\/raw-export\/alpha1/);
 
   assert.match(debugPlaneWriter, /Writes DebugFS-style export diagnostics/);
   assert.match(debugPlaneWriter, /raw-export" \+ File\.separator \+ "debug"/);
-  assert.match(debugPlaneWriter, /export\/timing\.json/);
-  assert.match(debugPlaneWriter, /export\/checkpoint\.json/);
-  assert.match(debugPlaneWriter, /trace\/latest\.json/);
-  assert.match(debugPlaneWriter, /export_stage_timings\.json/);
-  assert.match(debugPlaneWriter, /stage_checkpoint\.json/);
-  assert.match(debugPlaneWriter, /export_kernel_trace\.json/);
+  assert.match(debugPlaneWriter, /ExportDebugFile\.STAGE_TIMING\.schemaVersion\(\)/);
+  assert.match(debugPlaneWriter, /ExportDebugFile\.STAGE_CHECKPOINT\.schemaVersion\(\)/);
+  assert.match(debugPlaneWriter, /ExportDebugFile\.KERNEL_TRACE\.schemaVersion\(\)/);
+  assert.match(debugPlaneWriter, /validationAliasFile\(exportContext, ExportDebugFile\.STAGE_TIMING\)/);
+  assert.match(debugPlaneWriter, /debugFile\(exportContext, ExportDebugFile\.KERNEL_TRACE\)/);
+  assert.doesNotMatch(debugPlaneWriter, /nesqlpp\/export-debug-/);
 
   assert.match(runner, /ExportControlPlaneWriter\.write\(exportContext, moduleCatalog\)/);
   assert.match(runner, /ExportDebugPlaneWriter\.writeStageTimingReport/);
@@ -317,8 +371,12 @@ test('export control and debug planes have explicit filesystem ownership', () =>
   assert.doesNotMatch(kernel, /new FileOutputStream/);
   assert.doesNotMatch(kernel, /writeTrace/);
 
-  assert.match(rawManifestBuilder, /controlIndex/);
-  assert.match(rawManifestBuilder, /debugTraceLatest/);
-  assert.match(integrityManifestWriter, /control\/index\.json/);
-  assert.match(integrityManifestWriter, /debug\/trace\/latest\.json/);
+  assert.match(rawManifestBuilder, /for \(ExportControlFile file : ExportControlFile\.values\(\)\)/);
+  assert.match(rawManifestBuilder, /file\.manifestKey\(\), file\.rawExportPath\(\)/);
+  assert.match(rawManifestBuilder, /for \(ExportDebugFile file : ExportDebugFile\.values\(\)\)/);
+  assert.match(rawManifestBuilder, /file\.manifestKey\(\), file\.rawExportDebugPath\(\)/);
+  assert.match(integrityManifestWriter, /ExportSchemaCatalog\.EXPORT_MANIFEST/);
+  assert.match(integrityManifestWriter, /ExportSchemaCatalog\.STAGE_CHECKSUMS/);
+  assert.match(integrityManifestWriter, /addControlFile\(artifacts, repositoryDirectory, rawDir, ExportControlFile\.INDEX, "control"\)/);
+  assert.match(integrityManifestWriter, /addDebugFile\(artifacts, repositoryDirectory, rawDir, ExportDebugFile\.KERNEL_TRACE, "debug-trace"\)/);
 });

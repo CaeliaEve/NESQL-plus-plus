@@ -9,6 +9,7 @@ const readSource = (relativePath) => fs.readFileSync(path.join(repoRoot, relativ
 const metadata = readSource('src/main/java/com/github/dcysteine/nesql/exporter/main/ExportStageMetadata.java');
 const runner = readSource('src/main/java/com/github/dcysteine/nesql/exporter/main/ExportStageRunner.java');
 const debugPlaneWriter = readSource('src/main/java/com/github/dcysteine/nesql/exporter/main/ExportDebugPlaneWriter.java');
+const debugFileCatalog = readSource('src/main/java/com/github/dcysteine/nesql/elysium/kernel/ExportDebugFile.java');
 const selection = readSource('src/main/java/com/github/dcysteine/nesql/exporter/main/ExportSelection.java');
 const executionPlan = readSource('src/main/java/com/github/dcysteine/nesql/exporter/main/ExportExecutionPlan.java');
 const exporter = readSource('src/main/java/com/github/dcysteine/nesql/exporter/main/Exporter.java');
@@ -310,9 +311,12 @@ test('stage diagnostics write machine-readable checkpoint and error records', ()
   const diagnostics = readSource('src/main/java/com/github/dcysteine/nesql/exporter/main/ExportDiagnosticsSupport.java');
   assert.equal(runner.includes('ExportDebugPlaneWriter.writeStageCheckpointReport'), true);
   assert.equal(runner.includes('stage_checkpoint.json'), false);
-  assert.equal(debugPlaneWriter.includes('stage_checkpoint.json'), true);
-  assert.equal(debugPlaneWriter.includes('debugFile(exportContext, "export/checkpoint.json")'), true);
-  assert.equal(debugPlaneWriter.includes('debugFile(exportContext, "trace/latest.json")'), true);
+  assert.equal(debugPlaneWriter.includes('ExportDebugFile.STAGE_CHECKPOINT'), true);
+  assert.equal(debugPlaneWriter.includes('debugFile(exportContext, ExportDebugFile.STAGE_CHECKPOINT)'), true);
+  assert.equal(debugPlaneWriter.includes('debugFile(exportContext, ExportDebugFile.KERNEL_TRACE)'), true);
+  assert.equal(debugFileCatalog.includes('"validation/stage_checkpoint.json"'), true);
+  assert.equal(debugFileCatalog.includes('"export/checkpoint.json"'), true);
+  assert.equal(debugFileCatalog.includes('"trace/latest.json"'), true);
   assert.equal(runner.includes('ExportValidationReportWriter.write(exportContext)'), true);
   assert.equal(diagnostics.includes('new File(validationDirectory, "errors.jsonl")'), true);
   assert.equal(diagnostics.includes('"nesqlpp/export-error/v1"'), true);

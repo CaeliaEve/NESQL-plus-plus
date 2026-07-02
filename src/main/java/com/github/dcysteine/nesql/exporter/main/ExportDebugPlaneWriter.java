@@ -1,5 +1,6 @@
 package com.github.dcysteine.nesql.exporter.main;
 
+import com.github.dcysteine.nesql.elysium.kernel.ExportDebugFile;
 import com.github.dcysteine.nesql.elysium.kernel.ExportKernelContext;
 import com.github.dcysteine.nesql.elysium.kernel.ExportModuleCatalog;
 import com.github.dcysteine.nesql.elysium.kernel.ExportTraceEvent;
@@ -31,21 +32,21 @@ final class ExportDebugPlaneWriter {
             long totalElapsedMs) {
         try {
             TimingReport report = new TimingReport();
-            report.schemaVersion = "nesqlpp/export-debug-stage-timing/v1";
+            report.schemaVersion = ExportDebugFile.STAGE_TIMING.schemaVersion();
             report.profile = exportContext.profile.profileId;
             report.selection = exportContext.selection.describe();
             report.totalElapsedMs = totalElapsedMs;
             report.totalElapsed = formatDuration(totalElapsedMs);
             report.stages = timings;
 
-            File validationFile = validationFile(exportContext, "export_stage_timings.json");
-            File debugFile = debugFile(exportContext, "export/timing.json");
-            writeJson(validationFile, report);
+            File validationAliasFile = validationAliasFile(exportContext, ExportDebugFile.STAGE_TIMING);
+            File debugFile = debugFile(exportContext, ExportDebugFile.STAGE_TIMING);
+            writeJson(validationAliasFile, report);
             writeJson(debugFile, report);
             Logger.chatMessage(
                     EnumChatFormatting.GREEN
                             + "[NESQL] Stage timing report written: "
-                            + validationFile.getAbsolutePath());
+                            + validationAliasFile.getAbsolutePath());
         } catch (Exception e) {
             Logger.MOD.warn("Failed to write NESQL++ stage timing report", e);
         }
@@ -63,7 +64,7 @@ final class ExportDebugPlaneWriter {
             String errorSummary) {
         try {
             StageCheckpointReport report = new StageCheckpointReport();
-            report.schemaVersion = "nesqlpp/export-debug-stage-checkpoint/v1";
+            report.schemaVersion = ExportDebugFile.STAGE_CHECKPOINT.schemaVersion();
             report.generatedAtEpochMs = System.currentTimeMillis();
             report.profile = exportContext.profile.profileId;
             report.selection = exportContext.selection.describe();
@@ -79,8 +80,8 @@ final class ExportDebugPlaneWriter {
                     ? new ArrayList<StageTiming>()
                     : new ArrayList<StageTiming>(timings);
 
-            writeJson(validationFile(exportContext, "stage_checkpoint.json"), report);
-            writeJson(debugFile(exportContext, "export/checkpoint.json"), report);
+            writeJson(validationAliasFile(exportContext, ExportDebugFile.STAGE_CHECKPOINT), report);
+            writeJson(debugFile(exportContext, ExportDebugFile.STAGE_CHECKPOINT), report);
         } catch (Exception e) {
             Logger.MOD.warn("Failed to write NESQL++ stage checkpoint report", e);
         }
@@ -92,15 +93,15 @@ final class ExportDebugPlaneWriter {
             ExportKernelContext context) {
         try {
             TraceReport report = new TraceReport();
-            report.schemaVersion = "nesqlpp/export-debug-kernel-trace/v1";
+            report.schemaVersion = ExportDebugFile.KERNEL_TRACE.schemaVersion();
             report.profile = exportContext.profile.profileId;
             report.selection = exportContext.selection.describe();
             report.tracepoints = ExportTracepoint.all();
             report.modules = catalog.descriptors();
             report.events = context.traceEvents();
 
-            writeJson(validationFile(exportContext, "export_kernel_trace.json"), report);
-            writeJson(debugFile(exportContext, "trace/latest.json"), report);
+            writeJson(validationAliasFile(exportContext, ExportDebugFile.KERNEL_TRACE), report);
+            writeJson(debugFile(exportContext, ExportDebugFile.KERNEL_TRACE), report);
         } catch (Exception e) {
             Logger.MOD.warn("Failed to write NESQL++ export kernel trace", e);
         }
@@ -120,16 +121,16 @@ final class ExportDebugPlaneWriter {
         return String.format("%ds", seconds);
     }
 
-    private static File validationFile(ExportContext exportContext, String fileName) {
+    private static File validationAliasFile(ExportContext exportContext, ExportDebugFile file) {
         return new File(
-                new File(exportContext.paths.repositoryDirectory, "raw-export" + File.separator + "validation"),
-                fileName);
+                exportContext.paths.repositoryDirectory,
+                ("raw-export/" + file.validationAliasPath()).replace('/', File.separatorChar));
     }
 
-    private static File debugFile(ExportContext exportContext, String relativePath) {
+    private static File debugFile(ExportContext exportContext, ExportDebugFile file) {
         return new File(
                 new File(exportContext.paths.repositoryDirectory, "raw-export" + File.separator + "debug"),
-                relativePath.replace('/', File.separatorChar));
+                file.debugPath().replace('/', File.separatorChar));
     }
 
     private static void writeJson(File file, Object value) throws Exception {

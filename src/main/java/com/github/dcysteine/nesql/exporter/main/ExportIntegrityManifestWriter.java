@@ -1,5 +1,8 @@
 package com.github.dcysteine.nesql.exporter.main;
 
+import com.github.dcysteine.nesql.elysium.kernel.ExportControlFile;
+import com.github.dcysteine.nesql.elysium.kernel.ExportDebugFile;
+import com.github.dcysteine.nesql.elysium.kernel.ExportSchemaCatalog;
 import com.google.gson.Gson;
 import com.google.gson.GsonBuilder;
 import net.minecraft.util.EnumChatFormatting;
@@ -34,7 +37,7 @@ final class ExportIntegrityManifestWriter {
             List<ArtifactChecksum> artifacts = collectArtifacts(repositoryDirectory, rawDir);
             annotateChanges(artifacts, previousArtifacts);
             ExportManifest manifest = new ExportManifest();
-            manifest.schemaVersion = "nesqlpp/export-manifest/v1";
+            manifest.schemaVersion = ExportSchemaCatalog.EXPORT_MANIFEST;
             manifest.generatedAtEpochMs = System.currentTimeMillis();
             manifest.repository = exportContext.paths.repositoryName;
             manifest.profile = exportContext.profile.profileId;
@@ -46,7 +49,7 @@ final class ExportIntegrityManifestWriter {
             manifest.artifacts = artifacts;
 
             ChecksumReport checksumReport = new ChecksumReport();
-            checksumReport.schemaVersion = "nesqlpp/stage-checksums/v1";
+            checksumReport.schemaVersion = ExportSchemaCatalog.STAGE_CHECKSUMS;
             checksumReport.generatedAtEpochMs = manifest.generatedAtEpochMs;
             checksumReport.repository = manifest.repository;
             checksumReport.profile = manifest.profile;
@@ -75,8 +78,14 @@ final class ExportIntegrityManifestWriter {
         addFile(artifacts, repositoryDirectory, new File(rawDir, "validation/export_manifest.json"), "manifest");
         addFile(artifacts, repositoryDirectory, new File(rawDir, "validation/stage_checksums.json"), "checksums");
         addFile(artifacts, repositoryDirectory, new File(rawDir, "validation/export_stage_timings.json"), "timings");
-        addFile(artifacts, repositoryDirectory, new File(rawDir, "control/index.json"), "control");
-        addFile(artifacts, repositoryDirectory, new File(rawDir, "debug/trace/latest.json"), "debug-trace");
+        addControlFile(artifacts, repositoryDirectory, rawDir, ExportControlFile.INDEX, "control");
+        addControlFile(artifacts, repositoryDirectory, rawDir, ExportControlFile.ABI, "control-abi");
+        addControlFile(artifacts, repositoryDirectory, rawDir, ExportControlFile.CAPABILITIES, "control-capabilities");
+        addControlFile(artifacts, repositoryDirectory, rawDir, ExportControlFile.MODULES, "control-modules");
+        addControlFile(artifacts, repositoryDirectory, rawDir, ExportControlFile.DRIVERS, "control-drivers");
+        addControlFile(artifacts, repositoryDirectory, rawDir, ExportControlFile.HEALTH, "control-health");
+        addControlFile(artifacts, repositoryDirectory, rawDir, ExportControlFile.VERSION, "control-version");
+        addDebugFile(artifacts, repositoryDirectory, rawDir, ExportDebugFile.KERNEL_TRACE, "debug-trace");
         addFile(artifacts, repositoryDirectory, new File(rawDir, "facts/recipes/index.json"), "recipes");
         addFile(artifacts, repositoryDirectory, new File(rawDir, "assets/textures/browser_atlas_index.json"), "browser-atlas");
         addFile(artifacts, repositoryDirectory, new File(rawDir, "facts/render/backend.json"), "render-backend");
@@ -104,6 +113,24 @@ final class ExportIntegrityManifestWriter {
             artifact.sha256 = sha256(file);
         }
         artifacts.add(artifact);
+    }
+
+    private static void addControlFile(
+            List<ArtifactChecksum> artifacts,
+            File root,
+            File rawDir,
+            ExportControlFile file,
+            String stage) {
+        addFile(artifacts, root, new File(rawDir, file.rawExportPath().replace('/', File.separatorChar)), stage);
+    }
+
+    private static void addDebugFile(
+            List<ArtifactChecksum> artifacts,
+            File root,
+            File rawDir,
+            ExportDebugFile file,
+            String stage) {
+        addFile(artifacts, root, new File(rawDir, file.rawExportDebugPath().replace('/', File.separatorChar)), stage);
     }
 
     private static void addDirectorySummary(List<ArtifactChecksum> artifacts, File root, File dir, String stage) {

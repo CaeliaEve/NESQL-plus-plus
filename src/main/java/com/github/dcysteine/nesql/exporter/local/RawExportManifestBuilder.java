@@ -1,5 +1,7 @@
 package com.github.dcysteine.nesql.exporter.local;
 
+import com.github.dcysteine.nesql.elysium.kernel.ExportControlFile;
+import com.github.dcysteine.nesql.elysium.kernel.ExportDebugFile;
 import com.github.dcysteine.nesql.exporter.main.ExportContext;
 import com.github.dcysteine.nesql.exporter.main.ExportStage;
 
@@ -80,14 +82,12 @@ final class RawExportManifestBuilder {
         manifest.files.put("semanticNbtKeyDistribution", "validation/semantic/nbt-key-distribution.json");
         manifest.files.put("semanticIdentityNormalizationReport", "validation/semantic/identity-normalization-report.json");
         manifest.files.put("semanticRulePack", "facts/semantic/rule-pack.json");
-        manifest.files.put("controlIndex", "control/index.json");
-        manifest.files.put("controlAbi", "control/abi.json");
-        manifest.files.put("controlCapabilities", "control/capabilities.json");
-        manifest.files.put("controlModules", "control/modules.json");
-        manifest.files.put("controlDrivers", "control/drivers.json");
-        manifest.files.put("debugTraceLatest", "debug/trace/latest.json");
-        manifest.files.put("debugStageTimings", "debug/export/timing.json");
-        manifest.files.put("debugStageCheckpoint", "debug/export/checkpoint.json");
+        for (ExportControlFile file : ExportControlFile.values()) {
+            manifest.files.put(file.manifestKey(), file.rawExportPath());
+        }
+        for (ExportDebugFile file : ExportDebugFile.values()) {
+            manifest.files.put(file.manifestKey(), file.rawExportDebugPath());
+        }
         manifest.counts = report.counts;
         return manifest;
     }

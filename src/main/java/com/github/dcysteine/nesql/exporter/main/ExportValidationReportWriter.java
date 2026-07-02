@@ -2,6 +2,7 @@ package com.github.dcysteine.nesql.exporter.main;
 
 import com.github.dcysteine.nesql.exporter.canonical.CanonicalRenderAsset;
 import com.github.dcysteine.nesql.exporter.semantic.SemanticRulePack;
+import com.github.dcysteine.nesql.elysium.kernel.ExportSchemaCatalog;
 import com.google.gson.Gson;
 import com.google.gson.GsonBuilder;
 import com.google.gson.JsonArray;
@@ -42,7 +43,7 @@ final class ExportValidationReportWriter {
             }
 
             ValidationReport report = new ValidationReport();
-            report.schemaVersion = "nesqlpp/export-validation/v1";
+            report.schemaVersion = ExportSchemaCatalog.EXPORT_VALIDATION;
             report.profile = exportContext.profile.profileId;
             report.selection = exportContext.selection.describe();
             report.repository = exportContext.paths.repositoryName;
