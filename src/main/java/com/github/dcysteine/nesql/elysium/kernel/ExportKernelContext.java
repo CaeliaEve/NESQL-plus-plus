@@ -32,6 +32,11 @@ public final class ExportKernelContext {
     }
 
     public void closeResources() throws Exception {
-        resources.close();
+        resources.close(new ExportResourceManager.ReleaseObserver() {
+            @Override
+            public void released(String id, String status, long elapsedMs) {
+                trace("export.resource.release", id, status, elapsedMs);
+            }
+        });
     }
 }

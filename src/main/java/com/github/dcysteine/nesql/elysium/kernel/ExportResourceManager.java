@@ -22,12 +22,23 @@ public final class ExportResourceManager implements AutoCloseable {
 
     @Override
     public void close() throws Exception {
+        close(null);
+    }
+
+    public void close(ReleaseObserver observer) throws Exception {
         Exception failure = null;
         while (!resources.isEmpty()) {
             ManagedResource resource = resources.pop();
+            long startedAt = System.currentTimeMillis();
             try {
                 resource.release();
+                if (observer != null) {
+                    observer.released(resource.id, "ok", System.currentTimeMillis() - startedAt);
+                }
             } catch (Exception e) {
+                if (observer != null) {
+                    observer.released(resource.id, "failed", System.currentTimeMillis() - startedAt);
+                }
                 if (failure == null) {
                     failure = e;
                 } else {
@@ -46,6 +57,10 @@ public final class ExportResourceManager implements AutoCloseable {
 
     public interface ResourceAction {
         void run() throws Exception;
+    }
+
+    public interface ReleaseObserver {
+        void released(String id, String status, long elapsedMs);
     }
 
     private static final class ManagedResource {

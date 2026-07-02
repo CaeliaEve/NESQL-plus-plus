@@ -1,5 +1,7 @@
 package com.github.dcysteine.nesql.exporter.main;
 
+import com.github.dcysteine.nesql.elysium.kernel.ExportResourceManager;
+
 import java.util.EnumMap;
 import java.util.List;
 
@@ -37,15 +39,40 @@ final class LifecycleStageActionProvider implements ExportStageActionProvider {
     public void register(EnumMap<ExportStage, ExportStageAction> actions, ExportStageActionContext context) {
         actions.put(ExportStage.INITIALIZE_REPOSITORY,
                 () -> context.prepareRepositoryOrStop(context.strategy.requiresFreshRepository(context.exportContext)));
-        actions.put(ExportStage.INITIALIZE_DATABASE,
-                () -> context.stageState.runtime = context.strategy.createRuntime(context.exportContext));
+        actions.put(ExportStage.INITIALIZE_DATABASE, () -> {
+            ExportRuntime runtime = context.strategy.createRuntime(context.exportContext);
+            context.stageState.runtime = runtime;
+            context.kernelContext.resources().add(
+                    "export.runtime",
+                    runtime,
+                    new ExportResourceManager.ResourceReleaser<ExportRuntime>() {
+                        @Override
+                        public void release(ExportRuntime resource) {
+                            if (context.stageState.session == null) {
+                                resource.close();
+                            }
+                        }
+                    });
+        });
         actions.put(ExportStage.INITIALIZE_PLUGINS, () -> {
             context.stageState.renderingImages =
                     context.strategy.initializeRendering(
                             context.exportContext,
                             context.exportContext.paths.imageDirectory);
-            context.stageState.session =
+            ExportSession session =
                     context.strategy.startSession(context.exportContext, context.stageState.runtime);
+            context.stageState.session = session;
+            context.kernelContext.resources().add(
+                    "export.session",
+                    session,
+                    new ExportResourceManager.ResourceReleaser<ExportSession>() {
+                        @Override
+                        public void release(ExportSession resource) {
+                            ExportLifecycleSupport.closeSession(
+                                    resource,
+                                    context.strategy.shouldLogEntityManagerClose());
+                        }
+                    });
         });
         actions.put(ExportStage.COLLECT_PLUGIN_DATA,
                 () -> context.strategy.runCollectionStage(context.exportContext, context.stageState.runtime));

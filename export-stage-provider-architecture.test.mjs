@@ -31,6 +31,18 @@ const driverProbeResult = readFileSync(
   new URL('./src/main/java/com/github/dcysteine/nesql/elysium/kernel/DriverProbeResult.java', import.meta.url),
   'utf8',
 );
+const resourceManager = readFileSync(
+  new URL('./src/main/java/com/github/dcysteine/nesql/elysium/kernel/ExportResourceManager.java', import.meta.url),
+  'utf8',
+);
+const kernelContext = readFileSync(
+  new URL('./src/main/java/com/github/dcysteine/nesql/elysium/kernel/ExportKernelContext.java', import.meta.url),
+  'utf8',
+);
+const actionContext = readFileSync(
+  new URL('./src/main/java/com/github/dcysteine/nesql/exporter/main/ExportStageActionContext.java', import.meta.url),
+  'utf8',
+);
 const providerInterface = readFileSync(
   new URL('./src/main/java/com/github/dcysteine/nesql/exporter/main/ExportStageActionProvider.java', import.meta.url),
   'utf8',
@@ -210,4 +222,22 @@ test('export kernel owns Linux-style bus device driver probe and bind lifecycle'
   assert.match(actionModule, /DriverProbeResult\.supported/);
   assert.match(actionModule, /DriverProbeResult\.unsupported/);
   assert.match(actionModule, /provider\.stages\(\)\.isEmpty\(\)/);
+});
+
+test('export lifecycle resources are owned by the kernel managed-resource stack', () => {
+  assert.match(resourceManager, /Deque<ManagedResource> resources/);
+  assert.match(resourceManager, /resources\.push\(new ManagedResource/);
+  assert.match(resourceManager, /while \(!resources\.isEmpty\(\)\)/);
+  assert.match(resourceManager, /public interface ReleaseObserver/);
+  assert.match(kernelContext, /resources\.close\(new ExportResourceManager\.ReleaseObserver/);
+  assert.match(kernelContext, /export\.resource\.release/);
+  assert.match(actionContext, /final ExportKernelContext kernelContext/);
+  assert.match(runner, /new ExportStageActionContext\(exportContext, kernelContext, strategy, stageState\)/);
+  assert.doesNotMatch(runner, /ExportLifecycleSupport\.closeSession\(stageState\.session/);
+  assert.doesNotMatch(runner, /stageState\.runtime\.close\(\)/);
+
+  const lifecycle = providerSources.LifecycleStageActionProvider;
+  assert.match(lifecycle, /context\.kernelContext\.resources\(\)\.add\(\s*"export\.runtime"/);
+  assert.match(lifecycle, /context\.kernelContext\.resources\(\)\.add\(\s*"export\.session"/);
+  assert.match(lifecycle, /ExportLifecycleSupport\.closeSession/);
 });

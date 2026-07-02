@@ -30,7 +30,7 @@ final class ExportStageRunner {
         try {
             kernel.init(kernelContext);
             ExportStageActionContext stageActionContext =
-                    new ExportStageActionContext(exportContext, strategy, stageState);
+                    new ExportStageActionContext(exportContext, kernelContext, strategy, stageState);
             Map<ExportStage, ExportStageAction> stageActions =
                     kernel.buildStageActions(ExportStage.class, stageActionContext);
             int totalStages = exportContext.executionPlan.stages.size();
@@ -121,11 +121,6 @@ final class ExportStageRunner {
                             + reportFile.getAbsolutePath());
             throw e;
         } finally {
-            if (stageState.session != null) {
-                ExportLifecycleSupport.closeSession(stageState.session, strategy.shouldLogEntityManagerClose());
-            } else if (stageState.runtime != null) {
-                stageState.runtime.close();
-            }
             try {
                 kernel.exit(kernelContext);
             } finally {

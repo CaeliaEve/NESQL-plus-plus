@@ -1,15 +1,20 @@
 package com.github.dcysteine.nesql.exporter.main;
 
+import com.github.dcysteine.nesql.elysium.kernel.ExportKernelContext;
+
 final class ExportStageActionContext {
     final ExportContext exportContext;
+    final ExportKernelContext kernelContext;
     final ExportExecutionStrategy strategy;
     final ExportStageState stageState;
 
     ExportStageActionContext(
             ExportContext exportContext,
+            ExportKernelContext kernelContext,
             ExportExecutionStrategy strategy,
             ExportStageState stageState) {
         this.exportContext = exportContext;
+        this.kernelContext = kernelContext;
         this.strategy = strategy;
         this.stageState = stageState;
     }
