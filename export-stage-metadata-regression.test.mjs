@@ -19,6 +19,7 @@ const commandDispatcher = readSource('src/main/java/com/github/dcysteine/nesql/e
 const integrity = readSource('src/main/java/com/github/dcysteine/nesql/exporter/main/ExportIntegrityManifestWriter.java');
 const templateWriter = readSource('src/main/java/com/github/dcysteine/nesql/exporter/local/RawExportUiTemplateCatalogWriter.java');
 const templateLayoutSpecs = readSource('src/main/java/com/github/dcysteine/nesql/exporter/plugin/nei/metadata/NeiUiTemplateLayoutSpecs.java');
+const nativeUiAbi = readSource('src/main/java/com/github/dcysteine/nesql/exporter/nativeui/NativeUiExportAbi.java');
 const rawManifestBuilder = readSource('src/main/java/com/github/dcysteine/nesql/exporter/local/RawExportManifestBuilder.java');
 const rawNeiFactWriter = readSource('src/main/java/com/github/dcysteine/nesql/exporter/local/RawExportNeiFactWriter.java');
 const rawRepositoryFactStreamer = readSource('src/main/java/com/github/dcysteine/nesql/exporter/local/RawExportRepositoryFactStreamer.java');
@@ -46,7 +47,7 @@ test('export stages expose stable incremental families', () => {
   assert.equal(debugPlaneWriter.includes('skippableByChecksum'), true);
   assert.equal(selection.includes('writeUiFamilyCensus'), true);
   assert.equal(selection.includes('writeUiTemplateCatalog'), true);
-  assert.equal(templateWriter.includes('ui-template-catalog.json'), true);
+  assert.equal(templateWriter.includes('NativeUiExportAbi.UI_TEMPLATE_CATALOG_FILE'), true);
   assert.equal(templateWriter.includes('computeTemplateSignature'), true);
   assert.equal(templateWriter.includes('templateSignature'), true);
   assert.equal(templateWriter.includes('List<UiTemplateRect> hotspots'), true);
@@ -69,13 +70,21 @@ test('native NEI handler layouts export GT dynamic primitives and background reg
   assert.equal(rawNeiFactWriter.includes('layout.add("hotspots"'), true);
   assert.equal(rawNeiFactWriter.includes('layout.add("viewports"'), true);
   assert.equal(rawNeiFactWriter.includes('layout.addProperty("canonicalMachineFamily", family)'), true);
+  assert.equal(rawNeiFactWriter.includes('layout.addProperty("coordinateSpace", NativeUiExportAbi.COORDINATE_SPACE)'), true);
+  assert.equal(rawNeiFactWriter.includes('layout.addProperty("scaleMode", NativeUiExportAbi.SCALE_MODE)'), true);
+  assert.equal(rawNeiFactWriter.includes('layout.addProperty("anchor", NativeUiExportAbi.ANCHOR)'), true);
   assert.equal(rawNeiFactWriter.includes('addImageRegion(layout, source)'), true);
   assert.equal(rawNeiFactWriter.includes('handler.addProperty("imageResource", imageResource)'), true);
-  assert.equal(rawNeiFactWriter.includes('GT_NEI_BACKGROUND_ASSET_REF'), true);
-  assert.equal(rawNeiFactWriter.includes('GT_NEI_BACKGROUND_RESOURCE'), true);
+  assert.equal(nativeUiAbi.includes('GT_NEI_BACKGROUND_ASSET_REF'), true);
+  assert.equal(nativeUiAbi.includes('GT_NEI_BACKGROUND_RESOURCE'), true);
+  assert.equal(nativeUiAbi.includes('COORDINATE_SPACE = "nei_pixels"'), true);
+  assert.equal(nativeUiAbi.includes('SCALE_MODE = "uniform-scale"'), true);
+  assert.equal(nativeUiAbi.includes('SLOT_SIZE = 18'), true);
   assert.equal(rawNeiFactWriter.includes('materializeGtNeiBackgroundAsset(rawDir)'), true);
-  assert.equal(rawNeiFactWriter.includes('background.addProperty("kind", "gt-modular-ui")'), true);
-  assert.equal(rawNeiFactWriter.includes('background.addProperty("scaling", "nine-slice")'), true);
+  assert.equal(rawNeiFactWriter.includes('background.addProperty("kind", NativeUiExportAbi.BACKGROUND_KIND_GT_MODULAR_UI)'), true);
+  assert.equal(rawNeiFactWriter.includes('background.addProperty("scaling", NativeUiExportAbi.BACKGROUND_SCALING_NINE_SLICE)'), true);
+  assert.equal(templateLayoutSpecs.includes('json.addProperty("coordinateSpace", slot.coordinateSpace)'), true);
+  assert.equal(templateLayoutSpecs.includes('json.addProperty("slotWidth", slot.slotWidth)'), true);
   assert.equal(rawNeiFactWriter.includes('background.addProperty("captureRequired", false)'), true);
   assert.equal(rawNeiFactWriter.includes('GTNEIDefaultHandler.drawUI(ModularWindow.getBackground)'), true);
   assert.equal(rawNeiFactWriter.includes('String imageResource = trimToEmpty(readString(source, "imageResource", null));'), true);
@@ -83,8 +92,10 @@ test('native NEI handler layouts export GT dynamic primitives and background reg
   assert.equal(rawNeiFactWriter.includes('throw new IOException("Failed to materialize required GT NEI ModularUI background asset: " + location, e)'), true);
   assert.equal(rawNeiFactWriter.includes('Logger.MOD.warn("Could not materialize GT NEI ModularUI background asset'), false);
   assert.equal(rawNeiFactWriter.includes('StandardCopyOption.ATOMIC_MOVE'), true);
-  assert.equal(rawManifestBuilder.includes('manifest.files.put("uiBackgrounds", "assets/ui-backgrounds")'), true);
+  assert.equal(rawManifestBuilder.includes('manifest.files.put("uiBackgrounds", NativeUiExportAbi.UI_BACKGROUNDS_DIRECTORY)'), true);
   assert.equal(templateWriter.includes('template.nativeBackground.assetRef'), true);
+  assert.equal(templateWriter.includes('template.coordinateSpace = NativeUiExportAbi.COORDINATE_SPACE'), true);
+  assert.equal(templateWriter.includes('template.scaleMode = NativeUiExportAbi.SCALE_MODE'), true);
 });
 
 test('export checksums carry previous-run reuse signals without mtime dependence', () => {

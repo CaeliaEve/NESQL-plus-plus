@@ -1,6 +1,7 @@
 package com.github.dcysteine.nesql.exporter.local;
 
 import com.github.dcysteine.nesql.exporter.main.Logger;
+import com.github.dcysteine.nesql.exporter.nativeui.NativeUiExportAbi;
 import com.github.dcysteine.nesql.exporter.plugin.nei.metadata.NeiUiTemplateLayoutSpecs;
 import com.github.dcysteine.nesql.exporter.plugin.nei.metadata.NeiUiTemplateLayoutSpecs.UiTemplateSlot;
 import com.google.gson.Gson;
@@ -34,9 +35,9 @@ import java.util.zip.GZIPInputStream;
  */
 public final class RawExportUiTemplateCatalogWriter {
     private static final String OUTPUT_DIRECTORY = "raw-export";
-    private static final String OUTPUT_FILE = "validation/ui-template-catalog.json";
-    private static final String SCHEMA_VERSION = "nesqlpp/raw-export/alpha1/ui-template-catalog";
-    private static final String CENSUS_FILE = "validation/ui-family-census.json";
+    private static final String OUTPUT_FILE = NativeUiExportAbi.UI_TEMPLATE_CATALOG_FILE;
+    private static final String SCHEMA_VERSION = NativeUiExportAbi.UI_TEMPLATE_CATALOG_SCHEMA;
+    private static final String CENSUS_FILE = NativeUiExportAbi.UI_FAMILY_CENSUS_FILE;
 
     private final File repositoryDirectory;
 
@@ -129,6 +130,9 @@ public final class RawExportUiTemplateCatalogWriter {
         template.familyKey = family.familyKey;
         template.canonicalMachineFamily = family.canonicalMachineFamily;
         template.layoutKind = family.layoutKind;
+        template.coordinateSpace = NativeUiExportAbi.COORDINATE_SPACE;
+        template.scaleMode = NativeUiExportAbi.SCALE_MODE;
+        template.anchor = NativeUiExportAbi.ANCHOR;
         template.width = family.width;
         template.height = family.height;
         template.yShift = family.yShift;
@@ -175,6 +179,9 @@ public final class RawExportUiTemplateCatalogWriter {
             canonical.append(nullToEmpty(template.familyKey)).append('\n');
             canonical.append(nullToEmpty(template.canonicalMachineFamily)).append('\n');
             canonical.append(nullToEmpty(template.layoutKind)).append('\n');
+            canonical.append(nullToEmpty(template.coordinateSpace)).append(':')
+                    .append(nullToEmpty(template.scaleMode)).append(':')
+                    .append(nullToEmpty(template.anchor)).append('\n');
             canonical.append(template.width).append('x').append(template.height).append('@').append(template.yShift).append('\n');
             canonical.append(template.maxRecipesPerPage).append('\n');
             canonical.append(nullToEmpty(template.imageResource)).append('\n');
@@ -259,6 +266,9 @@ public final class RawExportUiTemplateCatalogWriter {
         String familyKey;
         String canonicalMachineFamily;
         String layoutKind;
+        String coordinateSpace;
+        String scaleMode;
+        String anchor;
         int width;
         int height;
         int yShift;

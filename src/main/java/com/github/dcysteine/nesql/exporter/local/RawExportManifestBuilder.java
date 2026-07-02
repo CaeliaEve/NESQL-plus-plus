@@ -2,6 +2,7 @@ package com.github.dcysteine.nesql.exporter.local;
 
 import com.github.dcysteine.nesql.elysium.kernel.ExportControlFile;
 import com.github.dcysteine.nesql.elysium.kernel.ExportDebugFile;
+import com.github.dcysteine.nesql.exporter.nativeui.NativeUiExportAbi;
 import com.github.dcysteine.nesql.exporter.main.ExportContext;
 import com.github.dcysteine.nesql.exporter.main.ExportStage;
 
@@ -46,7 +47,7 @@ final class RawExportManifestBuilder {
         manifest.files.put("neiGuidFilters", "facts/nei/guidfilters.jsonl.gz");
         manifest.files.put("neiHiddenItems", "facts/nei/hiddenitems.jsonl.gz");
         manifest.files.put("textures", "assets/textures/index.jsonl.gz");
-        manifest.files.put("uiBackgrounds", "assets/ui-backgrounds");
+        manifest.files.put("uiBackgrounds", NativeUiExportAbi.UI_BACKGROUNDS_DIRECTORY);
         manifest.files.put("animations", "assets/animations/index.jsonl.gz");
         manifest.files.put("nativeSprites", "assets/animations/native-sprites.jsonl.gz");
         manifest.files.put("renderedGifs", "assets/animations/rendered-gifs.jsonl.gz");
@@ -58,12 +59,12 @@ final class RawExportManifestBuilder {
         manifest.files.put("browserAtlasIndex", "assets/textures/browser_atlas_index.json");
         manifest.files.put("browserAtlasAssets", "assets/textures/atlas-assets");
         manifest.files.put("neiHandlers", "facts/nei/handlers.jsonl.gz");
-        manifest.files.put("neiHandlerLayouts", "facts/nei/handler-layouts.jsonl.gz");
+        manifest.files.put("neiHandlerLayouts", NativeUiExportAbi.NEI_HANDLER_LAYOUTS_FILE);
         if (exportContext.selection.includesStage(ExportStage.WRITE_UI_FAMILY_CENSUS, exportContext.profile)) {
-            manifest.files.put("uiFamilyCensus", "validation/ui-family-census.json");
+            manifest.files.put("uiFamilyCensus", NativeUiExportAbi.UI_FAMILY_CENSUS_FILE);
         }
         if (exportContext.selection.includesStage(ExportStage.WRITE_UI_TEMPLATE_CATALOG, exportContext.profile)) {
-            manifest.files.put("uiTemplateCatalog", "validation/ui-template-catalog.json");
+            manifest.files.put("uiTemplateCatalog", NativeUiExportAbi.UI_TEMPLATE_CATALOG_FILE);
         }
         manifest.files.put("multiblocks", "models/multiblocks/index.jsonl.gz");
         manifest.files.put("entities", "models/entities/index.jsonl.gz");

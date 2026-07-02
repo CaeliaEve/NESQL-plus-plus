@@ -3,6 +3,7 @@ package com.github.dcysteine.nesql.exporter.local;
 import com.github.dcysteine.nesql.exporter.canonical.CanonicalRenderAsset;
 import com.github.dcysteine.nesql.exporter.main.ExportContext;
 import com.github.dcysteine.nesql.exporter.main.Logger;
+import com.github.dcysteine.nesql.elysium.kernel.ExportSchemaCatalog;
 import jakarta.persistence.EntityManager;
 import net.minecraft.util.EnumChatFormatting;
 
@@ -21,7 +22,7 @@ import java.util.List;
  */
 public final class RawExportSidecarWriter {
     private static final String OUTPUT_DIRECTORY = "raw-export";
-    private static final String SCHEMA_VERSION = "nesqlpp/raw-export/alpha1";
+    private static final String SCHEMA_VERSION = ExportSchemaCatalog.RAW_EXPORT_ABI;
 
     private final EntityManager entityManager;
     private final File repositoryDirectory;

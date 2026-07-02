@@ -1,5 +1,6 @@
 package com.github.dcysteine.nesql.exporter.plugin.nei.metadata;
 
+import com.github.dcysteine.nesql.exporter.nativeui.NativeUiExportAbi;
 import com.google.gson.JsonArray;
 import com.google.gson.JsonObject;
 
@@ -83,6 +84,12 @@ public final class NeiUiTemplateLayoutSpecs {
         slot.rows = rows;
         slot.x = x;
         slot.y = y;
+        slot.coordinateSpace = NativeUiExportAbi.COORDINATE_SPACE;
+        slot.anchor = NativeUiExportAbi.ANCHOR;
+        slot.slotWidth = NativeUiExportAbi.SLOT_SIZE;
+        slot.slotHeight = NativeUiExportAbi.SLOT_SIZE;
+        slot.pitchX = NativeUiExportAbi.SLOT_PITCH;
+        slot.pitchY = NativeUiExportAbi.SLOT_PITCH;
         return slot;
     }
 
@@ -97,6 +104,12 @@ public final class NeiUiTemplateLayoutSpecs {
         json.addProperty("rows", slot.rows);
         json.addProperty("x", slot.x);
         json.addProperty("y", slot.y);
+        json.addProperty("coordinateSpace", slot.coordinateSpace);
+        json.addProperty("anchor", slot.anchor);
+        json.addProperty("slotWidth", slot.slotWidth);
+        json.addProperty("slotHeight", slot.slotHeight);
+        json.addProperty("pitchX", slot.pitchX);
+        json.addProperty("pitchY", slot.pitchY);
         return json;
     }
 
@@ -107,5 +120,11 @@ public final class NeiUiTemplateLayoutSpecs {
         public int rows;
         public int x;
         public int y;
+        public String coordinateSpace;
+        public String anchor;
+        public int slotWidth;
+        public int slotHeight;
+        public int pitchX;
+        public int pitchY;
     }
 }

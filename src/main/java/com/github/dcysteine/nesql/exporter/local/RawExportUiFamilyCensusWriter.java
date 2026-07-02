@@ -4,6 +4,7 @@ import com.github.dcysteine.nesql.exporter.plugin.nei.metadata.NeiHandlerMetadat
 import com.github.dcysteine.nesql.exporter.plugin.nei.metadata.NeiHandlerMetadataRepository;
 import com.github.dcysteine.nesql.exporter.plugin.nei.metadata.NeiUiFamilyClassifier;
 import com.github.dcysteine.nesql.exporter.main.Logger;
+import com.github.dcysteine.nesql.exporter.nativeui.NativeUiExportAbi;
 import com.google.gson.Gson;
 import com.google.gson.GsonBuilder;
 import net.minecraft.util.EnumChatFormatting;
@@ -28,10 +29,8 @@ import java.util.Set;
  */
 public final class RawExportUiFamilyCensusWriter {
     private static final String OUTPUT_DIRECTORY = "raw-export";
-    private static final String OUTPUT_FILE = "validation/ui-family-census.json";
-    private static final String SCHEMA_VERSION = "nesqlpp/raw-export/alpha1/ui-family-census";
-    private static final String GT_NEI_BACKGROUND_ASSET_REF = "assets/ui-backgrounds/gregtech/nei_single_recipe.png";
-    private static final String GT_NEI_BACKGROUND_RESOURCE = "gregtech:textures/gui/background/nei_single_recipe.png";
+    private static final String OUTPUT_FILE = NativeUiExportAbi.UI_FAMILY_CENSUS_FILE;
+    private static final String SCHEMA_VERSION = NativeUiExportAbi.UI_FAMILY_CENSUS_SCHEMA;
 
     private final File repositoryDirectory;
 
@@ -199,18 +198,21 @@ public final class RawExportUiFamilyCensusWriter {
             int height,
             int yShift) {
         UiNativeBackground background = new UiNativeBackground();
-        background.schemaVersion = SCHEMA_VERSION + "/native-ui-background";
+        background.schemaVersion = NativeUiExportAbi.schema(SCHEMA_VERSION, "native-ui-background");
         background.width = width;
         background.height = height;
         background.yShift = yShift;
         background.layoutKind = layoutKind;
         background.canonicalMachineFamily = family;
+        background.coordinateSpace = NativeUiExportAbi.COORDINATE_SPACE;
+        background.scaleMode = NativeUiExportAbi.SCALE_MODE;
+        background.anchor = NativeUiExportAbi.ANCHOR;
         String imageResource = trimToEmpty(entry.getImageResource());
         Integer imageWidth = entry.getImageWidthInt();
         Integer imageHeight = entry.getImageHeightInt();
         if (!imageResource.isEmpty() && imageWidth != null && imageHeight != null && imageWidth.intValue() > 0 && imageHeight.intValue() > 0) {
-            background.status = "captured";
-            background.kind = "texture-region";
+            background.status = NativeUiExportAbi.BACKGROUND_STATUS_CAPTURED;
+            background.kind = NativeUiExportAbi.BACKGROUND_KIND_TEXTURE_REGION;
             background.resource = imageResource;
             background.region = new UiRect();
             background.region.x = entry.getImageXInt() == null ? 0 : entry.getImageXInt().intValue();
@@ -220,13 +222,13 @@ public final class RawExportUiFamilyCensusWriter {
             return background;
         }
         if ("gregtech-machine".equals(family)) {
-            background.status = "captured";
-            background.kind = "gt-modular-ui";
-            background.assetRef = GT_NEI_BACKGROUND_ASSET_REF;
-            background.resource = GT_NEI_BACKGROUND_RESOURCE;
+            background.status = NativeUiExportAbi.BACKGROUND_STATUS_CAPTURED;
+            background.kind = NativeUiExportAbi.BACKGROUND_KIND_GT_MODULAR_UI;
+            background.assetRef = NativeUiExportAbi.GT_NEI_BACKGROUND_ASSET_REF;
+            background.resource = NativeUiExportAbi.GT_NEI_BACKGROUND_RESOURCE;
             background.source = "GTNEIDefaultHandler.drawUI(ModularWindow.getBackground)";
             background.drawable = "GTUITextures.BACKGROUND_NEI_SINGLE_RECIPE";
-            background.scaling = "nine-slice";
+            background.scaling = NativeUiExportAbi.BACKGROUND_SCALING_NINE_SLICE;
             background.texture = new UiTexture();
             background.texture.width = 64;
             background.texture.height = 64;
@@ -241,8 +243,8 @@ public final class RawExportUiFamilyCensusWriter {
             background.captureRequired = false;
             return background;
         }
-        background.status = "missing";
-        background.kind = "unknown";
+        background.status = NativeUiExportAbi.BACKGROUND_STATUS_MISSING;
+        background.kind = NativeUiExportAbi.BACKGROUND_KIND_UNKNOWN;
         background.captureRequired = true;
         return background;
     }
@@ -329,6 +331,9 @@ public final class RawExportUiFamilyCensusWriter {
         String schemaVersion;
         String status;
         String kind;
+        String coordinateSpace;
+        String scaleMode;
+        String anchor;
         String assetRef;
         String resource;
         String source;

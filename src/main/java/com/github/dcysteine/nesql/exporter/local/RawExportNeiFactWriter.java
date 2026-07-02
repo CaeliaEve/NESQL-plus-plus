@@ -1,5 +1,6 @@
 package com.github.dcysteine.nesql.exporter.local;
 
+import com.github.dcysteine.nesql.exporter.nativeui.NativeUiExportAbi;
 import com.github.dcysteine.nesql.exporter.plugin.nei.metadata.NeiUiFamilyClassifier;
 import com.github.dcysteine.nesql.exporter.plugin.nei.metadata.NeiUiTemplateLayoutSpecs;
 import com.google.gson.Gson;
@@ -35,8 +36,6 @@ import java.util.TimeZone;
 import java.util.zip.GZIPOutputStream;
 
 final class RawExportNeiFactWriter {
-    private static final String GT_NEI_BACKGROUND_ASSET_REF = "assets/ui-backgrounds/gregtech/nei_single_recipe.png";
-    private static final String GT_NEI_BACKGROUND_RESOURCE = "gregtech:textures/gui/background/nei_single_recipe.png";
     private static final Map<String, String> MACHINE_CATALYST_RULES = loadBundledMachineCatalystRules();
 
     private final File repositoryDirectory;
@@ -93,7 +92,7 @@ final class RawExportNeiFactWriter {
             JsonArray groups,
             JsonArray defaultEntries) {
         NeiBrowserContract contract = new NeiBrowserContract();
-        contract.schemaVersion = schemaVersion + "/nei-browser-contract";
+        contract.schemaVersion = NativeUiExportAbi.schema(schemaVersion, "nei-browser-contract");
         contract.generatedAt = utcNow();
         contract.neiRuntimeSnapshot = readBoolean(browserLayout, "neiRuntimeSnapshot", false);
         contract.neiRuntimePanelItemCount = readLong(browserLayout, "neiRuntimeItemCount", 0L);
@@ -259,7 +258,7 @@ final class RawExportNeiFactWriter {
                         continue;
                     }
                     JsonObject row = new JsonObject();
-                    row.addProperty("schemaVersion", schemaVersion + "/nei-guidfilter-rule");
+                    row.addProperty("schemaVersion", NativeUiExportAbi.schema(schemaVersion, "nei-guidfilter-rule"));
                     row.addProperty("sourceKind", "gtnh-nei-config");
                     row.addProperty("sourceFile", source.getName());
                     row.addProperty("lineNumber", lineNumber);
@@ -296,7 +295,7 @@ final class RawExportNeiFactWriter {
                         continue;
                     }
                     JsonObject row = new JsonObject();
-                    row.addProperty("schemaVersion", schemaVersion + "/nei-hidden-item-rule");
+                    row.addProperty("schemaVersion", NativeUiExportAbi.schema(schemaVersion, "nei-hidden-item-rule"));
                     row.addProperty("sourceKind", "gtnh-nei-config");
                     row.addProperty("sourceFile", source.getName());
                     row.addProperty("lineNumber", lineNumber);
@@ -344,7 +343,7 @@ final class RawExportNeiFactWriter {
                     || isGtModularUiBackground(nativeBackground);
 
             JsonObject handler = new JsonObject();
-            handler.addProperty("schemaVersion", schemaVersion + "/nei-handler");
+            handler.addProperty("schemaVersion", NativeUiExportAbi.schema(schemaVersion, "nei-handler"));
             handler.addProperty("handlerKey", handlerKey);
             handler.addProperty("handlerClass", handlerClass);
             handler.addProperty("displayName", displayName);
@@ -365,11 +364,14 @@ final class RawExportNeiFactWriter {
             handlerRows.add(handler);
 
             JsonObject layout = new JsonObject();
-            layout.addProperty("schemaVersion", schemaVersion + "/nei-handler-layout");
+            layout.addProperty("schemaVersion", NativeUiExportAbi.schema(schemaVersion, "nei-handler-layout"));
             layout.addProperty("handlerKey", handlerKey);
             layout.addProperty("handlerClass", handlerClass);
             layout.addProperty("canonicalMachineFamily", family);
             layout.addProperty("layoutKind", layoutKind);
+            layout.addProperty("coordinateSpace", NativeUiExportAbi.COORDINATE_SPACE);
+            layout.addProperty("scaleMode", NativeUiExportAbi.SCALE_MODE);
+            layout.addProperty("anchor", NativeUiExportAbi.ANCHOR);
             layout.addProperty("width", width);
             layout.addProperty("height", height);
             layout.addProperty("yShift", yShift);
@@ -392,8 +394,8 @@ final class RawExportNeiFactWriter {
         if (requiresGtNeiBackgroundAsset) {
             materializeGtNeiBackgroundAsset(rawDir);
         }
-        counts.handlers = writeArrayAsJsonl(handlerRows, new File(rawDir, "facts/nei/handlers.jsonl.gz"));
-        counts.layouts = writeArrayAsJsonl(layoutRows, new File(rawDir, "facts/nei/handler-layouts.jsonl.gz"));
+        counts.handlers = writeArrayAsJsonl(handlerRows, new File(rawDir, NativeUiExportAbi.NEI_HANDLERS_FILE));
+        counts.layouts = writeArrayAsJsonl(layoutRows, new File(rawDir, NativeUiExportAbi.NEI_HANDLER_LAYOUTS_FILE));
         return counts;
     }
 
@@ -415,15 +417,18 @@ final class RawExportNeiFactWriter {
         int imageWidth = parseInt(readString(source, "imageWidth", null), 0);
         int imageHeight = parseInt(readString(source, "imageHeight", null), 0);
         JsonObject background = new JsonObject();
-        background.addProperty("schemaVersion", schemaVersion + "/native-ui-background");
+        background.addProperty("schemaVersion", NativeUiExportAbi.schema(schemaVersion, "native-ui-background"));
         background.addProperty("width", width);
         background.addProperty("height", height);
         background.addProperty("yShift", yShift);
         background.addProperty("layoutKind", layoutKind);
         background.addProperty("canonicalMachineFamily", family);
+        background.addProperty("coordinateSpace", NativeUiExportAbi.COORDINATE_SPACE);
+        background.addProperty("scaleMode", NativeUiExportAbi.SCALE_MODE);
+        background.addProperty("anchor", NativeUiExportAbi.ANCHOR);
         if (!imageResource.trim().isEmpty() && imageWidth > 0 && imageHeight > 0) {
-            background.addProperty("status", "captured");
-            background.addProperty("kind", "texture-region");
+            background.addProperty("status", NativeUiExportAbi.BACKGROUND_STATUS_CAPTURED);
+            background.addProperty("kind", NativeUiExportAbi.BACKGROUND_KIND_TEXTURE_REGION);
             background.addProperty("resource", imageResource);
             JsonObject region = new JsonObject();
             region.addProperty("x", parseInt(readString(source, "imageX", null), 0));
@@ -434,13 +439,13 @@ final class RawExportNeiFactWriter {
             return background;
         }
         if ("gregtech-machine".equals(family)) {
-            background.addProperty("status", "captured");
-            background.addProperty("kind", "gt-modular-ui");
+            background.addProperty("status", NativeUiExportAbi.BACKGROUND_STATUS_CAPTURED);
+            background.addProperty("kind", NativeUiExportAbi.BACKGROUND_KIND_GT_MODULAR_UI);
             background.addProperty("source", "GTNEIDefaultHandler.drawUI(ModularWindow.getBackground)");
             background.addProperty("drawable", "GTUITextures.BACKGROUND_NEI_SINGLE_RECIPE");
-            background.addProperty("assetRef", GT_NEI_BACKGROUND_ASSET_REF);
-            background.addProperty("resource", GT_NEI_BACKGROUND_RESOURCE);
-            background.addProperty("scaling", "nine-slice");
+            background.addProperty("assetRef", NativeUiExportAbi.GT_NEI_BACKGROUND_ASSET_REF);
+            background.addProperty("resource", NativeUiExportAbi.GT_NEI_BACKGROUND_RESOURCE);
+            background.addProperty("scaling", NativeUiExportAbi.BACKGROUND_SCALING_NINE_SLICE);
             JsonObject texture = new JsonObject();
             texture.addProperty("width", 64);
             texture.addProperty("height", 64);
@@ -458,8 +463,8 @@ final class RawExportNeiFactWriter {
             background.addProperty("captureRequired", false);
             return background;
         }
-        background.addProperty("status", "missing");
-        background.addProperty("kind", "unknown");
+        background.addProperty("status", NativeUiExportAbi.BACKGROUND_STATUS_MISSING);
+        background.addProperty("kind", NativeUiExportAbi.BACKGROUND_KIND_UNKNOWN);
         background.addProperty("captureRequired", true);
         return background;
     }
@@ -469,14 +474,14 @@ final class RawExportNeiFactWriter {
     }
 
     private static void materializeGtNeiBackgroundAsset(File rawDir) throws IOException {
-        File target = new File(rawDir, GT_NEI_BACKGROUND_ASSET_REF.replace('/', File.separatorChar));
+        File target = new File(rawDir, NativeUiExportAbi.GT_NEI_BACKGROUND_ASSET_REF.replace('/', File.separatorChar));
         File parent = target.getParentFile();
         if (parent != null) {
             ensureDirectory(parent);
         }
         File temporary = new File(parent, target.getName() + ".tmp");
         deleteIfExists(temporary);
-        ResourceLocation location = new ResourceLocation(GT_NEI_BACKGROUND_RESOURCE);
+            ResourceLocation location = new ResourceLocation(NativeUiExportAbi.GT_NEI_BACKGROUND_RESOURCE);
         try (InputStream input = net.minecraft.client.Minecraft.getMinecraft()
                 .getResourceManager()
                 .getResource(location)
