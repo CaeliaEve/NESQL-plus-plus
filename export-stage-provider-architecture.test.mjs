@@ -413,6 +413,8 @@ test('export control and debug planes have explicit filesystem ownership', () =>
     assert.match(controlFileCatalog, new RegExp(`"${fileName.replace('.', '\\.')}"`));
   }
   assert.match(controlFileCatalog, /public String rawExportPath\(\)/);
+  assert.match(controlFileCatalog, /STABILITY_STABLE = "stable"/);
+  assert.match(controlFileCatalog, /VALIDATION_PROBE_POLICY = "ordered-fail-closed-validation-probe-catalog"/);
   assert.match(controlFileCatalog, /public static Map<String, String> indexedFiles\(\)/);
 
   for (const [constant, manifestKey, path, alias] of [
@@ -433,14 +435,21 @@ test('export control and debug planes have explicit filesystem ownership', () =>
   assert.match(controlPlaneWriter, /Writes stable ControlFS-style export descriptors/);
   assert.match(controlPlaneWriter, /RawExportFileCatalog\.rawExportDirectory/);
   assert.match(controlPlaneWriter, /RawExportFileCatalog\.CONTROL_DIRECTORY/);
-  assert.match(controlPlaneWriter, /ExportControlFile\.INDEX/);
-  assert.match(controlPlaneWriter, /ExportControlFile\.ABI/);
-  assert.match(controlPlaneWriter, /ExportControlFile\.CAPABILITIES/);
-  assert.match(controlPlaneWriter, /ExportControlFile\.MODULES/);
-  assert.match(controlPlaneWriter, /ExportControlFile\.DRIVERS/);
-  assert.match(controlPlaneWriter, /ExportControlFile\.VALIDATION_PROBES/);
-  assert.match(controlPlaneWriter, /ExportControlFile\.HEALTH/);
-  assert.match(controlPlaneWriter, /ExportControlFile\.VERSION/);
+  assert.match(controlPlaneWriter, /CONTROL_REPORTS = validateAndFreeze\(Arrays\.asList/);
+  assert.match(controlPlaneWriter, /new ControlReportDescriptor\(ExportControlFile\.INDEX/);
+  assert.match(controlPlaneWriter, /new ControlReportDescriptor\(ExportControlFile\.ABI/);
+  assert.match(controlPlaneWriter, /new ControlReportDescriptor\(ExportControlFile\.CAPABILITIES/);
+  assert.match(controlPlaneWriter, /new ControlReportDescriptor\(ExportControlFile\.MODULES/);
+  assert.match(controlPlaneWriter, /new ControlReportDescriptor\(ExportControlFile\.DRIVERS/);
+  assert.match(controlPlaneWriter, /new ControlReportDescriptor\(ExportControlFile\.VALIDATION_PROBES/);
+  assert.match(controlPlaneWriter, /new ControlReportDescriptor\(ExportControlFile\.HEALTH/);
+  assert.match(controlPlaneWriter, /new ControlReportDescriptor\(ExportControlFile\.VERSION/);
+  assert.match(controlPlaneWriter, /for \(ControlReportDescriptor descriptor : CONTROL_REPORTS\)/);
+  assert.match(controlPlaneWriter, /writeJson\(controlFile\(controlDir, descriptor\.file\(\)\), descriptor\.build\(exportContext, catalog\)\)/);
+  assert.match(controlPlaneWriter, /Duplicate ControlFS report descriptor/);
+  assert.match(controlPlaneWriter, /Missing ControlFS report descriptor/);
+  assert.match(controlPlaneWriter, /private interface ControlReportFactory/);
+  assert.match(controlPlaneWriter, /private static final class ControlReportDescriptor/);
   assert.match(controlPlaneWriter, /ExportControlFile\.indexedFiles\(\)/);
   assert.match(controlPlaneWriter, /ExportSchemaCatalog\.RAW_EXPORT_ABI/);
   assert.match(controlPlaneWriter, /validationProbeControlSchema = ExportControlFile\.VALIDATION_PROBES\.schemaVersion\(\)/);
@@ -448,9 +457,14 @@ test('export control and debug planes have explicit filesystem ownership', () =>
   assert.match(controlPlaneWriter, /ExportValidationProbeCatalog\.descriptors\(\)/);
   assert.match(controlPlaneWriter, /report\.validationProbeCount = ExportValidationProbeCatalog\.descriptors\(\)\.size\(\)/);
   assert.match(controlPlaneWriter, /ExportDebugFile\.KERNEL_TRACE\.schemaVersion\(\)/);
-  assert.match(controlPlaneWriter, /stability = "stable"/);
+  assert.match(controlPlaneWriter, /stability = ExportControlFile\.STABILITY_STABLE/);
+  assert.match(controlPlaneWriter, /policy = ExportControlFile\.VALIDATION_PROBE_POLICY/);
   assert.match(controlPlaneWriter, /catalog\.descriptors\(\)/);
   assert.match(controlPlaneWriter, /catalog\.drivers\(\)/);
+  assert.doesNotMatch(controlPlaneWriter, /writeJson\(controlFile\(controlDir, ExportControlFile\.INDEX\)/);
+  assert.doesNotMatch(controlPlaneWriter, /writeJson\(controlFile\(controlDir, ExportControlFile\.VERSION\)/);
+  assert.doesNotMatch(controlPlaneWriter, /stability = "stable"/);
+  assert.doesNotMatch(controlPlaneWriter, /ordered-fail-closed-validation-probe-catalog/);
   assert.doesNotMatch(controlPlaneWriter, /nesqlpp\/export-control-plane\/v1/);
   assert.doesNotMatch(controlPlaneWriter, /nesqlpp\/raw-export\/alpha1/);
 

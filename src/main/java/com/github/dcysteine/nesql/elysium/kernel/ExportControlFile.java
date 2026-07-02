@@ -19,6 +19,9 @@ public enum ExportControlFile {
     private final String fileName;
     private final String schemaVersion;
 
+    public static final String STABILITY_STABLE = "stable";
+    public static final String VALIDATION_PROBE_POLICY = "ordered-fail-closed-validation-probe-catalog";
+
     ExportControlFile(String manifestKey, String indexKey, String fileName, String schemaVersion) {
         this.manifestKey = manifestKey;
         this.indexKey = indexKey;

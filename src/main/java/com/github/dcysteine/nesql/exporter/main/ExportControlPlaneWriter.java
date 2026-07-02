@@ -16,7 +16,9 @@ import java.io.FileOutputStream;
 import java.io.OutputStreamWriter;
 import java.nio.charset.StandardCharsets;
 import java.util.ArrayList;
+import java.util.Arrays;
 import java.util.Collections;
+import java.util.EnumSet;
 import java.util.LinkedHashMap;
 import java.util.LinkedHashSet;
 import java.util.List;
@@ -26,6 +28,23 @@ import java.util.Set;
 /** Writes stable ControlFS-style export descriptors for downstream tooling. */
 final class ExportControlPlaneWriter {
     private static final Gson GSON = new GsonBuilder().setPrettyPrinting().create();
+    private static final List<ControlReportDescriptor> CONTROL_REPORTS = validateAndFreeze(Arrays.asList(
+            new ControlReportDescriptor(ExportControlFile.INDEX, (exportContext, catalog) ->
+                    indexReport(exportContext)),
+            new ControlReportDescriptor(ExportControlFile.ABI, (exportContext, catalog) ->
+                    abiReport(exportContext)),
+            new ControlReportDescriptor(ExportControlFile.CAPABILITIES, (exportContext, catalog) ->
+                    capabilitiesReport(catalog)),
+            new ControlReportDescriptor(ExportControlFile.MODULES, (exportContext, catalog) ->
+                    modulesReport(catalog)),
+            new ControlReportDescriptor(ExportControlFile.DRIVERS, (exportContext, catalog) ->
+                    driversReport(catalog)),
+            new ControlReportDescriptor(ExportControlFile.VALIDATION_PROBES, (exportContext, catalog) ->
+                    validationProbesReport()),
+            new ControlReportDescriptor(ExportControlFile.HEALTH, (exportContext, catalog) ->
+                    healthReport(exportContext)),
+            new ControlReportDescriptor(ExportControlFile.VERSION, (exportContext, catalog) ->
+                    versionReport(exportContext))));
 
     private ExportControlPlaneWriter() {}
 
@@ -33,16 +52,9 @@ final class ExportControlPlaneWriter {
         try {
             File controlDir = controlDirectory(exportContext);
             ensureDirectory(controlDir);
-            writeJson(controlFile(controlDir, ExportControlFile.INDEX), indexReport(exportContext));
-            writeJson(controlFile(controlDir, ExportControlFile.ABI), abiReport(exportContext));
-            writeJson(controlFile(controlDir, ExportControlFile.CAPABILITIES), capabilitiesReport(catalog));
-            writeJson(controlFile(controlDir, ExportControlFile.MODULES), modulesReport(catalog));
-            writeJson(controlFile(controlDir, ExportControlFile.DRIVERS), driversReport(catalog));
-            writeJson(
-                    controlFile(controlDir, ExportControlFile.VALIDATION_PROBES),
-                    validationProbesReport());
-            writeJson(controlFile(controlDir, ExportControlFile.HEALTH), healthReport(exportContext));
-            writeJson(controlFile(controlDir, ExportControlFile.VERSION), versionReport(exportContext));
+            for (ControlReportDescriptor descriptor : CONTROL_REPORTS) {
+                writeJson(controlFile(controlDir, descriptor.file()), descriptor.build(exportContext, catalog));
+            }
         } catch (Exception e) {
             Logger.MOD.warn("Failed to write NESQL++ export control plane", e);
         }
@@ -54,7 +66,7 @@ final class ExportControlPlaneWriter {
         report.repository = exportContext.paths.repositoryName;
         report.profile = exportContext.profile.profileId;
         report.selection = exportContext.selection.describe();
-        report.stability = "stable";
+        report.stability = ExportControlFile.STABILITY_STABLE;
         report.files.putAll(ExportControlFile.indexedFiles());
         return report;
     }
@@ -116,7 +128,7 @@ final class ExportControlPlaneWriter {
     private static ValidationProbesReport validationProbesReport() {
         ValidationProbesReport report = new ValidationProbesReport();
         report.schemaVersion = ExportControlFile.VALIDATION_PROBES.schemaVersion();
-        report.policy = "ordered-fail-closed-validation-probe-catalog";
+        report.policy = ExportControlFile.VALIDATION_PROBE_POLICY;
         report.probes = ExportValidationProbeCatalog.descriptors();
         report.probeCount = report.probes.size();
         return report;
@@ -163,6 +175,52 @@ final class ExportControlPlaneWriter {
         try (FileOutputStream fos = new FileOutputStream(file);
              OutputStreamWriter writer = new OutputStreamWriter(fos, StandardCharsets.UTF_8)) {
             GSON.toJson(value, writer);
+        }
+    }
+
+    private static List<ControlReportDescriptor> validateAndFreeze(List<ControlReportDescriptor> descriptors) {
+        EnumSet<ExportControlFile> seen = EnumSet.noneOf(ExportControlFile.class);
+        for (ControlReportDescriptor descriptor : descriptors) {
+            if (descriptor == null) {
+                throw new IllegalStateException("ControlFS report descriptor must not be null");
+            }
+            if (!seen.add(descriptor.file())) {
+                throw new IllegalStateException("Duplicate ControlFS report descriptor: " + descriptor.file().name());
+            }
+        }
+        for (ExportControlFile file : ExportControlFile.values()) {
+            if (!seen.contains(file)) {
+                throw new IllegalStateException("Missing ControlFS report descriptor: " + file.name());
+            }
+        }
+        return Collections.unmodifiableList(new ArrayList<ControlReportDescriptor>(descriptors));
+    }
+
+    private interface ControlReportFactory {
+        Object build(ExportContext exportContext, ExportModuleCatalog catalog);
+    }
+
+    private static final class ControlReportDescriptor {
+        private final ExportControlFile file;
+        private final ControlReportFactory factory;
+
+        private ControlReportDescriptor(ExportControlFile file, ControlReportFactory factory) {
+            if (file == null) {
+                throw new IllegalArgumentException("ControlFS report file must be non-null");
+            }
+            if (factory == null) {
+                throw new IllegalArgumentException("ControlFS report factory must be non-null: " + file.name());
+            }
+            this.file = file;
+            this.factory = factory;
+        }
+
+        private ExportControlFile file() {
+            return file;
+        }
+
+        private Object build(ExportContext exportContext, ExportModuleCatalog catalog) {
+            return factory.build(exportContext, catalog);
         }
     }
 
