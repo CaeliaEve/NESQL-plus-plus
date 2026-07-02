@@ -253,6 +253,10 @@ public final class NativeUiExportValidator {
     }
 
     private static void checkInteractionContract(String label, JsonObject object, Result result) {
+        if (object.has("action") || object.has("itemId") || object.has("payloadKey")) {
+            result.interactionContractViolationCount++;
+            addSample(result.interactionContractSamples, "legacy-rect-interaction-field:" + label);
+        }
         String payloadSchema = readString(object, "interactionPayloadSchema", "");
         String kind = readString(object, "interactionKind", "");
         String targetKind = readString(object, "interactionTargetKind", "");

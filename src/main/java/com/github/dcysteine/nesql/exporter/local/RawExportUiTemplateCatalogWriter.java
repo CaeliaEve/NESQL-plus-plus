@@ -300,9 +300,6 @@ public final class RawExportUiTemplateCatalogWriter {
         String role;
         String label;
         String tooltip;
-        String action;
-        String itemId;
-        String payloadKey;
         int x;
         int y;
         int width;
