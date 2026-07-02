@@ -549,7 +549,12 @@ test('export validation probe catalog owns report collection order and capabilit
   assert.match(validationProbeCatalog, /new ExportValidationPreviousDeltaProbe\(\)/);
   assert.match(validationProbeCatalog, /new ExportValidationHealthPolicyProbe\(\)/);
   assert.match(validationProbeCatalog, /new ExportValidationHealthSectionProbe\(\)/);
-  assert.match(validationProbeCatalog, /validateAndFreeze/);
+  assert.match(validationProbeCatalog, /DEFAULT_PROBE_DESCRIPTORS/);
+  assert.match(validationProbeCatalog, /validateProbeDescriptors/);
+  assert.match(validationProbeCatalog, /instantiateAndFreeze/);
+  assert.match(validationProbeCatalog, /ProbeFactory/);
+  assert.match(validationProbeCatalog, /Missing export validation probe descriptor/);
+  assert.match(validationProbeCatalog, /Export validation probe id does not match descriptor/);
   assert.match(validationProbeCatalog, /Duplicate export validation probe id/);
   assert.match(validationProbeCatalog, /Export validation probe capabilities must be non-empty/);
   assert.match(validationProbeDescriptor, /final String id/);
