@@ -422,15 +422,17 @@ test('export health report surfaces missing contracts and samples', () => {
 
 test('export health report audits browser layout atlas residency', () => {
   const validationSource = read('src/main/java/com/github/dcysteine/nesql/exporter/main/ExportValidationReportWriter.java');
+  const browserValidationProbeSource = read('src/main/java/com/github/dcysteine/nesql/exporter/main/ExportValidationBrowserValidationProbe.java');
   const browserAtlasProbeSource = read('src/main/java/com/github/dcysteine/nesql/exporter/main/ExportValidationBrowserAtlasProbe.java');
   const healthPolicySource = read('src/main/java/com/github/dcysteine/nesql/exporter/main/ExportValidationHealthPolicy.java');
   const validationAbiCatalogSource = read('src/main/java/com/github/dcysteine/nesql/exporter/main/ExportValidationAbiCatalog.java');
 
   assert.equal(
-    validationSource.includes('ExportValidationBrowserAtlasProbe.inspect(rawDir, report);')
+    validationSource.includes('ExportValidationProbeCatalog.defaultProbes()')
+      && browserValidationProbeSource.includes('ExportValidationBrowserAtlasProbe.inspect(context.rawDir, report);')
       && browserAtlasProbeSource.includes('static void inspect(File rawDir, ExportValidationReportWriter.ValidationReport report)'),
     true,
-    'Validation writer should delegate browser atlas coverage to the browser atlas probe',
+    'Validation writer should delegate browser atlas coverage through the validation probe catalog',
   );
   assert.equal(
     browserAtlasProbeSource.includes('browserAtlasLayoutCoverageRatio'),

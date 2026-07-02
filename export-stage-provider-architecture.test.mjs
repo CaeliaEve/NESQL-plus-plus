@@ -128,6 +128,42 @@ const validationRenderAssetProbe = readFileSync(
   new URL('./src/main/java/com/github/dcysteine/nesql/exporter/main/ExportValidationRenderAssetProbe.java', import.meta.url),
   'utf8',
 );
+const validationProbeInterface = readFileSync(
+  new URL('./src/main/java/com/github/dcysteine/nesql/exporter/main/ExportValidationProbe.java', import.meta.url),
+  'utf8',
+);
+const validationProbeContext = readFileSync(
+  new URL('./src/main/java/com/github/dcysteine/nesql/exporter/main/ExportValidationProbeContext.java', import.meta.url),
+  'utf8',
+);
+const validationProbeCatalog = readFileSync(
+  new URL('./src/main/java/com/github/dcysteine/nesql/exporter/main/ExportValidationProbeCatalog.java', import.meta.url),
+  'utf8',
+);
+const validationProbeDescriptor = readFileSync(
+  new URL('./src/main/java/com/github/dcysteine/nesql/exporter/main/ExportValidationProbeDescriptor.java', import.meta.url),
+  'utf8',
+);
+const validationRepositoryProbe = readFileSync(
+  new URL('./src/main/java/com/github/dcysteine/nesql/exporter/main/ExportValidationRepositoryProbe.java', import.meta.url),
+  'utf8',
+);
+const validationBrowserProbe = readFileSync(
+  new URL('./src/main/java/com/github/dcysteine/nesql/exporter/main/ExportValidationBrowserValidationProbe.java', import.meta.url),
+  'utf8',
+);
+const validationPreviousDeltaProbe = readFileSync(
+  new URL('./src/main/java/com/github/dcysteine/nesql/exporter/main/ExportValidationPreviousDeltaProbe.java', import.meta.url),
+  'utf8',
+);
+const validationHealthPolicyProbe = readFileSync(
+  new URL('./src/main/java/com/github/dcysteine/nesql/exporter/main/ExportValidationHealthPolicyProbe.java', import.meta.url),
+  'utf8',
+);
+const validationHealthSectionProbe = readFileSync(
+  new URL('./src/main/java/com/github/dcysteine/nesql/exporter/main/ExportValidationHealthSectionProbe.java', import.meta.url),
+  'utf8',
+);
 const providerInterface = readFileSync(
   new URL('./src/main/java/com/github/dcysteine/nesql/exporter/main/ExportStageActionProvider.java', import.meta.url),
   'utf8',
@@ -442,7 +478,7 @@ test('export control and debug planes have explicit filesystem ownership', () =>
   assert.match(integrityManifestWriter, /RawExportFileCatalog\.debugArtifactStage\(file\)/);
 });
 
-test('export validation health policy is split from report collection and serialization', () => {
+test('export validation probe catalog owns report collection order and capabilities', () => {
   assert.match(validationAbiCatalog, /final class ExportValidationAbiCatalog/);
   assert.match(validationAbiCatalog, /EXPORT_VALIDATION_SCHEMA = ExportSchemaCatalog\.EXPORT_VALIDATION/);
   assert.match(validationAbiCatalog, /EXPORT_ERROR_SCHEMA = ExportSchemaCatalog\.EXPORT_ERROR/);
@@ -458,16 +494,39 @@ test('export validation health policy is split from report collection and serial
   assert.match(validationHealthPolicy, /ExportValidationAbiCatalog\.WARNING_RENDER_ASSET_MANIFEST_MISSING/);
   assert.match(validationHealthPolicy, /ExportValidationAbiCatalog\.BLOCKED_MACHINE_PATHS/);
   assert.match(validationHealthPolicy, /ExportValidationAbiCatalog\.COMPILE_READINESS_READY_WITH_WARNINGS/);
-  assert.match(validationReportWriter, /ExportValidationHealthPolicy\.evaluate\(report\)/);
-  assert.match(validationReportWriter, /ExportValidationHealthSectionBuilder\.populate\(repositoryDirectory, report\)/);
-  assert.match(validationReportWriter, /ExportValidationRawCountProbe\.inspect\(repositoryDirectory, report\)/);
-  assert.match(validationReportWriter, /ExportValidationBrowserAtlasProbe\.inspect\(rawDir, report\)/);
-  assert.match(validationReportWriter, /ExportValidationRenderAssetProbe\.inspect\(repositoryDirectory, rawDir, report\)/);
-  assert.match(validationReportWriter, /ExportValidationSemanticProbe\.inspectDiagnostics\(repositoryDirectory, report\)/);
-  assert.match(validationReportWriter, /ExportValidationPathHygieneProbe\.inspect\(repositoryDirectory, report\)/);
-  assert.match(validationReportWriter, /ExportValidationAbiCatalog\.EXPORT_VALIDATION_SCHEMA/);
-  assert.match(validationReportWriter, /RawExportFileCatalog\.rawExportDirectory\(repositoryDirectory\)/);
+  assert.match(validationProbeInterface, /Kernel-style validation probe boundary/);
+  assert.match(validationProbeInterface, /String id\(\)/);
+  assert.match(validationProbeInterface, /List<String> capabilities\(\)/);
+  assert.match(validationProbeInterface, /void inspect\(/);
+  assert.match(validationProbeContext, /Immutable filesystem and export context shared by validation probes/);
+  assert.match(validationProbeContext, /RawExportFileCatalog\.rawExportDirectory\(repositoryDirectory\)/);
+  assert.match(validationProbeCatalog, /Owns validation probe ordering, identity checks, and probe capability descriptors/);
+  assert.match(validationProbeCatalog, /new ExportValidationRepositoryProbe\(\)/);
+  assert.match(validationProbeCatalog, /new ExportValidationRawCountsValidationProbe\(\)/);
+  assert.match(validationProbeCatalog, /new ExportValidationBrowserValidationProbe\(\)/);
+  assert.match(validationProbeCatalog, /new ExportValidationRenderAssetValidationProbe\(\)/);
+  assert.match(validationProbeCatalog, /new ExportValidationSemanticValidationProbe\(\)/);
+  assert.match(validationProbeCatalog, /new ExportValidationPathValidationProbe\(\)/);
+  assert.match(validationProbeCatalog, /new ExportValidationDerivedMetricsProbe\(\)/);
+  assert.match(validationProbeCatalog, /new ExportValidationPreviousDeltaProbe\(\)/);
+  assert.match(validationProbeCatalog, /new ExportValidationHealthPolicyProbe\(\)/);
+  assert.match(validationProbeCatalog, /new ExportValidationHealthSectionProbe\(\)/);
+  assert.match(validationProbeCatalog, /validateAndFreeze/);
+  assert.match(validationProbeCatalog, /Duplicate export validation probe id/);
+  assert.match(validationProbeCatalog, /Export validation probe capabilities must be non-empty/);
+  assert.match(validationProbeDescriptor, /final String id/);
+  assert.match(validationProbeDescriptor, /final List<String> capabilities/);
+  assert.match(validationReportWriter, /ExportValidationProbeContext\.from\(exportContext\)/);
+  assert.match(validationReportWriter, /for \(ExportValidationProbe probe : ExportValidationProbeCatalog\.defaultProbes\(\)\)/);
+  assert.match(validationReportWriter, /probe\.inspect\(context, report\)/);
   assert.match(validationReportWriter, /static final class ValidationReport/);
+  assert.match(validationRepositoryProbe, /ExportValidationAbiCatalog\.EXPORT_VALIDATION_SCHEMA/);
+  assert.match(validationRepositoryProbe, /new File\(context\.repositoryDirectory, "items"\)/);
+  assert.match(validationBrowserProbe, /ExportValidationBrowserAtlasProbe\.inspect\(context\.rawDir, report\)/);
+  assert.match(validationBrowserProbe, /RawExportFileCatalog\.NEI_ORDER_FILE/);
+  assert.match(validationPreviousDeltaProbe, /ExportValidationReportStore\.applyPreviousDelta\(context\.validationDir, report\)/);
+  assert.match(validationHealthPolicyProbe, /ExportValidationHealthPolicy\.evaluate\(report\)/);
+  assert.match(validationHealthSectionProbe, /ExportValidationHealthSectionBuilder\.populate\(context\.repositoryDirectory, report\)/);
   assert.match(validationJsonSupport, /Shared low-level JSON, counting, and ratio helpers/);
   assert.match(validationEvidenceCatalog, /Stable ABI\/catalog surface for validation evidence JSON member names/);
   assert.match(validationEvidenceCatalog, /OBJECT_COUNTS = "counts"/);
@@ -502,6 +561,13 @@ test('export validation health policy is split from report collection and serial
   assert.doesNotMatch(validationReportWriter, /private static void inspectRawExportCounts/);
   assert.doesNotMatch(validationReportWriter, /private static void inspectRenderAssets/);
   assert.doesNotMatch(validationReportWriter, /private static void inspectExportPathHygiene/);
+  assert.doesNotMatch(validationReportWriter, /ExportValidationRawCountProbe\.inspect/);
+  assert.doesNotMatch(validationReportWriter, /ExportValidationBrowserAtlasProbe\.inspect/);
+  assert.doesNotMatch(validationReportWriter, /ExportValidationRenderAssetProbe\.inspect/);
+  assert.doesNotMatch(validationReportWriter, /ExportValidationSemanticProbe\.inspectDiagnostics/);
+  assert.doesNotMatch(validationReportWriter, /ExportValidationPathHygieneProbe\.inspect/);
+  assert.doesNotMatch(validationReportWriter, /ExportValidationHealthPolicy\.evaluate/);
+  assert.doesNotMatch(validationReportWriter, /ExportValidationHealthSectionBuilder\.populate/);
   assert.doesNotMatch(validationReportWriter, /ExportValidationAbiCatalog\.pathHygieneRules\(\)/);
   assert.doesNotMatch(validationReportWriter, /RawExportFileCatalog\.VALIDATION_ERRORS_FILE/);
   assert.doesNotMatch(validationReportWriter, /nesqlpp\/export-error\/v1/);
@@ -520,8 +586,8 @@ test('export validation report persistence and delta metadata are store-owned', 
   assert.match(rawFileCatalog, /EXPORT_VALIDATION_REPORT_FILE_NAME = "export_validation_report\.json"/);
   assert.match(rawFileCatalog, /EXPORT_HEALTH_REPORT_FILE_NAME = "export-health-report\.json"/);
   assert.match(validationReportStore, /WRITE_GSON\.toJson\(value, writer\)/);
-  assert.match(validationReportWriter, /ExportValidationReportStore\.applyPreviousDelta\(validationDir, report\)/);
-  assert.match(validationReportWriter, /ExportValidationReportStore\.write\(validationDir, report\)/);
+  assert.match(validationPreviousDeltaProbe, /ExportValidationReportStore\.applyPreviousDelta\(context\.validationDir, report\)/);
+  assert.match(validationReportWriter, /ExportValidationReportStore\.write\(context\.validationDir, report\)/);
   assert.match(validationReportWriter, /reportFiles\.reportFile\.getAbsolutePath\(\)/);
   assert.match(validationReportWriter, /static class PreviousSnapshot/);
   assert.match(validationReportWriter, /static final class DeltaSnapshot extends PreviousSnapshot/);

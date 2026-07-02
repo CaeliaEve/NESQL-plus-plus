@@ -1,12 +1,10 @@
 package com.github.dcysteine.nesql.exporter.main;
 
-import com.github.dcysteine.nesql.exporter.local.RawExportFileCatalog;
 import com.github.dcysteine.nesql.exporter.semantic.SemanticRulePack;
 import com.google.gson.JsonArray;
 import com.google.gson.JsonObject;
 import net.minecraft.util.EnumChatFormatting;
 
-import java.io.File;
 import java.util.ArrayList;
 import java.util.List;
 
@@ -16,58 +14,14 @@ final class ExportValidationReportWriter {
 
     static void write(ExportContext exportContext) {
         try {
-            File repositoryDirectory = exportContext.paths.repositoryDirectory;
-            File rawDir = RawExportFileCatalog.rawExportDirectory(repositoryDirectory);
-            File validationDir = RawExportFileCatalog.validationDirectory(rawDir);
-
+            ExportValidationProbeContext context = ExportValidationProbeContext.from(exportContext);
             ValidationReport report = new ValidationReport();
-            report.schemaVersion = ExportValidationAbiCatalog.EXPORT_VALIDATION_SCHEMA;
-            report.profile = exportContext.profile.profileId;
-            report.selection = exportContext.selection.describe();
-            report.repository = exportContext.paths.repositoryName;
-            report.itemsJsonGzFiles = ExportValidationJsonSupport.countFiles(new File(repositoryDirectory, "items"), ".json.gz");
-            report.recipeJsonGzFiles = ExportValidationJsonSupport.countFiles(new File(repositoryDirectory, "recipes"), ".json.gz");
-            report.imagePngFiles = ExportValidationJsonSupport.countFiles(exportContext.paths.imageDirectory, ".png");
-            report.imageGifFiles = ExportValidationJsonSupport.countFiles(exportContext.paths.imageDirectory, ".gif");
-            report.renderJsonFiles = ExportValidationJsonSupport.countFiles(exportContext.paths.imageDirectory, ".render.json");
-            report.spriteJsonFiles = ExportValidationJsonSupport.countFiles(exportContext.paths.imageDirectory, ".sprite.json");
-
-            ExportValidationRawCountProbe.inspect(repositoryDirectory, report);
-            report.staticAtlasPngFiles = ExportValidationJsonSupport.countFiles(
-                    RawExportFileCatalog.rawExportFile(rawDir, RawExportFileCatalog.BROWSER_ATLAS_ASSETS_DIRECTORY),
-                    ".png");
-            report.animatedAtlasPngFiles = report.staticAtlasPngFiles;
-            report.staticAtlasManifestAssets = ExportValidationJsonSupport.safeInt(report.rawTextures);
-            report.animatedAtlasManifestAssets = ExportValidationJsonSupport.safeInt(report.rawAnimations);
-            report.totalAtlasManifestAssets = report.staticAtlasManifestAssets + report.animatedAtlasManifestAssets;
-            report.browserLayoutPresent =
-                    RawExportFileCatalog.rawExportFile(rawDir, RawExportFileCatalog.NEI_GROUPS_FILE).exists()
-                            && RawExportFileCatalog.rawExportFile(rawDir, RawExportFileCatalog.NEI_ORDER_FILE)
-                                    .exists();
-            report.browserLayoutEntries = ExportValidationJsonSupport.safeInt(report.rawBrowserItems);
-            report.browserLayoutItemCount = ExportValidationJsonSupport.safeInt(report.rawBrowserItems);
-            report.browserLayoutGroupCount = ExportValidationJsonSupport.safeInt(report.rawBrowserGroups);
-            report.browserLayoutDefaultEntryCount = ExportValidationJsonSupport.safeInt(ExportValidationJsonSupport.countGzipJsonl(
-                    RawExportFileCatalog.rawExportFile(rawDir, RawExportFileCatalog.NEI_ORDER_FILE)));
-            ExportValidationBrowserAtlasProbe.inspect(rawDir, report);
-            report.multiblockBlueprints = ExportValidationJsonSupport.safeInt(ExportValidationJsonSupport.countGzipJsonl(
-                    RawExportFileCatalog.rawExportFile(rawDir, RawExportFileCatalog.MULTIBLOCKS_INDEX_FILE)));
-            report.entityPreviewEntries = ExportValidationJsonSupport.safeInt(ExportValidationJsonSupport.countGzipJsonl(
-                    RawExportFileCatalog.rawExportFile(rawDir, RawExportFileCatalog.ENTITIES_INDEX_FILE)));
-            report.entityModelEntries = report.entityPreviewEntries;
-            ExportValidationRenderAssetProbe.inspect(repositoryDirectory, rawDir, report);
-            ExportValidationSemanticProbe.inspectDiagnostics(repositoryDirectory, report);
-            ExportValidationSemanticProbe.inspectRulePack(report);
-            ExportValidationPathHygieneProbe.inspect(repositoryDirectory, report);
-            report.atlasManifestCoverageRatio = ExportValidationJsonSupport.ratio(
-                    report.totalAtlasManifestAssets,
-                    report.renderAssetManifestAssets);
-            ExportValidationReportStore.applyPreviousDelta(validationDir, report);
-            ExportValidationHealthPolicy.evaluate(report);
-            ExportValidationHealthSectionBuilder.populate(repositoryDirectory, report);
+            for (ExportValidationProbe probe : ExportValidationProbeCatalog.defaultProbes()) {
+                probe.inspect(context, report);
+            }
 
             ExportValidationReportStore.ReportFiles reportFiles =
-                    ExportValidationReportStore.write(validationDir, report);
+                    ExportValidationReportStore.write(context.validationDir, report);
 
             Logger.chatMessage(
                     EnumChatFormatting.GREEN
