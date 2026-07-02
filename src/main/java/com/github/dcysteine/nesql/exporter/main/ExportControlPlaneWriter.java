@@ -7,6 +7,7 @@ import com.github.dcysteine.nesql.elysium.kernel.ExportDriver;
 import com.github.dcysteine.nesql.elysium.kernel.ExportModuleCatalog;
 import com.github.dcysteine.nesql.elysium.kernel.ExportSchemaCatalog;
 import com.github.dcysteine.nesql.elysium.kernel.ExportTracepoint;
+import com.github.dcysteine.nesql.exporter.local.RawExportFileCatalog;
 import com.google.gson.Gson;
 import com.google.gson.GsonBuilder;
 
@@ -123,7 +124,9 @@ final class ExportControlPlaneWriter {
     }
 
     private static File controlDirectory(ExportContext exportContext) {
-        return new File(exportContext.paths.repositoryDirectory, "raw-export" + File.separator + "control");
+        return new File(
+                RawExportFileCatalog.rawExportDirectory(exportContext.paths.repositoryDirectory),
+                RawExportFileCatalog.CONTROL_DIRECTORY);
     }
 
     private static File controlFile(File controlDir, ExportControlFile file) {

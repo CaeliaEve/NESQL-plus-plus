@@ -71,6 +71,10 @@ const rawManifestBuilder = readFileSync(
   new URL('./src/main/java/com/github/dcysteine/nesql/exporter/local/RawExportManifestBuilder.java', import.meta.url),
   'utf8',
 );
+const rawFileCatalog = readFileSync(
+  new URL('./src/main/java/com/github/dcysteine/nesql/exporter/local/RawExportFileCatalog.java', import.meta.url),
+  'utf8',
+);
 const integrityManifestWriter = readFileSync(
   new URL('./src/main/java/com/github/dcysteine/nesql/exporter/main/ExportIntegrityManifestWriter.java', import.meta.url),
   'utf8',
@@ -346,9 +350,13 @@ test('export control and debug planes have explicit filesystem ownership', () =>
     assert.match(debugFileCatalog, new RegExp(`"${alias.replaceAll('/', '\\/').replace('.', '\\.')}"`));
   }
   assert.match(debugFileCatalog, /public String rawExportDebugPath\(\)/);
+  assert.match(rawFileCatalog, /RAW_EXPORT_DIRECTORY = "raw-export"/);
+  assert.match(rawFileCatalog, /CONTROL_DIRECTORY = "control"/);
+  assert.match(rawFileCatalog, /DEBUG_DIRECTORY = "debug"/);
 
   assert.match(controlPlaneWriter, /Writes stable ControlFS-style export descriptors/);
-  assert.match(controlPlaneWriter, /raw-export" \+ File\.separator \+ "control"/);
+  assert.match(controlPlaneWriter, /RawExportFileCatalog\.rawExportDirectory/);
+  assert.match(controlPlaneWriter, /RawExportFileCatalog\.CONTROL_DIRECTORY/);
   assert.match(controlPlaneWriter, /ExportControlFile\.INDEX/);
   assert.match(controlPlaneWriter, /ExportControlFile\.ABI/);
   assert.match(controlPlaneWriter, /ExportControlFile\.CAPABILITIES/);
@@ -366,7 +374,8 @@ test('export control and debug planes have explicit filesystem ownership', () =>
   assert.doesNotMatch(controlPlaneWriter, /nesqlpp\/raw-export\/alpha1/);
 
   assert.match(debugPlaneWriter, /Writes DebugFS-style export diagnostics/);
-  assert.match(debugPlaneWriter, /raw-export" \+ File\.separator \+ "debug"/);
+  assert.match(debugPlaneWriter, /RawExportFileCatalog\.RAW_EXPORT_DIRECTORY \+ "\/" \+ file\.validationAliasPath\(\)/);
+  assert.match(debugPlaneWriter, /RawExportFileCatalog\.DEBUG_DIRECTORY/);
   assert.match(debugPlaneWriter, /ExportDebugFile\.STAGE_TIMING\.schemaVersion\(\)/);
   assert.match(debugPlaneWriter, /ExportDebugFile\.STAGE_CHECKPOINT\.schemaVersion\(\)/);
   assert.match(debugPlaneWriter, /ExportDebugFile\.KERNEL_TRACE\.schemaVersion\(\)/);
@@ -389,8 +398,10 @@ test('export control and debug planes have explicit filesystem ownership', () =>
   assert.match(rawManifestBuilder, /file\.manifestKey\(\), file\.rawExportDebugPath\(\)/);
   assert.match(integrityManifestWriter, /ExportSchemaCatalog\.EXPORT_MANIFEST/);
   assert.match(integrityManifestWriter, /ExportSchemaCatalog\.STAGE_CHECKSUMS/);
-  assert.match(integrityManifestWriter, /addControlFile\(artifacts, repositoryDirectory, rawDir, ExportControlFile\.INDEX, "control"\)/);
-  assert.match(integrityManifestWriter, /addDebugFile\(artifacts, repositoryDirectory, rawDir, ExportDebugFile\.KERNEL_TRACE, "debug-trace"\)/);
+  assert.match(integrityManifestWriter, /for \(ExportControlFile file : ExportControlFile\.values\(\)\)/);
+  assert.match(integrityManifestWriter, /RawExportFileCatalog\.controlArtifactStage\(file\)/);
+  assert.match(integrityManifestWriter, /for \(ExportDebugFile file : ExportDebugFile\.values\(\)\)/);
+  assert.match(integrityManifestWriter, /RawExportFileCatalog\.debugArtifactStage\(file\)/);
 });
 
 test('export validation health policy is split from report collection and serialization', () => {
@@ -416,8 +427,10 @@ test('export validation report persistence and delta metadata are store-owned', 
   assert.match(validationReportStore, /readPreviousReport\(reportFile\(validationDirectory\)\)/);
   assert.match(validationReportStore, /previousSnapshot\(previousReport\)/);
   assert.match(validationReportStore, /deltaSnapshot\(report, previousReport\)/);
-  assert.match(validationReportStore, /export_validation_report\.json/);
-  assert.match(validationReportStore, /export-health-report\.json/);
+  assert.match(validationReportStore, /RawExportFileCatalog\.EXPORT_VALIDATION_REPORT_FILE_NAME/);
+  assert.match(validationReportStore, /RawExportFileCatalog\.EXPORT_HEALTH_REPORT_FILE_NAME/);
+  assert.match(rawFileCatalog, /EXPORT_VALIDATION_REPORT_FILE_NAME = "export_validation_report\.json"/);
+  assert.match(rawFileCatalog, /EXPORT_HEALTH_REPORT_FILE_NAME = "export-health-report\.json"/);
   assert.match(validationReportStore, /WRITE_GSON\.toJson\(value, writer\)/);
   assert.match(validationReportWriter, /ExportValidationReportStore\.applyPreviousDelta\(validationDir, report\)/);
   assert.match(validationReportWriter, /ExportValidationReportStore\.write\(validationDir, report\)/);

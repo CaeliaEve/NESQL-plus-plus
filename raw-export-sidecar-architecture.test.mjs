@@ -17,6 +17,7 @@ const reportPipelineUrl = new URL('./src/main/java/com/github/dcysteine/nesql/ex
 const validationUrl = new URL('./src/main/java/com/github/dcysteine/nesql/exporter/local/RawExportValidationSupport.java', import.meta.url);
 const manifestBuilderUrl = new URL('./src/main/java/com/github/dcysteine/nesql/exporter/local/RawExportManifestBuilder.java', import.meta.url);
 const reportWriterUrl = new URL('./src/main/java/com/github/dcysteine/nesql/exporter/local/RawExportReportWriter.java', import.meta.url);
+const rawFileCatalogUrl = new URL('./src/main/java/com/github/dcysteine/nesql/exporter/local/RawExportFileCatalog.java', import.meta.url);
 const repositoryFactStreamerUrl = new URL('./src/main/java/com/github/dcysteine/nesql/exporter/local/RawExportRepositoryFactStreamer.java', import.meta.url);
 const repositoryFactResultUrl = new URL('./src/main/java/com/github/dcysteine/nesql/exporter/local/RawRepositoryFactStreamResult.java', import.meta.url);
 const neiFactWriterUrl = new URL('./src/main/java/com/github/dcysteine/nesql/exporter/local/RawExportNeiFactWriter.java', import.meta.url);
@@ -39,7 +40,6 @@ const dtoFiles = [
   'RawExportCounts.java',
   'RawExportValidation.java',
   'RawValidationGate.java',
-  'RawExportFileRef.java',
 ];
 
 const sidecar = readFileSync(sidecarUrl, 'utf8');
@@ -57,6 +57,7 @@ const reportPipeline = readFileSync(reportPipelineUrl, 'utf8');
 const validation = readFileSync(validationUrl, 'utf8');
 const manifestBuilder = readFileSync(manifestBuilderUrl, 'utf8');
 const reportWriter = readFileSync(reportWriterUrl, 'utf8');
+const rawFileCatalog = readFileSync(rawFileCatalogUrl, 'utf8');
 const repositoryFactStreamer = readFileSync(repositoryFactStreamerUrl, 'utf8');
 const neiFactWriter = readFileSync(neiFactWriterUrl, 'utf8');
 const nativeUiAbi = readFileSync(nativeUiAbiUrl, 'utf8');
@@ -108,9 +109,11 @@ test('raw export manifest and report output are split from sidecar orchestration
   assert.doesNotMatch(sidecar, /private\s+RawExportManifest\s+buildManifest/);
   assert.doesNotMatch(sidecar, /writeSizeReport\(/);
   assert.doesNotMatch(sidecar, /createEmptyJsonlIfMissing\(/);
-  assert.match(manifestBuilder, /manifest\.capabilities\.add\("facts"\)/);
-  assert.match(manifestBuilder, /manifest\.files\.put\("exportReport", "validation\/export_report\.json"\)/);
-  assert.match(reportWriter, /writeJson\(gson, new File\(rawDir, "validation\/export_report\.json"\), report\)/);
+  assert.match(manifestBuilder, /RawExportFileCatalog\.manifestCapabilities/);
+  assert.match(manifestBuilder, /RawExportFileCatalog\.putManifestFiles/);
+  assert.match(rawFileCatalog, /CAPABILITY_FACTS = "facts"/);
+  assert.match(rawFileCatalog, /new ManifestFile\("exportReport", VALIDATION_EXPORT_REPORT_FILE\)/);
+  assert.match(reportWriter, /RawExportFileCatalog\.VALIDATION_EXPORT_REPORT_FILE/);
   assert.match(reportWriter, /writeSizeReport\(gson, schemaVersion, generatedAt, rawDir\)/);
 });
 

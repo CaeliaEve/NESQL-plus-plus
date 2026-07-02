@@ -21,6 +21,7 @@ const templateWriter = readSource('src/main/java/com/github/dcysteine/nesql/expo
 const templateLayoutSpecs = readSource('src/main/java/com/github/dcysteine/nesql/exporter/plugin/nei/metadata/NeiUiTemplateLayoutSpecs.java');
 const nativeUiAbi = readSource('src/main/java/com/github/dcysteine/nesql/exporter/nativeui/NativeUiExportAbi.java');
 const nativeUiValidator = readSource('src/main/java/com/github/dcysteine/nesql/exporter/nativeui/NativeUiExportValidator.java');
+const rawFileCatalog = readSource('src/main/java/com/github/dcysteine/nesql/exporter/local/RawExportFileCatalog.java');
 const rawManifestBuilder = readSource('src/main/java/com/github/dcysteine/nesql/exporter/local/RawExportManifestBuilder.java');
 const rawNeiFactWriter = readSource('src/main/java/com/github/dcysteine/nesql/exporter/local/RawExportNeiFactWriter.java');
 const rawValidationSupport = readSource('src/main/java/com/github/dcysteine/nesql/exporter/local/RawExportValidationSupport.java');
@@ -103,9 +104,9 @@ test('native NEI handler layouts export GT dynamic primitives and background reg
   assert.equal(rawNeiFactWriter.includes('throw new IOException("Failed to materialize required GT NEI ModularUI background asset: " + location, e)'), true);
   assert.equal(rawNeiFactWriter.includes('Logger.MOD.warn("Could not materialize GT NEI ModularUI background asset'), false);
   assert.equal(rawNeiFactWriter.includes('StandardCopyOption.ATOMIC_MOVE'), true);
-  assert.equal(rawManifestBuilder.includes('manifest.files.put("uiBackgrounds", NativeUiExportAbi.UI_BACKGROUNDS_DIRECTORY)'), true);
-  assert.equal(rawManifestBuilder.includes('manifest.files.put("nativeUiValidation", NativeUiExportAbi.NATIVE_UI_VALIDATION_FILE)'), true);
-  assert.equal(integrity.includes('NativeUiExportAbi.NATIVE_UI_VALIDATION_FILE'), true);
+  assert.equal(rawFileCatalog.includes('new ManifestFile("uiBackgrounds", NativeUiExportAbi.UI_BACKGROUNDS_DIRECTORY)'), true);
+  assert.equal(rawFileCatalog.includes('new ManifestFile("nativeUiValidation", NativeUiExportAbi.NATIVE_UI_VALIDATION_FILE)'), true);
+  assert.equal(integrity.includes('RawExportFileCatalog.NATIVE_UI_VALIDATION_FILE'), true);
   assert.equal(integrity.includes('"native-ui-validation"'), true);
   assert.equal(templateWriter.includes('template.nativeBackground.assetRef'), true);
   assert.equal(templateWriter.includes('template.coordinateSpace = NativeUiExportAbi.COORDINATE_SPACE'), true);
@@ -318,7 +319,7 @@ test('canonical output is opt-in debug staging after raw-export migration', () =
   assert.equal(runner.includes('deleteCanonicalStagingDirectory'), true);
   assert.equal(runner.includes('deleteCanonicalStagingDirectory'), true);
   assert.equal(support.includes('Removed legacy canonical staging output; raw-export is authoritative.'), true);
-  assert.equal(integrity.includes('export_manifest.json'), true);
+  assert.equal(rawFileCatalog.includes('EXPORT_MANIFEST_FILE_NAME = "export_manifest.json"'), true);
   assert.equal(rawRenderAssetCatalogWriter.includes('objectAt(item, "staticAtlas")'), true);
   assert.equal(rawRenderAssetCatalogWriter.includes('objectAt(item, "animatedAtlas")'), true);
   assert.equal(rawRenderAssetCatalogWriter.includes('element == null || !element.isJsonObject()'), true);

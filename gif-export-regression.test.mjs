@@ -360,6 +360,7 @@ test('export pipeline writes manifest, checksums, and health report aliases', ()
   const runnerSource = read('src/main/java/com/github/dcysteine/nesql/exporter/main/ExportStageRunner.java');
   const validationStoreSource = read('src/main/java/com/github/dcysteine/nesql/exporter/main/ExportValidationReportStore.java');
   const manifestSource = read('src/main/java/com/github/dcysteine/nesql/exporter/main/ExportIntegrityManifestWriter.java');
+  const rawFileCatalogSource = read('src/main/java/com/github/dcysteine/nesql/exporter/local/RawExportFileCatalog.java');
 
   assert.equal(
     runnerSource.includes('ExportIntegrityManifestWriter.write(exportContext);'),
@@ -367,17 +368,20 @@ test('export pipeline writes manifest, checksums, and health report aliases', ()
     'Export runner should write export-manifest/stage-checksums after validation',
   );
   assert.equal(
-    validationStoreSource.includes('export-health-report.json'),
+    validationStoreSource.includes('RawExportFileCatalog.EXPORT_HEALTH_REPORT_FILE_NAME')
+      && rawFileCatalogSource.includes('EXPORT_HEALTH_REPORT_FILE_NAME = "export-health-report.json"'),
     true,
     'Validation report store should emit the canonical export-health-report alias',
   );
   assert.equal(
-    manifestSource.includes('export-manifest.json'),
+    manifestSource.includes('RawExportFileCatalog.EXPORT_MANIFEST_DASH_FILE_NAME')
+      && rawFileCatalogSource.includes('EXPORT_MANIFEST_DASH_FILE_NAME = "export-manifest.json"'),
     true,
     'Integrity writer should emit export-manifest.json',
   );
   assert.equal(
-    manifestSource.includes('stage-checksums.json'),
+    manifestSource.includes('RawExportFileCatalog.STAGE_CHECKSUMS_DASH_FILE_NAME')
+      && rawFileCatalogSource.includes('STAGE_CHECKSUMS_DASH_FILE_NAME = "stage-checksums.json"'),
     true,
     'Integrity writer should emit stage-checksums.json',
   );

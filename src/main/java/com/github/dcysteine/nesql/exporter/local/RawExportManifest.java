@@ -19,5 +19,4 @@ final class RawExportManifest {
     List<String> notes = new ArrayList<String>();
     List<String> capabilities = new ArrayList<String>();
     Map<String, String> files = new LinkedHashMap<String, String>();
-    List<RawExportFileRef> compatibilityFiles = new ArrayList<RawExportFileRef>();
 }

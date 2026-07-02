@@ -3,7 +3,7 @@ package com.github.dcysteine.nesql.exporter.main;
 import com.github.dcysteine.nesql.elysium.kernel.ExportControlFile;
 import com.github.dcysteine.nesql.elysium.kernel.ExportDebugFile;
 import com.github.dcysteine.nesql.elysium.kernel.ExportSchemaCatalog;
-import com.github.dcysteine.nesql.exporter.nativeui.NativeUiExportAbi;
+import com.github.dcysteine.nesql.exporter.local.RawExportFileCatalog;
 import com.google.gson.Gson;
 import com.google.gson.GsonBuilder;
 import net.minecraft.util.EnumChatFormatting;
@@ -27,13 +27,13 @@ final class ExportIntegrityManifestWriter {
     static void write(ExportContext exportContext) {
         try {
             File repositoryDirectory = exportContext.paths.repositoryDirectory;
-            File rawDir = new File(repositoryDirectory, "raw-export");
-            File validationDir = new File(rawDir, "validation");
+            File rawDir = RawExportFileCatalog.rawExportDirectory(repositoryDirectory);
+            File validationDir = RawExportFileCatalog.validationDirectory(rawDir);
             if (!validationDir.exists()) {
                 validationDir.mkdirs();
             }
 
-            File checksumFile = new File(validationDir, "stage_checksums.json");
+            File checksumFile = new File(validationDir, RawExportFileCatalog.STAGE_CHECKSUMS_FILE_NAME);
             Map<String, ArtifactChecksum> previousArtifacts = readPreviousArtifacts(checksumFile);
             List<ArtifactChecksum> artifacts = collectArtifacts(repositoryDirectory, rawDir);
             annotateChanges(artifacts, previousArtifacts);
@@ -46,7 +46,7 @@ final class ExportIntegrityManifestWriter {
             manifest.nesqlImplementationVersion = implementationVersion();
             manifest.databaseFile = relative(repositoryDirectory, exportContext.paths.databaseFile);
             manifest.imageDirectory = relative(repositoryDirectory, exportContext.paths.imageDirectory);
-            manifest.rawExportDirectory = "raw-export";
+            manifest.rawExportDirectory = RawExportFileCatalog.RAW_EXPORT_DIRECTORY;
             manifest.artifacts = artifacts;
 
             ChecksumReport checksumReport = new ChecksumReport();
@@ -57,15 +57,15 @@ final class ExportIntegrityManifestWriter {
             checksumReport.selection = manifest.selection;
             checksumReport.artifacts = artifacts;
 
-            writeJson(new File(validationDir, "export_manifest.json"), manifest);
-            writeJson(new File(validationDir, "export-manifest.json"), manifest);
+            writeJson(new File(validationDir, RawExportFileCatalog.EXPORT_MANIFEST_FILE_NAME), manifest);
+            writeJson(new File(validationDir, RawExportFileCatalog.EXPORT_MANIFEST_DASH_FILE_NAME), manifest);
             writeJson(checksumFile, checksumReport);
-            writeJson(new File(validationDir, "stage-checksums.json"), checksumReport);
+            writeJson(new File(validationDir, RawExportFileCatalog.STAGE_CHECKSUMS_DASH_FILE_NAME), checksumReport);
 
             Logger.chatMessage(
                     EnumChatFormatting.GREEN
                             + "[NESQL] Export manifest/checksums written: "
-                            + new File(validationDir, "export_manifest.json").getAbsolutePath());
+                            + new File(validationDir, RawExportFileCatalog.EXPORT_MANIFEST_FILE_NAME).getAbsolutePath());
         } catch (Exception e) {
             Logger.MOD.warn("Failed to write NESQL++ export manifest/checksums", e);
         }
@@ -73,27 +73,83 @@ final class ExportIntegrityManifestWriter {
 
     private static List<ArtifactChecksum> collectArtifacts(File repositoryDirectory, File rawDir) {
         List<ArtifactChecksum> artifacts = new ArrayList<ArtifactChecksum>();
-        addFile(artifacts, repositoryDirectory, new File(rawDir, "manifest.json"), "raw-manifest");
-        addFile(artifacts, repositoryDirectory, new File(rawDir, "export_report.json"), "raw-report");
-        addFile(artifacts, repositoryDirectory, new File(rawDir, "validation/export-health-report.json"), "health");
-        addFile(artifacts, repositoryDirectory, new File(rawDir, "validation/export_manifest.json"), "manifest");
-        addFile(artifacts, repositoryDirectory, new File(rawDir, "validation/stage_checksums.json"), "checksums");
-        addFile(artifacts, repositoryDirectory, new File(rawDir, "validation/export_stage_timings.json"), "timings");
-        addFile(artifacts, repositoryDirectory,
-                new File(rawDir, NativeUiExportAbi.NATIVE_UI_VALIDATION_FILE.replace('/', File.separatorChar)),
+        addFile(
+                artifacts,
+                repositoryDirectory,
+                RawExportFileCatalog.rawExportFile(rawDir, RawExportFileCatalog.MANIFEST_FILE),
+                "raw-manifest");
+        addFile(
+                artifacts,
+                repositoryDirectory,
+                RawExportFileCatalog.rawExportFile(rawDir, RawExportFileCatalog.EXPORT_REPORT_FILE),
+                "raw-report");
+        addFile(
+                artifacts,
+                repositoryDirectory,
+                RawExportFileCatalog.rawExportFile(
+                        rawDir,
+                        RawExportFileCatalog.validationPath(RawExportFileCatalog.EXPORT_HEALTH_REPORT_FILE_NAME)),
+                "health");
+        addFile(
+                artifacts,
+                repositoryDirectory,
+                RawExportFileCatalog.rawExportFile(
+                        rawDir,
+                        RawExportFileCatalog.validationPath(RawExportFileCatalog.EXPORT_MANIFEST_FILE_NAME)),
+                "manifest");
+        addFile(
+                artifacts,
+                repositoryDirectory,
+                RawExportFileCatalog.rawExportFile(
+                        rawDir,
+                        RawExportFileCatalog.validationPath(RawExportFileCatalog.STAGE_CHECKSUMS_FILE_NAME)),
+                "checksums");
+        addFile(
+                artifacts,
+                repositoryDirectory,
+                RawExportFileCatalog.rawExportFile(rawDir, ExportDebugFile.STAGE_TIMING.validationAliasPath()),
+                "timings");
+        addFile(
+                artifacts,
+                repositoryDirectory,
+                RawExportFileCatalog.rawExportFile(rawDir, RawExportFileCatalog.NATIVE_UI_VALIDATION_FILE),
                 "native-ui-validation");
-        addControlFile(artifacts, repositoryDirectory, rawDir, ExportControlFile.INDEX, "control");
-        addControlFile(artifacts, repositoryDirectory, rawDir, ExportControlFile.ABI, "control-abi");
-        addControlFile(artifacts, repositoryDirectory, rawDir, ExportControlFile.CAPABILITIES, "control-capabilities");
-        addControlFile(artifacts, repositoryDirectory, rawDir, ExportControlFile.MODULES, "control-modules");
-        addControlFile(artifacts, repositoryDirectory, rawDir, ExportControlFile.DRIVERS, "control-drivers");
-        addControlFile(artifacts, repositoryDirectory, rawDir, ExportControlFile.HEALTH, "control-health");
-        addControlFile(artifacts, repositoryDirectory, rawDir, ExportControlFile.VERSION, "control-version");
-        addDebugFile(artifacts, repositoryDirectory, rawDir, ExportDebugFile.KERNEL_TRACE, "debug-trace");
-        addFile(artifacts, repositoryDirectory, new File(rawDir, "facts/recipes/index.json"), "recipes");
-        addFile(artifacts, repositoryDirectory, new File(rawDir, "assets/textures/browser_atlas_index.json"), "browser-atlas");
-        addFile(artifacts, repositoryDirectory, new File(rawDir, "facts/render/backend.json"), "render-backend");
-        addFile(artifacts, repositoryDirectory, new File(rawDir, "special/index.json"), "special");
+        for (ExportControlFile file : ExportControlFile.values()) {
+            addControlFile(
+                    artifacts,
+                    repositoryDirectory,
+                    rawDir,
+                    file,
+                    RawExportFileCatalog.controlArtifactStage(file));
+        }
+        for (ExportDebugFile file : ExportDebugFile.values()) {
+            addDebugFile(
+                    artifacts,
+                    repositoryDirectory,
+                    rawDir,
+                    file,
+                    RawExportFileCatalog.debugArtifactStage(file));
+        }
+        addFile(
+                artifacts,
+                repositoryDirectory,
+                RawExportFileCatalog.rawExportFile(rawDir, "facts/recipes/index.json"),
+                "recipes");
+        addFile(
+                artifacts,
+                repositoryDirectory,
+                RawExportFileCatalog.rawExportFile(rawDir, "assets/textures/browser_atlas_index.json"),
+                "browser-atlas");
+        addFile(
+                artifacts,
+                repositoryDirectory,
+                RawExportFileCatalog.rawExportFile(rawDir, "facts/render/backend.json"),
+                "render-backend");
+        addFile(
+                artifacts,
+                repositoryDirectory,
+                RawExportFileCatalog.rawExportFile(rawDir, "special/index.json"),
+                "special");
         addDirectorySummary(artifacts, repositoryDirectory, new File(repositoryDirectory, "items"), "items");
         addDirectorySummary(artifacts, repositoryDirectory, new File(repositoryDirectory, "recipes"), "recipes");
         addDirectorySummary(artifacts, repositoryDirectory, new File(repositoryDirectory, "image"), "images");
@@ -101,8 +157,16 @@ final class ExportIntegrityManifestWriter {
         addDirectorySummary(artifacts, repositoryDirectory, new File(rawDir, "assets"), "raw-assets");
         addDirectorySummary(artifacts, repositoryDirectory, new File(rawDir, "models"), "raw-models");
         addDirectorySummary(artifacts, repositoryDirectory, new File(rawDir, "special"), "raw-special");
-        addDirectorySummary(artifacts, repositoryDirectory, new File(rawDir, "control"), "raw-control");
-        addDirectorySummary(artifacts, repositoryDirectory, new File(rawDir, "debug"), "raw-debug");
+        addDirectorySummary(
+                artifacts,
+                repositoryDirectory,
+                new File(rawDir, RawExportFileCatalog.CONTROL_DIRECTORY),
+                "raw-control");
+        addDirectorySummary(
+                artifacts,
+                repositoryDirectory,
+                new File(rawDir, RawExportFileCatalog.DEBUG_DIRECTORY),
+                "raw-debug");
         return artifacts;
     }
 

@@ -18,14 +18,18 @@ final class RawExportReportWriter {
     static void write(String schemaVersion, String generatedAt, File rawDir, RawExportManifest manifest, RawExportReport report)
             throws IOException {
         Gson gson = new GsonBuilder().setPrettyPrinting().serializeNulls().create();
-        writeJson(gson, new File(rawDir, "manifest.json"), manifest);
-        writeJson(gson, new File(rawDir, "export_report.json"), report);
-        writeJson(gson, new File(rawDir, "validation/export_report.json"), report);
+        writeJson(gson, RawExportFileCatalog.rawExportFile(rawDir, RawExportFileCatalog.MANIFEST_FILE), manifest);
+        writeJson(gson, RawExportFileCatalog.rawExportFile(rawDir, RawExportFileCatalog.EXPORT_REPORT_FILE), report);
+        writeJson(gson, RawExportFileCatalog.rawExportFile(rawDir, RawExportFileCatalog.VALIDATION_EXPORT_REPORT_FILE), report);
         if (report.neiBrowserContract != null) {
-            writeJson(gson, new File(rawDir, "validation/nei_browser_contract.json"), report.neiBrowserContract);
+            writeJson(
+                    gson,
+                    RawExportFileCatalog.rawExportFile(rawDir, RawExportFileCatalog.NEI_BROWSER_CONTRACT_FILE),
+                    report.neiBrowserContract);
         }
         writeSizeReport(gson, schemaVersion, generatedAt, rawDir);
-        createEmptyJsonlIfMissing(new File(rawDir, "validation/errors.jsonl"));
+        createEmptyJsonlIfMissing(
+                RawExportFileCatalog.rawExportFile(rawDir, RawExportFileCatalog.VALIDATION_ERRORS_FILE));
     }
 
     private static void writeJson(Gson gson, File out, Object value) throws IOException {
@@ -42,28 +46,18 @@ final class RawExportReportWriter {
     private static void writeSizeReport(Gson gson, String schemaVersion, String generatedAt, File rawDir)
             throws IOException {
         JsonObject report = new JsonObject();
-        report.addProperty("schemaVersion", schemaVersion + "/size-report");
+        report.addProperty("schemaVersion", schemaVersion + RawExportFileCatalog.SIZE_REPORT_SCHEMA_SUFFIX);
         report.addProperty("generatedAt", generatedAt);
-        report.addProperty("strategy", "raw-export-only");
+        report.addProperty("strategy", RawExportFileCatalog.SIZE_REPORT_STRATEGY);
         report.addProperty("totalBytes", directorySize(rawDir));
 
         JsonArray prohibited = new JsonArray();
-        addProhibitedFile(prohibited, rawDir, "recipes.jsonl");
-        addProhibitedFile(prohibited, rawDir, "items.jsonl");
-        addProhibitedFile(prohibited, rawDir, "fluids.jsonl");
-        addProhibitedFile(prohibited, rawDir, "entities.jsonl");
-        addProhibitedFile(prohibited, rawDir, "facts/items.jsonl");
-        addProhibitedFile(prohibited, rawDir, "facts/fluids.jsonl");
-        addProhibitedFile(prohibited, rawDir, "facts/recipes/all.jsonl");
-        addProhibitedFile(prohibited, rawDir, "special/gregtech/recipes.jsonl");
-        addProhibitedFile(prohibited, rawDir, "special/thaumcraft/recipes.jsonl");
-        addProhibitedFile(prohibited, rawDir, "special/botania/recipes.jsonl");
-        addProhibitedFile(prohibited, rawDir, "special/bloodmagic/recipes.jsonl");
-        addProhibitedFile(prohibited, rawDir, "special/forestry/recipes.jsonl");
-        addProhibitedFile(prohibited, rawDir, "special/eec/recipes.jsonl");
+        for (String relativePath : RawExportFileCatalog.prohibitedRootOutputs()) {
+            addProhibitedFile(prohibited, rawDir, relativePath);
+        }
         report.add("prohibitedOutputs", prohibited);
         report.addProperty("status", prohibited.size() == 0 ? "pass" : "fail");
-        writeJson(gson, new File(rawDir, "validation/size_report.json"), report);
+        writeJson(gson, RawExportFileCatalog.rawExportFile(rawDir, RawExportFileCatalog.SIZE_REPORT_FILE), report);
     }
 
     private static void addProhibitedFile(JsonArray out, File rawDir, String relativePath) {

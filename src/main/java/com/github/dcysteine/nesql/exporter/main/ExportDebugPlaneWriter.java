@@ -5,6 +5,7 @@ import com.github.dcysteine.nesql.elysium.kernel.ExportKernelContext;
 import com.github.dcysteine.nesql.elysium.kernel.ExportModuleCatalog;
 import com.github.dcysteine.nesql.elysium.kernel.ExportTraceEvent;
 import com.github.dcysteine.nesql.elysium.kernel.ExportTracepoint;
+import com.github.dcysteine.nesql.exporter.local.RawExportFileCatalog;
 import com.google.gson.Gson;
 import com.google.gson.GsonBuilder;
 import net.minecraft.util.EnumChatFormatting;
@@ -124,12 +125,15 @@ final class ExportDebugPlaneWriter {
     private static File validationAliasFile(ExportContext exportContext, ExportDebugFile file) {
         return new File(
                 exportContext.paths.repositoryDirectory,
-                ("raw-export/" + file.validationAliasPath()).replace('/', File.separatorChar));
+                (RawExportFileCatalog.RAW_EXPORT_DIRECTORY + "/" + file.validationAliasPath())
+                        .replace('/', File.separatorChar));
     }
 
     private static File debugFile(ExportContext exportContext, ExportDebugFile file) {
         return new File(
-                new File(exportContext.paths.repositoryDirectory, "raw-export" + File.separator + "debug"),
+                new File(
+                        RawExportFileCatalog.rawExportDirectory(exportContext.paths.repositoryDirectory),
+                        RawExportFileCatalog.DEBUG_DIRECTORY),
                 file.debugPath().replace('/', File.separatorChar));
     }
 

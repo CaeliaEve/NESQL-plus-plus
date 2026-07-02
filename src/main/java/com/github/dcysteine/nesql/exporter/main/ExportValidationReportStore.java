@@ -3,6 +3,7 @@ package com.github.dcysteine.nesql.exporter.main;
 import com.github.dcysteine.nesql.exporter.main.ExportValidationReportWriter.DeltaSnapshot;
 import com.github.dcysteine.nesql.exporter.main.ExportValidationReportWriter.PreviousSnapshot;
 import com.github.dcysteine.nesql.exporter.main.ExportValidationReportWriter.ValidationReport;
+import com.github.dcysteine.nesql.exporter.local.RawExportFileCatalog;
 import com.google.gson.Gson;
 import com.google.gson.GsonBuilder;
 
@@ -75,11 +76,11 @@ final class ExportValidationReportStore {
     }
 
     private static File reportFile(File validationDirectory) {
-        return new File(validationDirectory, "export_validation_report.json");
+        return new File(validationDirectory, RawExportFileCatalog.EXPORT_VALIDATION_REPORT_FILE_NAME);
     }
 
     private static File healthReportFile(File validationDirectory) {
-        return new File(validationDirectory, "export-health-report.json");
+        return new File(validationDirectory, RawExportFileCatalog.EXPORT_HEALTH_REPORT_FILE_NAME);
     }
 
     private static void ensureDirectory(File directory) throws Exception {
