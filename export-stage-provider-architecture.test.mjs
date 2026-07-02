@@ -518,13 +518,13 @@ test('export control and debug planes have explicit filesystem ownership', () =>
 
 test('export validation probe catalog owns report collection order and capabilities', () => {
   assert.match(validationAbiCatalog, /final class ExportValidationAbiCatalog/);
-  assert.match(validationAbiCatalog, /EXPORT_VALIDATION_SCHEMA = ExportSchemaCatalog\.EXPORT_VALIDATION/);
-  assert.match(validationAbiCatalog, /EXPORT_ERROR_SCHEMA = ExportSchemaCatalog\.EXPORT_ERROR/);
+  assert.match(validationAbiCatalog, /descriptor\("exportValidation", ExportSchemaCatalog\.EXPORT_VALIDATION\)/);
+  assert.match(validationAbiCatalog, /descriptor\("exportError", ExportSchemaCatalog\.EXPORT_ERROR\)/);
   assert.match(validationAbiCatalog, /WARNING_RENDER_ASSET_MANIFEST_MISSING/);
   assert.match(validationAbiCatalog, /BLOCKED_MACHINE_PATHS/);
-  assert.match(validationAbiCatalog, /COMPILE_READINESS_READY_WITH_WARNINGS = "ready-with-warnings"/);
+  assert.match(validationAbiCatalog, /COMPILE_READINESS_READY_WITH_WARNINGS =\s*\r?\n?\s*descriptorValue\(COMPILE_READINESS_DESCRIPTORS, "readyWithWarnings"\)/);
   assert.match(validationAbiCatalog, /PATH_HYGIENE_RULES/);
-  assert.match(validationAbiCatalog, /PATH_HYGIENE_ERROR_CODE = "export-path-hygiene"/);
+  assert.match(validationAbiCatalog, /PATH_HYGIENE_ERROR_DESCRIPTOR = validateCodeMessageDescriptor\([\s\S]*"export-path-hygiene"/);
   assert.match(validationHealthPolicy, /Owns validation warning, blocked-state, and compile-readiness policy/);
   assert.match(validationHealthPolicy, /static void evaluate\(ExportValidationReportWriter\.ValidationReport report\)/);
   assert.match(validationHealthPolicy, /collectWarnings\(report\)/);

@@ -39,31 +39,10 @@ final class RawExportValidationSupport {
         RawExportValidationAbiCatalog.addNativeUiIssues(issues, counts);
         report.validation.failedStages = issues;
         report.validation.status = RawExportValidationAbiCatalog.validationStatus(issues);
-        report.validation.gates = buildRawValidationGates(counts, issues);
+        report.validation.gates = RawExportValidationAbiCatalog.buildGates(counts, issues);
         report.validation.readinessStatus = rawValidationReady(report.validation)
                 ? RawExportValidationAbiCatalog.STATUS_READY
                 : RawExportValidationAbiCatalog.STATUS_BLOCKED;
-    }
-
-    private static List<RawValidationGate> buildRawValidationGates(
-            RawExportCounts counts,
-            List<String> issues) {
-        List<RawValidationGate> gates = new ArrayList<RawValidationGate>();
-        gates.add(RawExportValidationAbiCatalog.coreCountsGate(issues.isEmpty(), issues.size()));
-        gates.add(RawExportValidationAbiCatalog.browserOrderGate(counts));
-        gates.add(RawExportValidationAbiCatalog.neiBrowserContractGate(counts));
-        gates.add(RawExportValidationAbiCatalog.semanticIdentityGate(counts));
-        gates.add(RawExportValidationAbiCatalog.uiFamilyCensusGate(counts));
-        gates.add(RawExportValidationAbiCatalog.uiTemplateCatalogGate(counts));
-        gates.add(RawExportValidationAbiCatalog.nativeUiAbiGate(counts));
-        gates.add(RawExportValidationAbiCatalog.nativeNeiRulesGate(counts));
-        gates.add(RawExportValidationAbiCatalog.neiHandlerMetadataGate(counts));
-        gates.add(RawExportValidationAbiCatalog.texturesGate(counts));
-        gates.add(RawExportValidationAbiCatalog.animationsGate(counts));
-        gates.add(RawExportValidationAbiCatalog.angelicaRenderFactsGate(counts));
-        gates.add(RawExportValidationAbiCatalog.angelicaSpecialCapturesGate(counts));
-        gates.add(RawExportValidationAbiCatalog.entityModelsGate(counts));
-        return gates;
     }
 
     private static boolean rawValidationReady(RawExportValidation validation) {

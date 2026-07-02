@@ -116,9 +116,9 @@ test('native NEI handler layouts export GT dynamic primitives and background reg
   assert.equal(nativeUiValidator.includes('validateSlot'), true);
   assert.equal(nativeUiValidator.includes('validateBackground'), true);
   assert.equal(nativeUiValidator.includes('finish(rawDir, result)'), true);
-  assert.equal(rawValidationAbiCatalog.includes('GATE_NATIVE_UI_ABI = "native-ui-abi"'), true);
+  assert.equal(rawValidationAbiCatalog.includes('GATE_NATIVE_UI_ABI = gateName("nativeUiAbi")'), true);
   assert.equal(rawValidationAbiCatalog.includes('nativeUiMissingSurfaces == 0'), true);
-  assert.equal(rawValidationSupport.includes('RawExportValidationAbiCatalog.nativeUiAbiGate(counts)'), true);
+  assert.equal(rawValidationSupport.includes('RawExportValidationAbiCatalog.buildGates(counts, issues)'), true);
   assert.equal(validationReportWriter.includes('nativeUiTotals'), true);
   assert.equal(validationHealthPolicy.includes('ExportValidationAbiCatalog.BLOCKED_NATIVE_UI_ABI'), true);
   assert.equal(validationAbiCatalog.includes('Native UI ABI validation is blocked'), true);
@@ -359,7 +359,7 @@ test('stage diagnostics write machine-readable checkpoint and error records', ()
   assert.equal(runner.includes('ExportValidationReportWriter.write(exportContext)'), true);
   assert.equal(diagnostics.includes('RawExportFileCatalog.VALIDATION_ERRORS_FILE'), true);
   assert.equal(diagnostics.includes('ExportValidationAbiCatalog.EXPORT_ERROR_SCHEMA'), true);
-  assert.equal(validationAbiCatalog.includes('EXPORT_ERROR_SCHEMA = ExportSchemaCatalog.EXPORT_ERROR'), true);
+  assert.equal(validationAbiCatalog.includes('descriptor("exportError", ExportSchemaCatalog.EXPORT_ERROR)'), true);
   assert.equal(diagnostics.includes('"stage"'), true);
   assert.equal(diagnostics.includes('ExportValidationAbiCatalog.EXPORT_ERROR_STAGE_UNKNOWN'), true);
 });
