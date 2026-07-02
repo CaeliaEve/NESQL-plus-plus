@@ -83,6 +83,10 @@ const validationHealthPolicy = readFileSync(
   new URL('./src/main/java/com/github/dcysteine/nesql/exporter/main/ExportValidationHealthPolicy.java', import.meta.url),
   'utf8',
 );
+const validationReportStore = readFileSync(
+  new URL('./src/main/java/com/github/dcysteine/nesql/exporter/main/ExportValidationReportStore.java', import.meta.url),
+  'utf8',
+);
 const providerInterface = readFileSync(
   new URL('./src/main/java/com/github/dcysteine/nesql/exporter/main/ExportStageActionProvider.java', import.meta.url),
   'utf8',
@@ -403,4 +407,24 @@ test('export validation health policy is split from report collection and serial
   assert.doesNotMatch(validationReportWriter, /private static void determineHealthStatus/);
   assert.doesNotMatch(validationReportWriter, /private static void addBlockedIf/);
   assert.doesNotMatch(validationReportWriter, /private static void addActionableIssue/);
+});
+
+test('export validation report persistence and delta metadata are store-owned', () => {
+  assert.match(validationReportStore, /Owns validation report persistence, aliases, previous-run snapshot, and delta metadata/);
+  assert.match(validationReportStore, /static void applyPreviousDelta\(File validationDirectory, ValidationReport report\)/);
+  assert.match(validationReportStore, /static ReportFiles write\(File validationDirectory, ValidationReport report\) throws Exception/);
+  assert.match(validationReportStore, /readPreviousReport\(reportFile\(validationDirectory\)\)/);
+  assert.match(validationReportStore, /previousSnapshot\(previousReport\)/);
+  assert.match(validationReportStore, /deltaSnapshot\(report, previousReport\)/);
+  assert.match(validationReportStore, /export_validation_report\.json/);
+  assert.match(validationReportStore, /export-health-report\.json/);
+  assert.match(validationReportStore, /WRITE_GSON\.toJson\(value, writer\)/);
+  assert.match(validationReportWriter, /ExportValidationReportStore\.applyPreviousDelta\(validationDir, report\)/);
+  assert.match(validationReportWriter, /ExportValidationReportStore\.write\(validationDir, report\)/);
+  assert.match(validationReportWriter, /reportFiles\.reportFile\.getAbsolutePath\(\)/);
+  assert.match(validationReportWriter, /static class PreviousSnapshot/);
+  assert.match(validationReportWriter, /static final class DeltaSnapshot extends PreviousSnapshot/);
+  assert.doesNotMatch(validationReportWriter, /readPreviousReport/);
+  assert.doesNotMatch(validationReportWriter, /new File\(validationDir, "export_validation_report\.json"\)/);
+  assert.doesNotMatch(validationReportWriter, /new File\(validationDir, "export-health-report\.json"\)/);
 });

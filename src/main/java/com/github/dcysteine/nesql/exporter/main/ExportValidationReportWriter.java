@@ -38,9 +38,6 @@ final class ExportValidationReportWriter {
             File repositoryDirectory = exportContext.paths.repositoryDirectory;
             File rawDir = new File(repositoryDirectory, "raw-export");
             File validationDir = new File(rawDir, "validation");
-            if (!validationDir.exists()) {
-                validationDir.mkdirs();
-            }
 
             ValidationReport report = new ValidationReport();
             report.schemaVersion = ExportSchemaCatalog.EXPORT_VALIDATION;
@@ -74,43 +71,17 @@ final class ExportValidationReportWriter {
         inspectSemanticRulePack(report);
         inspectExportPathHygiene(repositoryDirectory, report);
             report.atlasManifestCoverageRatio = ratio(report.totalAtlasManifestAssets, report.renderAssetManifestAssets);
-            File reportFile = new File(validationDir, "export_validation_report.json");
-            File healthReportFile = new File(validationDir, "export-health-report.json");
-            ValidationReport previousReport = readPreviousReport(reportFile);
-            if (previousReport != null) {
-                report.previous = new PreviousSnapshot();
-                report.previous.itemsJsonGzFiles = previousReport.itemsJsonGzFiles;
-                report.previous.recipeJsonGzFiles = previousReport.recipeJsonGzFiles;
-                report.previous.imagePngFiles = previousReport.imagePngFiles;
-                report.previous.imageGifFiles = previousReport.imageGifFiles;
-                report.previous.staticAtlasManifestAssets = previousReport.staticAtlasManifestAssets;
-                report.previous.animatedAtlasManifestAssets = previousReport.animatedAtlasManifestAssets;
-                report.delta = new DeltaSnapshot();
-                report.delta.itemsJsonGzFiles = report.itemsJsonGzFiles - previousReport.itemsJsonGzFiles;
-                report.delta.recipeJsonGzFiles = report.recipeJsonGzFiles - previousReport.recipeJsonGzFiles;
-                report.delta.imagePngFiles = report.imagePngFiles - previousReport.imagePngFiles;
-                report.delta.imageGifFiles = report.imageGifFiles - previousReport.imageGifFiles;
-                report.delta.staticAtlasManifestAssets =
-                        report.staticAtlasManifestAssets - previousReport.staticAtlasManifestAssets;
-                report.delta.animatedAtlasManifestAssets =
-                        report.animatedAtlasManifestAssets - previousReport.animatedAtlasManifestAssets;
-            }
+            ExportValidationReportStore.applyPreviousDelta(validationDir, report);
             ExportValidationHealthPolicy.evaluate(report);
             populateHealthSections(repositoryDirectory, report);
 
-            try (FileOutputStream fos = new FileOutputStream(reportFile);
-                 OutputStreamWriter writer = new OutputStreamWriter(fos, StandardCharsets.UTF_8)) {
-                new GsonBuilder().setPrettyPrinting().create().toJson(report, writer);
-            }
-            try (FileOutputStream fos = new FileOutputStream(healthReportFile);
-                 OutputStreamWriter writer = new OutputStreamWriter(fos, StandardCharsets.UTF_8)) {
-                new GsonBuilder().setPrettyPrinting().create().toJson(report, writer);
-            }
+            ExportValidationReportStore.ReportFiles reportFiles =
+                    ExportValidationReportStore.write(validationDir, report);
 
             Logger.chatMessage(
                     EnumChatFormatting.GREEN
                             + "[NESQL] Export validation report written: "
-                            + reportFile.getAbsolutePath());
+                            + reportFiles.reportFile.getAbsolutePath());
             if (!report.warnings.isEmpty()) {
                 Logger.chatMessage(
                         EnumChatFormatting.YELLOW
@@ -120,19 +91,6 @@ final class ExportValidationReportWriter {
             }
         } catch (Exception e) {
             Logger.MOD.warn("Failed to write NESQL++ validation report", e);
-        }
-    }
-
-    private static ValidationReport readPreviousReport(File reportFile) {
-        if (!reportFile.exists()) {
-            return null;
-        }
-        try (FileInputStream fis = new FileInputStream(reportFile);
-             InputStreamReader reader = new InputStreamReader(fis, StandardCharsets.UTF_8)) {
-            return new GsonBuilder().create().fromJson(reader, ValidationReport.class);
-        } catch (Exception e) {
-            Logger.MOD.warn("Failed to read previous NESQL++ validation report", e);
-            return null;
         }
     }
 
@@ -1257,7 +1215,7 @@ final class ExportValidationReportWriter {
         List<CanonicalRenderAsset> assets;
     }
 
-    private static class PreviousSnapshot {
+    static class PreviousSnapshot {
         int itemsJsonGzFiles;
         int recipeJsonGzFiles;
         int imagePngFiles;
@@ -1266,5 +1224,5 @@ final class ExportValidationReportWriter {
         int animatedAtlasManifestAssets;
     }
 
-    private static final class DeltaSnapshot extends PreviousSnapshot {}
+    static final class DeltaSnapshot extends PreviousSnapshot {}
 }

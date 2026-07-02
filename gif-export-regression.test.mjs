@@ -358,7 +358,7 @@ test('nei recipe export captures raw positioned slot geometry for the layout con
 // P0 export integrity/report contract guardrails.
 test('export pipeline writes manifest, checksums, and health report aliases', () => {
   const runnerSource = read('src/main/java/com/github/dcysteine/nesql/exporter/main/ExportStageRunner.java');
-  const validationSource = read('src/main/java/com/github/dcysteine/nesql/exporter/main/ExportValidationReportWriter.java');
+  const validationStoreSource = read('src/main/java/com/github/dcysteine/nesql/exporter/main/ExportValidationReportStore.java');
   const manifestSource = read('src/main/java/com/github/dcysteine/nesql/exporter/main/ExportIntegrityManifestWriter.java');
 
   assert.equal(
@@ -367,9 +367,9 @@ test('export pipeline writes manifest, checksums, and health report aliases', ()
     'Export runner should write export-manifest/stage-checksums after validation',
   );
   assert.equal(
-    validationSource.includes('export-health-report.json'),
+    validationStoreSource.includes('export-health-report.json'),
     true,
-    'Validation writer should emit the canonical export-health-report alias',
+    'Validation report store should emit the canonical export-health-report alias',
   );
   assert.equal(
     manifestSource.includes('export-manifest.json'),
