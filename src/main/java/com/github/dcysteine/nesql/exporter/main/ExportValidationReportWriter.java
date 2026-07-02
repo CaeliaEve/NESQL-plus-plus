@@ -122,10 +122,15 @@ final class ExportValidationReportWriter {
         report.rawNeiHandlerLayouts = readLongMember(counts, "neiHandlerLayouts");
         report.nativeUiLayouts = readLongMember(counts, "nativeUiLayouts");
         report.nativeUiSlots = readLongMember(counts, "nativeUiSlots");
+        report.nativeUiRects = readLongMember(counts, "nativeUiRects");
+        report.nativeUiPrimitives = readLongMember(counts, "nativeUiPrimitives");
         report.nativeUiMissingSurfaces = readLongMember(counts, "nativeUiMissingSurfaces");
         report.nativeUiSlotBoundsViolations = readLongMember(counts, "nativeUiSlotBoundsViolations");
+        report.nativeUiRectBoundsViolations = readLongMember(counts, "nativeUiRectBoundsViolations");
+        report.nativeUiPrimitiveBoundsViolations = readLongMember(counts, "nativeUiPrimitiveBoundsViolations");
         report.nativeUiBackgroundBoundsViolations = readLongMember(counts, "nativeUiBackgroundBoundsViolations");
         report.nativeUiCoordinateContractViolations = readLongMember(counts, "nativeUiCoordinateContractViolations");
+        report.nativeUiInteractionContractViolations = readLongMember(counts, "nativeUiInteractionContractViolations");
         report.rawRecipeTypes = readLongMember(counts, "recipeTypes");
         report.renderBackendFacts = readLongMember(counts, "renderBackendFacts");
         report.renderBackendAngelica = readLongMember(counts, "renderBackendAngelica");
@@ -228,16 +233,24 @@ final class ExportValidationReportWriter {
         report.nativeUiTotals = new NativeUiTotals();
         report.nativeUiTotals.layouts = report.nativeUiLayouts;
         report.nativeUiTotals.slots = report.nativeUiSlots;
+        report.nativeUiTotals.rects = report.nativeUiRects;
+        report.nativeUiTotals.primitives = report.nativeUiPrimitives;
         report.nativeUiTotals.missingSurfaces = report.nativeUiMissingSurfaces;
         report.nativeUiTotals.slotBoundsViolations = report.nativeUiSlotBoundsViolations;
+        report.nativeUiTotals.rectBoundsViolations = report.nativeUiRectBoundsViolations;
+        report.nativeUiTotals.primitiveBoundsViolations = report.nativeUiPrimitiveBoundsViolations;
         report.nativeUiTotals.backgroundBoundsViolations = report.nativeUiBackgroundBoundsViolations;
         report.nativeUiTotals.coordinateContractViolations = report.nativeUiCoordinateContractViolations;
+        report.nativeUiTotals.interactionContractViolations = report.nativeUiInteractionContractViolations;
         report.nativeUiTotals.status = report.nativeUiLayouts > 0L
                 && report.nativeUiSlots > 0L
                 && report.nativeUiMissingSurfaces == 0L
                 && report.nativeUiSlotBoundsViolations == 0L
+                && report.nativeUiRectBoundsViolations == 0L
+                && report.nativeUiPrimitiveBoundsViolations == 0L
                 && report.nativeUiBackgroundBoundsViolations == 0L
                 && report.nativeUiCoordinateContractViolations == 0L
+                && report.nativeUiInteractionContractViolations == 0L
                 ? "ok"
                 : "blocked";
 
@@ -1087,10 +1100,15 @@ final class ExportValidationReportWriter {
         long rawNeiHandlerLayouts;
         long nativeUiLayouts;
         long nativeUiSlots;
+        long nativeUiRects;
+        long nativeUiPrimitives;
         long nativeUiMissingSurfaces;
         long nativeUiSlotBoundsViolations;
+        long nativeUiRectBoundsViolations;
+        long nativeUiPrimitiveBoundsViolations;
         long nativeUiBackgroundBoundsViolations;
         long nativeUiCoordinateContractViolations;
+        long nativeUiInteractionContractViolations;
         long rawRecipeTypes;
         long renderBackendFacts;
         long renderBackendAngelica;
@@ -1215,10 +1233,15 @@ final class ExportValidationReportWriter {
     private static final class NativeUiTotals {
         long layouts;
         long slots;
+        long rects;
+        long primitives;
         long missingSurfaces;
         long slotBoundsViolations;
+        long rectBoundsViolations;
+        long primitiveBoundsViolations;
         long backgroundBoundsViolations;
         long coordinateContractViolations;
+        long interactionContractViolations;
         String status;
     }
 

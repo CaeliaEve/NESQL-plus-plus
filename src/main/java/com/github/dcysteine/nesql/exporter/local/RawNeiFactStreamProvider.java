@@ -55,13 +55,21 @@ final class RawNeiFactStreamProvider implements RawExportFactStreamProvider {
         NativeUiExportValidator.Result nativeUi = NativeUiExportValidator.validate(context.rawDir);
         counts.nativeUiLayouts = nativeUi.layoutCount;
         counts.nativeUiSlots = nativeUi.slotCount;
+        counts.nativeUiRects = nativeUi.rectCount;
+        counts.nativeUiPrimitives = nativeUi.primitiveCount;
         counts.nativeUiMissingSurfaces = nativeUi.missingSurfaceCount;
         counts.nativeUiSlotBoundsViolations = nativeUi.slotBoundsViolationCount;
+        counts.nativeUiRectBoundsViolations = nativeUi.rectBoundsViolationCount;
+        counts.nativeUiPrimitiveBoundsViolations = nativeUi.primitiveBoundsViolationCount;
         counts.nativeUiBackgroundBoundsViolations = nativeUi.backgroundBoundsViolationCount;
         counts.nativeUiCoordinateContractViolations = nativeUi.coordinateContractViolationCount;
+        counts.nativeUiInteractionContractViolations = nativeUi.interactionContractViolationCount;
         counts.nativeUiMissingSurfaceSamples = nativeUi.missingSurfaceSamples;
         counts.nativeUiSlotBoundsViolationSamples = nativeUi.slotBoundsSamples;
+        counts.nativeUiRectBoundsViolationSamples = nativeUi.rectBoundsSamples;
+        counts.nativeUiPrimitiveBoundsViolationSamples = nativeUi.primitiveBoundsSamples;
         counts.nativeUiBackgroundBoundsViolationSamples = nativeUi.backgroundBoundsSamples;
         counts.nativeUiCoordinateContractViolationSamples = nativeUi.coordinateContractSamples;
+        counts.nativeUiInteractionContractViolationSamples = nativeUi.interactionContractSamples;
     }
 }

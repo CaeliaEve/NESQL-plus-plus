@@ -89,6 +89,7 @@ public final class NativeUiExportValidator {
         }
         validateRectArray(handlerKey, "hotspot", width, height, layout.get("hotspots"), result);
         validateRectArray(handlerKey, "viewport", width, height, layout.get("viewports"), result);
+        validateDynamicPrimitiveArray(handlerKey, width, height, layout.get("dynamicPrimitives"), result);
 
         JsonObject background = object(layout, "nativeBackground");
         if (background == null) {
@@ -97,6 +98,48 @@ public final class NativeUiExportValidator {
             return;
         }
         validateBackground(handlerKey, width, height, background, result);
+    }
+
+    private static void validateDynamicPrimitiveArray(
+            String handlerKey,
+            int surfaceWidth,
+            int surfaceHeight,
+            JsonElement primitivesElement,
+            Result result) {
+        if (primitivesElement == null || !primitivesElement.isJsonArray()) {
+            return;
+        }
+        int index = 0;
+        for (JsonElement primitiveElement : primitivesElement.getAsJsonArray()) {
+            if (primitiveElement != null && primitiveElement.isJsonObject()) {
+                validateDynamicPrimitive(handlerKey, index, surfaceWidth, surfaceHeight, primitiveElement.getAsJsonObject(), result);
+            }
+            index++;
+        }
+    }
+
+    private static void validateDynamicPrimitive(
+            String handlerKey,
+            int index,
+            int surfaceWidth,
+            int surfaceHeight,
+            JsonObject primitive,
+            Result result) {
+        result.primitiveCount++;
+        String label = "primitive:" + handlerKey + ":" + index;
+        checkPrimitiveContract(label, primitive, result);
+        int x = readInt(primitive, "x", -1);
+        int y = readInt(primitive, "y", -1);
+        int width = readInt(primitive, "width", 0);
+        int height = readInt(primitive, "height", 0);
+        if (x < 0 || y < 0 || width <= 0 || height <= 0
+                || x + width > surfaceWidth || y + height > surfaceHeight) {
+            result.primitiveBoundsViolationCount++;
+            addSample(result.primitiveBoundsSamples,
+                    "primitive-bounds:" + handlerKey + ":" + index + ":"
+                            + x + "," + y + " " + width + "x" + height
+                            + " surface=" + surfaceWidth + "x" + surfaceHeight);
+        }
     }
 
     private static void validateRectArray(
@@ -252,6 +295,17 @@ public final class NativeUiExportValidator {
         }
     }
 
+    private static void checkPrimitiveContract(String label, JsonObject object, Result result) {
+        String orientation = readString(object, "orientation", "");
+        if (readString(object, "kind", "").trim().isEmpty()
+                || !NativeUiExportAbi.COORDINATE_SPACE.equals(readString(object, "coordinateSpace", ""))
+                || !NativeUiExportAbi.ANCHOR.equals(readString(object, "anchor", ""))
+                || (!"horizontal".equals(orientation) && !"vertical".equals(orientation))) {
+            result.coordinateContractViolationCount++;
+            addSample(result.coordinateContractSamples, "primitive-contract:" + label);
+        }
+    }
+
     private static void checkInteractionContract(String label, JsonObject object, Result result) {
         if (object.has("action") || object.has("itemId") || object.has("payloadKey")) {
             result.interactionContractViolationCount++;
@@ -281,11 +335,12 @@ public final class NativeUiExportValidator {
                 && result.missingSurfaceCount == 0
                 && result.slotBoundsViolationCount == 0
                 && result.rectBoundsViolationCount == 0
+                && result.primitiveBoundsViolationCount == 0
                 && result.backgroundBoundsViolationCount == 0
                 && result.coordinateContractViolationCount == 0
                 && result.interactionContractViolationCount == 0
-                ? "ok"
-                : "blocked";
+                ? NativeUiExportAbi.STATUS_OK
+                : NativeUiExportAbi.STATUS_BLOCKED;
         File out = new File(rawDir, NativeUiExportAbi.NATIVE_UI_VALIDATION_FILE.replace('/', File.separatorChar));
         File parent = out.getParentFile();
         if (parent != null && !parent.exists() && !parent.mkdirs()) {
@@ -349,15 +404,18 @@ public final class NativeUiExportValidator {
         public long layoutCount;
         public long slotCount;
         public long rectCount;
+        public long primitiveCount;
         public long missingSurfaceCount;
         public long slotBoundsViolationCount;
         public long rectBoundsViolationCount;
+        public long primitiveBoundsViolationCount;
         public long backgroundBoundsViolationCount;
         public long coordinateContractViolationCount;
         public long interactionContractViolationCount;
         public List<String> missingSurfaceSamples = new ArrayList<String>();
         public List<String> slotBoundsSamples = new ArrayList<String>();
         public List<String> rectBoundsSamples = new ArrayList<String>();
+        public List<String> primitiveBoundsSamples = new ArrayList<String>();
         public List<String> backgroundBoundsSamples = new ArrayList<String>();
         public List<String> coordinateContractSamples = new ArrayList<String>();
         public List<String> interactionContractSamples = new ArrayList<String>();

@@ -114,20 +114,33 @@ final class RawExportValidationSupport {
                         && counts.nativeUiSlots > 0
                         && counts.nativeUiMissingSurfaces == 0
                         && counts.nativeUiSlotBoundsViolations == 0
+                        && counts.nativeUiRectBoundsViolations == 0
+                        && counts.nativeUiPrimitiveBoundsViolations == 0
                         && counts.nativeUiBackgroundBoundsViolations == 0
-                        && counts.nativeUiCoordinateContractViolations == 0,
+                        && counts.nativeUiCoordinateContractViolations == 0
+                        && counts.nativeUiInteractionContractViolations == 0,
                 "Native UI ABI: layouts="
                         + counts.nativeUiLayouts
                         + ", slots="
                         + counts.nativeUiSlots
+                        + ", rects="
+                        + counts.nativeUiRects
+                        + ", primitives="
+                        + counts.nativeUiPrimitives
                         + ", missingSurfaces="
                         + counts.nativeUiMissingSurfaces
                         + ", slotBoundsViolations="
                         + counts.nativeUiSlotBoundsViolations
+                        + ", rectBoundsViolations="
+                        + counts.nativeUiRectBoundsViolations
+                        + ", primitiveBoundsViolations="
+                        + counts.nativeUiPrimitiveBoundsViolations
                         + ", backgroundBoundsViolations="
                         + counts.nativeUiBackgroundBoundsViolations
                         + ", coordinateContractViolations="
                         + counts.nativeUiCoordinateContractViolations
+                        + ", interactionContractViolations="
+                        + counts.nativeUiInteractionContractViolations
                         + "."));
         gates.add(validationGate(
                 "native-nei-rules",
@@ -255,6 +268,14 @@ final class RawExportValidationSupport {
             issues.add("native-ui-slot-bounds:" + counts.nativeUiSlotBoundsViolations);
             addRenderSampleIssues(issues, "native-ui-slot-bounds", counts.nativeUiSlotBoundsViolationSamples);
         }
+        if (counts.nativeUiRectBoundsViolations > 0) {
+            issues.add("native-ui-rect-bounds:" + counts.nativeUiRectBoundsViolations);
+            addRenderSampleIssues(issues, "native-ui-rect-bounds", counts.nativeUiRectBoundsViolationSamples);
+        }
+        if (counts.nativeUiPrimitiveBoundsViolations > 0) {
+            issues.add("native-ui-primitive-bounds:" + counts.nativeUiPrimitiveBoundsViolations);
+            addRenderSampleIssues(issues, "native-ui-primitive-bounds", counts.nativeUiPrimitiveBoundsViolationSamples);
+        }
         if (counts.nativeUiBackgroundBoundsViolations > 0) {
             issues.add("native-ui-background-bounds:" + counts.nativeUiBackgroundBoundsViolations);
             addRenderSampleIssues(issues, "native-ui-background-bounds", counts.nativeUiBackgroundBoundsViolationSamples);
@@ -262,6 +283,10 @@ final class RawExportValidationSupport {
         if (counts.nativeUiCoordinateContractViolations > 0) {
             issues.add("native-ui-coordinate-contract:" + counts.nativeUiCoordinateContractViolations);
             addRenderSampleIssues(issues, "native-ui-coordinate-contract", counts.nativeUiCoordinateContractViolationSamples);
+        }
+        if (counts.nativeUiInteractionContractViolations > 0) {
+            issues.add("native-ui-interaction-contract:" + counts.nativeUiInteractionContractViolations);
+            addRenderSampleIssues(issues, "native-ui-interaction-contract", counts.nativeUiInteractionContractViolationSamples);
         }
     }
 }

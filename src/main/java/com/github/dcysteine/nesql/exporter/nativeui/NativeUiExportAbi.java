@@ -38,6 +38,33 @@ public final class NativeUiExportAbi {
     public static final String INTERACTION_TARGET_NONE = "none";
     public static final String INTERACTION_TARGET_ITEM = "item";
 
+    public static final String STATUS_OK = "ok";
+    public static final String STATUS_BLOCKED = "blocked";
+    public static final String LAYOUT_COUNT_FIELD = "layoutCount";
+    public static final String SLOT_COUNT_FIELD = "slotCount";
+    public static final String RECT_COUNT_FIELD = "rectCount";
+    public static final String PRIMITIVE_COUNT_FIELD = "primitiveCount";
+    public static final String MISSING_SURFACE_COUNT_FIELD = "missingSurfaceCount";
+    public static final String SLOT_BOUNDS_VIOLATION_COUNT_FIELD = "slotBoundsViolationCount";
+    public static final String RECT_BOUNDS_VIOLATION_COUNT_FIELD = "rectBoundsViolationCount";
+    public static final String PRIMITIVE_BOUNDS_VIOLATION_COUNT_FIELD = "primitiveBoundsViolationCount";
+    public static final String BACKGROUND_BOUNDS_VIOLATION_COUNT_FIELD = "backgroundBoundsViolationCount";
+    public static final String COORDINATE_CONTRACT_VIOLATION_COUNT_FIELD = "coordinateContractViolationCount";
+    public static final String INTERACTION_CONTRACT_VIOLATION_COUNT_FIELD = "interactionContractViolationCount";
+    public static final String[] REQUIRED_POSITIVE_COUNTERS = new String[] {
+            LAYOUT_COUNT_FIELD,
+            SLOT_COUNT_FIELD
+    };
+    public static final String[] ZERO_VIOLATION_COUNTERS = new String[] {
+            MISSING_SURFACE_COUNT_FIELD,
+            SLOT_BOUNDS_VIOLATION_COUNT_FIELD,
+            RECT_BOUNDS_VIOLATION_COUNT_FIELD,
+            PRIMITIVE_BOUNDS_VIOLATION_COUNT_FIELD,
+            BACKGROUND_BOUNDS_VIOLATION_COUNT_FIELD,
+            COORDINATE_CONTRACT_VIOLATION_COUNT_FIELD,
+            INTERACTION_CONTRACT_VIOLATION_COUNT_FIELD
+    };
+
     private NativeUiExportAbi() {}
 
     public static String schema(String root, String suffix) {

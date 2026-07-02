@@ -101,15 +101,26 @@ final class ExportValidationHealthPolicy {
         if (report.nativeUiMissingSurfaces > 0L) {
             report.warnings.add("Native UI surfaces missing captured backgrounds: " + report.nativeUiMissingSurfaces);
         }
-        if (report.nativeUiSlotBoundsViolations > 0L || report.nativeUiBackgroundBoundsViolations > 0L) {
+        if (report.nativeUiSlotBoundsViolations > 0L
+                || report.nativeUiRectBoundsViolations > 0L
+                || report.nativeUiPrimitiveBoundsViolations > 0L
+                || report.nativeUiBackgroundBoundsViolations > 0L) {
             report.warnings.add("Native UI geometry bounds violations: slots="
                     + report.nativeUiSlotBoundsViolations
+                    + ", rects="
+                    + report.nativeUiRectBoundsViolations
+                    + ", primitives="
+                    + report.nativeUiPrimitiveBoundsViolations
                     + ", backgrounds="
                     + report.nativeUiBackgroundBoundsViolations);
         }
         if (report.nativeUiCoordinateContractViolations > 0L) {
             report.warnings.add("Native UI coordinate contract violations: "
                     + report.nativeUiCoordinateContractViolations);
+        }
+        if (report.nativeUiInteractionContractViolations > 0L) {
+            report.warnings.add("Native UI interaction contract violations: "
+                    + report.nativeUiInteractionContractViolations);
         }
     }
 
@@ -131,9 +142,12 @@ final class ExportValidationHealthPolicy {
                         && (report.nativeUiSlots == 0L
                                 || report.nativeUiMissingSurfaces > 0L
                                 || report.nativeUiSlotBoundsViolations > 0L
+                                || report.nativeUiRectBoundsViolations > 0L
+                                || report.nativeUiPrimitiveBoundsViolations > 0L
                                 || report.nativeUiBackgroundBoundsViolations > 0L
-                                || report.nativeUiCoordinateContractViolations > 0L),
-                "Native UI ABI validation is blocked by missing surfaces, bounds errors, or coordinate contract drift.");
+                                || report.nativeUiCoordinateContractViolations > 0L
+                                || report.nativeUiInteractionContractViolations > 0L),
+                "Native UI ABI validation is blocked by missing surfaces, bounds errors, coordinate drift, or interaction contract drift.");
         addActionableIssue(report,
                 "semantic-unclassified-families",
                 report.semanticTopUnclassifiedFamilyActions,
