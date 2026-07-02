@@ -25,6 +25,7 @@ const rawFileCatalog = readSource('src/main/java/com/github/dcysteine/nesql/expo
 const rawManifestBuilder = readSource('src/main/java/com/github/dcysteine/nesql/exporter/local/RawExportManifestBuilder.java');
 const rawNeiFactWriter = readSource('src/main/java/com/github/dcysteine/nesql/exporter/local/RawExportNeiFactWriter.java');
 const rawValidationSupport = readSource('src/main/java/com/github/dcysteine/nesql/exporter/local/RawExportValidationSupport.java');
+const rawValidationAbiCatalog = readSource('src/main/java/com/github/dcysteine/nesql/exporter/local/RawExportValidationAbiCatalog.java');
 const validationReportWriter = readSource('src/main/java/com/github/dcysteine/nesql/exporter/main/ExportValidationReportWriter.java');
 const validationHealthPolicy = readSource('src/main/java/com/github/dcysteine/nesql/exporter/main/ExportValidationHealthPolicy.java');
 const validationAbiCatalog = readSource('src/main/java/com/github/dcysteine/nesql/exporter/main/ExportValidationAbiCatalog.java');
@@ -115,7 +116,9 @@ test('native NEI handler layouts export GT dynamic primitives and background reg
   assert.equal(nativeUiValidator.includes('validateSlot'), true);
   assert.equal(nativeUiValidator.includes('validateBackground'), true);
   assert.equal(nativeUiValidator.includes('finish(rawDir, result)'), true);
-  assert.equal(rawValidationSupport.includes('"native-ui-abi"'), true);
+  assert.equal(rawValidationAbiCatalog.includes('GATE_NATIVE_UI_ABI = "native-ui-abi"'), true);
+  assert.equal(rawValidationAbiCatalog.includes('nativeUiMissingSurfaces == 0'), true);
+  assert.equal(rawValidationSupport.includes('RawExportValidationAbiCatalog.nativeUiAbiGate(counts)'), true);
   assert.equal(validationReportWriter.includes('nativeUiTotals'), true);
   assert.equal(validationHealthPolicy.includes('ExportValidationAbiCatalog.BLOCKED_NATIVE_UI_ABI'), true);
   assert.equal(validationAbiCatalog.includes('Native UI ABI validation is blocked'), true);

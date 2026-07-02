@@ -12,281 +12,61 @@ final class RawExportValidationSupport {
         }
         RawExportCounts counts = report.counts;
         List<String> issues = new ArrayList<String>();
-        addCountMismatch(issues, "items", counts.items, counts.rawItems);
-        addCountMismatch(issues, "fluids", counts.fluids, counts.rawFluids);
-        addCountMismatch(issues, "recipes", counts.recipes, counts.rawRecipes);
+        RawExportValidationAbiCatalog.addCountMismatch(
+                issues, RawExportValidationAbiCatalog.COUNT_ITEMS, counts.items, counts.rawItems);
+        RawExportValidationAbiCatalog.addCountMismatch(
+                issues, RawExportValidationAbiCatalog.COUNT_FLUIDS, counts.fluids, counts.rawFluids);
+        RawExportValidationAbiCatalog.addCountMismatch(
+                issues, RawExportValidationAbiCatalog.COUNT_RECIPES, counts.recipes, counts.rawRecipes);
         if (counts.renderAssets > 0) {
-            addCountMismatch(issues, "renderAssets/textures", counts.renderAssets, counts.rawTextures);
+            RawExportValidationAbiCatalog.addCountMismatch(
+                    issues,
+                    RawExportValidationAbiCatalog.COUNT_RENDER_ASSETS_TEXTURES,
+                    counts.renderAssets,
+                    counts.rawTextures);
         }
         report.validation.missingTextureCount = counts.rawItems > 0 && counts.rawTextures == 0 ? counts.rawItems : 0;
         report.validation.missingAnimationMetadataCount = counts.rawAnimations > 0 ? 0 : report.validation.missingAnimationMetadataCount;
         report.validation.missingGroupOrOrderCount = (counts.rawGroups == 0 || counts.rawNeiOrderEntries == 0) ? 1 : 0;
-        addRenderSampleIssues(issues, "missing-render-capture", counts.renderShaderItemsMissingCaptureSamples);
-        addRenderSampleIssues(issues, "render-capture-without-frames", counts.renderFramebufferCapturesWithoutFramesSamples);
-        addNativeUiIssues(issues, counts);
+        RawExportValidationAbiCatalog.addRenderSampleIssues(
+                issues,
+                RawExportValidationAbiCatalog.ISSUE_MISSING_RENDER_CAPTURE,
+                counts.renderShaderItemsMissingCaptureSamples);
+        RawExportValidationAbiCatalog.addRenderSampleIssues(
+                issues,
+                RawExportValidationAbiCatalog.ISSUE_RENDER_CAPTURE_WITHOUT_FRAMES,
+                counts.renderFramebufferCapturesWithoutFramesSamples);
+        RawExportValidationAbiCatalog.addNativeUiIssues(issues, counts);
         report.validation.failedStages = issues;
-        report.validation.status = issues.isEmpty() ? "ok" : "warning";
+        report.validation.status = RawExportValidationAbiCatalog.validationStatus(issues);
         report.validation.gates = buildRawValidationGates(counts, issues);
-        report.validation.readinessStatus = rawValidationReady(report.validation) ? "ready" : "blocked";
+        report.validation.readinessStatus = rawValidationReady(report.validation)
+                ? RawExportValidationAbiCatalog.STATUS_READY
+                : RawExportValidationAbiCatalog.STATUS_BLOCKED;
     }
 
     private static List<RawValidationGate> buildRawValidationGates(
             RawExportCounts counts,
             List<String> issues) {
         List<RawValidationGate> gates = new ArrayList<RawValidationGate>();
-        gates.add(validationGate(
-                "core-counts",
-                issues.isEmpty(),
-                issues.isEmpty()
-                        ? "Raw fact counts match database/canonical source counts."
-                        : "Raw fact counts have " + issues.size() + " mismatch(es)."));
-        gates.add(validationGate(
-                "browser-order",
-                counts.rawGroups > 0 && counts.rawNeiOrderEntries > 0,
-                counts.rawGroups > 0 && counts.rawNeiOrderEntries > 0
-                        ? "NEI browser groups and ordering rows are present."
-                        : "NEI browser groups or ordering rows are missing."));
-        gates.add(validationGate(
-                "nei-browser-contract",
-                counts.neiBrowserItems > 0
-                        && counts.rawGroups == counts.neiNativeGroups + counts.neiFallbackGroups + counts.neiSyntheticGroups
-                        && counts.neiRepresentativeMismatches == 0,
-                "NEI browser contract: panelItems="
-                        + counts.neiRuntimePanelItems
-                        + ", browserItems="
-                        + counts.neiBrowserItems
-                        + ", groups="
-                        + counts.rawGroups
-                        + ", nativeGroups="
-                        + counts.neiNativeGroups
-                        + ", fallbackGroups="
-                        + counts.neiFallbackGroups
-                        + ", syntheticGroups="
-                        + counts.neiSyntheticGroups
-                        + ", representativeMismatches="
-                        + counts.neiRepresentativeMismatches
-                        + "."));
-        gates.add(validationGate(
-                "semantic-identity",
-                counts.rawItems == 0
-                        || (counts.semanticTotalItems == counts.rawItems
-                                && counts.semanticIdentityMapRows == counts.rawItems
-                                && counts.semanticItems > 0
-                                && counts.semanticFamilyCount > 0),
-                "Semantic identity streams: rawItems="
-                        + counts.rawItems
-                        + ", totalItems="
-                        + counts.semanticTotalItems
-                        + ", identityMapRows="
-                        + counts.semanticIdentityMapRows
-                        + ", semanticItems="
-                        + counts.semanticItems
-                        + ", families="
-                        + counts.semanticFamilyCount
-                        + ", classifiedTagged="
-                        + counts.semanticClassifiedTaggedItems
-                        + ", unclassifiedTagged="
-                        + counts.semanticUnclassifiedTaggedItems
-                        + "."));
-        gates.add(validationGate(
-                "ui-family-census",
-                counts.uiFamilyCensusHandlers > 0 && counts.uiFamilyCensusFamilies > 0,
-                "NEI UI family census: handlers="
-                        + counts.uiFamilyCensusHandlers
-                        + ", families="
-                        + counts.uiFamilyCensusFamilies
-                        + "."));
-        gates.add(validationGate(
-                "ui-template-catalog",
-                counts.uiTemplateCatalogHandlers > 0
-                        && counts.uiTemplateCatalogTemplates > 0
-                        && counts.uiTemplateCatalogFamilies > 0,
-                "NEI UI template catalog: handlers="
-                        + counts.uiTemplateCatalogHandlers
-                        + ", templates="
-                        + counts.uiTemplateCatalogTemplates
-                        + ", families="
-                        + counts.uiTemplateCatalogFamilies
-                        + "."));
-        gates.add(validationGate(
-                "native-ui-abi",
-                counts.nativeUiLayouts > 0
-                        && counts.nativeUiSlots > 0
-                        && counts.nativeUiMissingSurfaces == 0
-                        && counts.nativeUiSlotBoundsViolations == 0
-                        && counts.nativeUiRectBoundsViolations == 0
-                        && counts.nativeUiPrimitiveBoundsViolations == 0
-                        && counts.nativeUiBackgroundBoundsViolations == 0
-                        && counts.nativeUiCoordinateContractViolations == 0
-                        && counts.nativeUiInteractionContractViolations == 0,
-                "Native UI ABI: layouts="
-                        + counts.nativeUiLayouts
-                        + ", slots="
-                        + counts.nativeUiSlots
-                        + ", rects="
-                        + counts.nativeUiRects
-                        + ", primitives="
-                        + counts.nativeUiPrimitives
-                        + ", missingSurfaces="
-                        + counts.nativeUiMissingSurfaces
-                        + ", slotBoundsViolations="
-                        + counts.nativeUiSlotBoundsViolations
-                        + ", rectBoundsViolations="
-                        + counts.nativeUiRectBoundsViolations
-                        + ", primitiveBoundsViolations="
-                        + counts.nativeUiPrimitiveBoundsViolations
-                        + ", backgroundBoundsViolations="
-                        + counts.nativeUiBackgroundBoundsViolations
-                        + ", coordinateContractViolations="
-                        + counts.nativeUiCoordinateContractViolations
-                        + ", interactionContractViolations="
-                        + counts.nativeUiInteractionContractViolations
-                        + "."));
-        gates.add(validationGate(
-                "native-nei-rules",
-                counts.neiGuidFilterRules >= 0 && counts.neiHiddenItemRules >= 0,
-                "Native NEI rule streams: guidFilters="
-                        + counts.neiGuidFilterRules
-                        + ", hiddenItems="
-                        + counts.neiHiddenItemRules
-                        + "."));
-        gates.add(validationGate(
-                "nei-handler-metadata",
-                counts.neiHandlers > 0 && counts.neiHandlerLayouts > 0,
-                counts.neiHandlers > 0 && counts.neiHandlerLayouts > 0
-                        ? "NEI handler metadata and layout streams are present."
-                        : "NEI handler metadata or layout facts are missing."));
-        gates.add(validationGate(
-                "textures",
-                counts.rawItems == 0 || counts.rawTextures > 0,
-                counts.rawItems == 0 || counts.rawTextures > 0
-                        ? "Texture index stream is present for exported item rows."
-                        : "Texture index is empty while item rows are present."));
-        gates.add(validationGate(
-                "animations",
-                counts.rawAnimations >= 0,
-                "Animation metadata stream is present; zero rows is valid when no animated assets are detected."));
-        gates.add(validationGate(
-                "angelica-render-facts",
-                counts.renderBackendFacts == 1
-                        && counts.renderBackendAngelica == 1
-                        && counts.renderTextureSprites >= 0
-                        && counts.renderTextureSpritesMissingTiming == 0
-                        && counts.renderItemRenderers == counts.rawItems
-                        && counts.renderUnknownSpecialRenderers == 0,
-                "Angelica render facts: backendFacts="
-                        + counts.renderBackendFacts
-                        + ", backendAngelica="
-                        + counts.renderBackendAngelica
-                        + ", textureSprites="
-                        + counts.renderTextureSprites
-                        + ", spritesMissingTiming="
-                        + counts.renderTextureSpritesMissingTiming
-                        + ", itemRenderers="
-                        + counts.renderItemRenderers
-                        + ", unknownSpecialRenderers="
-                        + counts.renderUnknownSpecialRenderers
-                        + ", shaderItems="
-                        + counts.renderShaderItems
-                        + ", shaderItemsRequiringCapture="
-                        + counts.renderShaderItemsRequiringCapture
-                        + ", shaderItemsMissingCapture="
-                        + counts.renderShaderItemsMissingCapture
-                        + ", framebufferCaptures="
-                        + counts.renderFramebufferCaptures
-                        + ", framebufferCapturesWithoutFrames="
-                        + counts.renderFramebufferCapturesWithoutFrames
-                        + ", rawItems="
-                        + counts.rawItems
-                        + "."));
-        gates.add(validationGate(
-                "angelica-special-captures",
-                counts.renderShaderItemsRequiringCapture == 0
-                        || (counts.renderShaderItemsMissingCapture == 0
-                                && counts.renderFramebufferCapturesWithoutFrames == 0),
-                counts.renderShaderItemsRequiringCapture == 0
-                        ? "No shader/custom renderer items require framebuffer capture."
-                        : "Shader/custom renderer items requiring capture="
-                                + counts.renderShaderItemsRequiringCapture
-                                + ", missing capture assets="
-                                + counts.renderShaderItemsMissingCapture
-                                + ", exported framebuffer capture assets="
-                                + counts.renderFramebufferCaptures
-                                + ", framebuffer captures without frames="
-                                + counts.renderFramebufferCapturesWithoutFrames
-                                + "."));
-        gates.add(validationGate(
-                "entity-models",
-                counts.rawEntities >= 0,
-                "Entity model stream is present; zero rows is valid when entity exports are not selected."));
+        gates.add(RawExportValidationAbiCatalog.coreCountsGate(issues.isEmpty(), issues.size()));
+        gates.add(RawExportValidationAbiCatalog.browserOrderGate(counts));
+        gates.add(RawExportValidationAbiCatalog.neiBrowserContractGate(counts));
+        gates.add(RawExportValidationAbiCatalog.semanticIdentityGate(counts));
+        gates.add(RawExportValidationAbiCatalog.uiFamilyCensusGate(counts));
+        gates.add(RawExportValidationAbiCatalog.uiTemplateCatalogGate(counts));
+        gates.add(RawExportValidationAbiCatalog.nativeUiAbiGate(counts));
+        gates.add(RawExportValidationAbiCatalog.nativeNeiRulesGate(counts));
+        gates.add(RawExportValidationAbiCatalog.neiHandlerMetadataGate(counts));
+        gates.add(RawExportValidationAbiCatalog.texturesGate(counts));
+        gates.add(RawExportValidationAbiCatalog.animationsGate(counts));
+        gates.add(RawExportValidationAbiCatalog.angelicaRenderFactsGate(counts));
+        gates.add(RawExportValidationAbiCatalog.angelicaSpecialCapturesGate(counts));
+        gates.add(RawExportValidationAbiCatalog.entityModelsGate(counts));
         return gates;
     }
 
-    private static RawValidationGate validationGate(String name, boolean ready, String summary) {
-        RawValidationGate gate = new RawValidationGate();
-        gate.name = name;
-        gate.status = ready ? "ready" : "blocked";
-        gate.summary = summary;
-        return gate;
-    }
-
     private static boolean rawValidationReady(RawExportValidation validation) {
-        if (validation == null || validation.gates == null || validation.gates.isEmpty()) {
-            return false;
-        }
-        for (RawValidationGate gate : validation.gates) {
-            if (!"ready".equals(gate.status)) {
-                return false;
-            }
-        }
-        return true;
-    }
-
-    private static void addCountMismatch(List<String> issues, String label, long expected, long actual) {
-        if (expected != actual) {
-            issues.add("count-mismatch:" + label + ":expected=" + expected + ":actual=" + actual);
-        }
-    }
-
-    private static void addRenderSampleIssues(List<String> issues, String label, List<String> samples) {
-        if (issues == null || samples == null || samples.isEmpty()) {
-            return;
-        }
-        for (String sample : samples) {
-            if (sample != null && !sample.trim().isEmpty()) {
-                issues.add(label + ":" + sample);
-            }
-        }
-    }
-
-    private static void addNativeUiIssues(List<String> issues, RawExportCounts counts) {
-        if (counts.nativeUiMissingSurfaces > 0) {
-            issues.add("native-ui-missing-surfaces:" + counts.nativeUiMissingSurfaces);
-            addRenderSampleIssues(issues, "native-ui-missing-surface", counts.nativeUiMissingSurfaceSamples);
-        }
-        if (counts.nativeUiSlotBoundsViolations > 0) {
-            issues.add("native-ui-slot-bounds:" + counts.nativeUiSlotBoundsViolations);
-            addRenderSampleIssues(issues, "native-ui-slot-bounds", counts.nativeUiSlotBoundsViolationSamples);
-        }
-        if (counts.nativeUiRectBoundsViolations > 0) {
-            issues.add("native-ui-rect-bounds:" + counts.nativeUiRectBoundsViolations);
-            addRenderSampleIssues(issues, "native-ui-rect-bounds", counts.nativeUiRectBoundsViolationSamples);
-        }
-        if (counts.nativeUiPrimitiveBoundsViolations > 0) {
-            issues.add("native-ui-primitive-bounds:" + counts.nativeUiPrimitiveBoundsViolations);
-            addRenderSampleIssues(issues, "native-ui-primitive-bounds", counts.nativeUiPrimitiveBoundsViolationSamples);
-        }
-        if (counts.nativeUiBackgroundBoundsViolations > 0) {
-            issues.add("native-ui-background-bounds:" + counts.nativeUiBackgroundBoundsViolations);
-            addRenderSampleIssues(issues, "native-ui-background-bounds", counts.nativeUiBackgroundBoundsViolationSamples);
-        }
-        if (counts.nativeUiCoordinateContractViolations > 0) {
-            issues.add("native-ui-coordinate-contract:" + counts.nativeUiCoordinateContractViolations);
-            addRenderSampleIssues(issues, "native-ui-coordinate-contract", counts.nativeUiCoordinateContractViolationSamples);
-        }
-        if (counts.nativeUiInteractionContractViolations > 0) {
-            issues.add("native-ui-interaction-contract:" + counts.nativeUiInteractionContractViolations);
-            addRenderSampleIssues(issues, "native-ui-interaction-contract", counts.nativeUiInteractionContractViolationSamples);
-        }
+        return RawExportValidationAbiCatalog.allGatesReady(validation);
     }
 }

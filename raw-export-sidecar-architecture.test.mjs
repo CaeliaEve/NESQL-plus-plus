@@ -15,6 +15,7 @@ const renderAssetProviderUrl = new URL('./src/main/java/com/github/dcysteine/nes
 const entityRenderProviderUrl = new URL('./src/main/java/com/github/dcysteine/nesql/exporter/local/RawEntityAndRenderBackendFactStreamProvider.java', import.meta.url);
 const reportPipelineUrl = new URL('./src/main/java/com/github/dcysteine/nesql/exporter/local/RawExportSidecarReportPipeline.java', import.meta.url);
 const validationUrl = new URL('./src/main/java/com/github/dcysteine/nesql/exporter/local/RawExportValidationSupport.java', import.meta.url);
+const validationCatalogUrl = new URL('./src/main/java/com/github/dcysteine/nesql/exporter/local/RawExportValidationAbiCatalog.java', import.meta.url);
 const manifestBuilderUrl = new URL('./src/main/java/com/github/dcysteine/nesql/exporter/local/RawExportManifestBuilder.java', import.meta.url);
 const reportWriterUrl = new URL('./src/main/java/com/github/dcysteine/nesql/exporter/local/RawExportReportWriter.java', import.meta.url);
 const rawFileCatalogUrl = new URL('./src/main/java/com/github/dcysteine/nesql/exporter/local/RawExportFileCatalog.java', import.meta.url);
@@ -55,6 +56,7 @@ const renderAssetProvider = readFileSync(renderAssetProviderUrl, 'utf8');
 const entityRenderProvider = readFileSync(entityRenderProviderUrl, 'utf8');
 const reportPipeline = readFileSync(reportPipelineUrl, 'utf8');
 const validation = readFileSync(validationUrl, 'utf8');
+const validationCatalog = readFileSync(validationCatalogUrl, 'utf8');
 const manifestBuilder = readFileSync(manifestBuilderUrl, 'utf8');
 const reportWriter = readFileSync(reportWriterUrl, 'utf8');
 const rawFileCatalog = readFileSync(rawFileCatalogUrl, 'utf8');
@@ -77,6 +79,40 @@ test('raw export validation logic lives outside RawExportSidecarWriter', () => {
   assert.doesNotMatch(sidecar, /addCountMismatch/);
   assert.match(validation, /buildRawValidationGates/);
   assert.match(validation, /rawValidationReady/);
+});
+
+test('raw export validation ABI vocabulary is catalog-owned', () => {
+  assert.equal(existsSync(validationCatalogUrl), true, 'RawExportValidationAbiCatalog must exist');
+  for (const token of [
+    'STATUS_OK = "ok"',
+    'STATUS_WARNING = "warning"',
+    'STATUS_READY = "ready"',
+    'STATUS_BLOCKED = "blocked"',
+    'GATE_CORE_COUNTS = "core-counts"',
+    'GATE_BROWSER_ORDER = "browser-order"',
+    'GATE_NEI_BROWSER_CONTRACT = "nei-browser-contract"',
+    'GATE_SEMANTIC_IDENTITY = "semantic-identity"',
+    'GATE_NATIVE_UI_ABI = "native-ui-abi"',
+    'GATE_ANGELICA_RENDER_FACTS = "angelica-render-facts"',
+    'ISSUE_MISSING_RENDER_CAPTURE = "missing-render-capture"',
+    'ISSUE_RENDER_CAPTURE_WITHOUT_FRAMES = "render-capture-without-frames"',
+    'ISSUE_NATIVE_UI_MISSING_SURFACES = "native-ui-missing-surfaces"',
+    'ISSUE_NATIVE_UI_SLOT_BOUNDS = "native-ui-slot-bounds"',
+    'ISSUE_NATIVE_UI_COORDINATE_CONTRACT = "native-ui-coordinate-contract"',
+  ]) {
+    assert.equal(validationCatalog.includes(token), true, `validation catalog missing ${token}`);
+  }
+  assert.match(validationCatalog, /addCountMismatch/);
+  assert.match(validationCatalog, /nativeUiAbiGate\(RawExportCounts counts\)/);
+  assert.match(validationCatalog, /allGatesReady\(RawExportValidation validation\)/);
+  assert.match(validation, /RawExportValidationAbiCatalog\.addCountMismatch/);
+  assert.match(validation, /RawExportValidationAbiCatalog\.nativeUiAbiGate\(counts\)/);
+  assert.match(validation, /RawExportValidationAbiCatalog\.allGatesReady\(validation\)/);
+  assert.doesNotMatch(validation, /"native-ui-abi"/);
+  assert.doesNotMatch(validation, /"semantic-identity"/);
+  assert.doesNotMatch(validation, /"angelica-render-facts"/);
+  assert.doesNotMatch(validation, /"ready"/);
+  assert.doesNotMatch(validation, /"blocked"/);
 });
 
 test('raw export report DTOs are top-level local components', () => {
@@ -210,11 +246,12 @@ test('native UI ABI validator owns bounds and missing-surface validation', () =>
   assert.match(nativeUiValidator, /NATIVE_UI_VALIDATION_FILE/);
   assert.match(neiProvider, /NativeUiExportValidator\.validate\(context\.rawDir\)/);
   assert.match(neiProvider, /counts\.nativeUiMissingSurfaces = nativeUi\.missingSurfaceCount/);
-  assert.match(validation, /"native-ui-abi"/);
-  assert.match(validation, /nativeUiMissingSurfaces == 0/);
-  assert.match(validation, /nativeUiSlotBoundsViolations == 0/);
-  assert.match(validation, /nativeUiBackgroundBoundsViolations == 0/);
-  assert.match(validation, /nativeUiCoordinateContractViolations == 0/);
+  assert.match(validationCatalog, /GATE_NATIVE_UI_ABI = "native-ui-abi"/);
+  assert.match(validationCatalog, /nativeUiMissingSurfaces == 0/);
+  assert.match(validationCatalog, /nativeUiSlotBoundsViolations == 0/);
+  assert.match(validationCatalog, /nativeUiBackgroundBoundsViolations == 0/);
+  assert.match(validationCatalog, /nativeUiCoordinateContractViolations == 0/);
+  assert.match(validation, /RawExportValidationAbiCatalog\.nativeUiAbiGate\(counts\)/);
   assert.doesNotMatch(sidecar, /NativeUiExportValidator/);
 });
 

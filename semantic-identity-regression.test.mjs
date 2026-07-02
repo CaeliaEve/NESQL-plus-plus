@@ -111,8 +111,9 @@ test('semantic stream writer validates one identity row per raw item', () => {
 
 test('raw export health gates include semantic identity readiness', () => {
   const validationSupport = readSource('src/main/java/com/github/dcysteine/nesql/exporter/local/RawExportValidationSupport.java');
+  const validationAbiCatalog = readSource('src/main/java/com/github/dcysteine/nesql/exporter/local/RawExportValidationAbiCatalog.java');
   const reportAssembler = readSource('src/main/java/com/github/dcysteine/nesql/exporter/local/RawExportReportAssembler.java');
-  const healthSurface = [validationSupport, reportAssembler].join('\n');
+  const healthSurface = [validationSupport, validationAbiCatalog, reportAssembler].join('\n');
 
   assert.equal(healthSurface.includes('"semantic-identity"'), true);
   assert.equal(healthSurface.includes('semanticIdentityMapRows'), true);
