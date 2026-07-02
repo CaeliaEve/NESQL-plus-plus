@@ -349,8 +349,10 @@ test('stage diagnostics write machine-readable checkpoint and error records', ()
   assert.equal(runner.includes('ExportDebugPlaneWriter.writeStageCheckpointReport'), true);
   assert.equal(runner.includes('stage_checkpoint.json'), false);
   assert.equal(debugPlaneWriter.includes('ExportDebugFile.STAGE_CHECKPOINT'), true);
-  assert.equal(debugPlaneWriter.includes('debugFile(exportContext, ExportDebugFile.STAGE_CHECKPOINT)'), true);
-  assert.equal(debugPlaneWriter.includes('debugFile(exportContext, ExportDebugFile.KERNEL_TRACE)'), true);
+  assert.equal(debugPlaneWriter.includes('DEBUG_REPORTS = validateAndFreeze'), true);
+  assert.equal(debugPlaneWriter.includes('debugFile(exportContext, descriptor.file())'), true);
+  assert.equal(debugPlaneWriter.includes('writeDebugReport('), true);
+  assert.equal(debugPlaneWriter.includes('ExportDebugFile.KERNEL_TRACE'), true);
   assert.equal(debugFileCatalog.includes('"validation/stage_checkpoint.json"'), true);
   assert.equal(debugFileCatalog.includes('"export/checkpoint.json"'), true);
   assert.equal(debugFileCatalog.includes('"trace/latest.json"'), true);

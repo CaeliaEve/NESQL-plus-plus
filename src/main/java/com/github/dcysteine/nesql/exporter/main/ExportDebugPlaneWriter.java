@@ -15,11 +15,27 @@ import java.io.FileOutputStream;
 import java.io.OutputStreamWriter;
 import java.nio.charset.StandardCharsets;
 import java.util.ArrayList;
+import java.util.Arrays;
+import java.util.Collections;
+import java.util.EnumSet;
 import java.util.List;
 
 /** Writes DebugFS-style export diagnostics. These files are not stable ABI. */
 final class ExportDebugPlaneWriter {
     private static final Gson GSON = new GsonBuilder().setPrettyPrinting().create();
+    private static final List<DebugReportDescriptor> DEBUG_REPORTS = validateAndFreeze(Arrays.asList(
+            new DebugReportDescriptor(
+                    ExportDebugFile.STAGE_TIMING,
+                    "Failed to write NESQL++ stage timing report",
+                    EnumChatFormatting.GREEN + "[NESQL] Stage timing report written: "),
+            new DebugReportDescriptor(
+                    ExportDebugFile.STAGE_CHECKPOINT,
+                    "Failed to write NESQL++ stage checkpoint report",
+                    null),
+            new DebugReportDescriptor(
+                    ExportDebugFile.KERNEL_TRACE,
+                    "Failed to write NESQL++ export kernel trace",
+                    null)));
 
     private ExportDebugPlaneWriter() {}
 
@@ -31,26 +47,10 @@ final class ExportDebugPlaneWriter {
             ExportContext exportContext,
             List<StageTiming> timings,
             long totalElapsedMs) {
-        try {
-            TimingReport report = new TimingReport();
-            report.schemaVersion = ExportDebugFile.STAGE_TIMING.schemaVersion();
-            report.profile = exportContext.profile.profileId;
-            report.selection = exportContext.selection.describe();
-            report.totalElapsedMs = totalElapsedMs;
-            report.totalElapsed = formatDuration(totalElapsedMs);
-            report.stages = timings;
-
-            File validationAliasFile = validationAliasFile(exportContext, ExportDebugFile.STAGE_TIMING);
-            File debugFile = debugFile(exportContext, ExportDebugFile.STAGE_TIMING);
-            writeJson(validationAliasFile, report);
-            writeJson(debugFile, report);
-            Logger.chatMessage(
-                    EnumChatFormatting.GREEN
-                            + "[NESQL] Stage timing report written: "
-                            + validationAliasFile.getAbsolutePath());
-        } catch (Exception e) {
-            Logger.MOD.warn("Failed to write NESQL++ stage timing report", e);
-        }
+        writeDebugReport(
+                exportContext,
+                ExportDebugFile.STAGE_TIMING,
+                () -> timingReport(exportContext, timings, totalElapsedMs));
     }
 
     static void writeStageCheckpointReport(
@@ -63,49 +63,29 @@ final class ExportDebugPlaneWriter {
             String status,
             long elapsedMs,
             String errorSummary) {
-        try {
-            StageCheckpointReport report = new StageCheckpointReport();
-            report.schemaVersion = ExportDebugFile.STAGE_CHECKPOINT.schemaVersion();
-            report.generatedAtEpochMs = System.currentTimeMillis();
-            report.profile = exportContext.profile.profileId;
-            report.selection = exportContext.selection.describe();
-            report.status = status;
-            report.completedStages = Math.max(0, completedStages);
-            report.totalStages = Math.max(0, totalStages);
-            report.currentStage = currentStage == null ? null : currentStage.name();
-            report.nextStage = nextStage == null ? null : nextStage.name();
-            report.elapsedMs = Math.max(0L, elapsedMs);
-            report.elapsed = formatDuration(report.elapsedMs);
-            report.errorSummary = errorSummary;
-            report.completed = timings == null
-                    ? new ArrayList<StageTiming>()
-                    : new ArrayList<StageTiming>(timings);
-
-            writeJson(validationAliasFile(exportContext, ExportDebugFile.STAGE_CHECKPOINT), report);
-            writeJson(debugFile(exportContext, ExportDebugFile.STAGE_CHECKPOINT), report);
-        } catch (Exception e) {
-            Logger.MOD.warn("Failed to write NESQL++ stage checkpoint report", e);
-        }
+        writeDebugReport(
+                exportContext,
+                ExportDebugFile.STAGE_CHECKPOINT,
+                () -> stageCheckpointReport(
+                        exportContext,
+                        timings,
+                        completedStages,
+                        totalStages,
+                        currentStage,
+                        nextStage,
+                        status,
+                        elapsedMs,
+                        errorSummary));
     }
 
     static void writeKernelTrace(
             ExportContext exportContext,
             ExportModuleCatalog catalog,
             ExportKernelContext context) {
-        try {
-            TraceReport report = new TraceReport();
-            report.schemaVersion = ExportDebugFile.KERNEL_TRACE.schemaVersion();
-            report.profile = exportContext.profile.profileId;
-            report.selection = exportContext.selection.describe();
-            report.tracepoints = ExportTracepoint.all();
-            report.modules = catalog.descriptors();
-            report.events = context.traceEvents();
-
-            writeJson(validationAliasFile(exportContext, ExportDebugFile.KERNEL_TRACE), report);
-            writeJson(debugFile(exportContext, ExportDebugFile.KERNEL_TRACE), report);
-        } catch (Exception e) {
-            Logger.MOD.warn("Failed to write NESQL++ export kernel trace", e);
-        }
+        writeDebugReport(
+                exportContext,
+                ExportDebugFile.KERNEL_TRACE,
+                () -> traceReport(exportContext, catalog, context));
     }
 
     static String formatDuration(long elapsedMs) {
@@ -120,6 +100,95 @@ final class ExportDebugPlaneWriter {
             return String.format("%dm %02ds", minutes, seconds);
         }
         return String.format("%ds", seconds);
+    }
+
+    private static TimingReport timingReport(
+            ExportContext exportContext,
+            List<StageTiming> timings,
+            long totalElapsedMs) {
+        TimingReport report = new TimingReport();
+        report.schemaVersion = ExportDebugFile.STAGE_TIMING.schemaVersion();
+        report.profile = exportContext.profile.profileId;
+        report.selection = exportContext.selection.describe();
+        report.totalElapsedMs = totalElapsedMs;
+        report.totalElapsed = formatDuration(totalElapsedMs);
+        report.stages = timings;
+        return report;
+    }
+
+    private static StageCheckpointReport stageCheckpointReport(
+            ExportContext exportContext,
+            List<StageTiming> timings,
+            int completedStages,
+            int totalStages,
+            ExportStage currentStage,
+            ExportStage nextStage,
+            String status,
+            long elapsedMs,
+            String errorSummary) {
+        StageCheckpointReport report = new StageCheckpointReport();
+        report.schemaVersion = ExportDebugFile.STAGE_CHECKPOINT.schemaVersion();
+        report.generatedAtEpochMs = System.currentTimeMillis();
+        report.profile = exportContext.profile.profileId;
+        report.selection = exportContext.selection.describe();
+        report.status = status;
+        report.completedStages = Math.max(0, completedStages);
+        report.totalStages = Math.max(0, totalStages);
+        report.currentStage = currentStage == null ? null : currentStage.name();
+        report.nextStage = nextStage == null ? null : nextStage.name();
+        report.elapsedMs = Math.max(0L, elapsedMs);
+        report.elapsed = formatDuration(report.elapsedMs);
+        report.errorSummary = errorSummary;
+        report.completed = timings == null
+                ? new ArrayList<StageTiming>()
+                : new ArrayList<StageTiming>(timings);
+        return report;
+    }
+
+    private static TraceReport traceReport(
+            ExportContext exportContext,
+            ExportModuleCatalog catalog,
+            ExportKernelContext context) {
+        TraceReport report = new TraceReport();
+        report.schemaVersion = ExportDebugFile.KERNEL_TRACE.schemaVersion();
+        report.profile = exportContext.profile.profileId;
+        report.selection = exportContext.selection.describe();
+        report.tracepoints = ExportTracepoint.all();
+        report.modules = catalog.descriptors();
+        report.events = context.traceEvents();
+        return report;
+    }
+
+    private static void writeDebugReport(
+            ExportContext exportContext,
+            ExportDebugFile file,
+            DebugReportFactory factory) {
+        DebugReportDescriptor descriptor = debugReportDescriptor(file);
+        try {
+            if (factory == null) {
+                throw new IllegalArgumentException("DebugFS report factory must be non-null: " + file.name());
+            }
+            Object report = factory.build();
+            File validationAliasFile = validationAliasFile(exportContext, descriptor.file());
+            File debugFile = debugFile(exportContext, descriptor.file());
+            writeJson(validationAliasFile, report);
+            writeJson(debugFile, report);
+            descriptor.reportSuccess(validationAliasFile);
+        } catch (Exception e) {
+            Logger.MOD.warn(descriptor.failureMessage(), e);
+        }
+    }
+
+    private static DebugReportDescriptor debugReportDescriptor(ExportDebugFile file) {
+        if (file == null) {
+            throw new IllegalArgumentException("DebugFS report file must be non-null");
+        }
+        for (DebugReportDescriptor descriptor : DEBUG_REPORTS) {
+            if (descriptor.file() == file) {
+                return descriptor;
+            }
+        }
+        throw new IllegalStateException("Missing DebugFS report descriptor: " + file.name());
     }
 
     private static File validationAliasFile(ExportContext exportContext, ExportDebugFile file) {
@@ -145,6 +214,63 @@ final class ExportDebugPlaneWriter {
         try (FileOutputStream fos = new FileOutputStream(file);
              OutputStreamWriter writer = new OutputStreamWriter(fos, StandardCharsets.UTF_8)) {
             GSON.toJson(value, writer);
+        }
+    }
+
+    private static List<DebugReportDescriptor> validateAndFreeze(List<DebugReportDescriptor> descriptors) {
+        EnumSet<ExportDebugFile> seen = EnumSet.noneOf(ExportDebugFile.class);
+        for (DebugReportDescriptor descriptor : descriptors) {
+            if (descriptor == null) {
+                throw new IllegalStateException("DebugFS report descriptor must not be null");
+            }
+            if (!seen.add(descriptor.file())) {
+                throw new IllegalStateException("Duplicate DebugFS report descriptor: " + descriptor.file().name());
+            }
+        }
+        for (ExportDebugFile file : ExportDebugFile.values()) {
+            if (!seen.contains(file)) {
+                throw new IllegalStateException("Missing DebugFS report descriptor: " + file.name());
+            }
+        }
+        return Collections.unmodifiableList(new ArrayList<DebugReportDescriptor>(descriptors));
+    }
+
+    private interface DebugReportFactory {
+        Object build();
+    }
+
+    private static final class DebugReportDescriptor {
+        private final ExportDebugFile file;
+        private final String failureMessage;
+        private final String successMessagePrefix;
+
+        private DebugReportDescriptor(
+                ExportDebugFile file,
+                String failureMessage,
+                String successMessagePrefix) {
+            if (file == null) {
+                throw new IllegalArgumentException("DebugFS report file must be non-null");
+            }
+            if (failureMessage == null || failureMessage.trim().isEmpty()) {
+                throw new IllegalArgumentException("DebugFS report failure message must be non-empty: " + file.name());
+            }
+            this.file = file;
+            this.failureMessage = failureMessage;
+            this.successMessagePrefix = successMessagePrefix;
+        }
+
+        private ExportDebugFile file() {
+            return file;
+        }
+
+        private String failureMessage() {
+            return failureMessage;
+        }
+
+        private void reportSuccess(File validationAliasFile) {
+            if (successMessagePrefix != null) {
+                Logger.chatMessage(successMessagePrefix + validationAliasFile.getAbsolutePath());
+            }
         }
     }
 
