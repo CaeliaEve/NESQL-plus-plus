@@ -389,6 +389,7 @@ test('export pipeline writes manifest, checksums, and health report aliases', ()
 
 test('export health report surfaces missing contracts and samples', () => {
   const validationSource = read('src/main/java/com/github/dcysteine/nesql/exporter/main/ExportValidationReportWriter.java');
+  const renderAssetProbeSource = read('src/main/java/com/github/dcysteine/nesql/exporter/main/ExportValidationRenderAssetProbe.java');
   const healthPolicySource = read('src/main/java/com/github/dcysteine/nesql/exporter/main/ExportValidationHealthPolicy.java');
   const validationAbiCatalogSource = read('src/main/java/com/github/dcysteine/nesql/exporter/main/ExportValidationAbiCatalog.java');
 
@@ -408,12 +409,12 @@ test('export health report surfaces missing contracts and samples', () => {
     'Health report catalog should warn when browser layout is absent',
   );
   assert.equal(
-    validationSource.includes('renderAssetMissingPrimaryArtifactSamples'),
+    renderAssetProbeSource.includes('renderAssetMissingPrimaryArtifactSamples'),
     true,
     'Health report should include missing primary artifact samples',
   );
   assert.equal(
-    validationSource.includes('renderAssetMissingTimelineFrameSamples'),
+    renderAssetProbeSource.includes('renderAssetMissingTimelineFrameSamples'),
     true,
     'Health report should include missing timeline frame samples',
   );
@@ -421,21 +422,23 @@ test('export health report surfaces missing contracts and samples', () => {
 
 test('export health report audits browser layout atlas residency', () => {
   const validationSource = read('src/main/java/com/github/dcysteine/nesql/exporter/main/ExportValidationReportWriter.java');
+  const browserAtlasProbeSource = read('src/main/java/com/github/dcysteine/nesql/exporter/main/ExportValidationBrowserAtlasProbe.java');
   const healthPolicySource = read('src/main/java/com/github/dcysteine/nesql/exporter/main/ExportValidationHealthPolicy.java');
   const validationAbiCatalogSource = read('src/main/java/com/github/dcysteine/nesql/exporter/main/ExportValidationAbiCatalog.java');
 
   assert.equal(
-    validationSource.includes('inspectBrowserAtlasCoverage(rawDir, report);'),
+    validationSource.includes('ExportValidationBrowserAtlasProbe.inspect(rawDir, report);')
+      && browserAtlasProbeSource.includes('static void inspect(File rawDir, ExportValidationReportWriter.ValidationReport report)'),
     true,
-    'Validation writer should compare browser-layout-index.json against browser-atlas-index.json',
+    'Validation writer should delegate browser atlas coverage to the browser atlas probe',
   );
   assert.equal(
-    validationSource.includes('browserAtlasLayoutCoverageRatio'),
+    browserAtlasProbeSource.includes('browserAtlasLayoutCoverageRatio'),
     true,
     'Health report should include atlas coverage ratio for layout-visible browser items',
   );
   assert.equal(
-    validationSource.includes('browserAtlasLayoutMissingSamples'),
+    browserAtlasProbeSource.includes('browserAtlasLayoutMissingSamples'),
     true,
     'Health report should include bounded missing atlas samples for export repair',
   );

@@ -95,6 +95,35 @@ const validationAbiCatalog = readFileSync(
   new URL('./src/main/java/com/github/dcysteine/nesql/exporter/main/ExportValidationAbiCatalog.java', import.meta.url),
   'utf8',
 );
+
+const validationJsonSupport = readFileSync(
+  new URL('./src/main/java/com/github/dcysteine/nesql/exporter/main/ExportValidationJsonSupport.java', import.meta.url),
+  'utf8',
+);
+const validationRawCountProbe = readFileSync(
+  new URL('./src/main/java/com/github/dcysteine/nesql/exporter/main/ExportValidationRawCountProbe.java', import.meta.url),
+  'utf8',
+);
+const validationHealthSectionBuilder = readFileSync(
+  new URL('./src/main/java/com/github/dcysteine/nesql/exporter/main/ExportValidationHealthSectionBuilder.java', import.meta.url),
+  'utf8',
+);
+const validationSemanticProbe = readFileSync(
+  new URL('./src/main/java/com/github/dcysteine/nesql/exporter/main/ExportValidationSemanticProbe.java', import.meta.url),
+  'utf8',
+);
+const validationPathHygieneProbe = readFileSync(
+  new URL('./src/main/java/com/github/dcysteine/nesql/exporter/main/ExportValidationPathHygieneProbe.java', import.meta.url),
+  'utf8',
+);
+const validationBrowserAtlasProbe = readFileSync(
+  new URL('./src/main/java/com/github/dcysteine/nesql/exporter/main/ExportValidationBrowserAtlasProbe.java', import.meta.url),
+  'utf8',
+);
+const validationRenderAssetProbe = readFileSync(
+  new URL('./src/main/java/com/github/dcysteine/nesql/exporter/main/ExportValidationRenderAssetProbe.java', import.meta.url),
+  'utf8',
+);
 const providerInterface = readFileSync(
   new URL('./src/main/java/com/github/dcysteine/nesql/exporter/main/ExportStageActionProvider.java', import.meta.url),
   'utf8',
@@ -426,15 +455,32 @@ test('export validation health policy is split from report collection and serial
   assert.match(validationHealthPolicy, /ExportValidationAbiCatalog\.BLOCKED_MACHINE_PATHS/);
   assert.match(validationHealthPolicy, /ExportValidationAbiCatalog\.COMPILE_READINESS_READY_WITH_WARNINGS/);
   assert.match(validationReportWriter, /ExportValidationHealthPolicy\.evaluate\(report\)/);
+  assert.match(validationReportWriter, /ExportValidationHealthSectionBuilder\.populate\(repositoryDirectory, report\)/);
+  assert.match(validationReportWriter, /ExportValidationRawCountProbe\.inspect\(repositoryDirectory, report\)/);
+  assert.match(validationReportWriter, /ExportValidationBrowserAtlasProbe\.inspect\(rawDir, report\)/);
+  assert.match(validationReportWriter, /ExportValidationRenderAssetProbe\.inspect\(repositoryDirectory, rawDir, report\)/);
+  assert.match(validationReportWriter, /ExportValidationSemanticProbe\.inspectDiagnostics\(repositoryDirectory, report\)/);
+  assert.match(validationReportWriter, /ExportValidationPathHygieneProbe\.inspect\(repositoryDirectory, report\)/);
   assert.match(validationReportWriter, /ExportValidationAbiCatalog\.EXPORT_VALIDATION_SCHEMA/);
   assert.match(validationReportWriter, /RawExportFileCatalog\.rawExportDirectory\(repositoryDirectory\)/);
-  assert.match(validationReportWriter, /ExportValidationAbiCatalog\.pathHygieneRules\(\)/);
-  assert.match(validationReportWriter, /RawExportFileCatalog\.VALIDATION_ERRORS_FILE/);
   assert.match(validationReportWriter, /static final class ValidationReport/);
+  assert.match(validationJsonSupport, /Shared low-level JSON, counting, and ratio helpers/);
+  assert.match(validationRawCountProbe, /Owns raw-export report count extraction/);
+  assert.match(validationHealthSectionBuilder, /Builds aggregate health sections/);
+  assert.match(validationSemanticProbe, /Owns semantic diagnostics and bundled rule-pack evidence collection/);
+  assert.match(validationPathHygieneProbe, /ExportValidationAbiCatalog\.pathHygieneRules\(\)/);
+  assert.match(validationPathHygieneProbe, /RawExportFileCatalog\.VALIDATION_ERRORS_FILE/);
+  assert.match(validationBrowserAtlasProbe, /Owns browser atlas residency and layout coverage evidence collection/);
+  assert.match(validationRenderAssetProbe, /Owns render asset manifest, artifact residency, timeline, and singularity animation probes/);
   assert.doesNotMatch(validationReportWriter, /private static void collectWarnings/);
   assert.doesNotMatch(validationReportWriter, /private static void determineHealthStatus/);
   assert.doesNotMatch(validationReportWriter, /private static void addBlockedIf/);
   assert.doesNotMatch(validationReportWriter, /private static void addActionableIssue/);
+  assert.doesNotMatch(validationReportWriter, /private static void inspectRawExportCounts/);
+  assert.doesNotMatch(validationReportWriter, /private static void inspectRenderAssets/);
+  assert.doesNotMatch(validationReportWriter, /private static void inspectExportPathHygiene/);
+  assert.doesNotMatch(validationReportWriter, /ExportValidationAbiCatalog\.pathHygieneRules\(\)/);
+  assert.doesNotMatch(validationReportWriter, /RawExportFileCatalog\.VALIDATION_ERRORS_FILE/);
   assert.doesNotMatch(validationReportWriter, /nesqlpp\/export-error\/v1/);
   assert.doesNotMatch(validationReportWriter, /new File\(repositoryDirectory, "raw-export"/);
 });
