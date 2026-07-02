@@ -32,6 +32,11 @@ public final class NativeUiExportAbi {
     public static final String BACKGROUND_KIND_GT_MODULAR_UI = "gt-modular-ui";
     public static final String BACKGROUND_KIND_UNKNOWN = "unknown";
     public static final String BACKGROUND_SCALING_NINE_SLICE = "nine-slice";
+    public static final String INTERACTION_PAYLOAD_SCHEMA = "neonei/native-ui-interaction/v1";
+    public static final String INTERACTION_KIND_NONE = "none";
+    public static final String INTERACTION_KIND_ITEM_CLICK = "item-click";
+    public static final String INTERACTION_TARGET_NONE = "none";
+    public static final String INTERACTION_TARGET_ITEM = "item";
 
     private NativeUiExportAbi() {}
 

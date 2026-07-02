@@ -87,6 +87,8 @@ public final class NativeUiExportValidator {
                 index++;
             }
         }
+        validateRectArray(handlerKey, "hotspot", width, height, layout.get("hotspots"), result);
+        validateRectArray(handlerKey, "viewport", width, height, layout.get("viewports"), result);
 
         JsonObject background = object(layout, "nativeBackground");
         if (background == null) {
@@ -95,6 +97,50 @@ public final class NativeUiExportValidator {
             return;
         }
         validateBackground(handlerKey, width, height, background, result);
+    }
+
+    private static void validateRectArray(
+            String handlerKey,
+            String kind,
+            int surfaceWidth,
+            int surfaceHeight,
+            JsonElement rectsElement,
+            Result result) {
+        if (rectsElement == null || !rectsElement.isJsonArray()) {
+            return;
+        }
+        int index = 0;
+        for (JsonElement rectElement : rectsElement.getAsJsonArray()) {
+            if (rectElement != null && rectElement.isJsonObject()) {
+                validateRect(handlerKey, kind, index, surfaceWidth, surfaceHeight, rectElement.getAsJsonObject(), result);
+            }
+            index++;
+        }
+    }
+
+    private static void validateRect(
+            String handlerKey,
+            String kind,
+            int index,
+            int surfaceWidth,
+            int surfaceHeight,
+            JsonObject rect,
+            Result result) {
+        result.rectCount++;
+        checkRectContract(kind + ":" + handlerKey + ":" + index, rect, result);
+        checkInteractionContract(kind + ":" + handlerKey + ":" + index, rect, result);
+        int x = readInt(rect, "x", -1);
+        int y = readInt(rect, "y", -1);
+        int width = readInt(rect, "width", 0);
+        int height = readInt(rect, "height", 0);
+        if (x < 0 || y < 0 || width <= 0 || height <= 0
+                || x + width > surfaceWidth || y + height > surfaceHeight) {
+            result.rectBoundsViolationCount++;
+            addSample(result.rectBoundsSamples,
+                    "rect-bounds:" + kind + ":" + handlerKey + ":" + index + ":"
+                            + x + "," + y + " " + width + "x" + height
+                            + " surface=" + surfaceWidth + "x" + surfaceHeight);
+        }
     }
 
     private static void validateSlot(
@@ -198,13 +244,42 @@ public final class NativeUiExportValidator {
         }
     }
 
+    private static void checkRectContract(String label, JsonObject object, Result result) {
+        if (!NativeUiExportAbi.COORDINATE_SPACE.equals(readString(object, "coordinateSpace", ""))
+                || !NativeUiExportAbi.ANCHOR.equals(readString(object, "anchor", ""))) {
+            result.coordinateContractViolationCount++;
+            addSample(result.coordinateContractSamples, "rect-contract:" + label);
+        }
+    }
+
+    private static void checkInteractionContract(String label, JsonObject object, Result result) {
+        String payloadSchema = readString(object, "interactionPayloadSchema", "");
+        String kind = readString(object, "interactionKind", "");
+        String targetKind = readString(object, "interactionTargetKind", "");
+        String targetId = readString(object, "interactionTargetId", "").trim();
+        boolean valid = NativeUiExportAbi.INTERACTION_PAYLOAD_SCHEMA.equals(payloadSchema);
+        if (valid && NativeUiExportAbi.INTERACTION_KIND_NONE.equals(kind)) {
+            valid = NativeUiExportAbi.INTERACTION_TARGET_NONE.equals(targetKind) && targetId.isEmpty();
+        } else if (valid && NativeUiExportAbi.INTERACTION_KIND_ITEM_CLICK.equals(kind)) {
+            valid = NativeUiExportAbi.INTERACTION_TARGET_ITEM.equals(targetKind) && !targetId.isEmpty();
+        } else {
+            valid = false;
+        }
+        if (!valid) {
+            result.interactionContractViolationCount++;
+            addSample(result.interactionContractSamples, "interaction-contract:" + label);
+        }
+    }
+
     private static void finish(File rawDir, Result result) throws java.io.IOException {
         result.status = result.layoutCount > 0
                 && result.slotCount > 0
                 && result.missingSurfaceCount == 0
                 && result.slotBoundsViolationCount == 0
+                && result.rectBoundsViolationCount == 0
                 && result.backgroundBoundsViolationCount == 0
                 && result.coordinateContractViolationCount == 0
+                && result.interactionContractViolationCount == 0
                 ? "ok"
                 : "blocked";
         File out = new File(rawDir, NativeUiExportAbi.NATIVE_UI_VALIDATION_FILE.replace('/', File.separatorChar));
@@ -269,13 +344,18 @@ public final class NativeUiExportValidator {
         public String status;
         public long layoutCount;
         public long slotCount;
+        public long rectCount;
         public long missingSurfaceCount;
         public long slotBoundsViolationCount;
+        public long rectBoundsViolationCount;
         public long backgroundBoundsViolationCount;
         public long coordinateContractViolationCount;
+        public long interactionContractViolationCount;
         public List<String> missingSurfaceSamples = new ArrayList<String>();
         public List<String> slotBoundsSamples = new ArrayList<String>();
+        public List<String> rectBoundsSamples = new ArrayList<String>();
         public List<String> backgroundBoundsSamples = new ArrayList<String>();
         public List<String> coordinateContractSamples = new ArrayList<String>();
+        public List<String> interactionContractSamples = new ArrayList<String>();
     }
 }
