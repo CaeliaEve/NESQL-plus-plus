@@ -16,6 +16,14 @@ public interface ExportModule {
         return Collections.emptyList();
     }
 
+    default List<ExportDevice> devices() {
+        return Collections.emptyList();
+    }
+
+    default List<ExportDriver> drivers() {
+        return Collections.emptyList();
+    }
+
     default void init(ExportKernelContext context) throws Exception {}
 
     default void exit(ExportKernelContext context) throws Exception {}

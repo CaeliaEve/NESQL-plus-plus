@@ -1,8 +1,19 @@
 import fs from 'node:fs';
 import assert from 'node:assert/strict';
 
-const sidecar = fs.readFileSync('src/main/java/com/github/dcysteine/nesql/exporter/local/RawExportSidecarWriter.java', 'utf8');
 const writer = fs.readFileSync('src/main/java/com/github/dcysteine/nesql/exporter/local/AngelicaRenderFactsWriter.java', 'utf8');
+const backendWriter = fs.readFileSync('src/main/java/com/github/dcysteine/nesql/exporter/local/AngelicaRenderBackendFactsWriter.java', 'utf8');
+const textureSpriteWriter = fs.readFileSync('src/main/java/com/github/dcysteine/nesql/exporter/local/AngelicaRenderTextureSpriteFactsWriter.java', 'utf8');
+const itemRendererWriter = fs.readFileSync('src/main/java/com/github/dcysteine/nesql/exporter/local/AngelicaRenderItemRendererFactsWriter.java', 'utf8');
+const framebufferCaptureWriter = fs.readFileSync('src/main/java/com/github/dcysteine/nesql/exporter/local/AngelicaFramebufferCaptureFactsWriter.java', 'utf8');
+const rendererClassificationCatalog = fs.readFileSync('src/main/java/com/github/dcysteine/nesql/exporter/local/AngelicaRendererClassificationCatalog.java', 'utf8');
+const writerSurface = [writer, backendWriter, textureSpriteWriter, itemRendererWriter, framebufferCaptureWriter, rendererClassificationCatalog].join('\n');
+const manifestBuilder = fs.readFileSync('src/main/java/com/github/dcysteine/nesql/exporter/local/RawExportManifestBuilder.java', 'utf8');
+const validationSupport = fs.readFileSync('src/main/java/com/github/dcysteine/nesql/exporter/local/RawExportValidationSupport.java', 'utf8');
+const reportAssembler = fs.readFileSync('src/main/java/com/github/dcysteine/nesql/exporter/local/RawExportReportAssembler.java', 'utf8');
+const renderFactProvider = fs.readFileSync('src/main/java/com/github/dcysteine/nesql/exporter/local/RawEntityAndRenderBackendFactStreamProvider.java', 'utf8');
+const rawCounts = fs.readFileSync('src/main/java/com/github/dcysteine/nesql/exporter/local/RawExportCounts.java', 'utf8');
+const renderFactSurface = [manifestBuilder, validationSupport, reportAssembler, renderFactProvider, rawCounts, writer].join('\n');
 const renderJob = fs.readFileSync('src/main/java/com/github/dcysteine/nesql/exporter/util/render/RenderJob.java', 'utf8');
 const renderer = fs.readFileSync('src/main/java/com/github/dcysteine/nesql/exporter/util/render/Renderer.java', 'utf8');
 const glSnapshot = fs.readFileSync('src/main/java/com/github/dcysteine/nesql/exporter/util/render/AngelicaGlStateSnapshot.java', 'utf8');
@@ -21,9 +32,9 @@ for (const required of [
   'renderFramebufferCapturesWithoutFramesSamples',
   'spritesMissingTiming',
   'unknownSpecialRenderers',
-  'new AngelicaRenderFactsWriter(entityManager, rawDir, renderAssets).write()'
+  'new AngelicaRenderFactsWriter(context.entityManager, context.rawDir, context.renderAssets).write()'
 ]) {
-  assert(sidecar.includes(required), `Raw sidecar missing ${required}`);
+  assert(renderFactSurface.includes(required), `Render fact surface missing ${required}`);
 }
 
 for (const required of [
@@ -55,7 +66,7 @@ for (const required of [
   'shaderItemsMissingCaptureSamples',
   'framebufferCapturesWithoutFramesSamples'
 ]) {
-  assert(writer.includes(required), `Angelica writer missing ${required}`);
+  assert(writerSurface.includes(required), `Angelica writer surface missing ${required}`);
 }
 
 for (const required of [
@@ -69,13 +80,13 @@ for (const required of [
   'GSON.toJsonTree(asset.timeline)',
   'GSON.toJsonTree(asset.captureContract)',
 ]) {
-  assert(writer.includes(required), `Framebuffer capture fact writer missing ${required}`);
+  assert(writerSurface.includes(required), `Framebuffer capture fact writer missing ${required}`);
 }
 
 assert(
-  writer.includes('native_sprite_metadata')
-    && writer.includes('return false;')
-    && writer.includes('isFramebufferCaptureAsset'),
+  writerSurface.includes('native_sprite_metadata')
+    && writerSurface.includes('return false;')
+    && writerSurface.includes('isFramebufferCaptureAsset'),
   'Framebuffer capture fact writer must exclude native_sprite_metadata assets from the framebuffer stream'
 );
 
@@ -92,17 +103,17 @@ for (const [rendererClass, family] of [
   ['TexturedItemRenderer', 'gtnhlib.textured-item'],
   ['ModelISBRH', 'gtnhlib.model-isbrh'],
 ]) {
-  assert(writer.toLowerCase().includes(rendererClass.toLowerCase()), `Renderer classifier missing ${rendererClass}`);
-  assert(writer.includes(family), `Renderer classifier missing ${family}`);
+  assert(writerSurface.toLowerCase().includes(rendererClass.toLowerCase()), `Renderer classifier missing ${rendererClass}`);
+  assert(writerSurface.includes(family), `Renderer classifier missing ${family}`);
 }
 
 assert(
-  writer.includes('mapRegisteredSprites') && writer.includes('Map.class.isAssignableFrom(field.getType())'),
+  writerSurface.includes('mapRegisteredSprites') && writerSurface.includes('Map.class.isAssignableFrom(field.getType())'),
   'Texture sprite export must scan TextureMap map fields when MCP names differ at runtime'
 );
 
 assert(
-  /new RendererClassification\("generic\.iitemrenderer", false, false/.test(writer),
+  /classification\(\s*"generic\.iitemrenderer",\s*false,\s*false/.test(writerSurface),
   'Generic IItemRenderer must not force massive framebuffer capture without a known native animation family'
 );
 
@@ -114,7 +125,7 @@ for (const required of [
   'durationTicks',
   'durationMs',
 ]) {
-  assert(writer.includes(required), `Texture sprite timeline export missing ${required}`);
+  assert(writerSurface.includes(required), `Texture sprite timeline export missing ${required}`);
 }
 
 assert(

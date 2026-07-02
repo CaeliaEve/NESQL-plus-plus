@@ -17,6 +17,10 @@ const commandDispatcher = readSource('src/main/java/com/github/dcysteine/nesql/e
 const integrity = readSource('src/main/java/com/github/dcysteine/nesql/exporter/main/ExportIntegrityManifestWriter.java');
 const templateWriter = readSource('src/main/java/com/github/dcysteine/nesql/exporter/local/RawExportUiTemplateCatalogWriter.java');
 const templateLayoutSpecs = readSource('src/main/java/com/github/dcysteine/nesql/exporter/plugin/nei/metadata/NeiUiTemplateLayoutSpecs.java');
+const rawManifestBuilder = readSource('src/main/java/com/github/dcysteine/nesql/exporter/local/RawExportManifestBuilder.java');
+const rawNeiFactWriter = readSource('src/main/java/com/github/dcysteine/nesql/exporter/local/RawExportNeiFactWriter.java');
+const rawRepositoryFactStreamer = readSource('src/main/java/com/github/dcysteine/nesql/exporter/local/RawExportRepositoryFactStreamer.java');
+const rawRenderAssetCatalogWriter = readSource('src/main/java/com/github/dcysteine/nesql/exporter/local/RawExportRenderAssetCatalogWriter.java');
 
 test('export stages expose stable incremental families', () => {
   for (const family of [
@@ -53,32 +57,31 @@ test('export stages expose stable incremental families', () => {
 });
 
 test('native NEI handler layouts export GT dynamic primitives and background regions at the source', () => {
-  const sidecar = readSource('src/main/java/com/github/dcysteine/nesql/exporter/local/RawExportSidecarWriter.java');
   assert.equal(templateLayoutSpecs.includes('defaultProgressBarsJson'), true);
   assert.equal(templateLayoutSpecs.includes('gtnh-basic-ui-properties-default'), true);
   assert.equal(templateLayoutSpecs.includes('"gt-progress"'), true);
-  assert.equal(sidecar.includes('layout.add("dynamicPrimitives"'), true);
-  assert.equal(sidecar.includes('layout.add("progressBars"'), true);
-  assert.equal(sidecar.includes('layout.add("fluidBars"'), true);
-  assert.equal(sidecar.includes('layout.add("energyBars"'), true);
-  assert.equal(sidecar.includes('layout.add("hotspots"'), true);
-  assert.equal(sidecar.includes('layout.add("viewports"'), true);
-  assert.equal(sidecar.includes('layout.addProperty("canonicalMachineFamily", family)'), true);
-  assert.equal(sidecar.includes('addImageRegion(layout, source)'), true);
-  assert.equal(sidecar.includes('handler.addProperty("imageResource", imageResource)'), true);
-  assert.equal(sidecar.includes('GT_NEI_BACKGROUND_ASSET_REF'), true);
-  assert.equal(sidecar.includes('GT_NEI_BACKGROUND_RESOURCE'), true);
-  assert.equal(sidecar.includes('materializeGtNeiBackgroundAsset(rawDir)'), true);
-  assert.equal(sidecar.includes('background.addProperty("kind", "gt-modular-ui")'), true);
-  assert.equal(sidecar.includes('background.addProperty("scaling", "nine-slice")'), true);
-  assert.equal(sidecar.includes('background.addProperty("captureRequired", false)'), true);
-  assert.equal(sidecar.includes('GTNEIDefaultHandler.drawUI(ModularWindow.getBackground)'), true);
-  assert.equal(sidecar.includes('String imageResource = trimToEmpty(readString(source, "imageResource", null));'), true);
-  assert.equal(sidecar.includes('String imageResource = firstNonBlank(readString(source, "imageResource", null), "");'), false);
-  assert.equal(sidecar.includes('throw new IOException("Failed to materialize required GT NEI ModularUI background asset: " + location, e)'), true);
-  assert.equal(sidecar.includes('Logger.MOD.warn("Could not materialize GT NEI ModularUI background asset'), false);
-  assert.equal(sidecar.includes('StandardCopyOption.ATOMIC_MOVE'), true);
-  assert.equal(sidecar.includes('manifest.files.put("uiBackgrounds", "assets/ui-backgrounds")'), true);
+  assert.equal(rawNeiFactWriter.includes('layout.add("dynamicPrimitives"'), true);
+  assert.equal(rawNeiFactWriter.includes('layout.add("progressBars"'), true);
+  assert.equal(rawNeiFactWriter.includes('layout.add("fluidBars"'), true);
+  assert.equal(rawNeiFactWriter.includes('layout.add("energyBars"'), true);
+  assert.equal(rawNeiFactWriter.includes('layout.add("hotspots"'), true);
+  assert.equal(rawNeiFactWriter.includes('layout.add("viewports"'), true);
+  assert.equal(rawNeiFactWriter.includes('layout.addProperty("canonicalMachineFamily", family)'), true);
+  assert.equal(rawNeiFactWriter.includes('addImageRegion(layout, source)'), true);
+  assert.equal(rawNeiFactWriter.includes('handler.addProperty("imageResource", imageResource)'), true);
+  assert.equal(rawNeiFactWriter.includes('GT_NEI_BACKGROUND_ASSET_REF'), true);
+  assert.equal(rawNeiFactWriter.includes('GT_NEI_BACKGROUND_RESOURCE'), true);
+  assert.equal(rawNeiFactWriter.includes('materializeGtNeiBackgroundAsset(rawDir)'), true);
+  assert.equal(rawNeiFactWriter.includes('background.addProperty("kind", "gt-modular-ui")'), true);
+  assert.equal(rawNeiFactWriter.includes('background.addProperty("scaling", "nine-slice")'), true);
+  assert.equal(rawNeiFactWriter.includes('background.addProperty("captureRequired", false)'), true);
+  assert.equal(rawNeiFactWriter.includes('GTNEIDefaultHandler.drawUI(ModularWindow.getBackground)'), true);
+  assert.equal(rawNeiFactWriter.includes('String imageResource = trimToEmpty(readString(source, "imageResource", null));'), true);
+  assert.equal(rawNeiFactWriter.includes('String imageResource = firstNonBlank(readString(source, "imageResource", null), "");'), false);
+  assert.equal(rawNeiFactWriter.includes('throw new IOException("Failed to materialize required GT NEI ModularUI background asset: " + location, e)'), true);
+  assert.equal(rawNeiFactWriter.includes('Logger.MOD.warn("Could not materialize GT NEI ModularUI background asset'), false);
+  assert.equal(rawNeiFactWriter.includes('StandardCopyOption.ATOMIC_MOVE'), true);
+  assert.equal(rawManifestBuilder.includes('manifest.files.put("uiBackgrounds", "assets/ui-backgrounds")'), true);
   assert.equal(templateWriter.includes('template.nativeBackground.assetRef'), true);
 });
 
@@ -176,13 +179,12 @@ test('block face export skips known invalid metadata before noisy mod icon looku
 });
 
 test('special facts keep domain aliases needed by runtime coverage gates', () => {
-  const sidecar = readSource('src/main/java/com/github/dcysteine/nesql/exporter/local/RawExportSidecarWriter.java');
   const nei = readSource('src/main/java/com/github/dcysteine/nesql/exporter/plugin/nei/NeiRecipeExportProcessor.java');
-  assert.equal(sidecar.includes('copyFirstNumber(facts, "altarTier"'), true);
-  assert.equal(sidecar.includes('copyElement(facts, "entityId", recipe, "metadata.mobName")'), true);
-  assert.equal(sidecar.includes('copyElement(facts, "species", recipe, "metadata.beeSpecies")'), true);
-  assert.equal(sidecar.includes('copyElement(facts, "temperature", recipe, "metadata.temperature")'), true);
-  assert.equal(sidecar.includes('copyElement(facts, "humidity", recipe, "metadata.humidity")'), true);
+  assert.equal(rawRepositoryFactStreamer.includes('copyFirstNumber(facts, "altarTier"'), true);
+  assert.equal(rawRepositoryFactStreamer.includes('copyElement(facts, "entityId", recipe, "metadata.mobName")'), true);
+  assert.equal(rawRepositoryFactStreamer.includes('copyElement(facts, "species", recipe, "metadata.beeSpecies")'), true);
+  assert.equal(rawRepositoryFactStreamer.includes('copyElement(facts, "temperature", recipe, "metadata.temperature")'), true);
+  assert.equal(rawRepositoryFactStreamer.includes('copyElement(facts, "humidity", recipe, "metadata.humidity")'), true);
   assert.equal(nei.includes('copyFirstExistingForestryFact(metadata, recipe, "allele"'), true);
   assert.equal(nei.includes('extractForestryEnvironmentFromRequirements(metadata, requirements)'), true);
 });
@@ -278,16 +280,15 @@ test('canonical output is opt-in debug staging after raw-export migration', () =
   const selection = readSource('src/main/java/com/github/dcysteine/nesql/exporter/main/ExportSelection.java');
   const runner = readSource('src/main/java/com/github/dcysteine/nesql/exporter/main/ExportStageRunner.java');
   const support = readSource('src/main/java/com/github/dcysteine/nesql/exporter/main/ExportWriterSupport.java');
-  const raw = readSource('src/main/java/com/github/dcysteine/nesql/exporter/local/RawExportSidecarWriter.java');
   assert.equal(selection.includes('private boolean writeCanonicalSnapshot = false;') || selection.includes('private final boolean writeCanonicalSnapshot;'), true);
   assert.equal(selection.includes('&& writeCanonicalSnapshot\n                && writeMultiblocks'), false);
   assert.equal(runner.includes('deleteCanonicalStagingDirectory'), true);
   assert.equal(runner.includes('deleteCanonicalStagingDirectory'), true);
   assert.equal(support.includes('Removed legacy canonical staging output; raw-export is authoritative.'), true);
-  assert.equal(raw.includes('export_manifest.json'), true);
-  assert.equal(raw.includes('objectAt(item, "staticAtlas")'), true);
-  assert.equal(raw.includes('objectAt(item, "animatedAtlas")'), true);
-  assert.equal(raw.includes('element == null || !element.isJsonObject()'), true);
+  assert.equal(integrity.includes('export_manifest.json'), true);
+  assert.equal(rawRenderAssetCatalogWriter.includes('objectAt(item, "staticAtlas")'), true);
+  assert.equal(rawRenderAssetCatalogWriter.includes('objectAt(item, "animatedAtlas")'), true);
+  assert.equal(rawRenderAssetCatalogWriter.includes('element == null || !element.isJsonObject()'), true);
 });
 
 test('export progress noise is curated into English preparation summaries', () => {

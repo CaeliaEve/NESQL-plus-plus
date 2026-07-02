@@ -110,32 +110,36 @@ test('semantic stream writer validates one identity row per raw item', () => {
 });
 
 test('raw export health gates include semantic identity readiness', () => {
-  const sidecar = readSource('src/main/java/com/github/dcysteine/nesql/exporter/local/RawExportSidecarWriter.java');
+  const validationSupport = readSource('src/main/java/com/github/dcysteine/nesql/exporter/local/RawExportValidationSupport.java');
+  const reportAssembler = readSource('src/main/java/com/github/dcysteine/nesql/exporter/local/RawExportReportAssembler.java');
+  const healthSurface = [validationSupport, reportAssembler].join('\n');
 
-  assert.equal(sidecar.includes('"semantic-identity"'), true);
-  assert.equal(sidecar.includes('semanticIdentityMapRows'), true);
-  assert.equal(sidecar.includes('semanticUnclassifiedTaggedItems'), true);
+  assert.equal(healthSurface.includes('"semantic-identity"'), true);
+  assert.equal(healthSurface.includes('semanticIdentityMapRows'), true);
+  assert.equal(healthSurface.includes('semanticUnclassifiedTaggedItems'), true);
 });
 
 test('semantic rule pack is versioned by runtime modpack metadata', () => {
   const rulePack = readSource('src/main/java/com/github/dcysteine/nesql/exporter/semantic/SemanticRulePack.java');
-  const sidecar = readSource('src/main/java/com/github/dcysteine/nesql/exporter/local/RawExportSidecarWriter.java');
+  const reportPipeline = readSource('src/main/java/com/github/dcysteine/nesql/exporter/local/RawExportSidecarReportPipeline.java');
+  const runtimeBuilder = readSource('src/main/java/com/github/dcysteine/nesql/exporter/local/RawExportSemanticRuntimeBuilder.java');
+  const manifestBuilder = readSource('src/main/java/com/github/dcysteine/nesql/exporter/local/RawExportManifestBuilder.java');
   const validator = readSource('scripts/validate-semantic-rule-pack.mjs');
 
   assert.equal(rulePack.includes('RuntimeMetadata'), true);
   assert.equal(rulePack.includes('gtnhFingerprint'), true);
   assert.equal(rulePack.includes('validateAgainstRegistry()'), true);
-  assert.equal(sidecar.includes('buildSemanticRuleRuntimeMetadata()'), true);
-  assert.equal(sidecar.includes('Loader.instance().getIndexedModList()'), true);
-  assert.equal(sidecar.includes('SemanticRulePack.writeBundledCopy(new File(rawDir, "facts/semantic/rule-pack.json"), semanticRuleRuntime)'), true);
-  assert.equal(sidecar.includes('manifest.semanticRuleRuntime = report.semanticRuleRuntime;'), true);
+  assert.equal(reportPipeline.includes('new RawExportSemanticRuntimeBuilder(exportContext).build()'), true);
+  assert.equal(runtimeBuilder.includes('Loader.instance().getIndexedModList()'), true);
+  assert.equal(reportPipeline.includes('SemanticRulePack.writeBundledCopy(new File(rawDir, "facts/semantic/rule-pack.json"), semanticRuleRuntime)'), true);
+  assert.equal(manifestBuilder.includes('manifest.semanticRuleRuntime = report.semanticRuleRuntime;'), true);
   assert.equal(validator.includes('sourceHints'), true);
   assert.equal(validator.includes('plugin family ids missing from rule pack'), true);
 });
 
 test('GT machine catalyst preference rules stay data-driven', () => {
   const rules = JSON.parse(readSource('src/main/resources/gtnh-semantic-rules/machine-catalyst-rules.json').replace(/^\uFEFF/, ''));
-  const sidecar = readSource('src/main/java/com/github/dcysteine/nesql/exporter/local/RawExportSidecarWriter.java');
+  const neiFactWriter = readSource('src/main/java/com/github/dcysteine/nesql/exporter/local/RawExportNeiFactWriter.java');
 
   assert.equal(rules.schemaVersion, 'nesqlpp/gtnh-machine-catalyst-rules/alpha1');
   for (const [handler, preferred] of Object.entries({
@@ -146,9 +150,9 @@ test('GT machine catalyst preference rules stay data-driven', () => {
   })) {
     assert.equal(rules.exactHandlers[handler], preferred, `missing preferred catalyst for ${handler}`);
   }
-  assert.equal(sidecar.includes('MACHINE_CATALYST_RULES'), true);
-  assert.equal(sidecar.includes('gtnh-semantic-rules/machine-catalyst-rules.json'), true);
-  assert.equal(sidecar.includes('new String[] { handlerClass, itemName, family }'), true);
+  assert.equal(neiFactWriter.includes('MACHINE_CATALYST_RULES'), true);
+  assert.equal(neiFactWriter.includes('gtnh-semantic-rules/machine-catalyst-rules.json'), true);
+  assert.equal(neiFactWriter.includes('new String[] { handlerClass, itemName, family }'), true);
 });
 test('quick semantic check refreshes raw export readiness reports', () => {
   const quickCheck = readSource('src/main/java/com/github/dcysteine/nesql/exporter/main/SemanticIdentityQuickCheckRunner.java');

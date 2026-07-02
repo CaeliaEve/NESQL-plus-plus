@@ -19,6 +19,18 @@ const moduleInterface = readFileSync(
   new URL('./src/main/java/com/github/dcysteine/nesql/elysium/kernel/ExportModule.java', import.meta.url),
   'utf8',
 );
+const exportDevice = readFileSync(
+  new URL('./src/main/java/com/github/dcysteine/nesql/elysium/kernel/ExportDevice.java', import.meta.url),
+  'utf8',
+);
+const exportDriver = readFileSync(
+  new URL('./src/main/java/com/github/dcysteine/nesql/elysium/kernel/ExportDriver.java', import.meta.url),
+  'utf8',
+);
+const driverProbeResult = readFileSync(
+  new URL('./src/main/java/com/github/dcysteine/nesql/elysium/kernel/DriverProbeResult.java', import.meta.url),
+  'utf8',
+);
 const providerInterface = readFileSync(
   new URL('./src/main/java/com/github/dcysteine/nesql/exporter/main/ExportStageActionProvider.java', import.meta.url),
   'utf8',
@@ -89,6 +101,14 @@ test('export module catalog owns module ordering, identity validation, and trace
   assert.match(catalog, /public final boolean stageActionRegistrar/);
   assert.match(catalog, /public final List<String> capabilities/);
   assert.match(catalog, /public final List<String> stages/);
+  assert.match(catalog, /public List<ExportDevice> devices\(\)/);
+  assert.match(catalog, /public List<ExportDriver> drivers\(\)/);
+  assert.match(catalog, /validateDevices\(this\.devices\)/);
+  assert.match(catalog, /validateDrivers\(this\.drivers\)/);
+  assert.match(catalog, /Duplicate export device id/);
+  assert.match(catalog, /Duplicate export driver id/);
+  assert.match(catalog, /public final List<DeviceDescriptor> devices/);
+  assert.match(catalog, /public final List<DriverDescriptor> drivers/);
   assert.match(runner, /ExportModuleCatalog moduleCatalog = ExportStageModules\.defaultCatalog\(\)/);
   assert.match(runner, /new ExportKernel\(moduleCatalog\)/);
   assert.doesNotMatch(runner, /List<ExportModule> modules/);
@@ -98,6 +118,8 @@ test('export module catalog owns module ordering, identity validation, and trace
 test('stage action modules expose declared stages and capabilities through the module manifest', () => {
   assert.match(moduleInterface, /default List<String> capabilities\(\)/);
   assert.match(moduleInterface, /default List<String> stageIds\(\)/);
+  assert.match(moduleInterface, /default List<ExportDevice> devices\(\)/);
+  assert.match(moduleInterface, /default List<ExportDriver> drivers\(\)/);
   assert.match(providerInterface, /List<ExportStage> stages\(\)/);
   assert.match(providerInterface, /List<String> capabilities\(\)/);
   assert.match(providerInterface, /static List<ExportStage> stageList/);
@@ -156,4 +178,36 @@ test('stage action modules expose declared stages and capabilities through the m
   assert.match(providerSources.RawFactStageActionProvider, /export\.raw\.item-facts/);
   assert.match(providerSources.RenderStageActionProvider, /export\.render\.atlas-packs/);
   assert.match(providerSources.LifecycleStageActionProvider, /export\.lifecycle\.transaction/);
+});
+
+test('export kernel owns Linux-style bus device driver probe and bind lifecycle', () => {
+  assert.match(exportDevice, /public final class ExportDevice/);
+  assert.match(exportDevice, /public static ExportDevice required/);
+  assert.match(exportDevice, /String busId\(\)/);
+  assert.match(exportDevice, /boolean required\(\)/);
+  assert.match(exportDriver, /public interface ExportDriver/);
+  assert.match(exportDriver, /DriverProbeResult probe\(ExportDevice device, ExportKernelContext context\)/);
+  assert.match(exportDriver, /default void bind\(ExportDevice device, ExportKernelContext context\) throws Exception/);
+  assert.match(driverProbeResult, /enum Status/);
+  assert.match(driverProbeResult, /SUPPORTED/);
+  assert.match(driverProbeResult, /UNSUPPORTED/);
+  assert.match(driverProbeResult, /DEFERRED/);
+  assert.match(kernel, /bindDrivers\(context\)/);
+  assert.match(kernel, /for \(ExportDevice device : catalog\.devices\(\)\)/);
+  assert.match(kernel, /for \(ExportDriver driver : catalog\.drivers\(\)\)/);
+  assert.match(kernel, /driver\.probe\(device, context\)/);
+  assert.match(kernel, /export\.driver\.probe/);
+  assert.match(kernel, /driver\.bind\(device, context\)/);
+  assert.match(kernel, /export\.driver\.bind/);
+  assert.match(kernel, /Required export device has no bound driver/);
+
+  assert.match(modules, /ExportDevice\.required/);
+  assert.match(modules, /STAGE_ACTION_BUS_ID/);
+  assert.match(modules, /STAGE_ACTION_DEVICE_ID/);
+  assert.match(actionModule, /implements ExportDriver/);
+  assert.match(actionModule, /StageActionProviderDriver/);
+  assert.match(actionModule, /public List<ExportDriver> drivers\(\)/);
+  assert.match(actionModule, /DriverProbeResult\.supported/);
+  assert.match(actionModule, /DriverProbeResult\.unsupported/);
+  assert.match(actionModule, /provider\.stages\(\)\.isEmpty\(\)/);
 });

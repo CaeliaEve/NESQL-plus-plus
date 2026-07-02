@@ -29,6 +29,40 @@ public final class ExportKernel {
             module.init(context);
             context.trace("export.module.init", module.id(), "ok", System.currentTimeMillis() - startedAt);
         }
+        bindDrivers(context);
+    }
+
+    private void bindDrivers(ExportKernelContext context) throws Exception {
+        for (ExportDevice device : catalog.devices()) {
+            boolean bound = false;
+            for (ExportDriver driver : catalog.drivers()) {
+                if (!device.busId().equals(driver.busId())) {
+                    continue;
+                }
+                long startedAt = System.currentTimeMillis();
+                DriverProbeResult probe = driver.probe(device, context);
+                if (probe == null) {
+                    throw new IllegalStateException("Export driver returned null probe result: " + driver.id());
+                }
+                String subject = driver.id() + "->" + device.busId() + ":" + device.id();
+                context.trace(
+                        "export.driver.probe",
+                        subject,
+                        probe.status().name().toLowerCase(),
+                        System.currentTimeMillis() - startedAt);
+                if (!probe.supported()) {
+                    continue;
+                }
+                long bindStartedAt = System.currentTimeMillis();
+                driver.bind(device, context);
+                context.trace("export.driver.bind", subject, "ok", System.currentTimeMillis() - bindStartedAt);
+                bound = true;
+            }
+            if (device.required() && !bound) {
+                throw new IllegalStateException(
+                        "Required export device has no bound driver: " + device.busId() + ":" + device.id());
+            }
+        }
     }
 
     public void exit(ExportKernelContext context) throws Exception {
