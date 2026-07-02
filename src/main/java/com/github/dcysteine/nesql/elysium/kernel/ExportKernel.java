@@ -1,11 +1,5 @@
 package com.github.dcysteine.nesql.elysium.kernel;
 
-import com.google.gson.GsonBuilder;
-
-import java.io.File;
-import java.io.FileOutputStream;
-import java.io.OutputStreamWriter;
-import java.nio.charset.StandardCharsets;
 import java.util.EnumMap;
 import java.util.LinkedHashSet;
 import java.util.List;
@@ -142,35 +136,4 @@ public final class ExportKernel {
         }
     }
 
-    public void writeTrace(ExportKernelContext context) {
-        try {
-            File validationDir = new File(context.exportContext().paths.repositoryDirectory, "raw-export" + File.separator + "validation");
-            if (!validationDir.exists()) {
-                validationDir.mkdirs();
-            }
-            File traceFile = new File(validationDir, "export_kernel_trace.json");
-            TraceReport report = new TraceReport();
-            report.schemaVersion = "nesqlpp/export-kernel-trace/v1";
-            report.profile = context.exportContext().profile.profileId;
-            report.selection = context.exportContext().selection.describe();
-            report.tracepoints = ExportTracepoint.all();
-            report.modules = catalog.descriptors();
-            report.events = context.traceEvents();
-            try (FileOutputStream fos = new FileOutputStream(traceFile);
-                 OutputStreamWriter writer = new OutputStreamWriter(fos, StandardCharsets.UTF_8)) {
-                new GsonBuilder().setPrettyPrinting().create().toJson(report, writer);
-            }
-        } catch (Exception ignored) {
-            // Trace output is diagnostic-only and must not mask the export result.
-        }
-    }
-
-    private static final class TraceReport {
-        String schemaVersion;
-        String profile;
-        String selection;
-        List<String> tracepoints;
-        List<ExportModuleCatalog.ModuleDescriptor> modules;
-        List<ExportTraceEvent> events;
-    }
 }

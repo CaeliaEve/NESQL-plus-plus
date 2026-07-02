@@ -75,6 +75,8 @@ final class ExportIntegrityManifestWriter {
         addFile(artifacts, repositoryDirectory, new File(rawDir, "validation/export_manifest.json"), "manifest");
         addFile(artifacts, repositoryDirectory, new File(rawDir, "validation/stage_checksums.json"), "checksums");
         addFile(artifacts, repositoryDirectory, new File(rawDir, "validation/export_stage_timings.json"), "timings");
+        addFile(artifacts, repositoryDirectory, new File(rawDir, "control/index.json"), "control");
+        addFile(artifacts, repositoryDirectory, new File(rawDir, "debug/trace/latest.json"), "debug-trace");
         addFile(artifacts, repositoryDirectory, new File(rawDir, "facts/recipes/index.json"), "recipes");
         addFile(artifacts, repositoryDirectory, new File(rawDir, "assets/textures/browser_atlas_index.json"), "browser-atlas");
         addFile(artifacts, repositoryDirectory, new File(rawDir, "facts/render/backend.json"), "render-backend");
@@ -86,6 +88,8 @@ final class ExportIntegrityManifestWriter {
         addDirectorySummary(artifacts, repositoryDirectory, new File(rawDir, "assets"), "raw-assets");
         addDirectorySummary(artifacts, repositoryDirectory, new File(rawDir, "models"), "raw-models");
         addDirectorySummary(artifacts, repositoryDirectory, new File(rawDir, "special"), "raw-special");
+        addDirectorySummary(artifacts, repositoryDirectory, new File(rawDir, "control"), "raw-control");
+        addDirectorySummary(artifacts, repositoryDirectory, new File(rawDir, "debug"), "raw-debug");
         return artifacts;
     }
 

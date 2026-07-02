@@ -47,6 +47,22 @@ const actionContext = readFileSync(
   new URL('./src/main/java/com/github/dcysteine/nesql/exporter/main/ExportStageActionContext.java', import.meta.url),
   'utf8',
 );
+const controlPlaneWriter = readFileSync(
+  new URL('./src/main/java/com/github/dcysteine/nesql/exporter/main/ExportControlPlaneWriter.java', import.meta.url),
+  'utf8',
+);
+const debugPlaneWriter = readFileSync(
+  new URL('./src/main/java/com/github/dcysteine/nesql/exporter/main/ExportDebugPlaneWriter.java', import.meta.url),
+  'utf8',
+);
+const rawManifestBuilder = readFileSync(
+  new URL('./src/main/java/com/github/dcysteine/nesql/exporter/local/RawExportManifestBuilder.java', import.meta.url),
+  'utf8',
+);
+const integrityManifestWriter = readFileSync(
+  new URL('./src/main/java/com/github/dcysteine/nesql/exporter/main/ExportIntegrityManifestWriter.java', import.meta.url),
+  'utf8',
+);
 const providerInterface = readFileSync(
   new URL('./src/main/java/com/github/dcysteine/nesql/exporter/main/ExportStageActionProvider.java', import.meta.url),
   'utf8',
@@ -96,7 +112,7 @@ test('export kernel directly dispatches stage registrars', () => {
   assert.match(kernel, /module\.stageActionRegistrar\(\)/);
   assert.match(kernel, /ExportModuleCatalog catalog/);
   assert.match(kernel, /this\.modules = catalog\.modules\(\)/);
-  assert.match(kernel, /report\.modules = catalog\.descriptors\(\)/);
+  assert.match(debugPlaneWriter, /report\.modules = catalog\.descriptors\(\)/);
   assert.match(kernel, /validateDeclaredStageActions/);
   assert.match(kernel, /registered undeclared export stage/);
   assert.match(kernel, /declared export stage without registering action/);
@@ -262,9 +278,47 @@ test('export tracepoints are declared through a stable kernel catalog', () => {
     assert.match(tracepointCatalog, new RegExp(constant));
   }
   assert.match(tracepointCatalog, /public static List<String> all\(\)/);
-  assert.match(kernel, /report\.tracepoints = ExportTracepoint\.all\(\)/);
+  assert.match(debugPlaneWriter, /report\.tracepoints = ExportTracepoint\.all\(\)/);
   assert.match(runner, /ExportTracepoint\.STAGE_RUN/);
   assert.doesNotMatch(kernel, /trace\("export\./);
   assert.doesNotMatch(runner, /trace\("export\./);
   assert.doesNotMatch(kernelContext, /trace\("export\./);
+});
+
+test('export control and debug planes have explicit filesystem ownership', () => {
+  assert.match(controlPlaneWriter, /Writes stable ControlFS-style export descriptors/);
+  assert.match(controlPlaneWriter, /raw-export" \+ File\.separator \+ "control"/);
+  assert.match(controlPlaneWriter, /index\.json/);
+  assert.match(controlPlaneWriter, /abi\.json/);
+  assert.match(controlPlaneWriter, /capabilities\.json/);
+  assert.match(controlPlaneWriter, /modules\.json/);
+  assert.match(controlPlaneWriter, /drivers\.json/);
+  assert.match(controlPlaneWriter, /health\.json/);
+  assert.match(controlPlaneWriter, /version\.json/);
+  assert.match(controlPlaneWriter, /stability = "stable"/);
+  assert.match(controlPlaneWriter, /catalog\.descriptors\(\)/);
+  assert.match(controlPlaneWriter, /catalog\.drivers\(\)/);
+
+  assert.match(debugPlaneWriter, /Writes DebugFS-style export diagnostics/);
+  assert.match(debugPlaneWriter, /raw-export" \+ File\.separator \+ "debug"/);
+  assert.match(debugPlaneWriter, /export\/timing\.json/);
+  assert.match(debugPlaneWriter, /export\/checkpoint\.json/);
+  assert.match(debugPlaneWriter, /trace\/latest\.json/);
+  assert.match(debugPlaneWriter, /export_stage_timings\.json/);
+  assert.match(debugPlaneWriter, /stage_checkpoint\.json/);
+  assert.match(debugPlaneWriter, /export_kernel_trace\.json/);
+
+  assert.match(runner, /ExportControlPlaneWriter\.write\(exportContext, moduleCatalog\)/);
+  assert.match(runner, /ExportDebugPlaneWriter\.writeStageTimingReport/);
+  assert.match(runner, /ExportDebugPlaneWriter\.writeStageCheckpointReport/);
+  assert.match(runner, /ExportDebugPlaneWriter\.writeKernelTrace/);
+  assert.doesNotMatch(runner, /new GsonBuilder\(\)/);
+  assert.doesNotMatch(runner, /new FileOutputStream/);
+  assert.doesNotMatch(kernel, /new FileOutputStream/);
+  assert.doesNotMatch(kernel, /writeTrace/);
+
+  assert.match(rawManifestBuilder, /controlIndex/);
+  assert.match(rawManifestBuilder, /debugTraceLatest/);
+  assert.match(integrityManifestWriter, /control\/index\.json/);
+  assert.match(integrityManifestWriter, /debug\/trace\/latest\.json/);
 });
