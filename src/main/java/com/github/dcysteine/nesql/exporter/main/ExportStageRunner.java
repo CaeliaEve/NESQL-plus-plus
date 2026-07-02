@@ -3,6 +3,7 @@ package com.github.dcysteine.nesql.exporter.main;
 import com.github.dcysteine.nesql.elysium.kernel.ExportKernel;
 import com.github.dcysteine.nesql.elysium.kernel.ExportKernelContext;
 import com.github.dcysteine.nesql.elysium.kernel.ExportModuleCatalog;
+import com.github.dcysteine.nesql.elysium.kernel.ExportTracepoint;
 import com.google.gson.GsonBuilder;
 import net.minecraft.util.EnumChatFormatting;
 
@@ -48,7 +49,7 @@ final class ExportStageRunner {
                 long stageStartedAt = System.currentTimeMillis();
                 action.run();
                 long stageElapsedMs = System.currentTimeMillis() - stageStartedAt;
-                kernelContext.trace("export.stage.run", stage.name(), "ok", stageElapsedMs);
+                kernelContext.trace(ExportTracepoint.STAGE_RUN, stage.name(), "ok", stageElapsedMs);
                 timings.add(new StageTiming(index, totalStages, stage, stageElapsedMs));
                 writeCheckpointReport(
                         exportContext,
@@ -90,7 +91,7 @@ final class ExportStageRunner {
             return;
         } catch (Exception e) {
             if (stageState.currentStage != null) {
-                kernelContext.trace("export.stage.run", stageState.currentStage.name(), "failed", 0L);
+                kernelContext.trace(ExportTracepoint.STAGE_RUN, stageState.currentStage.name(), "failed", 0L);
             }
             File reportFile =
                     ExportDiagnosticsSupport.writeFailureReport(

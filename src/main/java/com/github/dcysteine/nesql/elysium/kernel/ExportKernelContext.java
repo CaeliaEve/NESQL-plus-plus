@@ -35,7 +35,7 @@ public final class ExportKernelContext {
         resources.close(new ExportResourceManager.ReleaseObserver() {
             @Override
             public void released(String id, String status, long elapsedMs) {
-                trace("export.resource.release", id, status, elapsedMs);
+                trace(ExportTracepoint.RESOURCE_RELEASE, id, status, elapsedMs);
             }
         });
     }

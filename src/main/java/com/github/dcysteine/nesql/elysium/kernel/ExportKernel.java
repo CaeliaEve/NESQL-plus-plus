@@ -27,7 +27,7 @@ public final class ExportKernel {
         for (ExportModule module : modules) {
             long startedAt = System.currentTimeMillis();
             module.init(context);
-            context.trace("export.module.init", module.id(), "ok", System.currentTimeMillis() - startedAt);
+            context.trace(ExportTracepoint.MODULE_INIT, module.id(), "ok", System.currentTimeMillis() - startedAt);
         }
         bindDrivers(context);
     }
@@ -46,7 +46,7 @@ public final class ExportKernel {
                 }
                 String subject = driver.id() + "->" + device.busId() + ":" + device.id();
                 context.trace(
-                        "export.driver.probe",
+                        ExportTracepoint.DRIVER_PROBE,
                         subject,
                         probe.status().name().toLowerCase(),
                         System.currentTimeMillis() - startedAt);
@@ -55,7 +55,7 @@ public final class ExportKernel {
                 }
                 long bindStartedAt = System.currentTimeMillis();
                 driver.bind(device, context);
-                context.trace("export.driver.bind", subject, "ok", System.currentTimeMillis() - bindStartedAt);
+                context.trace(ExportTracepoint.DRIVER_BIND, subject, "ok", System.currentTimeMillis() - bindStartedAt);
                 bound = true;
             }
             if (device.required() && !bound) {
@@ -72,9 +72,9 @@ public final class ExportKernel {
             long startedAt = System.currentTimeMillis();
             try {
                 module.exit(context);
-                context.trace("export.module.exit", module.id(), "ok", System.currentTimeMillis() - startedAt);
+                context.trace(ExportTracepoint.MODULE_EXIT, module.id(), "ok", System.currentTimeMillis() - startedAt);
             } catch (Exception e) {
-                context.trace("export.module.exit", module.id(), "failed", System.currentTimeMillis() - startedAt);
+                context.trace(ExportTracepoint.MODULE_EXIT, module.id(), "failed", System.currentTimeMillis() - startedAt);
                 if (failure == null) {
                     failure = e;
                 } else {
@@ -153,6 +153,7 @@ public final class ExportKernel {
             report.schemaVersion = "nesqlpp/export-kernel-trace/v1";
             report.profile = context.exportContext().profile.profileId;
             report.selection = context.exportContext().selection.describe();
+            report.tracepoints = ExportTracepoint.all();
             report.modules = catalog.descriptors();
             report.events = context.traceEvents();
             try (FileOutputStream fos = new FileOutputStream(traceFile);
@@ -168,6 +169,7 @@ public final class ExportKernel {
         String schemaVersion;
         String profile;
         String selection;
+        List<String> tracepoints;
         List<ExportModuleCatalog.ModuleDescriptor> modules;
         List<ExportTraceEvent> events;
     }

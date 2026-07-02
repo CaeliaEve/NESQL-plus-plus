@@ -31,6 +31,10 @@ const driverProbeResult = readFileSync(
   new URL('./src/main/java/com/github/dcysteine/nesql/elysium/kernel/DriverProbeResult.java', import.meta.url),
   'utf8',
 );
+const tracepointCatalog = readFileSync(
+  new URL('./src/main/java/com/github/dcysteine/nesql/elysium/kernel/ExportTracepoint.java', import.meta.url),
+  'utf8',
+);
 const resourceManager = readFileSync(
   new URL('./src/main/java/com/github/dcysteine/nesql/elysium/kernel/ExportResourceManager.java', import.meta.url),
   'utf8',
@@ -208,9 +212,9 @@ test('export kernel owns Linux-style bus device driver probe and bind lifecycle'
   assert.match(kernel, /for \(ExportDevice device : catalog\.devices\(\)\)/);
   assert.match(kernel, /for \(ExportDriver driver : catalog\.drivers\(\)\)/);
   assert.match(kernel, /driver\.probe\(device, context\)/);
-  assert.match(kernel, /export\.driver\.probe/);
+  assert.match(kernel, /ExportTracepoint\.DRIVER_PROBE/);
   assert.match(kernel, /driver\.bind\(device, context\)/);
-  assert.match(kernel, /export\.driver\.bind/);
+  assert.match(kernel, /ExportTracepoint\.DRIVER_BIND/);
   assert.match(kernel, /Required export device has no bound driver/);
 
   assert.match(modules, /ExportDevice\.required/);
@@ -230,7 +234,7 @@ test('export lifecycle resources are owned by the kernel managed-resource stack'
   assert.match(resourceManager, /while \(!resources\.isEmpty\(\)\)/);
   assert.match(resourceManager, /public interface ReleaseObserver/);
   assert.match(kernelContext, /resources\.close\(new ExportResourceManager\.ReleaseObserver/);
-  assert.match(kernelContext, /export\.resource\.release/);
+  assert.match(kernelContext, /ExportTracepoint\.RESOURCE_RELEASE/);
   assert.match(actionContext, /final ExportKernelContext kernelContext/);
   assert.match(runner, /new ExportStageActionContext\(exportContext, kernelContext, strategy, stageState\)/);
   assert.doesNotMatch(runner, /ExportLifecycleSupport\.closeSession\(stageState\.session/);
@@ -240,4 +244,27 @@ test('export lifecycle resources are owned by the kernel managed-resource stack'
   assert.match(lifecycle, /context\.kernelContext\.resources\(\)\.add\(\s*"export\.runtime"/);
   assert.match(lifecycle, /context\.kernelContext\.resources\(\)\.add\(\s*"export\.session"/);
   assert.match(lifecycle, /ExportLifecycleSupport\.closeSession/);
+});
+
+test('export tracepoints are declared through a stable kernel catalog', () => {
+  for (const [constant, event] of [
+    ['MODULE_INIT', 'export.module.init'],
+    ['MODULE_EXIT', 'export.module.exit'],
+    ['DRIVER_PROBE', 'export.driver.probe'],
+    ['DRIVER_BIND', 'export.driver.bind'],
+    ['STAGE_RUN', 'export.stage.run'],
+    ['RESOURCE_RELEASE', 'export.resource.release'],
+  ]) {
+    assert.match(
+      tracepointCatalog,
+      new RegExp(`public static final String ${constant} = "${event.replaceAll('.', '\\.')}"`),
+    );
+    assert.match(tracepointCatalog, new RegExp(constant));
+  }
+  assert.match(tracepointCatalog, /public static List<String> all\(\)/);
+  assert.match(kernel, /report\.tracepoints = ExportTracepoint\.all\(\)/);
+  assert.match(runner, /ExportTracepoint\.STAGE_RUN/);
+  assert.doesNotMatch(kernel, /trace\("export\./);
+  assert.doesNotMatch(runner, /trace\("export\./);
+  assert.doesNotMatch(kernelContext, /trace\("export\./);
 });
