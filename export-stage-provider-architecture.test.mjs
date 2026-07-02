@@ -75,6 +75,14 @@ const integrityManifestWriter = readFileSync(
   new URL('./src/main/java/com/github/dcysteine/nesql/exporter/main/ExportIntegrityManifestWriter.java', import.meta.url),
   'utf8',
 );
+const validationReportWriter = readFileSync(
+  new URL('./src/main/java/com/github/dcysteine/nesql/exporter/main/ExportValidationReportWriter.java', import.meta.url),
+  'utf8',
+);
+const validationHealthPolicy = readFileSync(
+  new URL('./src/main/java/com/github/dcysteine/nesql/exporter/main/ExportValidationHealthPolicy.java', import.meta.url),
+  'utf8',
+);
 const providerInterface = readFileSync(
   new URL('./src/main/java/com/github/dcysteine/nesql/exporter/main/ExportStageActionProvider.java', import.meta.url),
   'utf8',
@@ -379,4 +387,20 @@ test('export control and debug planes have explicit filesystem ownership', () =>
   assert.match(integrityManifestWriter, /ExportSchemaCatalog\.STAGE_CHECKSUMS/);
   assert.match(integrityManifestWriter, /addControlFile\(artifacts, repositoryDirectory, rawDir, ExportControlFile\.INDEX, "control"\)/);
   assert.match(integrityManifestWriter, /addDebugFile\(artifacts, repositoryDirectory, rawDir, ExportDebugFile\.KERNEL_TRACE, "debug-trace"\)/);
+});
+
+test('export validation health policy is split from report collection and serialization', () => {
+  assert.match(validationHealthPolicy, /Owns validation warning, blocked-state, and compile-readiness policy/);
+  assert.match(validationHealthPolicy, /static void evaluate\(ExportValidationReportWriter\.ValidationReport report\)/);
+  assert.match(validationHealthPolicy, /collectWarnings\(report\)/);
+  assert.match(validationHealthPolicy, /determineHealthStatus\(report\)/);
+  assert.match(validationHealthPolicy, /Missing raw-export\/assets\/textures\/index\.jsonl\.gz\./);
+  assert.match(validationHealthPolicy, /Runtime payload contains machine-specific local paths\./);
+  assert.match(validationHealthPolicy, /compileReadinessStatus = "ready-with-warnings"/);
+  assert.match(validationReportWriter, /ExportValidationHealthPolicy\.evaluate\(report\)/);
+  assert.match(validationReportWriter, /static final class ValidationReport/);
+  assert.doesNotMatch(validationReportWriter, /private static void collectWarnings/);
+  assert.doesNotMatch(validationReportWriter, /private static void determineHealthStatus/);
+  assert.doesNotMatch(validationReportWriter, /private static void addBlockedIf/);
+  assert.doesNotMatch(validationReportWriter, /private static void addActionableIssue/);
 });
