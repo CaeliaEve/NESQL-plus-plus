@@ -14,129 +14,139 @@ final class ExportValidationHealthPolicy {
 
     private static void collectWarnings(ExportValidationReportWriter.ValidationReport report) {
         if (!report.renderAssetManifestPresent) {
-            report.warnings.add("Missing raw-export/assets/textures/index.jsonl.gz.");
+            report.warnings.add(ExportValidationAbiCatalog.WARNING_RENDER_ASSET_MANIFEST_MISSING);
         }
         if (!report.browserLayoutPresent) {
-            report.warnings.add("Missing raw-export NEI browser group/order streams.");
+            report.warnings.add(ExportValidationAbiCatalog.WARNING_BROWSER_LAYOUT_MISSING);
         }
         if (report.itemsJsonGzFiles == 0) {
-            report.warnings.add("No item json.gz shards found under items/.");
+            report.warnings.add(ExportValidationAbiCatalog.WARNING_ITEM_SHARDS_MISSING);
         }
         if (report.recipeJsonGzFiles == 0) {
-            report.warnings.add("No recipe json.gz shards found under recipes/.");
+            report.warnings.add(ExportValidationAbiCatalog.WARNING_RECIPE_SHARDS_MISSING);
         }
         if (report.imagePngFiles == 0 && report.imageGifFiles == 0) {
-            report.warnings.add("No rendered image files found under image/.");
+            report.warnings.add(ExportValidationAbiCatalog.WARNING_RENDER_IMAGES_MISSING);
         }
         if (report.staticAtlasPngFiles == 0 && report.staticAtlasManifestAssets > 0) {
-            report.warnings.add("Static atlas manifest has assets but no atlas PNG files were found.");
+            report.warnings.add(ExportValidationAbiCatalog.WARNING_STATIC_ATLAS_FILES_MISSING);
         }
         if (report.animatedAtlasPngFiles == 0 && report.animatedAtlasManifestAssets > 0) {
-            report.warnings.add("Animated atlas manifest has assets but no animated atlas PNG files were found.");
+            report.warnings.add(ExportValidationAbiCatalog.WARNING_ANIMATED_ATLAS_FILES_MISSING);
         }
         if (report.renderAssetMissingPrimaryArtifacts > 0) {
-            report.warnings.add("Render assets with missing primary/static artifacts: "
-                    + report.renderAssetMissingPrimaryArtifacts);
+            report.warnings.add(ExportValidationAbiCatalog.renderAssetMissingPrimaryArtifactsWarning(
+                    report.renderAssetMissingPrimaryArtifacts));
         }
         if (report.renderAssetMissingTimelineFrames > 0) {
-            report.warnings.add("Render assets with missing timeline frame files: "
-                    + report.renderAssetMissingTimelineFrames);
+            report.warnings.add(ExportValidationAbiCatalog.renderAssetMissingTimelineFramesWarning(
+                    report.renderAssetMissingTimelineFrames));
         }
         if (report.suspiciousStaticSingularityAssets > 0) {
-            report.warnings.add("Singularity-like render assets exported without animation: "
-                    + report.suspiciousStaticSingularityAssets);
+            report.warnings.add(ExportValidationAbiCatalog.suspiciousStaticSingularityAssetsWarning(
+                    report.suspiciousStaticSingularityAssets));
         }
         if (report.renderAssetManifestAssets > 0 && report.totalAtlasManifestAssets == 0) {
-            report.warnings.add("Render assets exist but no atlas manifest assets were found.");
+            report.warnings.add(ExportValidationAbiCatalog.WARNING_ATLAS_MANIFEST_ASSETS_MISSING);
         }
         if (report.browserAtlasPresent && report.browserLayoutPresent && report.browserAtlasLayoutMissingItems > 0) {
-            report.warnings.add("Browser layout items missing atlas coverage: "
-                    + report.browserAtlasLayoutMissingItems);
+            report.warnings.add(ExportValidationAbiCatalog.browserLayoutMissingAtlasCoverageWarning(
+                    report.browserAtlasLayoutMissingItems));
         }
         if (report.exportPathHygieneViolations > 0) {
-            report.warnings.add("Runtime export payloads contain machine-specific paths: "
-                    + report.exportPathHygieneViolations);
+            report.warnings.add(ExportValidationAbiCatalog.exportPathHygieneWarning(
+                    report.exportPathHygieneViolations));
         }
         if (!report.semanticDiagnosticsPresent && report.rawItems > 0L) {
-            report.warnings.add("Missing raw-export semantic diagnostics report.");
+            report.warnings.add(ExportValidationAbiCatalog.WARNING_SEMANTIC_DIAGNOSTICS_MISSING);
         }
-        if (report.semanticTaggedItems > 0L && report.semanticClassificationCoverageRatio != null
-                && report.semanticClassificationCoverageRatio < 0.80D) {
-            report.warnings.add("Semantic classification coverage below 80%: "
-                    + report.semanticClassificationCoverageRatio);
+        if (report.semanticTaggedItems > 0L
+                && report.semanticClassificationCoverageRatio != null
+                && report.semanticClassificationCoverageRatio
+                        < ExportValidationAbiCatalog.SEMANTIC_CLASSIFICATION_MIN_COVERAGE_RATIO) {
+            report.warnings.add(ExportValidationAbiCatalog.semanticClassificationCoverageWarning(
+                    report.semanticClassificationCoverageRatio));
         }
         if (report.semanticMissingFacetFamilyCount > 0) {
-            report.warnings.add("Semantic families missing facet extraction: "
-                    + report.semanticMissingFacetFamilyCount);
+            report.warnings.add(ExportValidationAbiCatalog.semanticMissingFacetFamilyWarning(
+                    report.semanticMissingFacetFamilyCount));
         }
         if (report.semanticMissingSortKeyFamilyCount > 0) {
-            report.warnings.add("Semantic families missing stable sort keys: "
-                    + report.semanticMissingSortKeyFamilyCount);
+            report.warnings.add(ExportValidationAbiCatalog.semanticMissingSortKeyFamilyWarning(
+                    report.semanticMissingSortKeyFamilyCount));
         }
-        if (report.semanticRulePack == null || !"ok".equals(report.semanticRulePack.status)) {
-            report.warnings.add("Bundled GTNH semantic rule pack does not fully match the active Java semantic plugins.");
+        if (report.semanticRulePack == null
+                || !ExportValidationAbiCatalog.STATUS_OK.equals(report.semanticRulePack.status)) {
+            report.warnings.add(ExportValidationAbiCatalog.WARNING_SEMANTIC_RULE_PACK_MISMATCH);
         }
         if (report.renderBackendFacts > 0L && report.renderBackendAngelica == 0L) {
-            report.warnings.add("Native render export did not confirm Angelica as the active backend.");
+            report.warnings.add(ExportValidationAbiCatalog.WARNING_ANGELICA_BACKEND_MISSING);
         }
         if (report.renderTextureSpritesMissingTiming > 0L) {
-            report.warnings.add("Native texture sprites missing animation timing: "
-                    + report.renderTextureSpritesMissingTiming);
+            report.warnings.add(ExportValidationAbiCatalog.renderTextureSpritesMissingTimingWarning(
+                    report.renderTextureSpritesMissingTiming));
         }
         if (report.renderShaderItemsMissingCapture > 0L) {
-            report.warnings.add("Shader/custom renderer items missing native capture assets: "
-                    + report.renderShaderItemsMissingCapture);
+            report.warnings.add(ExportValidationAbiCatalog.renderShaderItemsMissingCaptureWarning(
+                    report.renderShaderItemsMissingCapture));
         }
         if (report.renderUnknownSpecialRenderers > 0L) {
-            report.warnings.add("Unknown special item renderers need explicit Angelica/native classification: "
-                    + report.renderUnknownSpecialRenderers);
+            report.warnings.add(ExportValidationAbiCatalog.renderUnknownSpecialRenderersWarning(
+                    report.renderUnknownSpecialRenderers));
         }
         if (report.renderFramebufferCapturesWithoutFrames > 0L) {
-            report.warnings.add("Native framebuffer captures without frame data: "
-                    + report.renderFramebufferCapturesWithoutFrames);
+            report.warnings.add(ExportValidationAbiCatalog.renderFramebufferCapturesWithoutFramesWarning(
+                    report.renderFramebufferCapturesWithoutFrames));
         }
         if (report.rawRecipes > 0L && (report.rawNeiHandlers == 0L || report.rawNeiHandlerLayouts == 0L)) {
-            report.warnings.add("NEI handler metadata/layout facts are missing; recipe pages will use generic categories.");
+            report.warnings.add(ExportValidationAbiCatalog.WARNING_NEI_HANDLER_METADATA_MISSING);
         }
         if (report.nativeUiMissingSurfaces > 0L) {
-            report.warnings.add("Native UI surfaces missing captured backgrounds: " + report.nativeUiMissingSurfaces);
+            report.warnings.add(ExportValidationAbiCatalog.nativeUiMissingSurfacesWarning(
+                    report.nativeUiMissingSurfaces));
         }
         if (report.nativeUiSlotBoundsViolations > 0L
                 || report.nativeUiRectBoundsViolations > 0L
                 || report.nativeUiPrimitiveBoundsViolations > 0L
                 || report.nativeUiBackgroundBoundsViolations > 0L) {
-            report.warnings.add("Native UI geometry bounds violations: slots="
-                    + report.nativeUiSlotBoundsViolations
-                    + ", rects="
-                    + report.nativeUiRectBoundsViolations
-                    + ", primitives="
-                    + report.nativeUiPrimitiveBoundsViolations
-                    + ", backgrounds="
-                    + report.nativeUiBackgroundBoundsViolations);
+            report.warnings.add(ExportValidationAbiCatalog.nativeUiGeometryBoundsWarning(
+                    report.nativeUiSlotBoundsViolations,
+                    report.nativeUiRectBoundsViolations,
+                    report.nativeUiPrimitiveBoundsViolations,
+                    report.nativeUiBackgroundBoundsViolations));
         }
         if (report.nativeUiCoordinateContractViolations > 0L) {
-            report.warnings.add("Native UI coordinate contract violations: "
-                    + report.nativeUiCoordinateContractViolations);
+            report.warnings.add(ExportValidationAbiCatalog.nativeUiCoordinateContractWarning(
+                    report.nativeUiCoordinateContractViolations));
         }
         if (report.nativeUiInteractionContractViolations > 0L) {
-            report.warnings.add("Native UI interaction contract violations: "
-                    + report.nativeUiInteractionContractViolations);
+            report.warnings.add(ExportValidationAbiCatalog.nativeUiInteractionContractWarning(
+                    report.nativeUiInteractionContractViolations));
         }
     }
 
     private static void determineHealthStatus(ExportValidationReportWriter.ValidationReport report) {
-        addBlockedIf(report, report.itemsJsonGzFiles == 0 && report.rawItems == 0L, "No item facts were exported.");
-        addBlockedIf(report, report.recipeJsonGzFiles == 0 && report.rawRecipes == 0L, "No recipe facts were exported.");
-        addBlockedIf(report, report.exportPathHygieneViolations > 0, "Runtime payload contains machine-specific local paths.");
+        addBlockedIf(
+                report,
+                report.itemsJsonGzFiles == 0 && report.rawItems == 0L,
+                ExportValidationAbiCatalog.BLOCKED_NO_ITEM_FACTS);
+        addBlockedIf(
+                report,
+                report.recipeJsonGzFiles == 0 && report.rawRecipes == 0L,
+                ExportValidationAbiCatalog.BLOCKED_NO_RECIPE_FACTS);
+        addBlockedIf(
+                report,
+                report.exportPathHygieneViolations > 0,
+                ExportValidationAbiCatalog.BLOCKED_MACHINE_PATHS);
         addBlockedIf(report,
                 report.rawItems > 0L
                         && report.semanticTotalItems > 0L
                         && report.semanticIdentityMapRows > 0L
                         && report.semanticIdentityMapRows != report.rawItems,
-                "Semantic identity-map row count does not match raw item count.");
+                ExportValidationAbiCatalog.BLOCKED_SEMANTIC_IDENTITY_MAP_MISMATCH);
         addBlockedIf(report,
                 report.rawItems > 0L && report.semanticDiagnosticsPresent && report.semanticTotalItems != report.rawItems,
-                "Semantic diagnostic item count does not match raw item count.");
+                ExportValidationAbiCatalog.BLOCKED_SEMANTIC_DIAGNOSTIC_ITEM_MISMATCH);
         addBlockedIf(report,
                 report.nativeUiLayouts > 0L
                         && (report.nativeUiSlots == 0L
@@ -147,28 +157,28 @@ final class ExportValidationHealthPolicy {
                                 || report.nativeUiBackgroundBoundsViolations > 0L
                                 || report.nativeUiCoordinateContractViolations > 0L
                                 || report.nativeUiInteractionContractViolations > 0L),
-                "Native UI ABI validation is blocked by missing surfaces, bounds errors, coordinate drift, or interaction contract drift.");
+                ExportValidationAbiCatalog.BLOCKED_NATIVE_UI_ABI);
         addActionableIssue(report,
-                "semantic-unclassified-families",
+                ExportValidationAbiCatalog.ACTION_SEMANTIC_UNCLASSIFIED_FAMILIES_CODE,
                 report.semanticTopUnclassifiedFamilyActions,
-                "Review or intentionally classify top unclassified tagged families.");
+                ExportValidationAbiCatalog.ACTION_SEMANTIC_UNCLASSIFIED_FAMILIES_MESSAGE);
         addActionableIssue(report,
-                "semantic-missing-facets",
+                ExportValidationAbiCatalog.ACTION_SEMANTIC_MISSING_FACETS_CODE,
                 report.semanticMissingFacetFamilies,
-                "Add family facet extraction so NeoNEI can filter/search variants without NBT guessing.");
+                ExportValidationAbiCatalog.ACTION_SEMANTIC_MISSING_FACETS_MESSAGE);
         addActionableIssue(report,
-                "semantic-missing-sort-keys",
+                ExportValidationAbiCatalog.ACTION_SEMANTIC_MISSING_SORT_KEYS_CODE,
                 report.semanticMissingSortKeyFamilies,
-                "Add stable family sort keys so expanded variant order remains NEI-like.");
+                ExportValidationAbiCatalog.ACTION_SEMANTIC_MISSING_SORT_KEYS_MESSAGE);
         if (!report.blockedIssues.isEmpty()) {
-            report.healthStatus = "blocked";
-            report.compileReadinessStatus = "blocked";
+            report.healthStatus = ExportValidationAbiCatalog.STATUS_BLOCKED;
+            report.compileReadinessStatus = ExportValidationAbiCatalog.STATUS_BLOCKED;
         } else if (!report.warnings.isEmpty() || !report.actionableIssues.isEmpty()) {
-            report.healthStatus = "warning";
-            report.compileReadinessStatus = "ready-with-warnings";
+            report.healthStatus = ExportValidationAbiCatalog.STATUS_WARNING;
+            report.compileReadinessStatus = ExportValidationAbiCatalog.COMPILE_READINESS_READY_WITH_WARNINGS;
         } else {
-            report.healthStatus = "healthy";
-            report.compileReadinessStatus = "ready";
+            report.healthStatus = ExportValidationAbiCatalog.HEALTH_STATUS_HEALTHY;
+            report.compileReadinessStatus = ExportValidationAbiCatalog.COMPILE_READINESS_READY;
         }
     }
 

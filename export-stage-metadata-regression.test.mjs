@@ -27,6 +27,7 @@ const rawNeiFactWriter = readSource('src/main/java/com/github/dcysteine/nesql/ex
 const rawValidationSupport = readSource('src/main/java/com/github/dcysteine/nesql/exporter/local/RawExportValidationSupport.java');
 const validationReportWriter = readSource('src/main/java/com/github/dcysteine/nesql/exporter/main/ExportValidationReportWriter.java');
 const validationHealthPolicy = readSource('src/main/java/com/github/dcysteine/nesql/exporter/main/ExportValidationHealthPolicy.java');
+const validationAbiCatalog = readSource('src/main/java/com/github/dcysteine/nesql/exporter/main/ExportValidationAbiCatalog.java');
 const rawRepositoryFactStreamer = readSource('src/main/java/com/github/dcysteine/nesql/exporter/local/RawExportRepositoryFactStreamer.java');
 const rawRenderAssetCatalogWriter = readSource('src/main/java/com/github/dcysteine/nesql/exporter/local/RawExportRenderAssetCatalogWriter.java');
 
@@ -116,7 +117,8 @@ test('native NEI handler layouts export GT dynamic primitives and background reg
   assert.equal(nativeUiValidator.includes('finish(rawDir, result)'), true);
   assert.equal(rawValidationSupport.includes('"native-ui-abi"'), true);
   assert.equal(validationReportWriter.includes('nativeUiTotals'), true);
-  assert.equal(validationHealthPolicy.includes('Native UI ABI validation is blocked'), true);
+  assert.equal(validationHealthPolicy.includes('ExportValidationAbiCatalog.BLOCKED_NATIVE_UI_ABI'), true);
+  assert.equal(validationAbiCatalog.includes('Native UI ABI validation is blocked'), true);
 });
 
 test('export checksums carry previous-run reuse signals without mtime dependence', () => {
@@ -350,7 +352,9 @@ test('stage diagnostics write machine-readable checkpoint and error records', ()
   assert.equal(debugFileCatalog.includes('"export/checkpoint.json"'), true);
   assert.equal(debugFileCatalog.includes('"trace/latest.json"'), true);
   assert.equal(runner.includes('ExportValidationReportWriter.write(exportContext)'), true);
-  assert.equal(diagnostics.includes('new File(validationDirectory, "errors.jsonl")'), true);
-  assert.equal(diagnostics.includes('"nesqlpp/export-error/v1"'), true);
-  assert.equal(diagnostics.includes('entry.addProperty("stage"'), true);
+  assert.equal(diagnostics.includes('RawExportFileCatalog.VALIDATION_ERRORS_FILE'), true);
+  assert.equal(diagnostics.includes('ExportValidationAbiCatalog.EXPORT_ERROR_SCHEMA'), true);
+  assert.equal(validationAbiCatalog.includes('EXPORT_ERROR_SCHEMA = ExportSchemaCatalog.EXPORT_ERROR'), true);
+  assert.equal(diagnostics.includes('"stage"'), true);
+  assert.equal(diagnostics.includes('ExportValidationAbiCatalog.EXPORT_ERROR_STAGE_UNKNOWN'), true);
 });

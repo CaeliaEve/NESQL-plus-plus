@@ -91,6 +91,10 @@ const validationReportStore = readFileSync(
   new URL('./src/main/java/com/github/dcysteine/nesql/exporter/main/ExportValidationReportStore.java', import.meta.url),
   'utf8',
 );
+const validationAbiCatalog = readFileSync(
+  new URL('./src/main/java/com/github/dcysteine/nesql/exporter/main/ExportValidationAbiCatalog.java', import.meta.url),
+  'utf8',
+);
 const providerInterface = readFileSync(
   new URL('./src/main/java/com/github/dcysteine/nesql/exporter/main/ExportStageActionProvider.java', import.meta.url),
   'utf8',
@@ -319,6 +323,7 @@ test('export control and debug planes have explicit filesystem ownership', () =>
   assert.match(schemaCatalog, /CONTROL_ROOT = "nesqlpp\/export-control-plane\/v1"/);
   assert.match(schemaCatalog, /DEBUG_KERNEL_TRACE = "nesqlpp\/export-debug-kernel-trace\/v1"/);
   assert.match(schemaCatalog, /EXPORT_VALIDATION = "nesqlpp\/export-validation\/v1"/);
+  assert.match(schemaCatalog, /EXPORT_ERROR = "nesqlpp\/export-error\/v1"/);
   assert.match(schemaCatalog, /EXPORT_MANIFEST = "nesqlpp\/export-manifest\/v1"/);
   assert.match(schemaCatalog, /STAGE_CHECKSUMS = "nesqlpp\/stage-checksums\/v1"/);
   assert.match(schemaCatalog, /public static List<String> controlSchemas\(\)/);
@@ -405,19 +410,33 @@ test('export control and debug planes have explicit filesystem ownership', () =>
 });
 
 test('export validation health policy is split from report collection and serialization', () => {
+  assert.match(validationAbiCatalog, /final class ExportValidationAbiCatalog/);
+  assert.match(validationAbiCatalog, /EXPORT_VALIDATION_SCHEMA = ExportSchemaCatalog\.EXPORT_VALIDATION/);
+  assert.match(validationAbiCatalog, /EXPORT_ERROR_SCHEMA = ExportSchemaCatalog\.EXPORT_ERROR/);
+  assert.match(validationAbiCatalog, /WARNING_RENDER_ASSET_MANIFEST_MISSING/);
+  assert.match(validationAbiCatalog, /BLOCKED_MACHINE_PATHS/);
+  assert.match(validationAbiCatalog, /COMPILE_READINESS_READY_WITH_WARNINGS = "ready-with-warnings"/);
+  assert.match(validationAbiCatalog, /PATH_HYGIENE_RULES/);
+  assert.match(validationAbiCatalog, /PATH_HYGIENE_ERROR_CODE = "export-path-hygiene"/);
   assert.match(validationHealthPolicy, /Owns validation warning, blocked-state, and compile-readiness policy/);
   assert.match(validationHealthPolicy, /static void evaluate\(ExportValidationReportWriter\.ValidationReport report\)/);
   assert.match(validationHealthPolicy, /collectWarnings\(report\)/);
   assert.match(validationHealthPolicy, /determineHealthStatus\(report\)/);
-  assert.match(validationHealthPolicy, /Missing raw-export\/assets\/textures\/index\.jsonl\.gz\./);
-  assert.match(validationHealthPolicy, /Runtime payload contains machine-specific local paths\./);
-  assert.match(validationHealthPolicy, /compileReadinessStatus = "ready-with-warnings"/);
+  assert.match(validationHealthPolicy, /ExportValidationAbiCatalog\.WARNING_RENDER_ASSET_MANIFEST_MISSING/);
+  assert.match(validationHealthPolicy, /ExportValidationAbiCatalog\.BLOCKED_MACHINE_PATHS/);
+  assert.match(validationHealthPolicy, /ExportValidationAbiCatalog\.COMPILE_READINESS_READY_WITH_WARNINGS/);
   assert.match(validationReportWriter, /ExportValidationHealthPolicy\.evaluate\(report\)/);
+  assert.match(validationReportWriter, /ExportValidationAbiCatalog\.EXPORT_VALIDATION_SCHEMA/);
+  assert.match(validationReportWriter, /RawExportFileCatalog\.rawExportDirectory\(repositoryDirectory\)/);
+  assert.match(validationReportWriter, /ExportValidationAbiCatalog\.pathHygieneRules\(\)/);
+  assert.match(validationReportWriter, /RawExportFileCatalog\.VALIDATION_ERRORS_FILE/);
   assert.match(validationReportWriter, /static final class ValidationReport/);
   assert.doesNotMatch(validationReportWriter, /private static void collectWarnings/);
   assert.doesNotMatch(validationReportWriter, /private static void determineHealthStatus/);
   assert.doesNotMatch(validationReportWriter, /private static void addBlockedIf/);
   assert.doesNotMatch(validationReportWriter, /private static void addActionableIssue/);
+  assert.doesNotMatch(validationReportWriter, /nesqlpp\/export-error\/v1/);
+  assert.doesNotMatch(validationReportWriter, /new File\(repositoryDirectory, "raw-export"/);
 });
 
 test('export validation report persistence and delta metadata are store-owned', () => {

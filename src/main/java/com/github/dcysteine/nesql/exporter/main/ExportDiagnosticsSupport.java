@@ -1,5 +1,7 @@
 package com.github.dcysteine.nesql.exporter.main;
 
+import com.github.dcysteine.nesql.exporter.local.RawExportFileCatalog;
+
 import net.minecraft.util.EnumChatFormatting;
 
 import com.google.gson.GsonBuilder;
@@ -95,21 +97,26 @@ final class ExportDiagnosticsSupport {
             ExportStage stage,
             Throwable error,
             File reportFile) {
-        File validationDirectory = new File(exportContext.paths.repositoryDirectory, "raw-export" + File.separator + "validation");
+        File rawDirectory = RawExportFileCatalog.rawExportDirectory(exportContext.paths.repositoryDirectory);
+        File validationDirectory = RawExportFileCatalog.validationDirectory(rawDirectory);
         if (!validationDirectory.exists() && !validationDirectory.mkdirs()) {
             Logger.MOD.warn("Failed to create NESQL validation directory: {}", validationDirectory.getAbsolutePath());
             return;
         }
 
-        File errorsFile = new File(validationDirectory, "errors.jsonl");
+        File errorsFile = RawExportFileCatalog.rawExportFile(rawDirectory, RawExportFileCatalog.VALIDATION_ERRORS_FILE);
         Throwable root = rootCause(error);
         JsonObject entry = new JsonObject();
-        entry.addProperty("schemaVersion", "nesqlpp/export-error/v1");
-        entry.addProperty("generatedAt", new SimpleDateFormat("yyyy-MM-dd'T'HH:mm:ss.SSSZ").format(new Date()));
+        entry.addProperty("schemaVersion", ExportValidationAbiCatalog.EXPORT_ERROR_SCHEMA);
+        entry.addProperty(
+                "generatedAt",
+                new SimpleDateFormat(ExportValidationAbiCatalog.GENERATED_AT_TIMESTAMP_PATTERN).format(new Date()));
         entry.addProperty("repository", exportContext.paths.repositoryName);
         entry.addProperty("profile", exportContext.profile.profileId);
         entry.addProperty("selection", exportContext.selection.describe());
-        entry.addProperty("stage", stage == null ? "<unknown>" : stage.name());
+        entry.addProperty(
+                "stage",
+                stage == null ? ExportValidationAbiCatalog.EXPORT_ERROR_STAGE_UNKNOWN : stage.name());
         entry.addProperty("errorClass", error.getClass().getName());
         entry.addProperty("message", safeMessage(error));
         entry.addProperty("rootCauseClass", root.getClass().getName());

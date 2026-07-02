@@ -1,8 +1,8 @@
 package com.github.dcysteine.nesql.exporter.main;
 
 import com.github.dcysteine.nesql.exporter.canonical.CanonicalRenderAsset;
+import com.github.dcysteine.nesql.exporter.local.RawExportFileCatalog;
 import com.github.dcysteine.nesql.exporter.semantic.SemanticRulePack;
-import com.github.dcysteine.nesql.elysium.kernel.ExportSchemaCatalog;
 import com.google.gson.Gson;
 import com.google.gson.GsonBuilder;
 import com.google.gson.JsonArray;
@@ -26,7 +26,6 @@ import java.util.List;
 import java.util.Locale;
 import java.util.Map;
 import java.util.Set;
-import java.util.regex.Pattern;
 import java.util.zip.GZIPInputStream;
 
 /** Writes a lightweight post-export integrity summary without changing exported data contracts. */
@@ -36,11 +35,11 @@ final class ExportValidationReportWriter {
     static void write(ExportContext exportContext) {
         try {
             File repositoryDirectory = exportContext.paths.repositoryDirectory;
-            File rawDir = new File(repositoryDirectory, "raw-export");
-            File validationDir = new File(rawDir, "validation");
+            File rawDir = RawExportFileCatalog.rawExportDirectory(repositoryDirectory);
+            File validationDir = RawExportFileCatalog.validationDirectory(rawDir);
 
             ValidationReport report = new ValidationReport();
-            report.schemaVersion = ExportSchemaCatalog.EXPORT_VALIDATION;
+            report.schemaVersion = ExportValidationAbiCatalog.EXPORT_VALIDATION_SCHEMA;
             report.profile = exportContext.profile.profileId;
             report.selection = exportContext.selection.describe();
             report.repository = exportContext.paths.repositoryName;
@@ -51,25 +50,32 @@ final class ExportValidationReportWriter {
             report.renderJsonFiles = countFiles(exportContext.paths.imageDirectory, ".render.json");
             report.spriteJsonFiles = countFiles(exportContext.paths.imageDirectory, ".sprite.json");
             inspectRawExportCounts(repositoryDirectory, report);
-            report.staticAtlasPngFiles = countFiles(new File(rawDir, "assets/textures/atlas-assets"), ".png");
+            report.staticAtlasPngFiles = countFiles(
+                    RawExportFileCatalog.rawExportFile(rawDir, RawExportFileCatalog.BROWSER_ATLAS_ASSETS_DIRECTORY),
+                    ".png");
             report.animatedAtlasPngFiles = report.staticAtlasPngFiles;
             report.staticAtlasManifestAssets = safeInt(report.rawTextures);
             report.animatedAtlasManifestAssets = safeInt(report.rawAnimations);
             report.totalAtlasManifestAssets = report.staticAtlasManifestAssets + report.animatedAtlasManifestAssets;
-            report.browserLayoutPresent = new File(rawDir, "facts/nei/groups.jsonl.gz").exists()
-                    && new File(rawDir, "facts/nei/order.jsonl.gz").exists();
+            report.browserLayoutPresent =
+                    RawExportFileCatalog.rawExportFile(rawDir, RawExportFileCatalog.NEI_GROUPS_FILE).exists()
+                            && RawExportFileCatalog.rawExportFile(rawDir, RawExportFileCatalog.NEI_ORDER_FILE)
+                                    .exists();
             report.browserLayoutEntries = safeInt(report.rawBrowserItems);
             report.browserLayoutItemCount = safeInt(report.rawBrowserItems);
             report.browserLayoutGroupCount = safeInt(report.rawBrowserGroups);
-            report.browserLayoutDefaultEntryCount = safeInt(countGzipJsonl(new File(rawDir, "facts/nei/order.jsonl.gz")));
+            report.browserLayoutDefaultEntryCount = safeInt(countGzipJsonl(
+                    RawExportFileCatalog.rawExportFile(rawDir, RawExportFileCatalog.NEI_ORDER_FILE)));
             inspectBrowserAtlasCoverage(rawDir, report);
-            report.multiblockBlueprints = safeInt(countGzipJsonl(new File(rawDir, "models/multiblocks/index.jsonl.gz")));
-            report.entityPreviewEntries = safeInt(countGzipJsonl(new File(rawDir, "models/entities/index.jsonl.gz")));
+            report.multiblockBlueprints = safeInt(countGzipJsonl(
+                    RawExportFileCatalog.rawExportFile(rawDir, RawExportFileCatalog.MULTIBLOCKS_INDEX_FILE)));
+            report.entityPreviewEntries = safeInt(countGzipJsonl(
+                    RawExportFileCatalog.rawExportFile(rawDir, RawExportFileCatalog.ENTITIES_INDEX_FILE)));
             report.entityModelEntries = report.entityPreviewEntries;
-        inspectRenderAssets(repositoryDirectory, rawDir, report);
-        inspectSemanticDiagnostics(repositoryDirectory, report);
-        inspectSemanticRulePack(report);
-        inspectExportPathHygiene(repositoryDirectory, report);
+            inspectRenderAssets(repositoryDirectory, rawDir, report);
+            inspectSemanticDiagnostics(repositoryDirectory, report);
+            inspectSemanticRulePack(report);
+            inspectExportPathHygiene(repositoryDirectory, report);
             report.atlasManifestCoverageRatio = ratio(report.totalAtlasManifestAssets, report.renderAssetManifestAssets);
             ExportValidationReportStore.applyPreviousDelta(validationDir, report);
             ExportValidationHealthPolicy.evaluate(report);
@@ -95,7 +101,9 @@ final class ExportValidationReportWriter {
     }
 
     private static void inspectRawExportCounts(File repositoryDirectory, ValidationReport report) {
-        File reportFile = new File(repositoryDirectory, "raw-export" + File.separator + "export_report.json");
+        File reportFile = RawExportFileCatalog.rawExportFile(
+                RawExportFileCatalog.rawExportDirectory(repositoryDirectory),
+                RawExportFileCatalog.EXPORT_REPORT_FILE);
         JsonObject root = readJsonObject(reportFile);
         if (root == null || !root.has("counts") || !root.get("counts").isJsonObject()) {
             return;
@@ -194,7 +202,9 @@ final class ExportValidationReportWriter {
         report.animationTotals.missingAnimatedAtlasEntries = Math.max(0,
                 report.animatedAtlasManifestAssets - report.browserAtlasAnimatedItems);
         report.animationTotals.missingTimingData = readLongMember(
-                readCountsObject(new File(repositoryDirectory, "raw-export" + File.separator + "export_report.json")),
+                readCountsObject(RawExportFileCatalog.rawExportFile(
+                        RawExportFileCatalog.rawExportDirectory(repositoryDirectory),
+                        RawExportFileCatalog.EXPORT_REPORT_FILE)),
                 "renderTextureSpritesMissingTiming");
         report.animationTotals.staticWhenAnimationExpected = report.suspiciousStaticSingularityAssets;
         report.animationTotals.singularityLikeAssets = report.singularityLikeRenderAssets;
@@ -220,8 +230,8 @@ final class ExportValidationReportWriter {
                 && report.renderUnknownSpecialRenderers == 0L
                 && report.renderShaderItemsMissingCapture == 0L
                 && report.renderFramebufferCapturesWithoutFrames == 0L
-                ? "ok"
-                : "warning";
+                ? ExportValidationAbiCatalog.STATUS_OK
+                : ExportValidationAbiCatalog.STATUS_WARNING;
 
         report.recipeTotals = new RecipeTotals();
         report.recipeTotals.recipes = report.rawRecipes;
@@ -251,8 +261,8 @@ final class ExportValidationReportWriter {
                 && report.nativeUiBackgroundBoundsViolations == 0L
                 && report.nativeUiCoordinateContractViolations == 0L
                 && report.nativeUiInteractionContractViolations == 0L
-                ? "ok"
-                : "blocked";
+                ? ExportValidationAbiCatalog.STATUS_OK
+                : ExportValidationAbiCatalog.STATUS_BLOCKED;
 
         report.runtimeManifestMetadata = new RuntimeManifestMetadata();
         report.runtimeManifestMetadata.gtnhProfile = report.profile;
@@ -260,7 +270,9 @@ final class ExportValidationReportWriter {
         report.runtimeManifestMetadata.exportSelection = report.selection;
         report.runtimeManifestMetadata.exporterSchemaVersion = report.schemaVersion;
         report.runtimeManifestMetadata.exportTimestamp = readStringMember(
-                readJsonObject(new File(repositoryDirectory, "raw-export" + File.separator + "manifest.json")),
+                readJsonObject(RawExportFileCatalog.rawExportFile(
+                        RawExportFileCatalog.rawExportDirectory(repositoryDirectory),
+                        RawExportFileCatalog.MANIFEST_FILE)),
                 "generatedAt");
         report.runtimeManifestMetadata.healthStatus = report.healthStatus;
         report.runtimeManifestMetadata.compileReadinessStatus = report.compileReadinessStatus;
@@ -276,8 +288,9 @@ final class ExportValidationReportWriter {
     }
 
     private static void inspectRecipeHandlerAnomalies(File repositoryDirectory, RecipeTotals totals) {
-        JsonObject root = readJsonObject(new File(repositoryDirectory,
-                "raw-export" + File.separator + "validation" + File.separator + "nei_handler_anomalies.json"));
+        JsonObject root = readJsonObject(RawExportFileCatalog.rawExportFile(
+                RawExportFileCatalog.rawExportDirectory(repositoryDirectory),
+                RawExportFileCatalog.NEI_HANDLER_ANOMALIES_FILE));
         if (root == null || !root.has("summary") || !root.get("summary").isJsonObject()) {
             return;
         }
@@ -295,8 +308,9 @@ final class ExportValidationReportWriter {
     }
 
     private static String readExportAssetHash(File repositoryDirectory) {
-        JsonObject root = readJsonObject(new File(repositoryDirectory,
-                "raw-export" + File.separator + "validation" + File.separator + "stage_checksums.json"));
+        JsonObject root = readJsonObject(RawExportFileCatalog.rawExportFile(
+                RawExportFileCatalog.rawExportDirectory(repositoryDirectory),
+                RawExportFileCatalog.validationPath(RawExportFileCatalog.STAGE_CHECKSUMS_FILE_NAME)));
         if (root == null) {
             return null;
         }
@@ -312,9 +326,9 @@ final class ExportValidationReportWriter {
     }
 
     private static void inspectSemanticDiagnostics(File repositoryDirectory, ValidationReport report) {
-        File semanticReportFile = new File(repositoryDirectory,
-                "raw-export" + File.separator + "validation" + File.separator + "semantic"
-                        + File.separator + "identity-normalization-report.json");
+        File semanticReportFile = RawExportFileCatalog.rawExportFile(
+                RawExportFileCatalog.rawExportDirectory(repositoryDirectory),
+                RawExportFileCatalog.SEMANTIC_IDENTITY_NORMALIZATION_REPORT_FILE);
         JsonObject root = readJsonObject(semanticReportFile);
         if (root == null) {
             return;
@@ -344,29 +358,23 @@ final class ExportValidationReportWriter {
         report.semanticRulePack = SemanticRulePack.loadBundled().validateAgainstRegistry();
     }
 
-    private static final PathHygieneRule[] PATH_HYGIENE_RULES = new PathHygieneRule[] {
-            new PathHygieneRule("windows-backslash-absolute", Pattern.compile("(^|[\\s\\\"'`\\(\\[\\{:=,])[A-Za-z]:\\\\[A-Za-z0-9._ -]")),
-            new PathHygieneRule("windows-slash-absolute", Pattern.compile("(^|[\\s\\\"'`\\(\\[\\{:=,])[A-Za-z]:/[A-Za-z0-9._ -]")),
-            new PathHygieneRule("minecraft-version-path", Pattern.compile("\\.minecraft[\\\\/]versions", Pattern.CASE_INSENSITIVE)),
-            new PathHygieneRule("local-gtnh-path", Pattern.compile("[A-Za-z]:[\\\\/]GTNH", Pattern.CASE_INSENSITIVE)),
-            new PathHygieneRule("local-codex-path", Pattern.compile("[A-Za-z]:[\\\\/]codex", Pattern.CASE_INSENSITIVE)),
-            new PathHygieneRule("linux-home-absolute", Pattern.compile("(^|[\\s\\\"'`\\(\\[\\{:=,])/(?:home|Users|mnt|opt|srv)/"))
-    };
-
     private static void inspectExportPathHygiene(File repositoryDirectory, ValidationReport report) {
         List<File> files = new ArrayList<File>();
-        collectRuntimeJsonFiles(new File(repositoryDirectory, "manifest.json"), files);
-        collectRuntimeJsonFiles(new File(repositoryDirectory, "raw-export"), files);
+        File rawDir = RawExportFileCatalog.rawExportDirectory(repositoryDirectory);
+        collectRuntimeJsonFiles(new File(repositoryDirectory, RawExportFileCatalog.MANIFEST_FILE), files);
+        collectRuntimeJsonFiles(rawDir, files);
         collectRuntimeJsonFiles(new File(repositoryDirectory, "facts"), files);
         collectRuntimeJsonFiles(new File(repositoryDirectory, "assets"), files);
         collectRuntimeJsonFiles(new File(repositoryDirectory, "special"), files);
         collectRuntimeJsonFiles(new File(repositoryDirectory, "models"), files);
-        collectRuntimeJsonFiles(new File(repositoryDirectory, "raw-export" + File.separator + "manifest.json"), files);
+        collectRuntimeJsonFiles(RawExportFileCatalog.rawExportFile(rawDir, RawExportFileCatalog.MANIFEST_FILE), files);
         report.exportPathHygieneAuditedFiles = files.size();
         for (File file : files) {
             inspectExportPathHygieneFile(repositoryDirectory, file, report);
         }
-        report.exportPathHygieneStatus = report.exportPathHygieneViolations == 0 ? "ok" : "failed";
+        report.exportPathHygieneStatus = report.exportPathHygieneViolations == 0
+                ? ExportValidationAbiCatalog.STATUS_OK
+                : ExportValidationAbiCatalog.STATUS_FAILED;
         if (report.exportPathHygieneViolations > 0) {
             writePathHygieneErrors(repositoryDirectory, report);
         }
@@ -414,7 +422,8 @@ final class ExportValidationReportWriter {
             int lineNumber = 0;
             while ((line = reader.readLine()) != null) {
                 lineNumber++;
-                for (PathHygieneRule rule : PATH_HYGIENE_RULES) {
+                for (ExportValidationAbiCatalog.PathHygieneRule rule :
+                        ExportValidationAbiCatalog.pathHygieneRules()) {
                     if (rule.pattern.matcher(line).find()) {
                         report.exportPathHygieneViolations++;
                         addPathHygieneSample(
@@ -437,7 +446,7 @@ final class ExportValidationReportWriter {
             int line,
             String rule,
             String text) {
-        if (report.exportPathHygieneSamples.size() >= 100) {
+        if (report.exportPathHygieneSamples.size() >= ExportValidationAbiCatalog.PATH_HYGIENE_SAMPLE_LIMIT) {
             return;
         }
         PathHygieneSample sample = new PathHygieneSample();
@@ -452,22 +461,26 @@ final class ExportValidationReportWriter {
     }
 
     private static void writePathHygieneErrors(File repositoryDirectory, ValidationReport report) {
-        File validationDirectory = new File(repositoryDirectory, "raw-export" + File.separator + "validation");
+        File rawDir = RawExportFileCatalog.rawExportDirectory(repositoryDirectory);
+        File validationDirectory = RawExportFileCatalog.validationDirectory(rawDir);
         if (!validationDirectory.exists() && !validationDirectory.mkdirs()) {
             Logger.MOD.warn("Failed to create NESQL validation directory: {}", validationDirectory.getAbsolutePath());
             return;
         }
-        File errorsFile = new File(validationDirectory, "errors.jsonl");
+        File errorsFile = RawExportFileCatalog.rawExportFile(rawDir, RawExportFileCatalog.VALIDATION_ERRORS_FILE);
         try (FileOutputStream fos = new FileOutputStream(errorsFile, true);
              OutputStreamWriter writer = new OutputStreamWriter(fos, StandardCharsets.UTF_8)) {
             Gson gson = new GsonBuilder().disableHtmlEscaping().create();
             for (PathHygieneSample sample : report.exportPathHygieneSamples) {
                 JsonObject entry = new JsonObject();
-                entry.addProperty("schemaVersion", "nesqlpp/export-error/v1");
-                entry.addProperty("generatedAt", new SimpleDateFormat("yyyy-MM-dd'T'HH:mm:ss.SSSZ").format(new Date()));
-                entry.addProperty("stage", "VALIDATION");
-                entry.addProperty("code", "export-path-hygiene");
-                entry.addProperty("message", "Runtime export payload contains a machine-specific path");
+                entry.addProperty("schemaVersion", ExportValidationAbiCatalog.EXPORT_ERROR_SCHEMA);
+                entry.addProperty(
+                        "generatedAt",
+                        new SimpleDateFormat(ExportValidationAbiCatalog.GENERATED_AT_TIMESTAMP_PATTERN)
+                                .format(new Date()));
+                entry.addProperty("stage", ExportValidationAbiCatalog.EXPORT_ERROR_STAGE_VALIDATION);
+                entry.addProperty("code", ExportValidationAbiCatalog.PATH_HYGIENE_ERROR_CODE);
+                entry.addProperty("message", ExportValidationAbiCatalog.PATH_HYGIENE_ERROR_MESSAGE);
                 entry.addProperty("file", sample.file);
                 entry.addProperty("line", sample.line);
                 entry.addProperty("rule", sample.rule);
@@ -490,7 +503,9 @@ final class ExportValidationReportWriter {
         }
     }
     private static void inspectBrowserAtlasCoverage(File rawDir, ValidationReport report) {
-        File browserAtlasFile = new File(rawDir, "assets/textures/browser_atlas_index.json");
+        File browserAtlasFile = RawExportFileCatalog.rawExportFile(
+                rawDir,
+                RawExportFileCatalog.BROWSER_ATLAS_INDEX_FILE);
         File browserLayoutFile = null;
         report.browserAtlasPresent = browserAtlasFile.exists();
         if (!browserAtlasFile.exists()) {
@@ -628,7 +643,7 @@ final class ExportValidationReportWriter {
     }
 
     private static void inspectRenderAssets(File repositoryDirectory, File rawDir, ValidationReport report) {
-        File manifestFile = new File(rawDir, "assets/textures/index.jsonl.gz");
+        File manifestFile = RawExportFileCatalog.rawExportFile(rawDir, RawExportFileCatalog.TEXTURE_INDEX_FILE);
         report.renderAssetManifestPresent = manifestFile.exists();
         if (!manifestFile.exists()) {
             return;
@@ -1254,16 +1269,6 @@ final class ExportValidationReportWriter {
         String healthStatus;
         String compileReadinessStatus;
         String assetHash;
-    }
-
-    private static final class PathHygieneRule {
-        final String name;
-        final Pattern pattern;
-
-        PathHygieneRule(String name, Pattern pattern) {
-            this.name = name;
-            this.pattern = pattern;
-        }
     }
 
     private static final class PathHygieneSample {

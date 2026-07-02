@@ -30,9 +30,40 @@ public final class RawExportFileCatalog {
 
     public static final String MANIFEST_FILE = "manifest.json";
     public static final String EXPORT_REPORT_FILE = "export_report.json";
+    public static final String ITEMS_FACTS_FILE = "facts/items.jsonl.gz";
+    public static final String FLUIDS_FACTS_FILE = "facts/fluids.jsonl.gz";
+    public static final String RECIPE_INDEX_FILE = "facts/recipes/index.json";
+    public static final String NEI_GROUPS_FILE = "facts/nei/groups.jsonl.gz";
+    public static final String NEI_ORDER_FILE = "facts/nei/order.jsonl.gz";
+    public static final String NEI_GUID_FILTERS_FILE = "facts/nei/guidfilters.jsonl.gz";
+    public static final String NEI_HIDDEN_ITEMS_FILE = "facts/nei/hiddenitems.jsonl.gz";
+    public static final String TEXTURE_INDEX_FILE = "assets/textures/index.jsonl.gz";
+    public static final String BROWSER_ATLAS_INDEX_FILE = "assets/textures/browser_atlas_index.json";
+    public static final String BROWSER_ATLAS_ASSETS_DIRECTORY = "assets/textures/atlas-assets";
+    public static final String ANIMATION_INDEX_FILE = "assets/animations/index.jsonl.gz";
+    public static final String NATIVE_SPRITES_FILE = "assets/animations/native-sprites.jsonl.gz";
+    public static final String RENDERED_GIFS_FILE = "assets/animations/rendered-gifs.jsonl.gz";
+    public static final String RENDER_BACKEND_FILE = "facts/render/backend.json";
+    public static final String RENDER_TEXTURE_SPRITES_FILE = "facts/render/texture-sprites.jsonl.gz";
+    public static final String RENDER_ITEM_RENDERERS_FILE = "facts/render/item-renderers.jsonl.gz";
+    public static final String RENDER_SHADER_ITEMS_FILE = "facts/render/shader-items.jsonl.gz";
+    public static final String RENDER_FRAMEBUFFER_CAPTURES_FILE =
+            "facts/render/framebuffer-captures.jsonl.gz";
+    public static final String MULTIBLOCKS_INDEX_FILE = "models/multiblocks/index.jsonl.gz";
+    public static final String ENTITIES_INDEX_FILE = "models/entities/index.jsonl.gz";
+    public static final String SPECIAL_INDEX_FILE = "special/index.json";
     public static final String VALIDATION_EXPORT_REPORT_FILE = "validation/export_report.json";
     public static final String VALIDATION_ERRORS_FILE = "validation/errors.jsonl";
     public static final String NEI_BROWSER_CONTRACT_FILE = "validation/nei_browser_contract.json";
+    public static final String NEI_HANDLER_ANOMALIES_FILE = "validation/nei_handler_anomalies.json";
+    public static final String EXPORT_PLUGIN_TIMINGS_FILE = "validation/export-plugin-timings.json";
+    public static final String SEMANTIC_FAMILY_AUDIT_FILE =
+            "validation/semantic/parametric-family-audit.json";
+    public static final String SEMANTIC_NBT_KEY_DISTRIBUTION_FILE =
+            "validation/semantic/nbt-key-distribution.json";
+    public static final String SEMANTIC_IDENTITY_NORMALIZATION_REPORT_FILE =
+            "validation/semantic/identity-normalization-report.json";
+    public static final String SEMANTIC_RULE_PACK_FILE = "facts/semantic/rule-pack.json";
     public static final String SIZE_REPORT_FILE = "validation/size_report.json";
     public static final String NATIVE_UI_VALIDATION_FILE = NativeUiExportAbi.NATIVE_UI_VALIDATION_FILE;
 
@@ -71,54 +102,52 @@ public final class RawExportFileCatalog {
 
     private static final List<ManifestFile> BASE_MANIFEST_FILES_BEFORE_OPTIONAL =
             Collections.unmodifiableList(Arrays.asList(
-                    new ManifestFile("items", "facts/items.jsonl.gz"),
+                    new ManifestFile("items", ITEMS_FACTS_FILE),
                     new ManifestFile("semanticItems", "facts/items/semantic-items.jsonl.gz"),
                     new ManifestFile("itemVariants", "facts/items/variants.jsonl.gz"),
                     new ManifestFile("itemPayloads", "facts/items/payloads.jsonl.gz"),
                     new ManifestFile("itemIdentityMap", "facts/items/identity-map.jsonl.gz"),
-                    new ManifestFile("fluids", "facts/fluids.jsonl.gz"),
-                    new ManifestFile("recipeIndex", "facts/recipes/index.json"),
-                    new ManifestFile("groups", "facts/nei/groups.jsonl.gz"),
-                    new ManifestFile("neiOrder", "facts/nei/order.jsonl.gz"),
-                    new ManifestFile("neiGuidFilters", "facts/nei/guidfilters.jsonl.gz"),
-                    new ManifestFile("neiHiddenItems", "facts/nei/hiddenitems.jsonl.gz"),
-                    new ManifestFile("textures", "assets/textures/index.jsonl.gz"),
+                    new ManifestFile("fluids", FLUIDS_FACTS_FILE),
+                    new ManifestFile("recipeIndex", RECIPE_INDEX_FILE),
+                    new ManifestFile("groups", NEI_GROUPS_FILE),
+                    new ManifestFile("neiOrder", NEI_ORDER_FILE),
+                    new ManifestFile("neiGuidFilters", NEI_GUID_FILTERS_FILE),
+                    new ManifestFile("neiHiddenItems", NEI_HIDDEN_ITEMS_FILE),
+                    new ManifestFile("textures", TEXTURE_INDEX_FILE),
                     new ManifestFile("uiBackgrounds", NativeUiExportAbi.UI_BACKGROUNDS_DIRECTORY),
-                    new ManifestFile("animations", "assets/animations/index.jsonl.gz"),
-                    new ManifestFile("nativeSprites", "assets/animations/native-sprites.jsonl.gz"),
-                    new ManifestFile("renderedGifs", "assets/animations/rendered-gifs.jsonl.gz"),
-                    new ManifestFile("renderBackend", "facts/render/backend.json"),
-                    new ManifestFile("renderTextureSprites", "facts/render/texture-sprites.jsonl.gz"),
-                    new ManifestFile("renderItemRenderers", "facts/render/item-renderers.jsonl.gz"),
-                    new ManifestFile("renderShaderItems", "facts/render/shader-items.jsonl.gz"),
-                    new ManifestFile("renderFramebufferCaptures", "facts/render/framebuffer-captures.jsonl.gz"),
-                    new ManifestFile("browserAtlasIndex", "assets/textures/browser_atlas_index.json"),
-                    new ManifestFile("browserAtlasAssets", "assets/textures/atlas-assets"),
+                    new ManifestFile("animations", ANIMATION_INDEX_FILE),
+                    new ManifestFile("nativeSprites", NATIVE_SPRITES_FILE),
+                    new ManifestFile("renderedGifs", RENDERED_GIFS_FILE),
+                    new ManifestFile("renderBackend", RENDER_BACKEND_FILE),
+                    new ManifestFile("renderTextureSprites", RENDER_TEXTURE_SPRITES_FILE),
+                    new ManifestFile("renderItemRenderers", RENDER_ITEM_RENDERERS_FILE),
+                    new ManifestFile("renderShaderItems", RENDER_SHADER_ITEMS_FILE),
+                    new ManifestFile("renderFramebufferCaptures", RENDER_FRAMEBUFFER_CAPTURES_FILE),
+                    new ManifestFile("browserAtlasIndex", BROWSER_ATLAS_INDEX_FILE),
+                    new ManifestFile("browserAtlasAssets", BROWSER_ATLAS_ASSETS_DIRECTORY),
                     new ManifestFile("neiHandlers", "facts/nei/handlers.jsonl.gz"),
                     new ManifestFile("neiHandlerLayouts", NativeUiExportAbi.NEI_HANDLER_LAYOUTS_FILE)));
 
     private static final List<ManifestFile> BASE_MANIFEST_FILES_AFTER_OPTIONAL =
             Collections.unmodifiableList(Arrays.asList(
-                    new ManifestFile("multiblocks", "models/multiblocks/index.jsonl.gz"),
-                    new ManifestFile("entities", "models/entities/index.jsonl.gz"),
-                    new ManifestFile("specialIndex", "special/index.json"),
+                    new ManifestFile("multiblocks", MULTIBLOCKS_INDEX_FILE),
+                    new ManifestFile("entities", ENTITIES_INDEX_FILE),
+                    new ManifestFile("specialIndex", SPECIAL_INDEX_FILE),
                     new ManifestFile("exportReport", VALIDATION_EXPORT_REPORT_FILE),
                     new ManifestFile("exportHealthReport", validationPath(EXPORT_HEALTH_REPORT_FILE_NAME)),
                     new ManifestFile("errors", VALIDATION_ERRORS_FILE),
-                    new ManifestFile("neiHandlerAnomalies", "validation/nei_handler_anomalies.json"),
+                    new ManifestFile("neiHandlerAnomalies", NEI_HANDLER_ANOMALIES_FILE),
                     new ManifestFile("nativeUiValidation", NativeUiExportAbi.NATIVE_UI_VALIDATION_FILE),
-                    new ManifestFile("pluginTimings", "validation/export-plugin-timings.json"),
+                    new ManifestFile("pluginTimings", EXPORT_PLUGIN_TIMINGS_FILE),
                     new ManifestFile("stageTimings", ExportDebugFile.STAGE_TIMING.validationAliasPath()),
                     new ManifestFile("stageCheckpoint", ExportDebugFile.STAGE_CHECKPOINT.validationAliasPath()),
                     new ManifestFile("stageChecksums", validationPath(STAGE_CHECKSUMS_FILE_NAME)),
                     new ManifestFile("sizeReport", SIZE_REPORT_FILE),
                     new ManifestFile("neiBrowserContract", NEI_BROWSER_CONTRACT_FILE),
-                    new ManifestFile("semanticFamilyAudit", "validation/semantic/parametric-family-audit.json"),
-                    new ManifestFile("semanticNbtKeyDistribution", "validation/semantic/nbt-key-distribution.json"),
-                    new ManifestFile(
-                            "semanticIdentityNormalizationReport",
-                            "validation/semantic/identity-normalization-report.json"),
-                    new ManifestFile("semanticRulePack", "facts/semantic/rule-pack.json")));
+                    new ManifestFile("semanticFamilyAudit", SEMANTIC_FAMILY_AUDIT_FILE),
+                    new ManifestFile("semanticNbtKeyDistribution", SEMANTIC_NBT_KEY_DISTRIBUTION_FILE),
+                    new ManifestFile("semanticIdentityNormalizationReport", SEMANTIC_IDENTITY_NORMALIZATION_REPORT_FILE),
+                    new ManifestFile("semanticRulePack", SEMANTIC_RULE_PACK_FILE)));
 
     private static final List<String> PROHIBITED_ROOT_OUTPUTS = Collections.unmodifiableList(Arrays.asList(
             "recipes.jsonl",

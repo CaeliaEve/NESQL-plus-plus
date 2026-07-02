@@ -28,6 +28,7 @@ public final class ExportSchemaCatalog {
     public static final String DEBUG_STAGE_CHECKPOINT = "nesqlpp/export-debug-stage-checkpoint/v1";
 
     public static final String EXPORT_VALIDATION = "nesqlpp/export-validation/v1";
+    public static final String EXPORT_ERROR = "nesqlpp/export-error/v1";
     public static final String EXPORT_MANIFEST = "nesqlpp/export-manifest/v1";
     public static final String STAGE_CHECKSUMS = "nesqlpp/stage-checksums/v1";
 
