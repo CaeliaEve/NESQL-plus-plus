@@ -67,7 +67,8 @@ public final class RawExportUiTemplateCatalogWriter {
                 + ", templates=" + report.summary.templateCount
                 + ", families=" + report.summary.familyCount
                 + ", layoutKinds=" + report.summary.layoutKindCount
-                + ", slots=" + report.summary.slotCount);
+                + ", slots=" + report.summary.slotCount
+                + ", primitives=" + report.summary.primitiveCount);
     }
 
     private UiTemplateCatalogReport buildReport(File rawDir) throws IOException {
@@ -91,6 +92,7 @@ public final class RawExportUiTemplateCatalogWriter {
         Set<String> layoutKinds = new LinkedHashSet<String>();
         long handlerCount = 0L;
         long slotCount = 0L;
+        long primitiveCount = 0L;
         List<RawExportUiFamilyCensusWriter.UiFamilyBucket> families = census.families == null
                 ? Collections.<RawExportUiFamilyCensusWriter.UiFamilyBucket>emptyList()
                 : census.families;
@@ -100,6 +102,7 @@ public final class RawExportUiTemplateCatalogWriter {
             layoutKinds.add(template.layoutKind);
             handlerCount += template.handlerCount;
             slotCount += template.slotCount;
+            primitiveCount += template.dynamicPrimitives.size();
         }
 
         Collections.sort(templates, (left, right) -> left.templateKey.compareTo(right.templateKey));
@@ -120,6 +123,7 @@ public final class RawExportUiTemplateCatalogWriter {
         report.summary.familyCount = templates.size();
         report.summary.layoutKindCount = layoutKinds.size();
         report.summary.slotCount = slotCount;
+        report.summary.primitiveCount = primitiveCount;
         report.summary.overlayCount = 0L;
         report.templates = templates;
         return report;
@@ -141,6 +145,9 @@ public final class RawExportUiTemplateCatalogWriter {
         template.nativeBackground = family.nativeBackground;
         template.slots = NeiUiTemplateLayoutSpecs.defaultLayoutSlots(family.layoutKind);
         template.slotCount = template.slots.size();
+        template.dynamicPrimitives = NeiUiTemplateLayoutSpecs.defaultProgressBarsJson(
+                family.canonicalMachineFamily,
+                family.layoutKind);
         template.textOverlays = new ArrayList<UiTemplateTextOverlay>();
         template.hotspots = new ArrayList<UiTemplateRect>();
         template.viewports = new ArrayList<UiTemplateRect>();
@@ -210,6 +217,22 @@ public final class RawExportUiTemplateCatalogWriter {
                         .append(':').append(slot.y)
                         .append('\n');
             }
+            for (JsonElement element : template.dynamicPrimitives) {
+                if (element == null || !element.isJsonObject()) {
+                    continue;
+                }
+                JsonObject primitive = element.getAsJsonObject();
+                canonical.append(nullToEmpty(readString(primitive, "kind")))
+                        .append(':').append(nullToEmpty(readString(primitive, "role")))
+                        .append(':').append(readInt(primitive, "x"))
+                        .append(':').append(readInt(primitive, "y"))
+                        .append(':').append(readInt(primitive, "width"))
+                        .append(':').append(readInt(primitive, "height"))
+                        .append(':').append(nullToEmpty(readString(primitive, "coordinateSpace")))
+                        .append(':').append(nullToEmpty(readString(primitive, "anchor")))
+                        .append(':').append(nullToEmpty(readString(primitive, "orientation")))
+                        .append('\n');
+            }
             byte[] bytes = digest.digest(canonical.toString().getBytes(StandardCharsets.UTF_8));
             StringBuilder hex = new StringBuilder();
             for (int i = 0; i < bytes.length; i++) {
@@ -223,6 +246,24 @@ public final class RawExportUiTemplateCatalogWriter {
 
     private static String nullToEmpty(String value) {
         return value == null ? "" : value;
+    }
+
+    private static String readString(JsonObject object, String key) {
+        try {
+            JsonElement element = object == null ? null : object.get(key);
+            return element == null || element.isJsonNull() ? "" : element.getAsString();
+        } catch (Exception ignored) {
+            return "";
+        }
+    }
+
+    private static int readInt(JsonObject object, String key) {
+        try {
+            JsonElement element = object == null ? null : object.get(key);
+            return element == null || element.isJsonNull() ? 0 : element.getAsInt();
+        } catch (Exception ignored) {
+            return 0;
+        }
     }
 
     private static void ensureDirectory(File directory) throws IOException {
@@ -257,6 +298,7 @@ public final class RawExportUiTemplateCatalogWriter {
         long familyCount;
         long layoutKindCount;
         long slotCount;
+        long primitiveCount;
         long overlayCount;
     }
 
@@ -281,6 +323,7 @@ public final class RawExportUiTemplateCatalogWriter {
         List<String> handlerClasses = new ArrayList<String>();
         List<String> modIds = new ArrayList<String>();
         List<UiTemplateSlot> slots = new ArrayList<UiTemplateSlot>();
+        JsonArray dynamicPrimitives = new JsonArray();
         List<UiTemplateTextOverlay> textOverlays = new ArrayList<UiTemplateTextOverlay>();
         List<UiTemplateRect> hotspots = new ArrayList<UiTemplateRect>();
         List<UiTemplateRect> viewports = new ArrayList<UiTemplateRect>();

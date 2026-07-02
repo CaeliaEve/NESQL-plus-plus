@@ -57,6 +57,8 @@ public final class NeiUiTemplateLayoutSpecs {
         bar.addProperty("y", 24);
         bar.addProperty("width", 20);
         bar.addProperty("height", 18);
+        bar.addProperty("coordinateSpace", NativeUiExportAbi.COORDINATE_SPACE);
+        bar.addProperty("anchor", NativeUiExportAbi.ANCHOR);
         bar.addProperty("orientation", "horizontal");
         bar.addProperty("source", "gtnh-basic-ui-properties-default");
         bars.add(bar);

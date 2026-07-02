@@ -381,10 +381,6 @@ final class RawExportNeiFactWriter {
             layout.add("nativeBackground", cloneJsonObject(nativeBackground));
             layout.add("slots", NeiUiTemplateLayoutSpecs.defaultLayoutSlotsJson(layoutKind));
             layout.add("textOverlays", new JsonArray());
-            layout.add("dynamicPrimitives", new JsonArray());
-            layout.add("progressBars", NeiUiTemplateLayoutSpecs.defaultProgressBarsJson(family, layoutKind));
-            layout.add("fluidBars", new JsonArray());
-            layout.add("energyBars", new JsonArray());
             layout.add("hotspots", new JsonArray());
             layout.add("viewports", new JsonArray());
             layoutRows.add(layout);
