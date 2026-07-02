@@ -33,10 +33,10 @@ final class ExportValidationJsonSupport {
 
     static JsonObject readCountsObject(File reportFile) {
         JsonObject root = readJsonObject(reportFile);
-        if (root == null || !root.has("counts") || !root.get("counts").isJsonObject()) {
+        if (root == null || !root.has(ExportValidationEvidenceCatalog.OBJECT_COUNTS) || !root.get(ExportValidationEvidenceCatalog.OBJECT_COUNTS).isJsonObject()) {
             return null;
         }
-        return root.getAsJsonObject("counts");
+        return root.getAsJsonObject(ExportValidationEvidenceCatalog.OBJECT_COUNTS);
     }
 
     static long readLongMember(JsonObject object, String memberName) {

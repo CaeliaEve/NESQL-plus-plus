@@ -48,19 +48,19 @@ final class ExportValidationRenderAssetProbe {
             return;
         }
         String primaryPath = ExportValidationJsonSupport.firstNonEmpty(
-                ExportValidationJsonSupport.readStringMember(asset, "primaryArtifact"),
-                ExportValidationJsonSupport.readStringMember(asset, "staticFile"),
-                ExportValidationJsonSupport.readStringMember(asset, "nativeSpriteAtlasFile"));
+                ExportValidationJsonSupport.readStringMember(asset, ExportValidationEvidenceCatalog.RenderAsset.PRIMARY_ARTIFACT),
+                ExportValidationJsonSupport.readStringMember(asset, ExportValidationEvidenceCatalog.RenderAsset.STATIC_FILE),
+                ExportValidationJsonSupport.readStringMember(asset, ExportValidationEvidenceCatalog.RenderAsset.NATIVE_SPRITE_ATLAS_FILE));
         if (primaryPath == null || !exportFileExists(repositoryDirectory, primaryPath)) {
             report.renderAssetMissingPrimaryArtifacts++;
             ExportValidationJsonSupport.addSample(report.renderAssetMissingPrimaryArtifactSamples,
                     ExportValidationJsonSupport.firstNonEmpty(
-                            ExportValidationJsonSupport.readStringMember(asset, "assetId"),
-                            ExportValidationJsonSupport.readStringMember(asset, "sourcePath"),
+                            ExportValidationJsonSupport.readStringMember(asset, ExportValidationEvidenceCatalog.RenderAsset.ASSET_ID),
+                            ExportValidationJsonSupport.readStringMember(asset, ExportValidationEvidenceCatalog.RenderAsset.SOURCE_PATH),
                             primaryPath));
         }
         inspectSingularityAnimation(asset, report);
-        JsonElement timeline = asset.get("timeline");
+        JsonElement timeline = asset.get(ExportValidationEvidenceCatalog.OBJECT_TIMELINE);
         if (timeline == null || !timeline.isJsonArray()) {
             return;
         }
@@ -68,13 +68,13 @@ final class ExportValidationRenderAssetProbe {
             if (frameElement == null || !frameElement.isJsonObject()) {
                 continue;
             }
-            String path = ExportValidationJsonSupport.readStringMember(frameElement.getAsJsonObject(), "path");
+            String path = ExportValidationJsonSupport.readStringMember(frameElement.getAsJsonObject(), ExportValidationEvidenceCatalog.MEMBER_PATH);
             if (path != null && !exportFileExists(repositoryDirectory, path)) {
                 report.renderAssetMissingTimelineFrames++;
                 ExportValidationJsonSupport.addSample(report.renderAssetMissingTimelineFrameSamples,
                         ExportValidationJsonSupport.firstNonEmpty(
-                                ExportValidationJsonSupport.readStringMember(asset, "assetId"),
-                                ExportValidationJsonSupport.readStringMember(asset, "sourcePath"),
+                                ExportValidationJsonSupport.readStringMember(asset, ExportValidationEvidenceCatalog.RenderAsset.ASSET_ID),
+                                ExportValidationJsonSupport.readStringMember(asset, ExportValidationEvidenceCatalog.RenderAsset.SOURCE_PATH),
                                 path));
             }
         }
@@ -84,29 +84,29 @@ final class ExportValidationRenderAssetProbe {
             JsonObject asset,
             ExportValidationReportWriter.ValidationReport report) {
         String haystack = joinLower(
-                ExportValidationJsonSupport.readStringMember(asset, "assetId"),
-                ExportValidationJsonSupport.readStringMember(asset, "variantKey"),
-                ExportValidationJsonSupport.readStringMember(asset, "family"),
-                ExportValidationJsonSupport.readStringMember(asset, "sourceType"),
-                ExportValidationJsonSupport.readStringMember(asset, "sourcePath"),
-                ExportValidationJsonSupport.readStringMember(asset, "primaryArtifact"),
-                ExportValidationJsonSupport.readStringMember(asset, "staticFile"),
-                ExportValidationJsonSupport.readStringMember(asset, "rendererFamily"),
-                ExportValidationJsonSupport.readStringMember(asset, "captureMethod"),
-                ExportValidationJsonSupport.readStringMember(asset, "captureSource"),
-                ExportValidationJsonSupport.readStringMember(asset, "animationMode"),
-                ExportValidationJsonSupport.readStringMember(asset, "renderMode"));
+                ExportValidationJsonSupport.readStringMember(asset, ExportValidationEvidenceCatalog.RenderAsset.ASSET_ID),
+                ExportValidationJsonSupport.readStringMember(asset, ExportValidationEvidenceCatalog.RenderAsset.VARIANT_KEY),
+                ExportValidationJsonSupport.readStringMember(asset, ExportValidationEvidenceCatalog.RenderAsset.FAMILY),
+                ExportValidationJsonSupport.readStringMember(asset, ExportValidationEvidenceCatalog.RenderAsset.SOURCE_TYPE),
+                ExportValidationJsonSupport.readStringMember(asset, ExportValidationEvidenceCatalog.RenderAsset.SOURCE_PATH),
+                ExportValidationJsonSupport.readStringMember(asset, ExportValidationEvidenceCatalog.RenderAsset.PRIMARY_ARTIFACT),
+                ExportValidationJsonSupport.readStringMember(asset, ExportValidationEvidenceCatalog.RenderAsset.STATIC_FILE),
+                ExportValidationJsonSupport.readStringMember(asset, ExportValidationEvidenceCatalog.RenderAsset.RENDERER_FAMILY),
+                ExportValidationJsonSupport.readStringMember(asset, ExportValidationEvidenceCatalog.RenderAsset.CAPTURE_METHOD),
+                ExportValidationJsonSupport.readStringMember(asset, ExportValidationEvidenceCatalog.RenderAsset.CAPTURE_SOURCE),
+                ExportValidationJsonSupport.readStringMember(asset, ExportValidationEvidenceCatalog.RenderAsset.ANIMATION_MODE),
+                ExportValidationJsonSupport.readStringMember(asset, ExportValidationEvidenceCatalog.RenderAsset.RENDER_MODE));
         if (!isSingularityLike(haystack)) {
             return;
         }
         report.singularityLikeRenderAssets++;
-        boolean animated = contains(haystack, ".gif")
-                || contains(haystack, "animated")
-                || contains(haystack, "timeline")
-                || ExportValidationJsonSupport.arraySize(asset, "timeline") > 1
-                || ExportValidationJsonSupport.arraySize(asset, "frames") > 1
-                || ExportValidationJsonSupport.readIntMember(asset, "frameCount") > 1
-                || ExportValidationJsonSupport.readIntMember(asset, "capturedFrameCount") > 1;
+        boolean animated = contains(haystack, ExportValidationEvidenceCatalog.ANIMATION_TOKEN_GIF)
+                || contains(haystack, ExportValidationEvidenceCatalog.ANIMATION_TOKEN_ANIMATED)
+                || contains(haystack, ExportValidationEvidenceCatalog.ANIMATION_TOKEN_TIMELINE)
+                || ExportValidationJsonSupport.arraySize(asset, ExportValidationEvidenceCatalog.OBJECT_TIMELINE) > 1
+                || ExportValidationJsonSupport.arraySize(asset, ExportValidationEvidenceCatalog.OBJECT_FRAMES) > 1
+                || ExportValidationJsonSupport.readIntMember(asset, ExportValidationEvidenceCatalog.RenderAsset.FRAME_COUNT) > 1
+                || ExportValidationJsonSupport.readIntMember(asset, ExportValidationEvidenceCatalog.RenderAsset.CAPTURED_FRAME_COUNT) > 1;
         if (animated) {
             report.animatedSingularityLikeRenderAssets++;
             return;
@@ -114,9 +114,9 @@ final class ExportValidationRenderAssetProbe {
         report.suspiciousStaticSingularityAssets++;
         ExportValidationJsonSupport.addSample(report.suspiciousStaticSingularitySamples,
                 ExportValidationJsonSupport.firstNonEmpty(
-                        ExportValidationJsonSupport.readStringMember(asset, "assetId"),
-                        ExportValidationJsonSupport.readStringMember(asset, "sourcePath"),
-                        ExportValidationJsonSupport.readStringMember(asset, "primaryArtifact")));
+                        ExportValidationJsonSupport.readStringMember(asset, ExportValidationEvidenceCatalog.RenderAsset.ASSET_ID),
+                        ExportValidationJsonSupport.readStringMember(asset, ExportValidationEvidenceCatalog.RenderAsset.SOURCE_PATH),
+                        ExportValidationJsonSupport.readStringMember(asset, ExportValidationEvidenceCatalog.RenderAsset.PRIMARY_ARTIFACT)));
     }
 
     private static String joinLower(String... values) {
@@ -130,15 +130,15 @@ final class ExportValidationRenderAssetProbe {
     }
 
     private static boolean isSingularityLike(String value) {
-        return contains(value, "singularity")
-                || contains(value, "singularitie")
-                || contains(value, "eternalsingularity")
-                || contains(value, "universalsingularity")
-                || contains(value, "universal_singularity")
-                || contains(value, "avaritia")
-                || contains(value, "cosmicneutronium")
-                || contains(value, "transcendentmetal")
-                || contains(value, "universium");
+        return contains(value, ExportValidationEvidenceCatalog.SINGULARITY_TOKEN_SINGULARITY)
+                || contains(value, ExportValidationEvidenceCatalog.SINGULARITY_TOKEN_SINGULARITIE)
+                || contains(value, ExportValidationEvidenceCatalog.SINGULARITY_TOKEN_ETERNAL)
+                || contains(value, ExportValidationEvidenceCatalog.SINGULARITY_TOKEN_UNIVERSAL)
+                || contains(value, ExportValidationEvidenceCatalog.SINGULARITY_TOKEN_UNIVERSAL_UNDERSCORE)
+                || contains(value, ExportValidationEvidenceCatalog.SINGULARITY_TOKEN_AVARITIA)
+                || contains(value, ExportValidationEvidenceCatalog.SINGULARITY_TOKEN_COSMIC_NEUTRONIUM)
+                || contains(value, ExportValidationEvidenceCatalog.SINGULARITY_TOKEN_TRANSCENDENT_METAL)
+                || contains(value, ExportValidationEvidenceCatalog.SINGULARITY_TOKEN_UNIVERSIUM);
     }
 
     private static boolean contains(String value, String needle) {
@@ -153,8 +153,8 @@ final class ExportValidationRenderAssetProbe {
         if (direct.exists() && direct.length() > 0L) {
             return true;
         }
-        if (!relativePath.startsWith("image/")) {
-            File underImage = new File(repositoryDirectory, ("image/" + relativePath).replace('/', File.separatorChar));
+        if (!relativePath.startsWith(ExportValidationEvidenceCatalog.IMAGE_DIRECTORY_PREFIX)) {
+            File underImage = new File(repositoryDirectory, (ExportValidationEvidenceCatalog.IMAGE_DIRECTORY_PREFIX + relativePath).replace('/', File.separatorChar));
             return underImage.exists() && underImage.length() > 0L;
         }
         return false;

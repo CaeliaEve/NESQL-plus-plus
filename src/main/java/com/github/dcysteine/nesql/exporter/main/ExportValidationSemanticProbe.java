@@ -19,22 +19,22 @@ final class ExportValidationSemanticProbe {
             return;
         }
         report.semanticDiagnosticsPresent = true;
-        report.semanticTopUnclassifiedFamilyActions = ExportValidationJsonSupport.copyArray(root, "topUnclassifiedFamilyActions", 20);
-        report.semanticMissingFacetFamilies = ExportValidationJsonSupport.copyArray(root, "missingFacetFamilies", 20);
-        report.semanticMissingSortKeyFamilies = ExportValidationJsonSupport.copyArray(root, "missingSortKeyFamilies", 20);
-        report.semanticMissingFacetFamilyCount = ExportValidationJsonSupport.arraySize(root, "missingFacetFamilies");
-        report.semanticMissingSortKeyFamilyCount = ExportValidationJsonSupport.arraySize(root, "missingSortKeyFamilies");
+        report.semanticTopUnclassifiedFamilyActions = ExportValidationJsonSupport.copyArray(root, ExportValidationEvidenceCatalog.SemanticDiagnostics.TOP_UNCLASSIFIED_FAMILY_ACTIONS, 20);
+        report.semanticMissingFacetFamilies = ExportValidationJsonSupport.copyArray(root, ExportValidationEvidenceCatalog.SemanticDiagnostics.MISSING_FACET_FAMILIES, 20);
+        report.semanticMissingSortKeyFamilies = ExportValidationJsonSupport.copyArray(root, ExportValidationEvidenceCatalog.SemanticDiagnostics.MISSING_SORT_KEY_FAMILIES, 20);
+        report.semanticMissingFacetFamilyCount = ExportValidationJsonSupport.arraySize(root, ExportValidationEvidenceCatalog.SemanticDiagnostics.MISSING_FACET_FAMILIES);
+        report.semanticMissingSortKeyFamilyCount = ExportValidationJsonSupport.arraySize(root, ExportValidationEvidenceCatalog.SemanticDiagnostics.MISSING_SORT_KEY_FAMILIES);
         if (report.semanticTotalItems == 0L) {
-            report.semanticTotalItems = ExportValidationJsonSupport.readLongMember(root, "beforePublicItems");
+            report.semanticTotalItems = ExportValidationJsonSupport.readLongMember(root, ExportValidationEvidenceCatalog.SemanticDiagnostics.BEFORE_PUBLIC_ITEMS);
         }
         if (report.semanticTaggedItems == 0L) {
-            report.semanticTaggedItems = ExportValidationJsonSupport.readLongMember(root, "taggedItems");
+            report.semanticTaggedItems = ExportValidationJsonSupport.readLongMember(root, ExportValidationEvidenceCatalog.SemanticDiagnostics.TAGGED_ITEMS);
         }
         if (report.semanticClassifiedTaggedItems == 0L) {
-            report.semanticClassifiedTaggedItems = ExportValidationJsonSupport.readLongMember(root, "classifiedTaggedItems");
+            report.semanticClassifiedTaggedItems = ExportValidationJsonSupport.readLongMember(root, ExportValidationEvidenceCatalog.SemanticDiagnostics.CLASSIFIED_TAGGED_ITEMS);
         }
         if (report.semanticUnclassifiedTaggedItems == 0L) {
-            report.semanticUnclassifiedTaggedItems = ExportValidationJsonSupport.readLongMember(root, "unclassifiedTaggedItems");
+            report.semanticUnclassifiedTaggedItems = ExportValidationJsonSupport.readLongMember(root, ExportValidationEvidenceCatalog.SemanticDiagnostics.UNCLASSIFIED_TAGGED_ITEMS);
         }
         report.semanticClassificationCoverageRatio = ExportValidationJsonSupport.ratio(
                 report.semanticClassifiedTaggedItems,

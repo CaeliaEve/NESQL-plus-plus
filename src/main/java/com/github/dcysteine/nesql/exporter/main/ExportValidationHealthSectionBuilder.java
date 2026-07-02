@@ -51,7 +51,7 @@ final class ExportValidationHealthSectionBuilder {
                 ExportValidationJsonSupport.readCountsObject(RawExportFileCatalog.rawExportFile(
                         RawExportFileCatalog.rawExportDirectory(repositoryDirectory),
                         RawExportFileCatalog.EXPORT_REPORT_FILE)),
-                "renderTextureSpritesMissingTiming");
+                ExportValidationEvidenceCatalog.RawCount.RENDER_TEXTURE_SPRITES_MISSING_TIMING);
         report.animationTotals.staticWhenAnimationExpected = report.suspiciousStaticSingularityAssets;
         report.animationTotals.singularityLikeAssets = report.singularityLikeRenderAssets;
         report.animationTotals.animatedSingularityLikeAssets = report.animatedSingularityLikeRenderAssets;
@@ -119,7 +119,7 @@ final class ExportValidationHealthSectionBuilder {
                 ExportValidationJsonSupport.readJsonObject(RawExportFileCatalog.rawExportFile(
                         RawExportFileCatalog.rawExportDirectory(repositoryDirectory),
                         RawExportFileCatalog.MANIFEST_FILE)),
-                "generatedAt");
+                ExportValidationEvidenceCatalog.MEMBER_GENERATED_AT);
         report.runtimeManifestMetadata.healthStatus = report.healthStatus;
         report.runtimeManifestMetadata.compileReadinessStatus = report.compileReadinessStatus;
         report.runtimeManifestMetadata.assetHash = readExportAssetHash(repositoryDirectory);
@@ -131,20 +131,20 @@ final class ExportValidationHealthSectionBuilder {
         JsonObject root = ExportValidationJsonSupport.readJsonObject(RawExportFileCatalog.rawExportFile(
                 RawExportFileCatalog.rawExportDirectory(repositoryDirectory),
                 RawExportFileCatalog.NEI_HANDLER_ANOMALIES_FILE));
-        if (root == null || !root.has("summary") || !root.get("summary").isJsonObject()) {
+        if (root == null || !root.has(ExportValidationEvidenceCatalog.OBJECT_SUMMARY) || !root.get(ExportValidationEvidenceCatalog.OBJECT_SUMMARY).isJsonObject()) {
             return;
         }
-        JsonObject summary = root.getAsJsonObject("summary");
-        totals.handlersWithLoadedRecipes = ExportValidationJsonSupport.readLongMember(summary, "handlersWithLoadedRecipes");
-        totals.handlersWithExportedRecipes = ExportValidationJsonSupport.readLongMember(summary, "handlersWithExportedRecipes");
-        totals.suspiciousZeroRecipeHandlers = ExportValidationJsonSupport.readLongMember(summary, "suspiciousZeroExports");
-        totals.nativeCoveredZeroRecipeHandlers = ExportValidationJsonSupport.readLongMember(summary, "nativeCoveredZeroExports");
-        totals.nonRecipeInfoZeroRecipeHandlers = ExportValidationJsonSupport.readLongMember(summary, "nonRecipeInfoZeroExports");
-        totals.expectedEmptyHandlers = ExportValidationJsonSupport.readLongMember(summary, "expectedEmptyHandlers");
-        totals.legalZeroRecipeHandlers = ExportValidationJsonSupport.readLongMember(summary, "legalZeroRecipeHandlers");
-        totals.partialExports = ExportValidationJsonSupport.readLongMember(summary, "partialExports");
-        totals.duplicateCategoryRisks = ExportValidationJsonSupport.readLongMember(summary, "duplicateCategoryRisks");
-        totals.zeroRecipeStatus = ExportValidationJsonSupport.readStringMember(summary, "status");
+        JsonObject summary = root.getAsJsonObject(ExportValidationEvidenceCatalog.OBJECT_SUMMARY);
+        totals.handlersWithLoadedRecipes = ExportValidationJsonSupport.readLongMember(summary, ExportValidationEvidenceCatalog.RecipeAnomaly.HANDLERS_WITH_LOADED_RECIPES);
+        totals.handlersWithExportedRecipes = ExportValidationJsonSupport.readLongMember(summary, ExportValidationEvidenceCatalog.RecipeAnomaly.HANDLERS_WITH_EXPORTED_RECIPES);
+        totals.suspiciousZeroRecipeHandlers = ExportValidationJsonSupport.readLongMember(summary, ExportValidationEvidenceCatalog.RecipeAnomaly.SUSPICIOUS_ZERO_EXPORTS);
+        totals.nativeCoveredZeroRecipeHandlers = ExportValidationJsonSupport.readLongMember(summary, ExportValidationEvidenceCatalog.RecipeAnomaly.NATIVE_COVERED_ZERO_EXPORTS);
+        totals.nonRecipeInfoZeroRecipeHandlers = ExportValidationJsonSupport.readLongMember(summary, ExportValidationEvidenceCatalog.RecipeAnomaly.NON_RECIPE_INFO_ZERO_EXPORTS);
+        totals.expectedEmptyHandlers = ExportValidationJsonSupport.readLongMember(summary, ExportValidationEvidenceCatalog.RecipeAnomaly.EXPECTED_EMPTY_HANDLERS);
+        totals.legalZeroRecipeHandlers = ExportValidationJsonSupport.readLongMember(summary, ExportValidationEvidenceCatalog.RecipeAnomaly.LEGAL_ZERO_RECIPE_HANDLERS);
+        totals.partialExports = ExportValidationJsonSupport.readLongMember(summary, ExportValidationEvidenceCatalog.RecipeAnomaly.PARTIAL_EXPORTS);
+        totals.duplicateCategoryRisks = ExportValidationJsonSupport.readLongMember(summary, ExportValidationEvidenceCatalog.RecipeAnomaly.DUPLICATE_CATEGORY_RISKS);
+        totals.zeroRecipeStatus = ExportValidationJsonSupport.readStringMember(summary, ExportValidationEvidenceCatalog.MEMBER_STATUS);
     }
 
     private static String readExportAssetHash(File repositoryDirectory) {
@@ -154,14 +154,14 @@ final class ExportValidationHealthSectionBuilder {
         if (root == null) {
             return null;
         }
-        String direct = ExportValidationJsonSupport.readStringMember(root, "assetHash");
+        String direct = ExportValidationJsonSupport.readStringMember(root, ExportValidationEvidenceCatalog.MEMBER_ASSET_HASH);
         if (direct != null && !direct.isEmpty()) {
             return direct;
         }
-        String checksum = ExportValidationJsonSupport.readStringMember(root, "checksum");
+        String checksum = ExportValidationJsonSupport.readStringMember(root, ExportValidationEvidenceCatalog.MEMBER_CHECKSUM);
         if (checksum != null && !checksum.isEmpty()) {
             return checksum;
         }
-        return ExportValidationJsonSupport.readStringMember(root, "sha256");
+        return ExportValidationJsonSupport.readStringMember(root, ExportValidationEvidenceCatalog.MEMBER_SHA256);
     }
 }

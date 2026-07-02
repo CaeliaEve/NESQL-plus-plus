@@ -137,17 +137,17 @@ final class ExportValidationPathHygieneProbe {
             Gson gson = new GsonBuilder().disableHtmlEscaping().create();
             for (ExportValidationReportWriter.PathHygieneSample sample : report.exportPathHygieneSamples) {
                 JsonObject entry = new JsonObject();
-                entry.addProperty("schemaVersion", ExportValidationAbiCatalog.EXPORT_ERROR_SCHEMA);
+                entry.addProperty(ExportValidationEvidenceCatalog.ERROR_FIELD_SCHEMA_VERSION, ExportValidationAbiCatalog.EXPORT_ERROR_SCHEMA);
                 entry.addProperty(
-                        "generatedAt",
+                        ExportValidationEvidenceCatalog.ERROR_FIELD_GENERATED_AT,
                         new SimpleDateFormat(ExportValidationAbiCatalog.GENERATED_AT_TIMESTAMP_PATTERN)
                                 .format(new Date()));
-                entry.addProperty("stage", ExportValidationAbiCatalog.EXPORT_ERROR_STAGE_VALIDATION);
-                entry.addProperty("code", ExportValidationAbiCatalog.PATH_HYGIENE_ERROR_CODE);
-                entry.addProperty("message", ExportValidationAbiCatalog.PATH_HYGIENE_ERROR_MESSAGE);
-                entry.addProperty("file", sample.file);
-                entry.addProperty("line", sample.line);
-                entry.addProperty("rule", sample.rule);
+                entry.addProperty(ExportValidationEvidenceCatalog.ERROR_FIELD_STAGE, ExportValidationAbiCatalog.EXPORT_ERROR_STAGE_VALIDATION);
+                entry.addProperty(ExportValidationEvidenceCatalog.ERROR_FIELD_CODE, ExportValidationAbiCatalog.PATH_HYGIENE_ERROR_CODE);
+                entry.addProperty(ExportValidationEvidenceCatalog.ERROR_FIELD_MESSAGE, ExportValidationAbiCatalog.PATH_HYGIENE_ERROR_MESSAGE);
+                entry.addProperty(ExportValidationEvidenceCatalog.ERROR_FIELD_FILE, sample.file);
+                entry.addProperty(ExportValidationEvidenceCatalog.ERROR_FIELD_LINE, sample.line);
+                entry.addProperty(ExportValidationEvidenceCatalog.ERROR_FIELD_RULE, sample.rule);
                 writer.write(gson.toJson(entry));
                 writer.write('\n');
             }

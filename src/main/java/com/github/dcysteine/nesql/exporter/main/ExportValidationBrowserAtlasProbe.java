@@ -9,9 +9,7 @@ import java.io.File;
 import java.io.FileInputStream;
 import java.io.InputStreamReader;
 import java.nio.charset.StandardCharsets;
-import java.util.ArrayList;
 import java.util.HashSet;
-import java.util.List;
 import java.util.Set;
 
 /** Owns browser atlas residency and layout coverage evidence collection. */
@@ -30,23 +28,40 @@ final class ExportValidationBrowserAtlasProbe {
         try (FileInputStream atlasFis = new FileInputStream(browserAtlasFile);
              InputStreamReader atlasReader = new InputStreamReader(atlasFis, StandardCharsets.UTF_8)) {
             JsonObject atlasObject = new JsonParser().parse(atlasReader).getAsJsonObject();
-            report.browserAtlasItems = ExportValidationJsonSupport.readIntMember(atlasObject, "itemCount");
-            report.browserAtlasAnimatedItems = ExportValidationJsonSupport.readIntMember(atlasObject, "animatedItemCount");
-            report.browserAtlasMissingAtlasCount = ExportValidationJsonSupport.readIntMember(atlasObject, "missingAtlasCount");
+            report.browserAtlasItems = ExportValidationJsonSupport.readIntMember(
+                    atlasObject,
+                    ExportValidationEvidenceCatalog.BrowserAtlas.ITEM_COUNT);
+            report.browserAtlasAnimatedItems = ExportValidationJsonSupport.readIntMember(
+                    atlasObject,
+                    ExportValidationEvidenceCatalog.BrowserAtlas.ANIMATED_ITEM_COUNT);
+            report.browserAtlasMissingAtlasCount = ExportValidationJsonSupport.readIntMember(
+                    atlasObject,
+                    ExportValidationEvidenceCatalog.BrowserAtlas.MISSING_ATLAS_COUNT);
 
             Set<String> drawableAtlasItemIds = new HashSet<String>();
-            if (atlasObject.has("items") && atlasObject.get("items").isJsonArray()) {
+            if (atlasObject.has(ExportValidationEvidenceCatalog.OBJECT_ITEMS)
+                    && atlasObject.get(ExportValidationEvidenceCatalog.OBJECT_ITEMS).isJsonArray()) {
                 if (report.browserAtlasItems == 0) {
-                    report.browserAtlasItems = atlasObject.get("items").getAsJsonArray().size();
+                    report.browserAtlasItems = atlasObject
+                            .get(ExportValidationEvidenceCatalog.OBJECT_ITEMS)
+                            .getAsJsonArray()
+                            .size();
                 }
-                for (JsonElement element : atlasObject.get("items").getAsJsonArray()) {
+                for (JsonElement element : atlasObject.get(ExportValidationEvidenceCatalog.OBJECT_ITEMS).getAsJsonArray()) {
                     if (!element.isJsonObject()) {
                         continue;
                     }
                     JsonObject item = element.getAsJsonObject();
-                    String itemId = ExportValidationJsonSupport.readStringMember(item, "itemId");
-                    if (itemId != null && hasDrawableAtlas(item)) {
+                    String itemId = ExportValidationJsonSupport.readStringMember(
+                            item,
+                            ExportValidationEvidenceCatalog.MEMBER_ITEM_ID);
+                    if (itemId == null) {
+                        continue;
+                    }
+                    if (hasDrawableAtlas(item)) {
                         drawableAtlasItemIds.add(itemId);
+                    } else {
+                        ExportValidationJsonSupport.addSample(report.browserAtlasLayoutMissingSamples, itemId);
                     }
                 }
             }
@@ -63,103 +78,18 @@ final class ExportValidationBrowserAtlasProbe {
         }
     }
 
-    private static void inspectBrowserLayoutCoverage(
-            File browserLayoutFile,
-            Set<String> drawableAtlasItemIds,
-            ExportValidationReportWriter.ValidationReport report) {
-        try (FileInputStream layoutFis = new FileInputStream(browserLayoutFile);
-             InputStreamReader layoutReader = new InputStreamReader(layoutFis, StandardCharsets.UTF_8)) {
-            JsonObject layoutObject = new JsonParser().parse(layoutReader).getAsJsonObject();
-            Set<String> layoutItemIds = new HashSet<String>();
-            collectLayoutItemIds(layoutObject, "items", false, layoutItemIds);
-            collectLayoutItemIds(layoutObject, "defaultEntries", true, layoutItemIds);
-
-            report.browserAtlasLayoutItemCount = layoutItemIds.size();
-            for (String itemId : layoutItemIds) {
-                if (hasDrawableAtlasForItem(drawableAtlasItemIds, itemId)) {
-                    report.browserAtlasLayoutCoveredItems++;
-                } else {
-                    report.browserAtlasLayoutMissingItems++;
-                    ExportValidationJsonSupport.addSample(report.browserAtlasLayoutMissingSamples, itemId);
-                }
-            }
-            report.browserAtlasLayoutCoverageRatio = ExportValidationJsonSupport.ratio(
-                    report.browserAtlasLayoutCoveredItems,
-                    report.browserAtlasLayoutItemCount);
-        } catch (Exception e) {
-            Logger.MOD.warn("Failed to inspect browser layout atlas coverage", e);
-        }
-    }
-
-    private static void collectLayoutItemIds(
-            JsonObject layoutObject,
-            String memberName,
-            boolean preferRepresentative,
-            Set<String> layoutItemIds) {
-        if (!layoutObject.has(memberName) || !layoutObject.get(memberName).isJsonArray()) {
-            return;
-        }
-        for (JsonElement element : layoutObject.get(memberName).getAsJsonArray()) {
-            if (!element.isJsonObject()) {
-                continue;
-            }
-            JsonObject item = element.getAsJsonObject();
-            String itemId = preferRepresentative
-                    ? ExportValidationJsonSupport.firstNonEmpty(
-                            ExportValidationJsonSupport.readStringMember(item, "representativeItemId"),
-                            ExportValidationJsonSupport.readStringMember(item, "itemId"),
-                            null)
-                    : ExportValidationJsonSupport.readStringMember(item, "itemId");
-            if (itemId != null && !itemId.isEmpty()) {
-                layoutItemIds.add(itemId);
-            }
-        }
-    }
-
     private static boolean hasDrawableAtlas(JsonObject item) {
-        return hasAtlasFile(item, "staticAtlas") || hasAtlasFile(item, "animatedAtlas");
+        return hasAtlasFile(item, ExportValidationEvidenceCatalog.OBJECT_STATIC_ATLAS)
+                || hasAtlasFile(item, ExportValidationEvidenceCatalog.OBJECT_ANIMATED_ATLAS);
     }
 
     private static boolean hasAtlasFile(JsonObject item, String memberName) {
         if (!item.has(memberName) || !item.get(memberName).isJsonObject()) {
             return false;
         }
-        String atlasFile = ExportValidationJsonSupport.readStringMember(item.get(memberName).getAsJsonObject(), "atlasFile");
+        String atlasFile = ExportValidationJsonSupport.readStringMember(
+                item.get(memberName).getAsJsonObject(),
+                ExportValidationEvidenceCatalog.MEMBER_ATLAS_FILE);
         return atlasFile != null && !atlasFile.isEmpty();
-    }
-
-    private static boolean hasDrawableAtlasForItem(Set<String> drawableAtlasItemIds, String itemId) {
-        if (drawableAtlasItemIds.contains(itemId)) {
-            return true;
-        }
-        for (String alias : getItemIdAliases(itemId)) {
-            if (drawableAtlasItemIds.contains(alias)) {
-                return true;
-            }
-        }
-        return false;
-    }
-
-    private static List<String> getItemIdAliases(String itemId) {
-        List<String> aliases = new ArrayList<String>();
-        if (itemId == null) {
-            return aliases;
-        }
-        String normalized = itemId.trim();
-        if (normalized.isEmpty()) {
-            return aliases;
-        }
-        String[] parts = normalized.split("~");
-        if (parts.length >= 4 && "i".equals(parts[0])) {
-            String compact = parts[0] + "~" + parts[1] + "~" + parts[2] + "~" + parts[3];
-            String metaZero = parts[0] + "~" + parts[1] + "~" + parts[2] + "~0";
-            if (!compact.equals(normalized)) {
-                aliases.add(compact);
-            }
-            if (!metaZero.equals(normalized) && !aliases.contains(metaZero)) {
-                aliases.add(metaZero);
-            }
-        }
-        return aliases;
     }
 }

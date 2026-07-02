@@ -95,6 +95,10 @@ const validationAbiCatalog = readFileSync(
   new URL('./src/main/java/com/github/dcysteine/nesql/exporter/main/ExportValidationAbiCatalog.java', import.meta.url),
   'utf8',
 );
+const validationEvidenceCatalog = readFileSync(
+  new URL('./src/main/java/com/github/dcysteine/nesql/exporter/main/ExportValidationEvidenceCatalog.java', import.meta.url),
+  'utf8',
+);
 
 const validationJsonSupport = readFileSync(
   new URL('./src/main/java/com/github/dcysteine/nesql/exporter/main/ExportValidationJsonSupport.java', import.meta.url),
@@ -465,13 +469,32 @@ test('export validation health policy is split from report collection and serial
   assert.match(validationReportWriter, /RawExportFileCatalog\.rawExportDirectory\(repositoryDirectory\)/);
   assert.match(validationReportWriter, /static final class ValidationReport/);
   assert.match(validationJsonSupport, /Shared low-level JSON, counting, and ratio helpers/);
+  assert.match(validationEvidenceCatalog, /Stable ABI\/catalog surface for validation evidence JSON member names/);
+  assert.match(validationEvidenceCatalog, /OBJECT_COUNTS = "counts"/);
+  assert.match(validationEvidenceCatalog, /RAW_ITEMS = "rawItems"/);
+  assert.match(validationEvidenceCatalog, /TOP_UNCLASSIFIED_FAMILY_ACTIONS = "topUnclassifiedFamilyActions"/);
+  assert.match(validationEvidenceCatalog, /PRIMARY_ARTIFACT = "primaryArtifact"/);
+  assert.match(validationEvidenceCatalog, /ITEM_COUNT = "itemCount"/);
+  assert.match(validationEvidenceCatalog, /HANDLERS_WITH_LOADED_RECIPES = "handlersWithLoadedRecipes"/);
+  assert.match(validationEvidenceCatalog, /ERROR_FIELD_SCHEMA_VERSION = "schemaVersion"/);
   assert.match(validationRawCountProbe, /Owns raw-export report count extraction/);
+  assert.match(validationRawCountProbe, /ExportValidationEvidenceCatalog\.RawCount\.RAW_ITEMS/);
   assert.match(validationHealthSectionBuilder, /Builds aggregate health sections/);
+  assert.match(validationHealthSectionBuilder, /ExportValidationEvidenceCatalog\.RecipeAnomaly\.HANDLERS_WITH_LOADED_RECIPES/);
   assert.match(validationSemanticProbe, /Owns semantic diagnostics and bundled rule-pack evidence collection/);
+  assert.match(validationSemanticProbe, /ExportValidationEvidenceCatalog\.SemanticDiagnostics\.TOP_UNCLASSIFIED_FAMILY_ACTIONS/);
   assert.match(validationPathHygieneProbe, /ExportValidationAbiCatalog\.pathHygieneRules\(\)/);
   assert.match(validationPathHygieneProbe, /RawExportFileCatalog\.VALIDATION_ERRORS_FILE/);
+  assert.match(validationPathHygieneProbe, /ExportValidationEvidenceCatalog\.ERROR_FIELD_SCHEMA_VERSION/);
   assert.match(validationBrowserAtlasProbe, /Owns browser atlas residency and layout coverage evidence collection/);
+  assert.match(validationBrowserAtlasProbe, /ExportValidationEvidenceCatalog\.BrowserAtlas\.ITEM_COUNT/);
   assert.match(validationRenderAssetProbe, /Owns render asset manifest, artifact residency, timeline, and singularity animation probes/);
+  assert.match(validationRenderAssetProbe, /ExportValidationEvidenceCatalog\.RenderAsset\.PRIMARY_ARTIFACT/);
+  assert.doesNotMatch(validationRawCountProbe, /"rawItems"/);
+  assert.doesNotMatch(validationSemanticProbe, /"topUnclassifiedFamilyActions"/);
+  assert.doesNotMatch(validationHealthSectionBuilder, /"handlersWithLoadedRecipes"/);
+  assert.doesNotMatch(validationBrowserAtlasProbe, /"itemCount"/);
+  assert.doesNotMatch(validationRenderAssetProbe, /"primaryArtifact"/);
   assert.doesNotMatch(validationReportWriter, /private static void collectWarnings/);
   assert.doesNotMatch(validationReportWriter, /private static void determineHealthStatus/);
   assert.doesNotMatch(validationReportWriter, /private static void addBlockedIf/);
