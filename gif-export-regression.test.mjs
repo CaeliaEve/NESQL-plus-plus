@@ -395,6 +395,7 @@ test('export health report surfaces missing contracts and samples', () => {
   const validationSource = read('src/main/java/com/github/dcysteine/nesql/exporter/main/ExportValidationReportWriter.java');
   const renderAssetProbeSource = read('src/main/java/com/github/dcysteine/nesql/exporter/main/ExportValidationRenderAssetProbe.java');
   const healthPolicySource = read('src/main/java/com/github/dcysteine/nesql/exporter/main/ExportValidationHealthPolicy.java');
+  const healthPolicyCatalogSource = read('src/main/java/com/github/dcysteine/nesql/exporter/main/ExportValidationHealthPolicyCatalog.java');
   const validationAbiCatalogSource = read('src/main/java/com/github/dcysteine/nesql/exporter/main/ExportValidationAbiCatalog.java');
 
   assert.equal(
@@ -403,9 +404,10 @@ test('export health report surfaces missing contracts and samples', () => {
     'Health report catalog should warn when render-assets is absent',
   );
   assert.equal(
-    healthPolicySource.includes('ExportValidationAbiCatalog.WARNING_RENDER_ASSET_MANIFEST_MISSING'),
+    healthPolicySource.includes('ExportValidationHealthPolicyCatalog.collectWarnings(report)')
+      && healthPolicyCatalogSource.includes('ExportValidationAbiCatalog.WARNING_RENDER_ASSET_MANIFEST_MISSING'),
     true,
-    'Health policy should consume the catalog-owned render-assets warning',
+    'Health policy catalog should consume the catalog-owned render-assets warning',
   );
   assert.equal(
     validationAbiCatalogSource.includes('Missing raw-export NEI browser group/order streams.'),
@@ -429,6 +431,7 @@ test('export health report audits browser layout atlas residency', () => {
   const browserValidationProbeSource = read('src/main/java/com/github/dcysteine/nesql/exporter/main/ExportValidationBrowserValidationProbe.java');
   const browserAtlasProbeSource = read('src/main/java/com/github/dcysteine/nesql/exporter/main/ExportValidationBrowserAtlasProbe.java');
   const healthPolicySource = read('src/main/java/com/github/dcysteine/nesql/exporter/main/ExportValidationHealthPolicy.java');
+  const healthPolicyCatalogSource = read('src/main/java/com/github/dcysteine/nesql/exporter/main/ExportValidationHealthPolicyCatalog.java');
   const validationAbiCatalogSource = read('src/main/java/com/github/dcysteine/nesql/exporter/main/ExportValidationAbiCatalog.java');
 
   assert.equal(
@@ -454,8 +457,9 @@ test('export health report audits browser layout atlas residency', () => {
     'Health report catalog should warn when layout-visible items cannot draw from the atlas',
   );
   assert.equal(
-    healthPolicySource.includes('ExportValidationAbiCatalog.browserLayoutMissingAtlasCoverageWarning'),
+    healthPolicySource.includes('ExportValidationHealthPolicyCatalog.collectWarnings(report)')
+      && healthPolicyCatalogSource.includes('ExportValidationAbiCatalog.browserLayoutMissingAtlasCoverageWarning'),
     true,
-    'Health policy should consume the catalog-owned browser atlas warning',
+    'Health policy catalog should consume the catalog-owned browser atlas warning',
   );
 });

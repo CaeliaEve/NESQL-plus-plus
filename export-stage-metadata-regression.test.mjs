@@ -29,6 +29,7 @@ const rawValidationAbiCatalog = readSource('src/main/java/com/github/dcysteine/n
 const validationReportWriter = readSource('src/main/java/com/github/dcysteine/nesql/exporter/main/ExportValidationReportWriter.java');
 const nativeUiEvidenceCatalog = readSource('src/main/java/com/github/dcysteine/nesql/exporter/main/ExportValidationNativeUiEvidenceCatalog.java');
 const validationHealthPolicy = readSource('src/main/java/com/github/dcysteine/nesql/exporter/main/ExportValidationHealthPolicy.java');
+const validationHealthPolicyCatalog = readSource('src/main/java/com/github/dcysteine/nesql/exporter/main/ExportValidationHealthPolicyCatalog.java');
 const validationAbiCatalog = readSource('src/main/java/com/github/dcysteine/nesql/exporter/main/ExportValidationAbiCatalog.java');
 const rawRepositoryFactStreamer = readSource('src/main/java/com/github/dcysteine/nesql/exporter/local/RawExportRepositoryFactStreamer.java');
 const rawRenderAssetCatalogWriter = readSource('src/main/java/com/github/dcysteine/nesql/exporter/local/RawExportRenderAssetCatalogWriter.java');
@@ -127,10 +128,11 @@ test('native NEI handler layouts export GT dynamic primitives and background reg
   assert.equal(nativeUiEvidenceCatalog.includes('collectWarnings'), true);
   assert.equal(nativeUiEvidenceCatalog.includes('isAbiBlocked'), true);
   assert.equal(nativeUiEvidenceCatalog.includes('validateRawCountDescriptors'), true);
-  assert.equal(validationHealthPolicy.includes('ExportValidationNativeUiEvidenceCatalog.collectWarnings(report)'), true);
-  assert.equal(validationHealthPolicy.includes('ExportValidationNativeUiEvidenceCatalog.isAbiBlocked(report)'), true);
+  assert.equal(validationHealthPolicy.includes('ExportValidationHealthPolicyCatalog.collectWarnings(report)'), true);
+  assert.equal(validationHealthPolicyCatalog.includes('ExportValidationNativeUiEvidenceCatalog.collectWarnings(report)'), true);
+  assert.equal(validationHealthPolicyCatalog.includes('ExportValidationNativeUiEvidenceCatalog.isAbiBlocked(report)'), true);
   assert.equal(validationReportWriter.includes('nativeUiTotals'), false);
-  assert.equal(validationHealthPolicy.includes('ExportValidationAbiCatalog.BLOCKED_NATIVE_UI_ABI'), true);
+  assert.equal(validationHealthPolicyCatalog.includes('ExportValidationAbiCatalog.BLOCKED_NATIVE_UI_ABI'), true);
   assert.equal(validationAbiCatalog.includes('Native UI ABI validation is blocked'), true);
 });
 

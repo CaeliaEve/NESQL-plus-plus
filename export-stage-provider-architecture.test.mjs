@@ -99,6 +99,13 @@ const validationHealthPolicy = readFileSync(
   new URL('./src/main/java/com/github/dcysteine/nesql/exporter/main/ExportValidationHealthPolicy.java', import.meta.url),
   'utf8',
 );
+const validationHealthPolicyCatalog = readFileSync(
+  new URL(
+    './src/main/java/com/github/dcysteine/nesql/exporter/main/ExportValidationHealthPolicyCatalog.java',
+    import.meta.url,
+  ),
+  'utf8',
+);
 const validationReportStore = readFileSync(
   new URL('./src/main/java/com/github/dcysteine/nesql/exporter/main/ExportValidationReportStore.java', import.meta.url),
   'utf8',
@@ -620,13 +627,18 @@ test('export validation probe catalog owns report collection order and capabilit
   assert.match(validationAbiCatalog, /COMPILE_READINESS_READY_WITH_WARNINGS =\s*\r?\n?\s*descriptorValue\(COMPILE_READINESS_DESCRIPTORS, "readyWithWarnings"\)/);
   assert.match(validationAbiCatalog, /PATH_HYGIENE_RULES/);
   assert.match(validationAbiCatalog, /PATH_HYGIENE_ERROR_DESCRIPTOR = validateCodeMessageDescriptor\([\s\S]*"export-path-hygiene"/);
-  assert.match(validationHealthPolicy, /Owns validation warning, blocked-state, and compile-readiness policy/);
+  assert.match(validationHealthPolicyCatalog, /Descriptor-owned validation health rules/);
   assert.match(validationHealthPolicy, /static void evaluate\(ExportValidationReport report\)/);
-  assert.match(validationHealthPolicy, /collectWarnings\(report\)/);
-  assert.match(validationHealthPolicy, /determineHealthStatus\(report\)/);
-  assert.match(validationHealthPolicy, /ExportValidationAbiCatalog\.WARNING_RENDER_ASSET_MANIFEST_MISSING/);
-  assert.match(validationHealthPolicy, /ExportValidationAbiCatalog\.BLOCKED_MACHINE_PATHS/);
-  assert.match(validationHealthPolicy, /ExportValidationAbiCatalog\.COMPILE_READINESS_READY_WITH_WARNINGS/);
+  assert.match(validationHealthPolicy, /ExportValidationHealthPolicyCatalog\.collectWarnings\(report\)/);
+  assert.match(validationHealthPolicy, /ExportValidationHealthPolicyCatalog\.applyBlockedRules\(report\)/);
+  assert.match(validationHealthPolicy, /ExportValidationHealthPolicyCatalog\.collectActionableIssues\(report\)/);
+  assert.match(validationHealthPolicy, /ExportValidationHealthPolicyCatalog\.resolveStatus\(report\)/);
+  assert.match(validationHealthPolicyCatalog, /WARNING_RULES = validateWarningRules/);
+  assert.match(validationHealthPolicyCatalog, /BLOCKED_RULES = validateBlockedRules/);
+  assert.match(validationHealthPolicyCatalog, /STATUS_RULES = validateStatusRules/);
+  assert.match(validationHealthPolicyCatalog, /ExportValidationAbiCatalog\.WARNING_RENDER_ASSET_MANIFEST_MISSING/);
+  assert.match(validationHealthPolicyCatalog, /ExportValidationAbiCatalog\.BLOCKED_MACHINE_PATHS/);
+  assert.match(validationHealthPolicyCatalog, /ExportValidationAbiCatalog\.COMPILE_READINESS_READY_WITH_WARNINGS/);
   assert.match(validationProbeInterface, /Kernel-style validation probe boundary/);
   assert.match(validationProbeInterface, /String id\(\)/);
   assert.match(validationProbeInterface, /List<String> capabilities\(\)/);
