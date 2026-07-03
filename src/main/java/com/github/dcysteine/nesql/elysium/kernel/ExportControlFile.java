@@ -34,6 +34,7 @@ public enum ExportControlFile {
 
     public static final String STABILITY_STABLE = "stable";
     public static final String VALIDATION_PROBE_POLICY = "ordered-fail-closed-validation-probe-catalog";
+    public static final String DRIVER_PROBE_POLICY = "bus-device-driver-probe-fail-closed-with-capability-evidence";
 
     ExportControlFile(String manifestKey, String indexKey, String fileName, String schemaVersion) {
         this.manifestKey = manifestKey;

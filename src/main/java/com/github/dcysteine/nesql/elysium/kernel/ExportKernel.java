@@ -1,5 +1,6 @@
 package com.github.dcysteine.nesql.elysium.kernel;
 
+import java.util.ArrayList;
 import java.util.EnumMap;
 import java.util.LinkedHashSet;
 import java.util.List;
@@ -29,12 +30,13 @@ public final class ExportKernel {
     private void bindDrivers(ExportKernelContext context) throws Exception {
         for (ExportDevice device : catalog.devices()) {
             boolean bound = false;
+            List<String> rejectedProbes = new ArrayList<String>();
             for (ExportDriver driver : catalog.drivers()) {
                 if (!device.busId().equals(driver.busId())) {
                     continue;
                 }
                 long startedAt = System.currentTimeMillis();
-                DriverProbeResult probe = driver.probe(device, context);
+                DriverProbeResult probe = probeDriver(driver, device, context);
                 if (probe == null) {
                     throw new IllegalStateException("Export driver returned null probe result: " + driver.id());
                 }
@@ -44,19 +46,108 @@ public final class ExportKernel {
                         subject,
                         probe.status().name().toLowerCase(),
                         System.currentTimeMillis() - startedAt);
+                if (probe.failed()) {
+                    rejectedProbes.add(describeProbeRejection(driver, probe));
+                    if (device.required()) {
+                        throw probeFailure(device, driver, probe);
+                    }
+                    continue;
+                }
                 if (!probe.supported()) {
+                    rejectedProbes.add(describeProbeRejection(driver, probe));
+                    continue;
+                }
+                List<String> missingCapabilities = missingRequiredCapabilities(device, driver, probe);
+                if (!missingCapabilities.isEmpty()) {
+                    rejectedProbes.add(driver.id()
+                            + " missing required capabilities "
+                            + missingCapabilities
+                            + " after supported probe");
+                    context.trace(
+                            ExportTracepoint.DRIVER_PROBE,
+                            subject,
+                            "capability-missing",
+                            0L);
                     continue;
                 }
                 long bindStartedAt = System.currentTimeMillis();
-                driver.bind(device, context);
-                context.trace(ExportTracepoint.DRIVER_BIND, subject, "ok", System.currentTimeMillis() - bindStartedAt);
+                try {
+                    driver.bind(device, context);
+                    context.trace(
+                            ExportTracepoint.DRIVER_BIND,
+                            subject,
+                            "ok",
+                            System.currentTimeMillis() - bindStartedAt);
+                } catch (Exception e) {
+                    context.trace(
+                            ExportTracepoint.DRIVER_BIND,
+                            subject,
+                            "failed",
+                            System.currentTimeMillis() - bindStartedAt);
+                    throw e;
+                }
                 bound = true;
             }
             if (device.required() && !bound) {
                 throw new IllegalStateException(
-                        "Required export device has no bound driver: " + device.busId() + ":" + device.id());
+                        "Required export device has no bound driver: "
+                                + device.busId()
+                                + ":"
+                                + device.id()
+                                + "; rejected probes="
+                                + rejectedProbes);
             }
         }
+    }
+
+    private static DriverProbeResult probeDriver(
+            ExportDriver driver,
+            ExportDevice device,
+            ExportKernelContext context) {
+        try {
+            return driver.probe(device, context);
+        } catch (RuntimeException e) {
+            return DriverProbeResult.failed("driver probe threw before bind", e);
+        }
+    }
+
+    private static IllegalStateException probeFailure(
+            ExportDevice device,
+            ExportDriver driver,
+            DriverProbeResult probe) {
+        String message = "Required export device probe failed: "
+                + device.busId()
+                + ":"
+                + device.id()
+                + " via "
+                + driver.id()
+                + " - "
+                + probe.reason();
+        Throwable cause = probe.cause();
+        return cause == null ? new IllegalStateException(message) : new IllegalStateException(message, cause);
+    }
+
+    private static String describeProbeRejection(ExportDriver driver, DriverProbeResult probe) {
+        return driver.id()
+                + "="
+                + probe.status().name().toLowerCase()
+                + (probe.reason().isEmpty() ? "" : "(" + probe.reason() + ")");
+    }
+
+    private static List<String> missingRequiredCapabilities(
+            ExportDevice device,
+            ExportDriver driver,
+            DriverProbeResult probe) {
+        Set<String> available = new LinkedHashSet<String>();
+        available.addAll(driver.capabilities());
+        available.addAll(probe.capabilities());
+        List<String> missing = new ArrayList<String>();
+        for (String requiredCapability : device.capabilities()) {
+            if (!available.contains(requiredCapability)) {
+                missing.add(requiredCapability);
+            }
+        }
+        return missing;
     }
 
     public void exit(ExportKernelContext context) throws Exception {

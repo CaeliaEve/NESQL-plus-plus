@@ -19,7 +19,8 @@ final class ExportStageModules {
                         Collections.singletonList(ExportDevice.required(
                                 ExportStageActionModule.STAGE_ACTION_BUS_ID,
                                 ExportStageActionModule.STAGE_ACTION_DEVICE_ID,
-                                ExportStageActionProvider.capabilityList("export.stage-action.dispatch")))))
+                                ExportStageActionProvider.capabilityList(
+                                        ExportStageActionModule.STAGE_ACTION_DISPATCH_CAPABILITY)))))
                 .add(new ExportStageActionModule(new LifecycleStageActionProvider(), ExportInitcallLevel.SUBSYS))
                 .add(new ExportStageActionModule(new RawFactStageActionProvider(), ExportInitcallLevel.FACTS))
                 .add(new ExportStageActionModule(new RenderStageActionProvider(), ExportInitcallLevel.RENDER))

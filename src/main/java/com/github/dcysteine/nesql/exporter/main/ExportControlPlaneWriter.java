@@ -1,5 +1,6 @@
 package com.github.dcysteine.nesql.exporter.main;
 
+import com.github.dcysteine.nesql.elysium.kernel.DriverProbeResult;
 import com.github.dcysteine.nesql.elysium.kernel.ExportDevice;
 import com.github.dcysteine.nesql.elysium.kernel.ExportControlFile;
 import com.github.dcysteine.nesql.elysium.kernel.ExportDebugFile;
@@ -91,6 +92,12 @@ final class ExportControlPlaneWriter {
         for (ExportModuleCatalog.ModuleDescriptor module : catalog.descriptors()) {
             capabilities.addAll(module.capabilities);
         }
+        for (ExportDevice device : catalog.devices()) {
+            capabilities.addAll(device.capabilities());
+        }
+        for (ExportDriver driver : catalog.drivers()) {
+            capabilities.addAll(driver.capabilities());
+        }
         for (ExportValidationProbeDescriptor probe : ExportValidationProbeCatalog.descriptors()) {
             capabilities.addAll(probe.capabilities);
         }
@@ -112,6 +119,10 @@ final class ExportControlPlaneWriter {
     private static DriversReport driversReport(ExportModuleCatalog catalog) {
         DriversReport report = new DriversReport();
         report.schemaVersion = ExportControlFile.DRIVERS.schemaVersion();
+        report.probePolicy = ExportControlFile.DRIVER_PROBE_POLICY;
+        for (DriverProbeResult.Status status : DriverProbeResult.Status.values()) {
+            report.probeStatuses.add(status.name().toLowerCase());
+        }
         for (ExportDevice device : catalog.devices()) {
             report.devices.add(new DeviceRecord(device));
         }
@@ -269,6 +280,8 @@ final class ExportControlPlaneWriter {
 
     private static final class DriversReport {
         String schemaVersion;
+        String probePolicy;
+        List<String> probeStatuses = new ArrayList<String>();
         List<DeviceRecord> devices = new ArrayList<DeviceRecord>();
         List<DriverRecord> drivers = new ArrayList<DriverRecord>();
     }

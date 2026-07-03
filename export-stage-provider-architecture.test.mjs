@@ -349,6 +349,40 @@ test('export kernel owns Linux-style bus device driver probe and bind lifecycle'
   assert.match(actionModule, /provider\.stages\(\)\.isEmpty\(\)/);
 });
 
+test('export driver probe boundary fails closed with capability evidence', () => {
+  assert.match(driverProbeResult, /FAILED/);
+  assert.match(driverProbeResult, /private final List<String> capabilities/);
+  assert.match(driverProbeResult, /private final Throwable cause/);
+  assert.match(driverProbeResult, /supported\(String reason, List<String> capabilities\)/);
+  assert.match(driverProbeResult, /failed\(String reason, Throwable cause\)/);
+  assert.match(driverProbeResult, /List<String> capabilities\(\)/);
+  assert.match(driverProbeResult, /Throwable cause\(\)/);
+  assert.match(driverProbeResult, /boolean failed\(\)/);
+
+  assert.match(kernel, /probeDriver\(driver, device, context\)/);
+  assert.match(kernel, /DriverProbeResult\.failed\("driver probe threw before bind", e\)/);
+  assert.match(kernel, /probe\.failed\(\)/);
+  assert.match(kernel, /probeFailure\(device, driver, probe\)/);
+  assert.match(kernel, /missingRequiredCapabilities\(device, driver, probe\)/);
+  assert.match(kernel, /probe\.capabilities\(\)/);
+  assert.match(kernel, /driver\.capabilities\(\)/);
+  assert.match(kernel, /capability-missing/);
+  assert.match(kernel, /rejected probes=/);
+  assert.match(kernel, /ExportTracepoint\.DRIVER_BIND,[\s\S]*"failed"/);
+
+  assert.match(actionModule, /STAGE_ACTION_DISPATCH_CAPABILITY/);
+  assert.match(actionModule, /capabilities\.add\(STAGE_ACTION_DISPATCH_CAPABILITY\)/);
+  assert.match(actionModule, /DriverProbeResult\.supported\("provider declares export stage actions", capabilities\(\)\)/);
+  assert.match(modules, /ExportStageActionModule\.STAGE_ACTION_DISPATCH_CAPABILITY/);
+
+  assert.match(controlFileCatalog, /DRIVER_PROBE_POLICY/);
+  assert.match(controlPlaneWriter, /DriverProbeResult\.Status\.values\(\)/);
+  assert.match(controlPlaneWriter, /report\.probePolicy = ExportControlFile\.DRIVER_PROBE_POLICY/);
+  assert.match(controlPlaneWriter, /probeStatuses/);
+  assert.match(controlPlaneWriter, /capabilities\.addAll\(device\.capabilities\(\)\)/);
+  assert.match(controlPlaneWriter, /capabilities\.addAll\(driver\.capabilities\(\)\)/);
+});
+
 test('export lifecycle resources are owned by the kernel managed-resource stack', () => {
   assert.match(resourceManager, /Deque<ManagedResource> resources/);
   assert.match(resourceManager, /resources\.push\(new ManagedResource/);

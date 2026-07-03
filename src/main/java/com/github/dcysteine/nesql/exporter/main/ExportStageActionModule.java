@@ -15,6 +15,7 @@ import java.util.List;
 final class ExportStageActionModule implements ExportModule {
     static final String STAGE_ACTION_BUS_ID = "export-stage-action";
     static final String STAGE_ACTION_DEVICE_ID = "stage-action-dispatch";
+    static final String STAGE_ACTION_DISPATCH_CAPABILITY = "export.stage-action.dispatch";
 
     private final ExportStageActionProvider provider;
     private final ExportInitcallLevel level;
@@ -79,7 +80,10 @@ final class ExportStageActionModule implements ExportModule {
 
         @Override
         public List<String> capabilities() {
-            return provider.capabilities();
+            List<String> capabilities = new ArrayList<String>();
+            capabilities.add(STAGE_ACTION_DISPATCH_CAPABILITY);
+            capabilities.addAll(provider.capabilities());
+            return Collections.unmodifiableList(capabilities);
         }
 
         @Override
@@ -91,7 +95,7 @@ final class ExportStageActionModule implements ExportModule {
             if (provider.stages().isEmpty()) {
                 return DriverProbeResult.unsupported("provider declares no export stages");
             }
-            return DriverProbeResult.supported("provider declares export stage actions");
+            return DriverProbeResult.supported("provider declares export stage actions", capabilities());
         }
     }
 }
