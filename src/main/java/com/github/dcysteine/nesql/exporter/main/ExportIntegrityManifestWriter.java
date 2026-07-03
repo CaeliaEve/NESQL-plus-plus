@@ -16,12 +16,70 @@ import java.io.OutputStreamWriter;
 import java.nio.charset.StandardCharsets;
 import java.security.MessageDigest;
 import java.util.ArrayList;
+import java.util.Arrays;
+import java.util.Collections;
 import java.util.HashMap;
+import java.util.LinkedHashSet;
 import java.util.List;
 import java.util.Map;
+import java.util.Set;
 
 /** Writes stable export identity/checksum artifacts for NeoNEI import and cache invalidation. */
 final class ExportIntegrityManifestWriter {
+    private static final IntegrityArtifactCatalog ARTIFACT_CATALOG =
+            IntegrityArtifactCatalog.validateAndFreeze(
+                    Arrays.asList(
+                            new FileArtifactDescriptor("raw-manifest", RawExportFileCatalog.MANIFEST_FILE),
+                            new FileArtifactDescriptor("raw-report", RawExportFileCatalog.EXPORT_REPORT_FILE),
+                            new FileArtifactDescriptor(
+                                    "health",
+                                    RawExportFileCatalog.validationPath(
+                                            RawExportFileCatalog.EXPORT_HEALTH_REPORT_FILE_NAME)),
+                            new FileArtifactDescriptor(
+                                    "manifest",
+                                    RawExportFileCatalog.validationPath(
+                                            RawExportFileCatalog.EXPORT_MANIFEST_FILE_NAME)),
+                            new FileArtifactDescriptor(
+                                    "checksums",
+                                    RawExportFileCatalog.validationPath(
+                                            RawExportFileCatalog.STAGE_CHECKSUMS_FILE_NAME)),
+                            new FileArtifactDescriptor(
+                                    "timings",
+                                    ExportDebugFile.STAGE_TIMING.validationAliasPath()),
+                            new FileArtifactDescriptor(
+                                    "native-ui-validation",
+                                    RawExportFileCatalog.NATIVE_UI_VALIDATION_FILE)),
+                    Arrays.asList(
+                            new FileArtifactDescriptor("recipes", RawExportFileCatalog.RECIPE_INDEX_FILE),
+                            new FileArtifactDescriptor(
+                                    "browser-atlas",
+                                    RawExportFileCatalog.BROWSER_ATLAS_INDEX_FILE),
+                            new FileArtifactDescriptor("render-backend", RawExportFileCatalog.RENDER_BACKEND_FILE),
+                            new FileArtifactDescriptor("special", RawExportFileCatalog.SPECIAL_INDEX_FILE)),
+                    Arrays.asList(
+                            new DirectoryArtifactDescriptor("items", ArtifactRoot.REPOSITORY, "items"),
+                            new DirectoryArtifactDescriptor("recipes", ArtifactRoot.REPOSITORY, "recipes"),
+                            new DirectoryArtifactDescriptor("images", ArtifactRoot.REPOSITORY, "image"),
+                            new DirectoryArtifactDescriptor("raw-facts", ArtifactRoot.RAW_EXPORT, "facts"),
+                            new DirectoryArtifactDescriptor("raw-assets", ArtifactRoot.RAW_EXPORT, "assets"),
+                            new DirectoryArtifactDescriptor("raw-models", ArtifactRoot.RAW_EXPORT, "models"),
+                            new DirectoryArtifactDescriptor("raw-special", ArtifactRoot.RAW_EXPORT, "special"),
+                            new DirectoryArtifactDescriptor(
+                                    "raw-control",
+                                    ArtifactRoot.RAW_EXPORT,
+                                    RawExportFileCatalog.CONTROL_DIRECTORY),
+                            new DirectoryArtifactDescriptor(
+                                    "raw-debug",
+                                    ArtifactRoot.RAW_EXPORT,
+                                    RawExportFileCatalog.DEBUG_DIRECTORY)));
+
+    private static final List<FileArtifactDescriptor> FILE_ARTIFACTS_BEFORE_DYNAMIC =
+            ARTIFACT_CATALOG.beforeDynamicFiles();
+    private static final List<FileArtifactDescriptor> FILE_ARTIFACTS_AFTER_DYNAMIC =
+            ARTIFACT_CATALOG.afterDynamicFiles();
+    private static final List<DirectoryArtifactDescriptor> DIRECTORY_ARTIFACTS =
+            ARTIFACT_CATALOG.directories();
+
     private ExportIntegrityManifestWriter() {}
 
     static void write(ExportContext exportContext) {
@@ -65,7 +123,9 @@ final class ExportIntegrityManifestWriter {
             Logger.chatMessage(
                     EnumChatFormatting.GREEN
                             + "[NESQL] Export manifest/checksums written: "
-                            + new File(validationDir, RawExportFileCatalog.EXPORT_MANIFEST_FILE_NAME).getAbsolutePath());
+                            + new File(
+                                    validationDir,
+                                    RawExportFileCatalog.EXPORT_MANIFEST_FILE_NAME).getAbsolutePath());
         } catch (Exception e) {
             Logger.MOD.warn("Failed to write NESQL++ export manifest/checksums", e);
         }
@@ -73,47 +133,7 @@ final class ExportIntegrityManifestWriter {
 
     private static List<ArtifactChecksum> collectArtifacts(File repositoryDirectory, File rawDir) {
         List<ArtifactChecksum> artifacts = new ArrayList<ArtifactChecksum>();
-        addFile(
-                artifacts,
-                repositoryDirectory,
-                RawExportFileCatalog.rawExportFile(rawDir, RawExportFileCatalog.MANIFEST_FILE),
-                "raw-manifest");
-        addFile(
-                artifacts,
-                repositoryDirectory,
-                RawExportFileCatalog.rawExportFile(rawDir, RawExportFileCatalog.EXPORT_REPORT_FILE),
-                "raw-report");
-        addFile(
-                artifacts,
-                repositoryDirectory,
-                RawExportFileCatalog.rawExportFile(
-                        rawDir,
-                        RawExportFileCatalog.validationPath(RawExportFileCatalog.EXPORT_HEALTH_REPORT_FILE_NAME)),
-                "health");
-        addFile(
-                artifacts,
-                repositoryDirectory,
-                RawExportFileCatalog.rawExportFile(
-                        rawDir,
-                        RawExportFileCatalog.validationPath(RawExportFileCatalog.EXPORT_MANIFEST_FILE_NAME)),
-                "manifest");
-        addFile(
-                artifacts,
-                repositoryDirectory,
-                RawExportFileCatalog.rawExportFile(
-                        rawDir,
-                        RawExportFileCatalog.validationPath(RawExportFileCatalog.STAGE_CHECKSUMS_FILE_NAME)),
-                "checksums");
-        addFile(
-                artifacts,
-                repositoryDirectory,
-                RawExportFileCatalog.rawExportFile(rawDir, ExportDebugFile.STAGE_TIMING.validationAliasPath()),
-                "timings");
-        addFile(
-                artifacts,
-                repositoryDirectory,
-                RawExportFileCatalog.rawExportFile(rawDir, RawExportFileCatalog.NATIVE_UI_VALIDATION_FILE),
-                "native-ui-validation");
+        addFileArtifacts(artifacts, repositoryDirectory, rawDir, FILE_ARTIFACTS_BEFORE_DYNAMIC);
         for (ExportControlFile file : ExportControlFile.values()) {
             addControlFile(
                     artifacts,
@@ -130,44 +150,23 @@ final class ExportIntegrityManifestWriter {
                     file,
                     RawExportFileCatalog.debugArtifactStage(file));
         }
-        addFile(
-                artifacts,
-                repositoryDirectory,
-                RawExportFileCatalog.rawExportFile(rawDir, "facts/recipes/index.json"),
-                "recipes");
-        addFile(
-                artifacts,
-                repositoryDirectory,
-                RawExportFileCatalog.rawExportFile(rawDir, "assets/textures/browser_atlas_index.json"),
-                "browser-atlas");
-        addFile(
-                artifacts,
-                repositoryDirectory,
-                RawExportFileCatalog.rawExportFile(rawDir, "facts/render/backend.json"),
-                "render-backend");
-        addFile(
-                artifacts,
-                repositoryDirectory,
-                RawExportFileCatalog.rawExportFile(rawDir, "special/index.json"),
-                "special");
-        addDirectorySummary(artifacts, repositoryDirectory, new File(repositoryDirectory, "items"), "items");
-        addDirectorySummary(artifacts, repositoryDirectory, new File(repositoryDirectory, "recipes"), "recipes");
-        addDirectorySummary(artifacts, repositoryDirectory, new File(repositoryDirectory, "image"), "images");
-        addDirectorySummary(artifacts, repositoryDirectory, new File(rawDir, "facts"), "raw-facts");
-        addDirectorySummary(artifacts, repositoryDirectory, new File(rawDir, "assets"), "raw-assets");
-        addDirectorySummary(artifacts, repositoryDirectory, new File(rawDir, "models"), "raw-models");
-        addDirectorySummary(artifacts, repositoryDirectory, new File(rawDir, "special"), "raw-special");
-        addDirectorySummary(
-                artifacts,
-                repositoryDirectory,
-                new File(rawDir, RawExportFileCatalog.CONTROL_DIRECTORY),
-                "raw-control");
-        addDirectorySummary(
-                artifacts,
-                repositoryDirectory,
-                new File(rawDir, RawExportFileCatalog.DEBUG_DIRECTORY),
-                "raw-debug");
+        addFileArtifacts(artifacts, repositoryDirectory, rawDir, FILE_ARTIFACTS_AFTER_DYNAMIC);
+        addDirectoryArtifacts(artifacts, repositoryDirectory, rawDir);
         return artifacts;
+    }
+
+    private static void addFileArtifacts(
+            List<ArtifactChecksum> artifacts,
+            File repositoryDirectory,
+            File rawDir,
+            List<FileArtifactDescriptor> descriptors) {
+        for (FileArtifactDescriptor descriptor : descriptors) {
+            addFile(
+                    artifacts,
+                    repositoryDirectory,
+                    RawExportFileCatalog.rawExportFile(rawDir, descriptor.relativePath),
+                    descriptor.stage);
+        }
     }
 
     private static void addFile(List<ArtifactChecksum> artifacts, File root, File file, String stage) {
@@ -199,6 +198,24 @@ final class ExportIntegrityManifestWriter {
             ExportDebugFile file,
             String stage) {
         addFile(artifacts, root, new File(rawDir, file.rawExportDebugPath().replace('/', File.separatorChar)), stage);
+    }
+
+    private static void addDirectoryArtifacts(List<ArtifactChecksum> artifacts, File repositoryDirectory, File rawDir) {
+        for (DirectoryArtifactDescriptor descriptor : DIRECTORY_ARTIFACTS) {
+            addDirectorySummary(
+                    artifacts,
+                    repositoryDirectory,
+                    artifactDirectory(repositoryDirectory, rawDir, descriptor),
+                    descriptor.stage);
+        }
+    }
+
+    private static File artifactDirectory(
+            File repositoryDirectory,
+            File rawDir,
+            DirectoryArtifactDescriptor descriptor) {
+        File root = descriptor.root == ArtifactRoot.RAW_EXPORT ? rawDir : repositoryDirectory;
+        return new File(root, descriptor.relativePath.replace('/', File.separatorChar));
     }
 
     private static void addDirectorySummary(List<ArtifactChecksum> artifacts, File root, File dir, String stage) {
@@ -336,6 +353,192 @@ final class ExportIntegrityManifestWriter {
             builder.append(String.format("%02x", value & 0xff));
         }
         return builder.toString();
+    }
+
+    private static void requireArtifactGroup(String group, List<?> descriptors) {
+        if (descriptors == null || descriptors.isEmpty()) {
+            throw new IllegalStateException("Export integrity " + group + " artifact catalog must not be empty");
+        }
+    }
+
+    private static void requireArtifactStage(String stage, String descriptorName) {
+        if (stage == null || stage.trim().isEmpty()) {
+            throw new IllegalStateException("Export integrity artifact stage must be non-empty: " + descriptorName);
+        }
+        for (int i = 0; i < stage.length(); i++) {
+            char value = stage.charAt(i);
+            boolean valid =
+                    (value >= 'a' && value <= 'z')
+                            || (value >= '0' && value <= '9')
+                            || value == '-';
+            if (!valid) {
+                throw new IllegalStateException(
+                        "Export integrity artifact stage must be kebab-case: " + descriptorName);
+            }
+        }
+    }
+
+    private static void requireRuntimeRelativePath(String label, String value, String descriptorName) {
+        if (value == null || value.trim().isEmpty()) {
+            throw new IllegalStateException(label + " must be non-empty: " + descriptorName);
+        }
+        if (value.startsWith("/")
+                || value.startsWith("\\")
+                || value.indexOf('\\') >= 0
+                || value.contains("..")
+                || value.startsWith(RawExportFileCatalog.RAW_EXPORT_DIRECTORY + "/")
+                || value.startsWith("./")
+                || value.endsWith("/")
+                || value.indexOf("//") >= 0) {
+            throw new IllegalStateException(label + " must be a runtime-relative artifact path: " + descriptorName);
+        }
+    }
+
+    private static final class IntegrityArtifactCatalog {
+        private final List<FileArtifactDescriptor> beforeDynamicFiles;
+        private final List<FileArtifactDescriptor> afterDynamicFiles;
+        private final List<DirectoryArtifactDescriptor> directories;
+
+        private IntegrityArtifactCatalog(
+                List<FileArtifactDescriptor> beforeDynamicFiles,
+                List<FileArtifactDescriptor> afterDynamicFiles,
+                List<DirectoryArtifactDescriptor> directories) {
+            this.beforeDynamicFiles = beforeDynamicFiles;
+            this.afterDynamicFiles = afterDynamicFiles;
+            this.directories = directories;
+        }
+
+        private static IntegrityArtifactCatalog validateAndFreeze(
+                List<FileArtifactDescriptor> beforeDynamicFiles,
+                List<FileArtifactDescriptor> afterDynamicFiles,
+                List<DirectoryArtifactDescriptor> directories) {
+            requireArtifactGroup("before-dynamic file", beforeDynamicFiles);
+            requireArtifactGroup("after-dynamic file", afterDynamicFiles);
+            requireArtifactGroup("directory", directories);
+            Set<String> paths = new LinkedHashSet<String>();
+            Set<String> identities = new LinkedHashSet<String>();
+            List<FileArtifactDescriptor> validatedBefore = validateFileArtifacts(
+                    "before-dynamic",
+                    beforeDynamicFiles,
+                    paths,
+                    identities);
+            List<FileArtifactDescriptor> validatedAfter = validateFileArtifacts(
+                    "after-dynamic",
+                    afterDynamicFiles,
+                    paths,
+                    identities);
+            List<DirectoryArtifactDescriptor> validatedDirectories = validateDirectoryArtifacts(
+                    directories,
+                    paths,
+                    identities);
+            return new IntegrityArtifactCatalog(validatedBefore, validatedAfter, validatedDirectories);
+        }
+
+        private static List<FileArtifactDescriptor> validateFileArtifacts(
+                String group,
+                List<FileArtifactDescriptor> descriptors,
+                Set<String> paths,
+                Set<String> identities) {
+            List<FileArtifactDescriptor> validated = new ArrayList<FileArtifactDescriptor>();
+            for (FileArtifactDescriptor descriptor : descriptors) {
+                if (descriptor == null) {
+                    throw new IllegalStateException(
+                            "Export integrity file artifact descriptor must not be null: " + group);
+                }
+                descriptor.validate(paths, identities);
+                validated.add(descriptor);
+            }
+            return Collections.unmodifiableList(validated);
+        }
+
+        private static List<DirectoryArtifactDescriptor> validateDirectoryArtifacts(
+                List<DirectoryArtifactDescriptor> descriptors,
+                Set<String> paths,
+                Set<String> identities) {
+            List<DirectoryArtifactDescriptor> validated = new ArrayList<DirectoryArtifactDescriptor>();
+            for (DirectoryArtifactDescriptor descriptor : descriptors) {
+                if (descriptor == null) {
+                    throw new IllegalStateException("Export integrity directory artifact descriptor must not be null");
+                }
+                descriptor.validate(paths, identities);
+                validated.add(descriptor);
+            }
+            return Collections.unmodifiableList(validated);
+        }
+
+        private List<FileArtifactDescriptor> beforeDynamicFiles() {
+            return beforeDynamicFiles;
+        }
+
+        private List<FileArtifactDescriptor> afterDynamicFiles() {
+            return afterDynamicFiles;
+        }
+
+        private List<DirectoryArtifactDescriptor> directories() {
+            return directories;
+        }
+    }
+
+    private static final class FileArtifactDescriptor {
+        private final String stage;
+        private final String relativePath;
+
+        private FileArtifactDescriptor(String stage, String relativePath) {
+            this.stage = stage;
+            this.relativePath = relativePath;
+        }
+
+        private void validate(Set<String> paths, Set<String> identities) {
+            requireArtifactStage(stage, stage);
+            requireRuntimeRelativePath("Export integrity file artifact path", relativePath, stage);
+            requireUniqueArtifactPath(paths, ArtifactRoot.RAW_EXPORT, relativePath);
+            requireUniqueArtifactIdentity(identities, stage, ArtifactRoot.RAW_EXPORT, relativePath);
+        }
+    }
+
+    private static final class DirectoryArtifactDescriptor {
+        private final String stage;
+        private final ArtifactRoot root;
+        private final String relativePath;
+
+        private DirectoryArtifactDescriptor(String stage, ArtifactRoot root, String relativePath) {
+            this.stage = stage;
+            this.root = root;
+            this.relativePath = relativePath;
+        }
+
+        private void validate(Set<String> paths, Set<String> identities) {
+            requireArtifactStage(stage, stage);
+            if (root == null) {
+                throw new IllegalStateException("Export integrity directory artifact root must be non-null: " + stage);
+            }
+            requireRuntimeRelativePath("Export integrity directory artifact path", relativePath, stage);
+            requireUniqueArtifactPath(paths, root, relativePath);
+            requireUniqueArtifactIdentity(identities, stage, root, relativePath);
+        }
+    }
+
+    private static void requireUniqueArtifactPath(Set<String> paths, ArtifactRoot root, String relativePath) {
+        String key = root.name() + ":" + relativePath;
+        if (!paths.add(key)) {
+            throw new IllegalStateException("Duplicate export integrity artifact path: " + key);
+        }
+    }
+
+    private static void requireUniqueArtifactIdentity(
+            Set<String> identities,
+            String stage,
+            ArtifactRoot root,
+            String relativePath) {
+        String key = stage + "|" + root.name() + ":" + relativePath;
+        if (!identities.add(key)) {
+            throw new IllegalStateException("Duplicate export integrity artifact descriptor: " + key);
+        }
+    }
+
+    private enum ArtifactRoot {
+        REPOSITORY,
+        RAW_EXPORT
     }
 
     private static final class ExportManifest {
