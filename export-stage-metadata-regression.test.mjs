@@ -324,6 +324,9 @@ test('canonical output is opt-in debug staging after raw-export migration', () =
   assert.equal(runner.includes('deleteCanonicalStagingDirectory'), true);
   assert.equal(runner.includes('deleteCanonicalStagingDirectory'), true);
   assert.equal(support.includes('Removed legacy canonical staging output; raw-export is authoritative.'), true);
+  assert.match(support, /writeCanonicalSnapshot\(\s*EntityManager entityManager,\s*File repositoryDirectory,\s*String profileId,\s*boolean includeRenderAssets\) throws Exception/);
+  assert.equal(support.includes('boolean failOnError'), false);
+  assert.equal(support.includes('java.util.Collections.emptyList()'), false);
   assert.equal(rawFileCatalog.includes('EXPORT_MANIFEST_FILE_NAME = "export_manifest.json"'), true);
   assert.equal(rawRenderAssetCatalogWriter.includes('objectAt(item, "staticAtlas")'), true);
   assert.equal(rawRenderAssetCatalogWriter.includes('objectAt(item, "animatedAtlas")'), true);

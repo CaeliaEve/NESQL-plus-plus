@@ -83,8 +83,7 @@ public final class ExportWriterSupport {
             EntityManager entityManager,
             File repositoryDirectory,
             String profileId,
-            boolean includeRenderAssets,
-            boolean failOnError) throws Exception {
+            boolean includeRenderAssets) throws Exception {
         Logger.chatMessage(EnumChatFormatting.AQUA + "Exporting NESQL++ canonical snapshot...");
         try {
             List<CanonicalRenderAsset> renderAssets =
@@ -98,11 +97,8 @@ public final class ExportWriterSupport {
             Logger.MOD.error("Failed to export NESQL++ canonical snapshot", e);
             Logger.chatMessage(
                     EnumChatFormatting.RED + "Failed to export NESQL++ canonical snapshot: " + e.getMessage());
-            if (failOnError) {
-                throw e;
-            }
+            throw e;
         }
-        return java.util.Collections.emptyList();
     }
 
     public static void writeGregTechMultiblocks(String repositoryName) throws Exception {

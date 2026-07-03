@@ -62,7 +62,6 @@ final class RawFactStageActionProvider implements ExportStageActionProvider {
                         context.stageState.runtime.entityManager,
                         context.exportContext.paths.repositoryDirectory,
                         context.exportContext.profile.profileId,
-                        context.exportContext.profile.renderImages,
-                        context.exportContext.profile == ExportProfile.DATA_ONLY_V104));
+                        context.exportContext.profile.renderImages));
     }
 }
