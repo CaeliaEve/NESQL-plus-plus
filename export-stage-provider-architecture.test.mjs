@@ -409,7 +409,7 @@ test('export control and debug planes have explicit filesystem ownership', () =>
     ['HEALTH', 'controlHealth', 'health.json'],
     ['VERSION', 'controlVersion', 'version.json'],
   ]) {
-    assert.match(controlFileCatalog, new RegExp(`${constant}\\("${manifestKey}"`));
+    assert.match(controlFileCatalog, new RegExp(`${constant}\\(\\s*"${manifestKey}"`));
     assert.match(controlFileCatalog, new RegExp(`"${fileName.replace('.', '\\.')}"`));
   }
   assert.match(controlFileCatalog, /public String rawExportPath\(\)/);
