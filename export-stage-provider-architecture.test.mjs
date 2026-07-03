@@ -83,6 +83,10 @@ const integrityManifestWriter = readFileSync(
   new URL('./src/main/java/com/github/dcysteine/nesql/exporter/main/ExportIntegrityManifestWriter.java', import.meta.url),
   'utf8',
 );
+const integrityOutputFileCatalog = readFileSync(
+  new URL('./src/main/java/com/github/dcysteine/nesql/exporter/main/ExportIntegrityOutputFileCatalog.java', import.meta.url),
+  'utf8',
+);
 const validationReportWriter = readFileSync(
   new URL('./src/main/java/com/github/dcysteine/nesql/exporter/main/ExportValidationReportWriter.java', import.meta.url),
   'utf8',
@@ -580,9 +584,12 @@ test('export control and debug planes have explicit filesystem ownership', () =>
   assert.match(integrityManifestWriter, /ExportSchemaCatalog\.EXPORT_MANIFEST/);
   assert.match(integrityManifestWriter, /ExportSchemaCatalog\.STAGE_CHECKSUMS/);
   assert.match(integrityManifestWriter, /static void write\(ExportContext exportContext\) throws Exception/);
-  assert.match(integrityManifestWriter, /ensureDirectory\(validationDir\)/);
-  assert.match(integrityManifestWriter, /Export integrity output directory must not be null/);
-  assert.match(integrityManifestWriter, /Export integrity output path exists but is not a directory/);
+  assert.match(integrityManifestWriter, /ExportIntegrityOutputFileCatalog\.ensureDirectory\(validationDir\)/);
+  assert.match(integrityManifestWriter, /ExportIntegrityOutputFileCatalog\.outputFiles\(validationDir, manifest, checksumReport\)/);
+  assert.match(integrityOutputFileCatalog, /Export integrity output directory must not be null/);
+  assert.match(integrityOutputFileCatalog, /Export integrity output path exists but is not a directory/);
+  assert.match(integrityOutputFileCatalog, /RawExportFileCatalog\.EXPORT_MANIFEST_DASH_FILE_NAME/);
+  assert.match(integrityOutputFileCatalog, /RawExportFileCatalog\.STAGE_CHECKSUMS_DASH_FILE_NAME/);
   assert.match(integrityManifestWriter, /Export integrity checksum path exists but is not a file/);
   assert.match(integrityManifestWriter, /Export integrity checksum report is empty or null JSON/);
   assert.match(integrityManifestWriter, /Export integrity checksum report artifacts must not be null/);

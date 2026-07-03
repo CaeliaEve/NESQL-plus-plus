@@ -87,9 +87,9 @@ final class ExportIntegrityManifestWriter {
         File repositoryDirectory = exportContext.paths.repositoryDirectory;
         File rawDir = RawExportFileCatalog.rawExportDirectory(repositoryDirectory);
         File validationDir = RawExportFileCatalog.validationDirectory(rawDir);
-        ensureDirectory(validationDir);
+        ExportIntegrityOutputFileCatalog.ensureDirectory(validationDir);
 
-        File checksumFile = new File(validationDir, RawExportFileCatalog.STAGE_CHECKSUMS_FILE_NAME);
+        File checksumFile = ExportIntegrityOutputFileCatalog.checksumFile(validationDir);
         Map<String, ArtifactChecksum> previousArtifacts = readPreviousArtifacts(checksumFile);
         List<ArtifactChecksum> artifacts = collectArtifacts(repositoryDirectory, rawDir);
         annotateChanges(artifacts, previousArtifacts);
@@ -113,17 +113,15 @@ final class ExportIntegrityManifestWriter {
         checksumReport.selection = manifest.selection;
         checksumReport.artifacts = artifacts;
 
-        writeJson(new File(validationDir, RawExportFileCatalog.EXPORT_MANIFEST_FILE_NAME), manifest);
-        writeJson(new File(validationDir, RawExportFileCatalog.EXPORT_MANIFEST_DASH_FILE_NAME), manifest);
-        writeJson(checksumFile, checksumReport);
-        writeJson(new File(validationDir, RawExportFileCatalog.STAGE_CHECKSUMS_DASH_FILE_NAME), checksumReport);
+        for (ExportIntegrityOutputFileCatalog.OutputFile outputFile
+                : ExportIntegrityOutputFileCatalog.outputFiles(validationDir, manifest, checksumReport)) {
+            writeJson(outputFile.file, outputFile.payload);
+        }
 
         Logger.chatMessage(
                 EnumChatFormatting.GREEN
                         + "[NESQL] Export manifest/checksums written: "
-                        + new File(
-                                validationDir,
-                                RawExportFileCatalog.EXPORT_MANIFEST_FILE_NAME).getAbsolutePath());
+                        + ExportIntegrityOutputFileCatalog.manifestFile(validationDir).getAbsolutePath());
     }
 
     private static List<ArtifactChecksum> collectArtifacts(File repositoryDirectory, File rawDir) throws Exception {
@@ -347,20 +345,7 @@ final class ExportIntegrityManifestWriter {
     }
 
     private static void ensureDirectory(File directory) throws Exception {
-        if (directory == null) {
-            throw new IOException("Export integrity output directory must not be null");
-        }
-        if (directory.exists()) {
-            if (!directory.isDirectory()) {
-                throw new IOException(
-                        "Export integrity output path exists but is not a directory: "
-                                + directory.getAbsolutePath());
-            }
-            return;
-        }
-        if (!directory.mkdirs() && !directory.isDirectory()) {
-            throw new IOException("Failed to create export integrity output directory: " + directory.getAbsolutePath());
-        }
+        ExportIntegrityOutputFileCatalog.ensureDirectory(directory);
     }
 
     private static void writeJson(File file, Object payload) throws Exception {
@@ -572,7 +557,7 @@ final class ExportIntegrityManifestWriter {
         RAW_EXPORT
     }
 
-    private static final class ExportManifest {
+    static final class ExportManifest {
         String schemaVersion;
         long generatedAtEpochMs;
         String repository;
@@ -585,7 +570,7 @@ final class ExportIntegrityManifestWriter {
         List<ArtifactChecksum> artifacts;
     }
 
-    private static final class ChecksumReport {
+    static final class ChecksumReport {
         String schemaVersion;
         long generatedAtEpochMs;
         String repository;

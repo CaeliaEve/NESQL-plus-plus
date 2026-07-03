@@ -8,6 +8,9 @@ const readSource = (relativePath) => fs.readFileSync(path.join(repoRoot, relativ
 const integrity = readSource(
   'src/main/java/com/github/dcysteine/nesql/exporter/main/ExportIntegrityManifestWriter.java',
 );
+const integrityOutputCatalog = readSource(
+  'src/main/java/com/github/dcysteine/nesql/exporter/main/ExportIntegrityOutputFileCatalog.java',
+);
 
 test('export integrity artifact checksums are emitted from a validated descriptor catalog', () => {
   assert.match(integrity, /static void write\(ExportContext exportContext\) throws Exception/);
@@ -31,11 +34,18 @@ test('export integrity artifact checksums are emitted from a validated descripto
 });
 
 test('export integrity manifest and checksum persistence fails closed', () => {
-  assert.match(integrity, /ensureDirectory\(validationDir\)/);
-  assert.match(integrity, /private static void ensureDirectory\(File directory\) throws Exception/);
-  assert.match(integrity, /Export integrity output directory must not be null/);
-  assert.match(integrity, /Export integrity output path exists but is not a directory/);
-  assert.match(integrity, /Failed to create export integrity output directory/);
+  assert.match(integrity, /ExportIntegrityOutputFileCatalog\.ensureDirectory\(validationDir\)/);
+  assert.match(integrity, /ExportIntegrityOutputFileCatalog\.checksumFile\(validationDir\)/);
+  assert.match(integrity, /ExportIntegrityOutputFileCatalog\.outputFiles\(validationDir, manifest, checksumReport\)/);
+  assert.match(integrityOutputCatalog, /OUTPUTS = validateAndFreeze\(Arrays\.asList\(/);
+  assert.match(integrityOutputCatalog, /RawExportFileCatalog\.EXPORT_MANIFEST_FILE_NAME/);
+  assert.match(integrityOutputCatalog, /RawExportFileCatalog\.EXPORT_MANIFEST_DASH_FILE_NAME/);
+  assert.match(integrityOutputCatalog, /RawExportFileCatalog\.STAGE_CHECKSUMS_FILE_NAME/);
+  assert.match(integrityOutputCatalog, /RawExportFileCatalog\.STAGE_CHECKSUMS_DASH_FILE_NAME/);
+  assert.match(integrityOutputCatalog, /Export integrity output directory must not be null/);
+  assert.match(integrityOutputCatalog, /Export integrity output path exists but is not a directory/);
+  assert.match(integrityOutputCatalog, /Failed to create export integrity output directory/);
+  assert.match(integrityOutputCatalog, /Export integrity output file catalog must not be empty/);
   assert.match(integrity, /readPreviousArtifacts\(File checksumFile\) throws Exception/);
   assert.match(integrity, /Export integrity checksum file must not be null/);
   assert.match(integrity, /Export integrity checksum path exists but is not a file/);
@@ -44,6 +54,8 @@ test('export integrity manifest and checksum persistence fails closed', () => {
   assert.match(integrity, /sha256\(File file\) throws Exception/);
   assert.match(integrity, /collectDirectoryStats\(File root, File file, DirectoryStats stats\) throws Exception/);
   assert.match(integrity, /Failed to list export integrity artifact directory/);
+  assert.doesNotMatch(integrity, /new File\(validationDir, RawExportFileCatalog\.EXPORT_MANIFEST_FILE_NAME\)/);
+  assert.doesNotMatch(integrity, /new File\(validationDir, RawExportFileCatalog\.STAGE_CHECKSUMS_DASH_FILE_NAME\)/);
   assert.doesNotMatch(integrity, /Failed to write NESQL\+\+ export manifest\/checksums/);
   assert.doesNotMatch(integrity, /Failed to read previous NESQL\+\+ stage checksums/);
   assert.doesNotMatch(integrity, /Failed to hash export artifact/);
