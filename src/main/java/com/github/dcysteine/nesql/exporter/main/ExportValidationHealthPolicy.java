@@ -101,28 +101,7 @@ final class ExportValidationHealthPolicy {
         if (report.rawRecipes > 0L && (report.rawNeiHandlers == 0L || report.rawNeiHandlerLayouts == 0L)) {
             report.warnings.add(ExportValidationAbiCatalog.WARNING_NEI_HANDLER_METADATA_MISSING);
         }
-        if (report.nativeUiMissingSurfaces > 0L) {
-            report.warnings.add(ExportValidationAbiCatalog.nativeUiMissingSurfacesWarning(
-                    report.nativeUiMissingSurfaces));
-        }
-        if (report.nativeUiSlotBoundsViolations > 0L
-                || report.nativeUiRectBoundsViolations > 0L
-                || report.nativeUiPrimitiveBoundsViolations > 0L
-                || report.nativeUiBackgroundBoundsViolations > 0L) {
-            report.warnings.add(ExportValidationAbiCatalog.nativeUiGeometryBoundsWarning(
-                    report.nativeUiSlotBoundsViolations,
-                    report.nativeUiRectBoundsViolations,
-                    report.nativeUiPrimitiveBoundsViolations,
-                    report.nativeUiBackgroundBoundsViolations));
-        }
-        if (report.nativeUiCoordinateContractViolations > 0L) {
-            report.warnings.add(ExportValidationAbiCatalog.nativeUiCoordinateContractWarning(
-                    report.nativeUiCoordinateContractViolations));
-        }
-        if (report.nativeUiInteractionContractViolations > 0L) {
-            report.warnings.add(ExportValidationAbiCatalog.nativeUiInteractionContractWarning(
-                    report.nativeUiInteractionContractViolations));
-        }
+        ExportValidationNativeUiEvidenceCatalog.collectWarnings(report);
     }
 
     private static void determineHealthStatus(ExportValidationReport report) {
@@ -148,15 +127,7 @@ final class ExportValidationHealthPolicy {
                 report.rawItems > 0L && report.semanticDiagnosticsPresent && report.semanticTotalItems != report.rawItems,
                 ExportValidationAbiCatalog.BLOCKED_SEMANTIC_DIAGNOSTIC_ITEM_MISMATCH);
         addBlockedIf(report,
-                report.nativeUiLayouts > 0L
-                        && (report.nativeUiSlots == 0L
-                                || report.nativeUiMissingSurfaces > 0L
-                                || report.nativeUiSlotBoundsViolations > 0L
-                                || report.nativeUiRectBoundsViolations > 0L
-                                || report.nativeUiPrimitiveBoundsViolations > 0L
-                                || report.nativeUiBackgroundBoundsViolations > 0L
-                                || report.nativeUiCoordinateContractViolations > 0L
-                                || report.nativeUiInteractionContractViolations > 0L),
+                ExportValidationNativeUiEvidenceCatalog.isAbiBlocked(report),
                 ExportValidationAbiCatalog.BLOCKED_NATIVE_UI_ABI);
         addActionableIssue(report,
                 ExportValidationAbiCatalog.ACTION_SEMANTIC_UNCLASSIFIED_FAMILIES_CODE,

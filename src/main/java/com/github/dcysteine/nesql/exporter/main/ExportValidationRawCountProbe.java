@@ -36,17 +36,7 @@ final class ExportValidationRawCountProbe {
         report.rawNeiRepresentativeMismatches = ExportValidationJsonSupport.readLongMember(counts, ExportValidationEvidenceCatalog.RawCount.NEI_REPRESENTATIVE_MISMATCHES);
         report.rawNeiHandlers = ExportValidationJsonSupport.readLongMember(counts, ExportValidationEvidenceCatalog.RawCount.NEI_HANDLERS);
         report.rawNeiHandlerLayouts = ExportValidationJsonSupport.readLongMember(counts, ExportValidationEvidenceCatalog.RawCount.NEI_HANDLER_LAYOUTS);
-        report.nativeUiLayouts = ExportValidationJsonSupport.readLongMember(counts, ExportValidationEvidenceCatalog.RawCount.NATIVE_UI_LAYOUTS);
-        report.nativeUiSlots = ExportValidationJsonSupport.readLongMember(counts, ExportValidationEvidenceCatalog.RawCount.NATIVE_UI_SLOTS);
-        report.nativeUiRects = ExportValidationJsonSupport.readLongMember(counts, ExportValidationEvidenceCatalog.RawCount.NATIVE_UI_RECTS);
-        report.nativeUiPrimitives = ExportValidationJsonSupport.readLongMember(counts, ExportValidationEvidenceCatalog.RawCount.NATIVE_UI_PRIMITIVES);
-        report.nativeUiMissingSurfaces = ExportValidationJsonSupport.readLongMember(counts, ExportValidationEvidenceCatalog.RawCount.NATIVE_UI_MISSING_SURFACES);
-        report.nativeUiSlotBoundsViolations = ExportValidationJsonSupport.readLongMember(counts, ExportValidationEvidenceCatalog.RawCount.NATIVE_UI_SLOT_BOUNDS_VIOLATIONS);
-        report.nativeUiRectBoundsViolations = ExportValidationJsonSupport.readLongMember(counts, ExportValidationEvidenceCatalog.RawCount.NATIVE_UI_RECT_BOUNDS_VIOLATIONS);
-        report.nativeUiPrimitiveBoundsViolations = ExportValidationJsonSupport.readLongMember(counts, ExportValidationEvidenceCatalog.RawCount.NATIVE_UI_PRIMITIVE_BOUNDS_VIOLATIONS);
-        report.nativeUiBackgroundBoundsViolations = ExportValidationJsonSupport.readLongMember(counts, ExportValidationEvidenceCatalog.RawCount.NATIVE_UI_BACKGROUND_BOUNDS_VIOLATIONS);
-        report.nativeUiCoordinateContractViolations = ExportValidationJsonSupport.readLongMember(counts, ExportValidationEvidenceCatalog.RawCount.NATIVE_UI_COORDINATE_CONTRACT_VIOLATIONS);
-        report.nativeUiInteractionContractViolations = ExportValidationJsonSupport.readLongMember(counts, ExportValidationEvidenceCatalog.RawCount.NATIVE_UI_INTERACTION_CONTRACT_VIOLATIONS);
+        ExportValidationNativeUiEvidenceCatalog.populateRawCounts(counts, report);
         report.rawRecipeTypes = ExportValidationJsonSupport.readLongMember(counts, ExportValidationEvidenceCatalog.RawCount.RECIPE_TYPES);
         report.renderBackendFacts = ExportValidationJsonSupport.readLongMember(counts, ExportValidationEvidenceCatalog.RawCount.RENDER_BACKEND_FACTS);
         report.renderBackendAngelica = ExportValidationJsonSupport.readLongMember(counts, ExportValidationEvidenceCatalog.RawCount.RENDER_BACKEND_ANGELICA);
