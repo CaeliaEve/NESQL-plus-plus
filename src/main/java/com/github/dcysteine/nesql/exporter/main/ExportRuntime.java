@@ -70,30 +70,23 @@ public final class ExportRuntime implements AutoCloseable {
 
     public void runPluginPipeline() {
         pluginTimings.clear();
-        runPluginPhase("initialize");
-        runPluginPhase("process");
-        runPluginPhase("postProcess");
+        for (ExportPluginLifecycleCatalog.PhaseDescriptor phase :
+                ExportPluginLifecycleCatalog.phases()) {
+            runPluginPhase(phase);
+        }
     }
 
-    private void runPluginPhase(String phase) {
+    private void runPluginPhase(ExportPluginLifecycleCatalog.PhaseDescriptor phase) {
         for (Map.Entry<Plugin, PluginExporter> entry : activePlugins.entrySet()) {
             long startedAt = System.currentTimeMillis();
             try {
-                if ("initialize".equals(phase)) {
-                    entry.getValue().initialize();
-                } else if ("process".equals(phase)) {
-                    entry.getValue().process();
-                } else if ("postProcess".equals(phase)) {
-                    entry.getValue().postProcess();
-                } else {
-                    throw new IllegalArgumentException("Unknown plugin phase: " + phase);
-                }
+                phase.invoke(entry.getValue());
             } finally {
                 pluginTimings.add(
                         new PluginTiming(
                                 entry.getKey().name(),
                                 entry.getValue().getClass().getName(),
-                                phase,
+                                phase.id(),
                                 System.currentTimeMillis() - startedAt));
             }
         }
