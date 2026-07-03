@@ -398,14 +398,29 @@ test('raw export artifact writers share the fail-closed sidecar file ops boundar
 });
 
 test('raw fact stream registry owns provider order and identity validation', () => {
-  for (const provider of [
-    'RawRepositoryFactStreamProvider',
-    'RawNeiFactStreamProvider',
-    'RawRenderAssetFactStreamProvider',
-    'RawEntityAndRenderBackendFactStreamProvider',
-  ]) {
-    assert.match(factStreamRegistry, new RegExp(`new ${provider}\\(\\)`));
-  }
+  assert.match(factStreamRegistry, /PROVIDER_DESCRIPTORS = validateDescriptorCatalog\(Arrays\.asList\(/);
+  assert.match(factStreamRegistry, /providerDescriptor\("raw\.repository-facts", RawRepositoryFactStreamProvider::new\)/);
+  assert.match(factStreamRegistry, /providerDescriptor\("raw\.nei-facts", RawNeiFactStreamProvider::new\)/);
+  assert.match(factStreamRegistry, /providerDescriptor\("raw\.render-asset-facts", RawRenderAssetFactStreamProvider::new\)/);
+  assert.match(
+    factStreamRegistry,
+    /providerDescriptor\("raw\.entity-render-backend-facts", RawEntityAndRenderBackendFactStreamProvider::new\)/,
+  );
+  assert.match(factStreamRegistry, /DEFAULT_PROVIDERS =\s*\r?\n?\s*instantiateAndFreeze\(PROVIDER_DESCRIPTORS\)/);
+  assert.match(factStreamRegistry, /static List<RawExportFactStreamProvider> defaultProviders\(\) \{\s*return DEFAULT_PROVIDERS;/);
+  assert.match(factStreamRegistry, /instantiateAndFreeze\(\s*\r?\n?\s*List<ProviderDescriptor> descriptors\)/);
+  assert.match(factStreamRegistry, /descriptor\.factory\.build\(\)/);
+  assert.match(factStreamRegistry, /validateProvider\(provider, descriptor\.id\)/);
+  assert.match(factStreamRegistry, /validateDescriptorCatalog\(List<ProviderDescriptor> descriptors\)/);
+  assert.match(factStreamRegistry, /Raw export fact stream provider descriptor catalog must not be empty/);
+  assert.match(factStreamRegistry, /Duplicate raw export fact stream provider descriptor id/);
+  assert.match(factStreamRegistry, /Raw export fact stream provider id does not match descriptor/);
+  assert.match(factStreamRegistry, /validateNonEmptyStringList/);
+  assert.doesNotMatch(factStreamRegistry, /providerList\(/);
+  assert.doesNotMatch(factStreamRegistry, /new RawRepositoryFactStreamProvider\(\)/);
+  assert.doesNotMatch(factStreamRegistry, /new RawNeiFactStreamProvider\(\)/);
+  assert.doesNotMatch(factStreamRegistry, /new RawRenderAssetFactStreamProvider\(\)/);
+  assert.doesNotMatch(factStreamRegistry, /new RawEntityAndRenderBackendFactStreamProvider\(\)/);
   assert.match(factStreamRegistry, /validateAndFreeze/);
   assert.match(factStreamRegistry, /static List<RawExportFactStreamDescriptor> describe/);
   assert.match(factStreamRegistry, /Raw export fact stream provider id must be non-empty/);
