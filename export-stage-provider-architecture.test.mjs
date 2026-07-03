@@ -95,6 +95,13 @@ const validationReportStore = readFileSync(
   new URL('./src/main/java/com/github/dcysteine/nesql/exporter/main/ExportValidationReportStore.java', import.meta.url),
   'utf8',
 );
+const validationReportFileCatalog = readFileSync(
+  new URL(
+    './src/main/java/com/github/dcysteine/nesql/exporter/main/ExportValidationReportFileCatalog.java',
+    import.meta.url,
+  ),
+  'utf8',
+);
 const validationAbiCatalog = readFileSync(
   new URL('./src/main/java/com/github/dcysteine/nesql/exporter/main/ExportValidationAbiCatalog.java', import.meta.url),
   'utf8',
@@ -699,20 +706,26 @@ test('export validation probe catalog owns report collection order and capabilit
 });
 
 test('export validation report persistence and delta metadata are store-owned', () => {
-  assert.match(validationReportStore, /Owns validation report persistence, aliases, previous-run snapshot, and delta metadata/);
+  assert.match(validationReportStore, /Owns validation report persistence, previous-run snapshot, and delta metadata/);
   assert.match(validationReportStore, /static void applyPreviousDelta\(File validationDirectory, ValidationReport report\) throws Exception/);
   assert.match(validationReportStore, /static ReportFiles write\(File validationDirectory, ValidationReport report\) throws Exception/);
-  assert.match(validationReportStore, /readPreviousReport\(reportFile\(validationDirectory\)\)/);
+  assert.match(validationReportStore, /ExportValidationReportFileCatalog\.reportFile\(validationDirectory\)/);
+  assert.match(validationReportStore, /ExportValidationReportFileCatalog\.outputFiles\(validationDirectory\)/);
+  assert.match(validationReportStore, /ExportValidationReportFileCatalog\.healthReportFile\(validationDirectory\)/);
   assert.match(validationReportStore, /readPreviousReport\(File reportFile\) throws Exception/);
   assert.match(validationReportStore, /previousSnapshot\(previousReport\)/);
   assert.match(validationReportStore, /deltaSnapshot\(report, previousReport\)/);
-  assert.match(validationReportStore, /RawExportFileCatalog\.EXPORT_VALIDATION_REPORT_FILE_NAME/);
-  assert.match(validationReportStore, /RawExportFileCatalog\.EXPORT_HEALTH_REPORT_FILE_NAME/);
-  assert.match(validationReportStore, /Validation report directory must not be null/);
-  assert.match(validationReportStore, /Validation report path exists but is not a directory/);
+  assert.doesNotMatch(validationReportStore, /RawExportFileCatalog\.EXPORT_VALIDATION_REPORT_FILE_NAME/);
+  assert.doesNotMatch(validationReportStore, /RawExportFileCatalog\.EXPORT_HEALTH_REPORT_FILE_NAME/);
   assert.match(validationReportStore, /Validation report path exists but is not a file/);
   assert.match(validationReportStore, /Validation report file is empty or null JSON/);
-  assert.match(validationReportStore, /Failed to create validation report directory/);
+  assert.match(validationReportFileCatalog, /REPORT_FILES = validateAndFreeze\(Arrays\.asList\(/);
+  assert.match(validationReportFileCatalog, /RawExportFileCatalog\.EXPORT_VALIDATION_REPORT_FILE_NAME/);
+  assert.match(validationReportFileCatalog, /RawExportFileCatalog\.EXPORT_HEALTH_REPORT_FILE_NAME/);
+  assert.match(validationReportFileCatalog, /Validation report directory must not be null/);
+  assert.match(validationReportFileCatalog, /Validation report path exists but is not a directory/);
+  assert.match(validationReportFileCatalog, /Failed to create validation report directory/);
+  assert.match(validationReportFileCatalog, /Validation report file catalog must not be empty/);
   assert.match(rawFileCatalog, /EXPORT_VALIDATION_REPORT_FILE_NAME = "export_validation_report\.json"/);
   assert.match(rawFileCatalog, /EXPORT_HEALTH_REPORT_FILE_NAME = "export-health-report\.json"/);
   assert.match(validationReportStore, /WRITE_GSON\.toJson\(value, writer\)/);

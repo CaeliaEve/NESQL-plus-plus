@@ -358,7 +358,9 @@ test('nei recipe export captures raw positioned slot geometry for the layout con
 // P0 export integrity/report contract guardrails.
 test('export pipeline writes manifest, checksums, and health report aliases', () => {
   const runnerSource = read('src/main/java/com/github/dcysteine/nesql/exporter/main/ExportStageRunner.java');
-  const validationStoreSource = read('src/main/java/com/github/dcysteine/nesql/exporter/main/ExportValidationReportStore.java');
+  const validationReportFileCatalogSource = read(
+    'src/main/java/com/github/dcysteine/nesql/exporter/main/ExportValidationReportFileCatalog.java',
+  );
   const manifestSource = read('src/main/java/com/github/dcysteine/nesql/exporter/main/ExportIntegrityManifestWriter.java');
   const rawFileCatalogSource = read('src/main/java/com/github/dcysteine/nesql/exporter/local/RawExportFileCatalog.java');
 
@@ -368,10 +370,10 @@ test('export pipeline writes manifest, checksums, and health report aliases', ()
     'Export runner should write export-manifest/stage-checksums after validation',
   );
   assert.equal(
-    validationStoreSource.includes('RawExportFileCatalog.EXPORT_HEALTH_REPORT_FILE_NAME')
+    validationReportFileCatalogSource.includes('RawExportFileCatalog.EXPORT_HEALTH_REPORT_FILE_NAME')
       && rawFileCatalogSource.includes('EXPORT_HEALTH_REPORT_FILE_NAME = "export-health-report.json"'),
     true,
-    'Validation report store should emit the canonical export-health-report alias',
+    'Validation report file catalog should emit the canonical export-health-report alias',
   );
   assert.equal(
     manifestSource.includes('RawExportFileCatalog.EXPORT_MANIFEST_DASH_FILE_NAME')

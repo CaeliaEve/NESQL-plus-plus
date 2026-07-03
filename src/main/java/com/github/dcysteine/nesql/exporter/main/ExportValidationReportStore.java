@@ -3,7 +3,6 @@ package com.github.dcysteine.nesql.exporter.main;
 import com.github.dcysteine.nesql.exporter.main.ExportValidationReportWriter.DeltaSnapshot;
 import com.github.dcysteine.nesql.exporter.main.ExportValidationReportWriter.PreviousSnapshot;
 import com.github.dcysteine.nesql.exporter.main.ExportValidationReportWriter.ValidationReport;
-import com.github.dcysteine.nesql.exporter.local.RawExportFileCatalog;
 import com.google.gson.Gson;
 import com.google.gson.GsonBuilder;
 
@@ -15,7 +14,7 @@ import java.io.InputStreamReader;
 import java.io.OutputStreamWriter;
 import java.nio.charset.StandardCharsets;
 
-/** Owns validation report persistence, aliases, previous-run snapshot, and delta metadata. */
+/** Owns validation report persistence, previous-run snapshot, and delta metadata. */
 final class ExportValidationReportStore {
     private static final Gson READ_GSON = new GsonBuilder().create();
     private static final Gson WRITE_GSON = new GsonBuilder().setPrettyPrinting().create();
@@ -23,7 +22,8 @@ final class ExportValidationReportStore {
     private ExportValidationReportStore() {}
 
     static void applyPreviousDelta(File validationDirectory, ValidationReport report) throws Exception {
-        ValidationReport previousReport = readPreviousReport(reportFile(validationDirectory));
+        ValidationReport previousReport = readPreviousReport(
+                ExportValidationReportFileCatalog.reportFile(validationDirectory));
         if (previousReport == null) {
             return;
         }
@@ -32,10 +32,14 @@ final class ExportValidationReportStore {
     }
 
     static ReportFiles write(File validationDirectory, ValidationReport report) throws Exception {
-        ensureDirectory(validationDirectory);
-        ReportFiles files = new ReportFiles(reportFile(validationDirectory), healthReportFile(validationDirectory));
-        writeJson(files.reportFile, report);
-        writeJson(files.healthReportFile, report);
+        ExportValidationReportFileCatalog.ensureDirectory(validationDirectory);
+        for (ExportValidationReportFileCatalog.ReportFile reportFile
+                : ExportValidationReportFileCatalog.outputFiles(validationDirectory)) {
+            writeJson(reportFile.file, report);
+        }
+        ReportFiles files = new ReportFiles(
+                ExportValidationReportFileCatalog.reportFile(validationDirectory),
+                ExportValidationReportFileCatalog.healthReportFile(validationDirectory));
         return files;
     }
 
@@ -85,35 +89,8 @@ final class ExportValidationReportStore {
         return delta;
     }
 
-    private static File reportFile(File validationDirectory) throws Exception {
-        requireDirectoryRoot(validationDirectory);
-        return new File(validationDirectory, RawExportFileCatalog.EXPORT_VALIDATION_REPORT_FILE_NAME);
-    }
-
-    private static File healthReportFile(File validationDirectory) throws Exception {
-        requireDirectoryRoot(validationDirectory);
-        return new File(validationDirectory, RawExportFileCatalog.EXPORT_HEALTH_REPORT_FILE_NAME);
-    }
-
-    private static void requireDirectoryRoot(File directory) throws Exception {
-        if (directory == null) {
-            throw new IOException("Validation report directory must not be null");
-        }
-        if (directory.exists() && !directory.isDirectory()) {
-            throw new IOException(
-                    "Validation report path exists but is not a directory: " + directory.getAbsolutePath());
-        }
-    }
-
-    private static void ensureDirectory(File directory) throws Exception {
-        requireDirectoryRoot(directory);
-        if (!directory.exists() && !directory.mkdirs() && !directory.isDirectory()) {
-            throw new IOException("Failed to create validation report directory: " + directory.getAbsolutePath());
-        }
-    }
-
     private static void writeJson(File file, Object value) throws Exception {
-        ensureDirectory(file.getParentFile());
+        ExportValidationReportFileCatalog.ensureDirectory(file.getParentFile());
         try (FileOutputStream fos = new FileOutputStream(file);
              OutputStreamWriter writer = new OutputStreamWriter(fos, StandardCharsets.UTF_8)) {
             WRITE_GSON.toJson(value, writer);
