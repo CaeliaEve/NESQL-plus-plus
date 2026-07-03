@@ -21,22 +21,10 @@ public class WitcheryPluginExporter extends PluginExporter {
 
     @Override
     public void process() {
-        // Direct API access to Witchery recipe managers is unreliable
-        // We now rely on the NEI plugin to export these recipes as a fallback
-        Logger.MOD.info("Witchery plugin: Direct API access skipped, relying on NEI fallback");
-        Logger.chatMessage("Witchery recipes will be exported via NEI handlers");
-
-        // The NEI plugin (running last) will capture all Witchery recipes from NEI handlers
-        // This approach is more reliable than direct API access
-
-        // If you want to try direct access anyway, uncomment below:
-        // try {
-        //     new SpinnerProcessor(this, recipeTypeHandler).process();
-        //     new DistilleryProcessor(this, recipeTypeHandler).process();
-        //     new AltarProcessor(this, recipeTypeHandler).process();
-        //     new CauldronProcessor(this, recipeTypeHandler).process();
-        // } catch (Exception e) {
-        //     Logger.MOD.warn("Direct Witchery API access failed (expected), NEI will handle it");
-        // }
+        // Witchery's recipe-manager API is not a stable export contract in this
+        // pack. The declared ingest surface for Witchery recipes is the NEI
+        // handler phase, which mirrors the in-game UI recipe source.
+        Logger.MOD.info("Witchery plugin: direct API access disabled; NEI handler ingest is authoritative");
+        Logger.chatMessage("Witchery recipes will be exported through NEI handler ingest");
     }
 }

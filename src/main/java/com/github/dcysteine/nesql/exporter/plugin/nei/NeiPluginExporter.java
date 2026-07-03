@@ -8,9 +8,11 @@ import com.github.dcysteine.nesql.sql.Plugin;
 /**
  * Plugin which exports NEI data (item list and recipes).
  *
- * This plugin is processed LAST in the plugin order to ensure that all
- * other recipes have been exported first. NEI serves as a fallback to catch
- * any recipes that weren't exported by the specialized mod plugins.
+ * This plugin is processed last because NEI handlers are the authoritative
+ * recipe-view ingest surface for handler-owned recipes. Specialized direct
+ * API plugins run earlier for canonical enrichment; the NEI stage records
+ * what the in-game recipe UI can actually expose instead of acting as a
+ * legacy compatibility fallback.
  */
 public class NeiPluginExporter extends PluginExporter {
 

@@ -21,23 +21,11 @@ public class ThaumcraftPluginExporter extends PluginExporter {
 
     @Override
     public void process() {
-        // Direct API access to Thaumcraft recipe managers is unreliable
-        // (static fields are often null at export time due to lazy initialization)
-        // We now rely on the NEI plugin to export these recipes as a fallback
-        Logger.MOD.info("Thaumcraft plugin: Direct API access skipped, relying on NEI fallback");
-        Logger.chatMessage("Thaumcraft recipes will be exported via NEI handlers");
-
-        // The NEI plugin (running last) will capture all Thaumcraft recipes from NEI handlers
-        // This approach is more reliable than direct API access
-
-        // If you want to try direct access anyway, uncomment below:
-        // try {
-        //     new InfusionCraftingProcessor(this, recipeTypeHandler).process();
-        //     new ArcaneWorkbenchProcessor(this, recipeTypeHandler).process();
-        //     new CrucibleProcessor(this, recipeTypeHandler).process();
-        //     new AspectCombinationProcessor(this, recipeTypeHandler).process();
-        // } catch (Exception e) {
-        //     Logger.MOD.warn("Direct Thaumcraft API access failed (expected), NEI will handle it");
-        // }
+        // Direct API access to Thaumcraft recipe managers is not a stable export
+        // contract in GTNH 1.7.10: key static fields can be absent until the UI
+        // path initializes them. The declared ingest surface for Thaumcraft
+        // recipes is therefore the NEI handler phase.
+        Logger.MOD.info("Thaumcraft plugin: direct API access disabled; NEI handler ingest is authoritative");
+        Logger.chatMessage("Thaumcraft recipes will be exported through NEI handler ingest");
     }
 }

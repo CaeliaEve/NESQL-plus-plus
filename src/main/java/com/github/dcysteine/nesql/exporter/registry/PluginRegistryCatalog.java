@@ -26,6 +26,8 @@ import static com.github.dcysteine.nesql.exporter.plugin.gregtech.util.GTRecipeM
 
 /** Descriptor-owned plugin registry order, dependency, and construction catalog. */
 final class PluginRegistryCatalog {
+    private static final String ROLE_NEI_HANDLER_INGEST = "nei-handler-ingest";
+
     private static final CatalogAction NO_ACTION = new CatalogAction() {
         @Override
         public void run() {}
@@ -77,7 +79,7 @@ final class PluginRegistryCatalog {
                     "direct-recipe-api",
                     WitcheryPluginExporter::new,
                     ModDependency.WITCHERY),
-            descriptor(Plugin.NEI, "fallback-nei", NeiPluginExporter::new)));
+            descriptor(Plugin.NEI, ROLE_NEI_HANDLER_INGEST, NeiPluginExporter::new)));
 
     private PluginRegistryCatalog() {}
 
@@ -156,8 +158,9 @@ final class PluginRegistryCatalog {
                 throw new IllegalStateException("Missing plugin registry descriptor: " + plugin);
             }
         }
-        if (!roles.contains("fallback-nei")) {
-            throw new IllegalStateException("Plugin registry catalog must include the fallback NEI role");
+        if (!roles.contains(ROLE_NEI_HANDLER_INGEST)) {
+            throw new IllegalStateException(
+                    "Plugin registry catalog must include the NEI handler ingest role");
         }
         return builder.build();
     }

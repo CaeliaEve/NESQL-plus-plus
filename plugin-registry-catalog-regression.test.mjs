@@ -19,7 +19,8 @@ test('plugin registry ordering and construction are descriptor-catalog owned', (
   assert.match(catalog, /Duplicate plugin registry descriptor/);
   assert.match(catalog, /Plugin registry constructor must not be null/);
   assert.match(catalog, /Plugin registry catalog action must not be null/);
-  assert.match(catalog, /Plugin registry catalog must include the fallback NEI role/);
+  assert.match(catalog, /ROLE_NEI_HANDLER_INGEST = "nei-handler-ingest"/);
+  assert.match(catalog, /Plugin registry catalog must include the NEI handler ingest role/);
 
   for (const plugin of [
     'BASE',
@@ -57,7 +58,9 @@ test('plugin registry ordering and construction are descriptor-catalog owned', (
   assert.match(catalog, /ModDependency\.WITCHERY/);
   assert.match(catalog, /makeGTRecipe\(\)/);
   assert.match(catalog, /role\(\)/);
-  assert.match(catalog, /"fallback-nei"/);
+  assert.match(catalog, /ROLE_NEI_HANDLER_INGEST/);
+  assert.doesNotMatch(catalog, /"fallback-nei"/);
+  assert.doesNotMatch(catalog, /fallback NEI role/);
 });
 
 test('PluginRegistry consumes catalog entries without direct exporter construction policy', () => {

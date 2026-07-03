@@ -21,7 +21,7 @@ public class BloodMagicPluginExporter extends PluginExporter {
 
     @Override
     public void process() {
-        Logger.MOD.info("Blood Magic plugin: attempting direct API export before NEI fallback");
+        Logger.MOD.info("Blood Magic plugin: exporting direct API families before NEI handler ingest");
         Logger.chatMessage("Blood Magic direct export: altar / alchemy / sacrificial / tartaric");
 
         boolean hadFailure = false;
@@ -31,8 +31,11 @@ public class BloodMagicPluginExporter extends PluginExporter {
         hadFailure |= runProcessor("tartaric forge", () -> new TartarForgeProcessor(this, recipeTypeHandler).process());
 
         if (hadFailure) {
-            Logger.MOD.warn("Blood Magic direct API export completed with one or more failures; NEI fallback will still run");
-            Logger.chatMessage("Blood Magic direct export had errors, but NEI fallback will handle any missing recipes");
+            Logger.MOD.warn(
+                    "Blood Magic direct API export completed with one or more failures; "
+                            + "NEI handler ingest remains the authoritative UI-visible recipe phase");
+            Logger.chatMessage(
+                    "Blood Magic direct export had errors; NEI handler ingest will still record UI-visible recipes");
         } else {
             Logger.MOD.info("Blood Magic direct API export completed");
         }
@@ -43,7 +46,11 @@ public class BloodMagicPluginExporter extends PluginExporter {
             processor.run();
             return false;
         } catch (Exception e) {
-            Logger.MOD.warn("Blood Magic direct API export failed for {} processor, NEI fallback will still run", name, e);
+            Logger.MOD.warn(
+                    "Blood Magic direct API export failed for {} processor; "
+                            + "NEI handler ingest remains scheduled",
+                    name,
+                    e);
             return true;
         }
     }
