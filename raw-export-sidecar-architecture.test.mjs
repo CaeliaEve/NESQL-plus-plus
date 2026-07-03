@@ -193,7 +193,14 @@ test('raw repository fact streaming is split from sidecar orchestration', () => 
   assert.match(factStreamContext, /final EntityManager entityManager/);
   assert.match(factStreamContext, /final File repositoryDirectory/);
   assert.match(factStreamContext, /final File rawDir/);
+  assert.match(factStreamContext, /final List<CanonicalRenderAsset> renderAssets/);
   assert.match(factStreamContext, /final String schemaVersion/);
+  assert.match(factStreamContext, /requireNonNull\("Raw export fact stream entity manager", entityManager\)/);
+  assert.match(factStreamContext, /requireNonNull\("Raw export fact stream repository directory", repositoryDirectory\)/);
+  assert.match(factStreamContext, /requireNonNull\("Raw export fact stream raw-export directory", rawDir\)/);
+  assert.match(factStreamContext, /requireNonNull\("Raw export fact stream render assets", renderAssets\)/);
+  assert.match(factStreamContext, /requireNonNull\("Raw export fact stream schema version", schemaVersion\)/);
+  assert.match(factStreamContext, /Collections\.unmodifiableList\(new ArrayList<CanonicalRenderAsset>/);
   assert.match(repositoryProvider, /new RawExportRepositoryFactStreamer\(context\.entityManager, context\.rawDir, context\.schemaVersion\)\.write\(\)/);
   assert.match(repositoryProvider, /RawRepositoryFactStreamResult repository =/);
   assert.doesNotMatch(factStreamPipeline, /new RawExportRepositoryFactStreamer/);

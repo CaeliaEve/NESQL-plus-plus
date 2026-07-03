@@ -130,6 +130,19 @@ test('Angelica framebuffer capture facts live outside the render fact coordinato
   assert.doesNotMatch(renderFacts, /rendererContract/);
 });
 
+test('Angelica render facts writer owns strict input and directory contracts', () => {
+  assert.match(renderFacts, /Angelica render facts entity manager must not be null/);
+  assert.match(renderFacts, /Angelica render facts raw-export directory must not be null/);
+  assert.match(renderFacts, /Angelica render facts render assets must not be null/);
+  assert.match(renderFacts, /Collections\.unmodifiableList\(new ArrayList<CanonicalRenderAsset>\(renderAssets\)\)/);
+  assert.match(renderFacts, /Angelica render facts directory must not be null/);
+  assert.match(renderFacts, /Angelica render facts path exists but is not a directory/);
+  assert.match(renderFacts, /Failed to create Angelica render facts directory/);
+  assert.doesNotMatch(renderFacts, /renderAssets == null\s*\?\s*Collections\.<CanonicalRenderAsset>emptyList\(\)/);
+  assert.doesNotMatch(renderFacts, /Collections\.<CanonicalRenderAsset>emptyList\(\)/);
+  assert.doesNotMatch(renderFacts, /directory != null && !directory\.exists\(\) && !directory\.mkdirs\(\)/);
+});
+
 test('Angelica framebuffer capture writer owns capture filtering and capture stream rows', () => {
   assert.match(framebufferCaptureFacts, /final class AngelicaFramebufferCaptureFactsWriter/);
   assert.match(framebufferCaptureFacts, /isFramebufferCaptureAsset\(/);

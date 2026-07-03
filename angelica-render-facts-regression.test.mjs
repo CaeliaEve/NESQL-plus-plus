@@ -34,6 +34,8 @@ for (const required of [
   'renderFramebufferCapturesWithoutFramesSamples',
   'spritesMissingTiming',
   'unknownSpecialRenderers',
+  'Angelica render facts render assets must not be null',
+  'Angelica render facts path exists but is not a directory',
   'new AngelicaRenderFactsWriter(context.entityManager, context.rawDir, context.renderAssets).write()'
 ]) {
   assert(renderFactSurface.includes(required), `Render fact surface missing ${required}`);

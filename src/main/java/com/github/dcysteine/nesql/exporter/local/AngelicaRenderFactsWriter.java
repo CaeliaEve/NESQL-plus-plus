@@ -25,11 +25,18 @@ final class AngelicaRenderFactsWriter {
     private final List<CanonicalRenderAsset> renderAssets;
 
     AngelicaRenderFactsWriter(EntityManager entityManager, File rawDir, List<CanonicalRenderAsset> renderAssets) {
+        if (entityManager == null) {
+            throw new IllegalArgumentException("Angelica render facts entity manager must not be null");
+        }
+        if (rawDir == null) {
+            throw new IllegalArgumentException("Angelica render facts raw-export directory must not be null");
+        }
+        if (renderAssets == null) {
+            throw new IllegalArgumentException("Angelica render facts render assets must not be null");
+        }
         this.entityManager = entityManager;
         this.rawDir = rawDir;
-        this.renderAssets = renderAssets == null
-                ? Collections.<CanonicalRenderAsset>emptyList()
-                : renderAssets;
+        this.renderAssets = Collections.unmodifiableList(new ArrayList<CanonicalRenderAsset>(renderAssets));
     }
 
     Counts write() throws IOException {
@@ -80,8 +87,19 @@ final class AngelicaRenderFactsWriter {
 
 
     private static void ensureDirectory(File directory) throws IOException {
-        if (directory != null && !directory.exists() && !directory.mkdirs()) {
-            throw new IOException("Failed to create directory: " + directory.getAbsolutePath());
+        if (directory == null) {
+            throw new IOException("Angelica render facts directory must not be null");
+        }
+        if (directory.exists()) {
+            if (!directory.isDirectory()) {
+                throw new IOException(
+                        "Angelica render facts path exists but is not a directory: "
+                                + directory.getAbsolutePath());
+            }
+            return;
+        }
+        if (!directory.mkdirs() && !directory.isDirectory()) {
+            throw new IOException("Failed to create Angelica render facts directory: " + directory.getAbsolutePath());
         }
     }
 
