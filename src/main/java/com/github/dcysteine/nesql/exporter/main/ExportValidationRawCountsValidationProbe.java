@@ -14,7 +14,7 @@ final class ExportValidationRawCountsValidationProbe implements ExportValidation
 
     public void inspect(
             ExportValidationProbeContext context,
-            ExportValidationReportWriter.ValidationReport report) {
+            ExportValidationReport report) {
         ExportValidationRawCountProbe.inspect(context.repositoryDirectory, report);
     }
 }

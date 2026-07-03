@@ -16,7 +16,7 @@ final class ExportValidationSemanticValidationProbe implements ExportValidationP
 
     public void inspect(
             ExportValidationProbeContext context,
-            ExportValidationReportWriter.ValidationReport report) {
+            ExportValidationReport report) {
         ExportValidationSemanticProbe.inspectDiagnostics(context.repositoryDirectory, report);
         ExportValidationSemanticProbe.inspectRulePack(report);
     }

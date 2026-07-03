@@ -10,7 +10,7 @@ import java.io.File;
 final class ExportValidationSemanticProbe {
     private ExportValidationSemanticProbe() {}
 
-    static void inspectDiagnostics(File repositoryDirectory, ExportValidationReportWriter.ValidationReport report) {
+    static void inspectDiagnostics(File repositoryDirectory, ExportValidationReport report) {
         File semanticReportFile = RawExportFileCatalog.rawExportFile(
                 RawExportFileCatalog.rawExportDirectory(repositoryDirectory),
                 RawExportFileCatalog.SEMANTIC_IDENTITY_NORMALIZATION_REPORT_FILE);
@@ -41,7 +41,7 @@ final class ExportValidationSemanticProbe {
                 report.semanticTaggedItems);
     }
 
-    static void inspectRulePack(ExportValidationReportWriter.ValidationReport report) {
+    static void inspectRulePack(ExportValidationReport report) {
         report.semanticRulePack = SemanticRulePack.loadBundled().validateAgainstRegistry();
     }
 }

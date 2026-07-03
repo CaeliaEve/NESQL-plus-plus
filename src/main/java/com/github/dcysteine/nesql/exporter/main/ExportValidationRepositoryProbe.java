@@ -15,7 +15,7 @@ final class ExportValidationRepositoryProbe implements ExportValidationProbe {
 
     public void inspect(
             ExportValidationProbeContext context,
-            ExportValidationReportWriter.ValidationReport report) {
+            ExportValidationReport report) {
         report.schemaVersion = ExportValidationAbiCatalog.EXPORT_VALIDATION_SCHEMA;
         report.profile = context.exportContext.profile.profileId;
         report.selection = context.exportContext.selection.describe();

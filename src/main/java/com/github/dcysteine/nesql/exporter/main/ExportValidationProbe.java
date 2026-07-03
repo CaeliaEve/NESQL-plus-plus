@@ -12,7 +12,7 @@ interface ExportValidationProbe {
 
     void inspect(
             ExportValidationProbeContext context,
-            ExportValidationReportWriter.ValidationReport report) throws Exception;
+            ExportValidationReport report) throws Exception;
 
     static List<String> capabilityList(String... values) {
         return Collections.unmodifiableList(Arrays.asList(values));

@@ -22,7 +22,7 @@ import java.util.Locale;
 final class ExportValidationPathHygieneProbe {
     private ExportValidationPathHygieneProbe() {}
 
-    static void inspect(File repositoryDirectory, ExportValidationReportWriter.ValidationReport report) {
+    static void inspect(File repositoryDirectory, ExportValidationReport report) {
         List<File> files = new ArrayList<File>();
         File rawDir = RawExportFileCatalog.rawExportDirectory(repositoryDirectory);
         collectRuntimeJsonFiles(new File(repositoryDirectory, RawExportFileCatalog.MANIFEST_FILE), files);
@@ -78,7 +78,7 @@ final class ExportValidationPathHygieneProbe {
     private static void inspectFile(
             File repositoryDirectory,
             File file,
-            ExportValidationReportWriter.ValidationReport report) {
+            ExportValidationReport report) {
         try (FileInputStream fis = new FileInputStream(file);
              InputStreamReader input = new InputStreamReader(fis, StandardCharsets.UTF_8);
              BufferedReader reader = new BufferedReader(input)) {
@@ -105,7 +105,7 @@ final class ExportValidationPathHygieneProbe {
     }
 
     private static void addSample(
-            ExportValidationReportWriter.ValidationReport report,
+            ExportValidationReport report,
             String file,
             int line,
             String rule,
@@ -113,7 +113,7 @@ final class ExportValidationPathHygieneProbe {
         if (report.exportPathHygieneSamples.size() >= ExportValidationAbiCatalog.PATH_HYGIENE_SAMPLE_LIMIT) {
             return;
         }
-        ExportValidationReportWriter.PathHygieneSample sample = new ExportValidationReportWriter.PathHygieneSample();
+        ExportValidationReport.PathHygieneSample sample = new ExportValidationReport.PathHygieneSample();
         sample.file = file;
         sample.line = line;
         sample.rule = rule;
@@ -124,7 +124,7 @@ final class ExportValidationPathHygieneProbe {
         report.exportPathHygieneSamples.add(sample);
     }
 
-    private static void writeErrors(File repositoryDirectory, ExportValidationReportWriter.ValidationReport report) {
+    private static void writeErrors(File repositoryDirectory, ExportValidationReport report) {
         File rawDir = RawExportFileCatalog.rawExportDirectory(repositoryDirectory);
         File validationDirectory = RawExportFileCatalog.validationDirectory(rawDir);
         if (!validationDirectory.exists() && !validationDirectory.mkdirs()) {
@@ -135,7 +135,7 @@ final class ExportValidationPathHygieneProbe {
         try (FileOutputStream fos = new FileOutputStream(errorsFile, true);
              OutputStreamWriter writer = new OutputStreamWriter(fos, StandardCharsets.UTF_8)) {
             Gson gson = new GsonBuilder().disableHtmlEscaping().create();
-            for (ExportValidationReportWriter.PathHygieneSample sample : report.exportPathHygieneSamples) {
+            for (ExportValidationReport.PathHygieneSample sample : report.exportPathHygieneSamples) {
                 JsonObject entry = new JsonObject();
                 entry.addProperty(ExportValidationEvidenceCatalog.ERROR_FIELD_SCHEMA_VERSION, ExportValidationAbiCatalog.EXPORT_ERROR_SCHEMA);
                 entry.addProperty(

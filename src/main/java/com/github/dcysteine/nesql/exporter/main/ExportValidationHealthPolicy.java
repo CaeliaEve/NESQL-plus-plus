@@ -7,12 +7,12 @@ import com.google.gson.JsonObject;
 final class ExportValidationHealthPolicy {
     private ExportValidationHealthPolicy() {}
 
-    static void evaluate(ExportValidationReportWriter.ValidationReport report) {
+    static void evaluate(ExportValidationReport report) {
         collectWarnings(report);
         determineHealthStatus(report);
     }
 
-    private static void collectWarnings(ExportValidationReportWriter.ValidationReport report) {
+    private static void collectWarnings(ExportValidationReport report) {
         if (!report.renderAssetManifestPresent) {
             report.warnings.add(ExportValidationAbiCatalog.WARNING_RENDER_ASSET_MANIFEST_MISSING);
         }
@@ -125,7 +125,7 @@ final class ExportValidationHealthPolicy {
         }
     }
 
-    private static void determineHealthStatus(ExportValidationReportWriter.ValidationReport report) {
+    private static void determineHealthStatus(ExportValidationReport report) {
         addBlockedIf(
                 report,
                 report.itemsJsonGzFiles == 0 && report.rawItems == 0L,
@@ -183,7 +183,7 @@ final class ExportValidationHealthPolicy {
     }
 
     private static void addBlockedIf(
-            ExportValidationReportWriter.ValidationReport report,
+            ExportValidationReport report,
             boolean condition,
             String message) {
         if (condition) {
@@ -192,7 +192,7 @@ final class ExportValidationHealthPolicy {
     }
 
     private static void addActionableIssue(
-            ExportValidationReportWriter.ValidationReport report,
+            ExportValidationReport report,
             String code,
             JsonArray details,
             String message) {

@@ -19,7 +19,7 @@ final class ExportValidationBrowserValidationProbe implements ExportValidationPr
 
     public void inspect(
             ExportValidationProbeContext context,
-            ExportValidationReportWriter.ValidationReport report) {
+            ExportValidationReport report) {
         report.staticAtlasPngFiles = ExportValidationJsonSupport.countFiles(
                 RawExportFileCatalog.rawExportFile(
                         context.rawDir,

@@ -91,6 +91,10 @@ const validationReportWriter = readFileSync(
   new URL('./src/main/java/com/github/dcysteine/nesql/exporter/main/ExportValidationReportWriter.java', import.meta.url),
   'utf8',
 );
+const validationReportModel = readFileSync(
+  new URL('./src/main/java/com/github/dcysteine/nesql/exporter/main/ExportValidationReport.java', import.meta.url),
+  'utf8',
+);
 const validationHealthPolicy = readFileSync(
   new URL('./src/main/java/com/github/dcysteine/nesql/exporter/main/ExportValidationHealthPolicy.java', import.meta.url),
   'utf8',
@@ -613,7 +617,7 @@ test('export validation probe catalog owns report collection order and capabilit
   assert.match(validationAbiCatalog, /PATH_HYGIENE_RULES/);
   assert.match(validationAbiCatalog, /PATH_HYGIENE_ERROR_DESCRIPTOR = validateCodeMessageDescriptor\([\s\S]*"export-path-hygiene"/);
   assert.match(validationHealthPolicy, /Owns validation warning, blocked-state, and compile-readiness policy/);
-  assert.match(validationHealthPolicy, /static void evaluate\(ExportValidationReportWriter\.ValidationReport report\)/);
+  assert.match(validationHealthPolicy, /static void evaluate\(ExportValidationReport report\)/);
   assert.match(validationHealthPolicy, /collectWarnings\(report\)/);
   assert.match(validationHealthPolicy, /determineHealthStatus\(report\)/);
   assert.match(validationHealthPolicy, /ExportValidationAbiCatalog\.WARNING_RENDER_ASSET_MANIFEST_MISSING/);
@@ -652,14 +656,16 @@ test('export validation probe catalog owns report collection order and capabilit
   assert.match(validationReportWriter, /probe\.inspect\(context, report\)/);
   assert.match(validationReportWriter, /report\.validationProbes = ExportValidationProbeCatalog\.descriptors\(\)/);
   assert.match(validationReportWriter, /report\.validationProbeCount = report\.validationProbes\.size\(\)/);
-  assert.match(validationReportWriter, /static final class ValidationReport/);
+  assert.match(validationReportModel, /final class ExportValidationReport/);
+  assert.match(validationReportWriter, /new ExportValidationReport\(\)/);
+  assert.doesNotMatch(validationReportWriter, /static final class ValidationReport/);
   assert.match(validationRepositoryProbe, /ExportValidationAbiCatalog\.EXPORT_VALIDATION_SCHEMA/);
   assert.match(validationRepositoryProbe, /new File\(context\.repositoryDirectory, "items"\)/);
   assert.match(validationBrowserProbe, /ExportValidationBrowserAtlasProbe\.inspect\(context\.rawDir, report\)/);
   assert.match(validationBrowserProbe, /RawExportFileCatalog\.NEI_ORDER_FILE/);
   assert.match(
     validationPreviousDeltaProbe,
-    /public void inspect\([\s\S]*ExportValidationReportWriter\.ValidationReport report\) throws Exception/,
+    /public void inspect\([\s\S]*ExportValidationReport report\) throws Exception/,
   );
   assert.match(validationPreviousDeltaProbe, /ExportValidationReportStore\.applyPreviousDelta\(context\.validationDir, report\)/);
   assert.match(validationHealthPolicyProbe, /ExportValidationHealthPolicy\.evaluate\(report\)/);
@@ -714,8 +720,8 @@ test('export validation probe catalog owns report collection order and capabilit
 
 test('export validation report persistence and delta metadata are store-owned', () => {
   assert.match(validationReportStore, /Owns validation report persistence, previous-run snapshot, and delta metadata/);
-  assert.match(validationReportStore, /static void applyPreviousDelta\(File validationDirectory, ValidationReport report\) throws Exception/);
-  assert.match(validationReportStore, /static ReportFiles write\(File validationDirectory, ValidationReport report\) throws Exception/);
+  assert.match(validationReportStore, /static void applyPreviousDelta\(File validationDirectory, ExportValidationReport report\) throws Exception/);
+  assert.match(validationReportStore, /static ReportFiles write\(File validationDirectory, ExportValidationReport report\) throws Exception/);
   assert.match(validationReportStore, /ExportValidationReportFileCatalog\.reportFile\(validationDirectory\)/);
   assert.match(validationReportStore, /ExportValidationReportFileCatalog\.outputFiles\(validationDirectory\)/);
   assert.match(validationReportStore, /ExportValidationReportFileCatalog\.healthReportFile\(validationDirectory\)/);
@@ -739,8 +745,8 @@ test('export validation report persistence and delta metadata are store-owned', 
   assert.match(validationPreviousDeltaProbe, /ExportValidationReportStore\.applyPreviousDelta\(context\.validationDir, report\)/);
   assert.match(validationReportWriter, /ExportValidationReportStore\.write\(context\.validationDir, report\)/);
   assert.match(validationReportWriter, /reportFiles\.reportFile\.getAbsolutePath\(\)/);
-  assert.match(validationReportWriter, /static class PreviousSnapshot/);
-  assert.match(validationReportWriter, /static final class DeltaSnapshot extends PreviousSnapshot/);
+  assert.match(validationReportModel, /static class PreviousSnapshot/);
+  assert.match(validationReportModel, /static final class DeltaSnapshot extends PreviousSnapshot/);
   assert.doesNotMatch(validationReportWriter, /readPreviousReport/);
   assert.doesNotMatch(validationReportWriter, /new File\(validationDir, "export_validation_report\.json"\)/);
   assert.doesNotMatch(validationReportWriter, /new File\(validationDir, "export-health-report\.json"\)/);

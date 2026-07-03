@@ -14,7 +14,7 @@ final class ExportValidationDerivedMetricsProbe implements ExportValidationProbe
 
     public void inspect(
             ExportValidationProbeContext context,
-            ExportValidationReportWriter.ValidationReport report) {
+            ExportValidationReport report) {
         report.atlasManifestCoverageRatio = ExportValidationJsonSupport.ratio(
                 report.totalAtlasManifestAssets,
                 report.renderAssetManifestAssets);

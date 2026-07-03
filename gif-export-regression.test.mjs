@@ -434,7 +434,7 @@ test('export health report audits browser layout atlas residency', () => {
   assert.equal(
     validationSource.includes('ExportValidationProbeCatalog.defaultProbes()')
       && browserValidationProbeSource.includes('ExportValidationBrowserAtlasProbe.inspect(context.rawDir, report);')
-      && browserAtlasProbeSource.includes('static void inspect(File rawDir, ExportValidationReportWriter.ValidationReport report)'),
+      && browserAtlasProbeSource.includes('static void inspect(File rawDir, ExportValidationReport report)'),
     true,
     'Validation writer should delegate browser atlas coverage through the validation probe catalog',
   );

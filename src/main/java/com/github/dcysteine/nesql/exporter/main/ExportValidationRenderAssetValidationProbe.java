@@ -16,7 +16,7 @@ final class ExportValidationRenderAssetValidationProbe implements ExportValidati
 
     public void inspect(
             ExportValidationProbeContext context,
-            ExportValidationReportWriter.ValidationReport report) {
+            ExportValidationReport report) {
         ExportValidationRenderAssetProbe.inspect(context.repositoryDirectory, context.rawDir, report);
     }
 }

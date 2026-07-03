@@ -9,8 +9,8 @@ import java.io.File;
 final class ExportValidationHealthSectionBuilder {
     private ExportValidationHealthSectionBuilder() {}
 
-    static void populate(File repositoryDirectory, ExportValidationReportWriter.ValidationReport report) {
-        report.itemTotals = new ExportValidationReportWriter.ItemTotals();
+    static void populate(File repositoryDirectory, ExportValidationReport report) {
+        report.itemTotals = new ExportValidationReport.ItemTotals();
         report.itemTotals.rawItems = report.rawItems;
         report.itemTotals.browserItems = report.rawBrowserItems;
         report.itemTotals.hiddenItems = report.rawHiddenItems;
@@ -18,7 +18,7 @@ final class ExportValidationHealthSectionBuilder {
         report.itemTotals.neiRuntimePanelItems = report.rawNeiRuntimePanelItems;
         report.itemTotals.neiExportOnlyItems = report.rawNeiExportOnlyItems;
 
-        report.browserGroupTotals = new ExportValidationReportWriter.BrowserGroupTotals();
+        report.browserGroupTotals = new ExportValidationReport.BrowserGroupTotals();
         report.browserGroupTotals.groups = report.rawBrowserGroups;
         report.browserGroupTotals.nativeNeiGroups = report.rawNativeNeiGroups;
         report.browserGroupTotals.guidFilterRules = report.rawGuidFilterRules;
@@ -31,7 +31,7 @@ final class ExportValidationHealthSectionBuilder {
         report.browserGroupTotals.orderEntries = report.rawNeiOrderEntries;
         report.browserGroupTotals.representativeMismatches = report.rawNeiRepresentativeMismatches;
 
-        report.textureTotals = new ExportValidationReportWriter.TextureTotals();
+        report.textureTotals = new ExportValidationReport.TextureTotals();
         report.textureTotals.textures = report.rawTextures;
         report.textureTotals.staticAtlasFiles = report.staticAtlasPngFiles;
         report.textureTotals.atlasManifestAssets = report.staticAtlasManifestAssets;
@@ -41,7 +41,7 @@ final class ExportValidationHealthSectionBuilder {
         report.textureTotals.browserAtlasItems = report.browserAtlasItems;
         report.textureTotals.browserAtlasDrawableItems = report.browserAtlasDrawableItems;
 
-        report.animationTotals = new ExportValidationReportWriter.AnimationTotals();
+        report.animationTotals = new ExportValidationReport.AnimationTotals();
         report.animationTotals.animations = report.rawAnimations;
         report.animationTotals.animatedAtlasFiles = report.animatedAtlasPngFiles;
         report.animationTotals.animatedAtlasManifestAssets = report.animatedAtlasManifestAssets;
@@ -56,7 +56,7 @@ final class ExportValidationHealthSectionBuilder {
         report.animationTotals.singularityLikeAssets = report.singularityLikeRenderAssets;
         report.animationTotals.animatedSingularityLikeAssets = report.animatedSingularityLikeRenderAssets;
 
-        report.nativeRenderTotals = new ExportValidationReportWriter.NativeRenderTotals();
+        report.nativeRenderTotals = new ExportValidationReport.NativeRenderTotals();
         report.nativeRenderTotals.backendFacts = report.renderBackendFacts;
         report.nativeRenderTotals.backendAngelica = report.renderBackendAngelica;
         report.nativeRenderTotals.textureSprites = report.renderTextureSprites;
@@ -79,14 +79,14 @@ final class ExportValidationHealthSectionBuilder {
                 ? ExportValidationAbiCatalog.STATUS_OK
                 : ExportValidationAbiCatalog.STATUS_WARNING;
 
-        report.recipeTotals = new ExportValidationReportWriter.RecipeTotals();
+        report.recipeTotals = new ExportValidationReport.RecipeTotals();
         report.recipeTotals.recipes = report.rawRecipes;
         report.recipeTotals.recipeTypes = report.rawRecipeTypes;
         report.recipeTotals.neiHandlers = report.rawNeiHandlers;
         report.recipeTotals.neiHandlerLayouts = report.rawNeiHandlerLayouts;
         inspectRecipeHandlerAnomalies(repositoryDirectory, report.recipeTotals);
 
-        report.nativeUiTotals = new ExportValidationReportWriter.NativeUiTotals();
+        report.nativeUiTotals = new ExportValidationReport.NativeUiTotals();
         report.nativeUiTotals.layouts = report.nativeUiLayouts;
         report.nativeUiTotals.slots = report.nativeUiSlots;
         report.nativeUiTotals.rects = report.nativeUiRects;
@@ -110,7 +110,7 @@ final class ExportValidationHealthSectionBuilder {
                 ? ExportValidationAbiCatalog.STATUS_OK
                 : ExportValidationAbiCatalog.STATUS_BLOCKED;
 
-        report.runtimeManifestMetadata = new ExportValidationReportWriter.RuntimeManifestMetadata();
+        report.runtimeManifestMetadata = new ExportValidationReport.RuntimeManifestMetadata();
         report.runtimeManifestMetadata.gtnhProfile = report.profile;
         report.runtimeManifestMetadata.exportRepository = report.repository;
         report.runtimeManifestMetadata.exportSelection = report.selection;
@@ -127,7 +127,7 @@ final class ExportValidationHealthSectionBuilder {
 
     private static void inspectRecipeHandlerAnomalies(
             File repositoryDirectory,
-            ExportValidationReportWriter.RecipeTotals totals) {
+            ExportValidationReport.RecipeTotals totals) {
         JsonObject root = ExportValidationJsonSupport.readJsonObject(RawExportFileCatalog.rawExportFile(
                 RawExportFileCatalog.rawExportDirectory(repositoryDirectory),
                 RawExportFileCatalog.NEI_HANDLER_ANOMALIES_FILE));

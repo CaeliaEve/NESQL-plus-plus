@@ -14,7 +14,7 @@ final class ExportValidationPathValidationProbe implements ExportValidationProbe
 
     public void inspect(
             ExportValidationProbeContext context,
-            ExportValidationReportWriter.ValidationReport report) {
+            ExportValidationReport report) {
         ExportValidationPathHygieneProbe.inspect(context.repositoryDirectory, report);
     }
 }

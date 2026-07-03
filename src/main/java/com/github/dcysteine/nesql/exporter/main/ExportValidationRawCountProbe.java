@@ -9,7 +9,7 @@ import java.io.File;
 final class ExportValidationRawCountProbe {
     private ExportValidationRawCountProbe() {}
 
-    static void inspect(File repositoryDirectory, ExportValidationReportWriter.ValidationReport report) {
+    static void inspect(File repositoryDirectory, ExportValidationReport report) {
         File reportFile = RawExportFileCatalog.rawExportFile(
                 RawExportFileCatalog.rawExportDirectory(repositoryDirectory),
                 RawExportFileCatalog.EXPORT_REPORT_FILE);

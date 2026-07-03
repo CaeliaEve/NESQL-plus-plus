@@ -16,7 +16,7 @@ final class ExportValidationRenderAssetProbe {
     static void inspect(
             File repositoryDirectory,
             File rawDir,
-            ExportValidationReportWriter.ValidationReport report) {
+            ExportValidationReport report) {
         File manifestFile = RawExportFileCatalog.rawExportFile(rawDir, RawExportFileCatalog.TEXTURE_INDEX_FILE);
         report.renderAssetManifestPresent = manifestFile.exists();
         if (!manifestFile.exists()) {
@@ -43,7 +43,7 @@ final class ExportValidationRenderAssetProbe {
     private static void inspectRow(
             File repositoryDirectory,
             JsonObject asset,
-            ExportValidationReportWriter.ValidationReport report) {
+            ExportValidationReport report) {
         if (asset == null) {
             return;
         }
@@ -82,7 +82,7 @@ final class ExportValidationRenderAssetProbe {
 
     private static void inspectSingularityAnimation(
             JsonObject asset,
-            ExportValidationReportWriter.ValidationReport report) {
+            ExportValidationReport report) {
         String haystack = joinLower(
                 ExportValidationJsonSupport.readStringMember(asset, ExportValidationEvidenceCatalog.RenderAsset.ASSET_ID),
                 ExportValidationJsonSupport.readStringMember(asset, ExportValidationEvidenceCatalog.RenderAsset.VARIANT_KEY),

@@ -16,7 +16,7 @@ import java.util.Set;
 final class ExportValidationBrowserAtlasProbe {
     private ExportValidationBrowserAtlasProbe() {}
 
-    static void inspect(File rawDir, ExportValidationReportWriter.ValidationReport report) {
+    static void inspect(File rawDir, ExportValidationReport report) {
         File browserAtlasFile = RawExportFileCatalog.rawExportFile(
                 rawDir,
                 RawExportFileCatalog.BROWSER_ATLAS_INDEX_FILE);

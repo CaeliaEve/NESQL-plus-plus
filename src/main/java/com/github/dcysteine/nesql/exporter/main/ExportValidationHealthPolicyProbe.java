@@ -14,7 +14,7 @@ final class ExportValidationHealthPolicyProbe implements ExportValidationProbe {
 
     public void inspect(
             ExportValidationProbeContext context,
-            ExportValidationReportWriter.ValidationReport report) {
+            ExportValidationReport report) {
         ExportValidationHealthPolicy.evaluate(report);
     }
 }

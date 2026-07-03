@@ -14,7 +14,7 @@ final class ExportValidationPreviousDeltaProbe implements ExportValidationProbe 
 
     public void inspect(
             ExportValidationProbeContext context,
-            ExportValidationReportWriter.ValidationReport report) throws Exception {
+            ExportValidationReport report) throws Exception {
         ExportValidationReportStore.applyPreviousDelta(context.validationDir, report);
     }
 }
