@@ -211,19 +211,23 @@ const runner = readFileSync(
 );
 
 test('export stage modules own subsystem providers', () => {
-  for (const provider of [
-    'LifecycleStageActionProvider',
-    'RawFactStageActionProvider',
-    'RenderStageActionProvider',
-    'NativeUiStageActionProvider',
-  ]) {
-    assert.match(modules, new RegExp(`new ${provider}\\(\\)`));
-  }
-  assert.match(modules, /new ExportStageActionModule/);
+  assert.match(modules, /MODULE_DESCRIPTORS = validateAndFreeze\(Arrays\.asList/);
+  assert.match(modules, /ModuleDescriptor\.stageAction\(\s*"nesqlpp\.export\.lifecycle"[\s\S]*LifecycleStageActionProvider::new/);
+  assert.match(modules, /ModuleDescriptor\.stageAction\(\s*"nesqlpp\.export\.raw-facts"[\s\S]*RawFactStageActionProvider::new/);
+  assert.match(modules, /ModuleDescriptor\.stageAction\(\s*"nesqlpp\.export\.render-assets"[\s\S]*RenderStageActionProvider::new/);
+  assert.match(modules, /ModuleDescriptor\.stageAction\(\s*"nesqlpp\.export\.native-ui"[\s\S]*NativeUiStageActionProvider::new/);
+  assert.match(modules, /ModuleDescriptor\.staticModule\(\s*"nesqlpp\.export\.core"/);
+  assert.match(modules, /ModuleDescriptor\.staticModule\(\s*"nesqlpp\.export\.validation"/);
+  assert.match(modules, /for \(ModuleDescriptor descriptor : MODULE_DESCRIPTORS\)/);
+  assert.match(modules, /builder\.add\(descriptor\.createModule\(\)\)/);
+  assert.match(modules, /validateAndFreeze\(List<ModuleDescriptor> descriptors\)/);
+  assert.match(modules, /Duplicate export stage module descriptor id/);
+  assert.match(modules, /Export stage provider id does not match module descriptor/);
+  assert.match(modules, /new ExportStageActionModule\(provider, level\)/);
   assert.match(modules, /static ExportModuleCatalog defaultCatalog\(\)/);
   assert.match(modules, /ExportModuleCatalog\.builder\(\)/);
-  assert.doesNotMatch(modules, /new ArrayList/);
-  assert.doesNotMatch(modules, /Collections\.unmodifiableList/);
+  assert.doesNotMatch(modules, /\.add\(new ExportStageActionModule/);
+  assert.doesNotMatch(modules, /\.add\(new StaticModule/);
 });
 
 test('export kernel directly dispatches stage registrars', () => {
