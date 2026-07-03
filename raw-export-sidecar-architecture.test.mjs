@@ -77,37 +77,51 @@ test('raw export validation logic lives outside RawExportSidecarWriter', () => {
   assert.doesNotMatch(sidecar, /buildRawValidationGates/);
   assert.doesNotMatch(sidecar, /rawValidationReady/);
   assert.doesNotMatch(sidecar, /addCountMismatch/);
-  assert.match(validation, /buildRawValidationGates/);
+  assert.match(validation, /RawExportValidationAbiCatalog\.buildGates\(counts, issues\)/);
   assert.match(validation, /rawValidationReady/);
+  assert.doesNotMatch(validation, /buildRawValidationGates/);
 });
 
 test('raw export validation ABI vocabulary is catalog-owned', () => {
   assert.equal(existsSync(validationCatalogUrl), true, 'RawExportValidationAbiCatalog must exist');
+  assert.match(validationCatalog, /STATUS_DESCRIPTORS = validateStringDescriptors\(/);
+  assert.match(validationCatalog, /ISSUE_DESCRIPTORS = validateStringDescriptors\(/);
+  assert.match(validationCatalog, /RAW_GATE_DESCRIPTORS = validateGateDescriptors\(Arrays\.asList\(/);
   for (const token of [
-    'STATUS_OK = "ok"',
-    'STATUS_WARNING = "warning"',
-    'STATUS_READY = "ready"',
-    'STATUS_BLOCKED = "blocked"',
-    'GATE_CORE_COUNTS = "core-counts"',
-    'GATE_BROWSER_ORDER = "browser-order"',
-    'GATE_NEI_BROWSER_CONTRACT = "nei-browser-contract"',
-    'GATE_SEMANTIC_IDENTITY = "semantic-identity"',
-    'GATE_NATIVE_UI_ABI = "native-ui-abi"',
-    'GATE_ANGELICA_RENDER_FACTS = "angelica-render-facts"',
-    'ISSUE_MISSING_RENDER_CAPTURE = "missing-render-capture"',
-    'ISSUE_RENDER_CAPTURE_WITHOUT_FRAMES = "render-capture-without-frames"',
-    'ISSUE_NATIVE_UI_MISSING_SURFACES = "native-ui-missing-surfaces"',
-    'ISSUE_NATIVE_UI_SLOT_BOUNDS = "native-ui-slot-bounds"',
-    'ISSUE_NATIVE_UI_COORDINATE_CONTRACT = "native-ui-coordinate-contract"',
+    'descriptor("ok", "ok")',
+    'descriptor("warning", "warning")',
+    'descriptor("ready", "ready")',
+    'descriptor("blocked", "blocked")',
+    'gateDescriptor(',
+    '"core-counts"',
+    '"browser-order"',
+    '"nei-browser-contract"',
+    '"semantic-identity"',
+    '"native-ui-abi"',
+    '"angelica-render-facts"',
+    'descriptor("missingRenderCapture", "missing-render-capture")',
+    'descriptor("renderCaptureWithoutFrames", "render-capture-without-frames")',
+    'descriptor("nativeUiMissingSurfaces", "native-ui-missing-surfaces")',
+    'descriptor("nativeUiSlotBounds", "native-ui-slot-bounds")',
+    'descriptor("nativeUiCoordinateContract", "native-ui-coordinate-contract")',
   ]) {
     assert.equal(validationCatalog.includes(token), true, `validation catalog missing ${token}`);
   }
+  assert.match(validationCatalog, /STATUS_OK = descriptorValue\(STATUS_DESCRIPTORS, "ok"\)/);
+  assert.match(validationCatalog, /GATE_NATIVE_UI_ABI = gateName\("nativeUiAbi"\)/);
+  assert.match(
+    validationCatalog,
+    /ISSUE_NATIVE_UI_COORDINATE_CONTRACT =\s*\r?\n?\s*descriptorValue\(ISSUE_DESCRIPTORS, "nativeUiCoordinateContract"\)/,
+  );
   assert.match(validationCatalog, /addCountMismatch/);
-  assert.match(validationCatalog, /nativeUiAbiGate\(RawExportCounts counts\)/);
+  assert.match(validationCatalog, /private static RawValidationGate nativeUiAbiGate\(RawExportCounts counts\)/);
+  assert.match(validationCatalog, /static List<RawValidationGate> buildGates\(RawExportCounts counts, List<String> issues\)/);
   assert.match(validationCatalog, /allGatesReady\(RawExportValidation validation\)/);
   assert.match(validation, /RawExportValidationAbiCatalog\.addCountMismatch/);
-  assert.match(validation, /RawExportValidationAbiCatalog\.nativeUiAbiGate\(counts\)/);
+  assert.match(validation, /RawExportValidationAbiCatalog\.addNativeUiIssues\(issues, counts\)/);
+  assert.match(validation, /RawExportValidationAbiCatalog\.buildGates\(counts, issues\)/);
   assert.match(validation, /RawExportValidationAbiCatalog\.allGatesReady\(validation\)/);
+  assert.doesNotMatch(validation, /RawExportValidationAbiCatalog\.nativeUiAbiGate\(counts\)/);
   assert.doesNotMatch(validation, /"native-ui-abi"/);
   assert.doesNotMatch(validation, /"semantic-identity"/);
   assert.doesNotMatch(validation, /"angelica-render-facts"/);
@@ -246,12 +260,14 @@ test('native UI ABI validator owns bounds and missing-surface validation', () =>
   assert.match(nativeUiValidator, /NATIVE_UI_VALIDATION_FILE/);
   assert.match(neiProvider, /NativeUiExportValidator\.validate\(context\.rawDir\)/);
   assert.match(neiProvider, /counts\.nativeUiMissingSurfaces = nativeUi\.missingSurfaceCount/);
-  assert.match(validationCatalog, /GATE_NATIVE_UI_ABI = "native-ui-abi"/);
+  assert.match(validationCatalog, /GATE_NATIVE_UI_ABI = gateName\("nativeUiAbi"\)/);
+  assert.match(validationCatalog, /gateDescriptor\(\s*"nativeUiAbi",\s*"native-ui-abi"/);
   assert.match(validationCatalog, /nativeUiMissingSurfaces == 0/);
   assert.match(validationCatalog, /nativeUiSlotBoundsViolations == 0/);
   assert.match(validationCatalog, /nativeUiBackgroundBoundsViolations == 0/);
   assert.match(validationCatalog, /nativeUiCoordinateContractViolations == 0/);
-  assert.match(validation, /RawExportValidationAbiCatalog\.nativeUiAbiGate\(counts\)/);
+  assert.match(validation, /RawExportValidationAbiCatalog\.buildGates\(counts, issues\)/);
+  assert.doesNotMatch(validation, /RawExportValidationAbiCatalog\.nativeUiAbiGate\(counts\)/);
   assert.doesNotMatch(sidecar, /NativeUiExportValidator/);
 });
 
