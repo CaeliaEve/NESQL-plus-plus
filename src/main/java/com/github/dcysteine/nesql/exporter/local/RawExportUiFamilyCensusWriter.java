@@ -10,10 +10,7 @@ import com.google.gson.GsonBuilder;
 import net.minecraft.util.EnumChatFormatting;
 
 import java.io.File;
-import java.io.FileOutputStream;
 import java.io.IOException;
-import java.io.OutputStreamWriter;
-import java.nio.charset.StandardCharsets;
 import java.util.ArrayList;
 import java.util.Collections;
 import java.util.Comparator;
@@ -40,18 +37,15 @@ public final class RawExportUiFamilyCensusWriter {
 
     public void export() throws IOException {
         File rawDir = new File(repositoryDirectory, OUTPUT_DIRECTORY);
-        ensureDirectory(rawDir);
+        RawExportSidecarFileOps.ensureDirectory(rawDir);
         File validationDir = new File(rawDir, "validation");
-        ensureDirectory(validationDir);
+        RawExportSidecarFileOps.ensureDirectory(validationDir);
 
         UiFamilyCensusReport report = buildReport();
 
         Gson gson = new GsonBuilder().setPrettyPrinting().serializeNulls().create();
         File outputFile = new File(rawDir, OUTPUT_FILE);
-        try (FileOutputStream fos = new FileOutputStream(outputFile);
-             OutputStreamWriter writer = new OutputStreamWriter(fos, StandardCharsets.UTF_8)) {
-            gson.toJson(report, writer);
-        }
+        RawExportSidecarFileOps.writeJson(gson, outputFile, report);
 
         Logger.chatMessage(EnumChatFormatting.GREEN + "NEI UI family census written:");
         Logger.chatMessage(EnumChatFormatting.YELLOW + "  " + outputFile.getAbsolutePath());
@@ -264,14 +258,6 @@ public final class RawExportUiFamilyCensusWriter {
         return value.trim();
     }
 
-    private static void ensureDirectory(File directory) throws IOException {
-        if (directory.exists()) {
-            return;
-        }
-        if (!directory.mkdirs() && !directory.exists()) {
-            throw new IOException("Failed to create directory: " + directory.getAbsolutePath());
-        }
-    }
 
     static final class UiFamilyCensusReport {
         String schemaVersion;

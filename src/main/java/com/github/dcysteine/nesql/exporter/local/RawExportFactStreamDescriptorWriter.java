@@ -3,10 +3,7 @@ package com.github.dcysteine.nesql.exporter.local;
 import com.google.gson.GsonBuilder;
 
 import java.io.File;
-import java.io.FileOutputStream;
 import java.io.IOException;
-import java.io.OutputStreamWriter;
-import java.nio.charset.StandardCharsets;
 import java.util.List;
 
 final class RawExportFactStreamDescriptorWriter {
@@ -24,10 +21,7 @@ final class RawExportFactStreamDescriptorWriter {
         report.providers = descriptors;
 
         File output = new File(validationDir, "raw_fact_stream_providers.json");
-        try (FileOutputStream fos = new FileOutputStream(output);
-             OutputStreamWriter writer = new OutputStreamWriter(fos, StandardCharsets.UTF_8)) {
-            new GsonBuilder().setPrettyPrinting().create().toJson(report, writer);
-        }
+        RawExportSidecarFileOps.writeJson(new GsonBuilder().setPrettyPrinting().create(), output, report);
     }
 
     private static final class ProviderReport {

@@ -30,6 +30,7 @@ const renderAssetCatalogWriterUrl = new URL('./src/main/java/com/github/dcystein
 const renderAssetCatalogCountsUrl = new URL('./src/main/java/com/github/dcysteine/nesql/exporter/local/RawRenderAssetCatalogCounts.java', import.meta.url);
 const entityModelWriterUrl = new URL('./src/main/java/com/github/dcysteine/nesql/exporter/local/RawExportEntityModelWriter.java', import.meta.url);
 const emptyJsonlWriterUrl = new URL('./src/main/java/com/github/dcysteine/nesql/exporter/local/RawExportEmptyJsonlWriter.java', import.meta.url);
+const uiFamilyCensusWriterUrl = new URL('./src/main/java/com/github/dcysteine/nesql/exporter/local/RawExportUiFamilyCensusWriter.java', import.meta.url);
 const rawFactCountsUrl = new URL('./src/main/java/com/github/dcysteine/nesql/exporter/local/RawFactCounts.java', import.meta.url);
 const reportAssemblerUrl = new URL('./src/main/java/com/github/dcysteine/nesql/exporter/local/RawExportReportAssembler.java', import.meta.url);
 const semanticRuntimeBuilderUrl = new URL('./src/main/java/com/github/dcysteine/nesql/exporter/local/RawExportSemanticRuntimeBuilder.java', import.meta.url);
@@ -66,6 +67,8 @@ const neiFactWriter = readFileSync(neiFactWriterUrl, 'utf8');
 const nativeUiAbi = readFileSync(nativeUiAbiUrl, 'utf8');
 const nativeUiValidator = readFileSync(nativeUiValidatorUrl, 'utf8');
 const renderAssetCatalogWriter = readFileSync(renderAssetCatalogWriterUrl, 'utf8');
+const emptyJsonlWriter = readFileSync(emptyJsonlWriterUrl, 'utf8');
+const uiFamilyCensusWriter = readFileSync(uiFamilyCensusWriterUrl, 'utf8');
 const entityModelWriter = readFileSync(entityModelWriterUrl, 'utf8');
 const reportAssembler = readFileSync(reportAssemblerUrl, 'utf8');
 const semanticRuntimeBuilder = readFileSync(semanticRuntimeBuilderUrl, 'utf8');
@@ -316,6 +319,53 @@ test('raw render asset catalog and entity model facts are split from sidecar orc
   assert.match(entityModelWriter, /entityRow/);
 });
 
+
+test('raw export artifact writers share the fail-closed sidecar file ops boundary', () => {
+  for (const required of [
+    'Raw-export directory must not be null',
+    'Raw-export path exists but is not a directory',
+    'Failed to create raw-export directory',
+    'Raw-export output file must not be null',
+    'Raw-export output parent directory must not be null',
+    'Raw-export output path exists but is not a file',
+    'createUtf8JsonWriter(File out)',
+    'createUtf8JsonlWriter(File out)',
+    'writeJson(Gson gson, File out, Object value)',
+    'copyOptional(File source, File target)',
+    'new FileOutputStream(out, false)',
+    'new GZIPOutputStream(fos)',
+    'failure.addSuppressed(closeFailure)',
+  ]) {
+    assert.equal(sidecarFileOps.includes(required), true, `sidecar file ops missing ${required}`);
+  }
+
+  for (const [name, source] of [
+    ['repository fact streamer', repositoryFactStreamer],
+    ['render asset catalog writer', renderAssetCatalogWriter],
+    ['empty jsonl writer', emptyJsonlWriter],
+    ['fact stream descriptor writer', factStreamDescriptorWriter],
+    ['ui family census writer', uiFamilyCensusWriter],
+  ]) {
+    assert.doesNotMatch(source, /private\s+static\s+void\s+ensureDirectory\(/, `${name} must not keep local mkdir ownership`);
+    assert.doesNotMatch(source, /private\s+static\s+OutputStreamWriter\s+createUtf8Writer\(/, `${name} must not keep local UTF-8 writer ownership`);
+    assert.doesNotMatch(source, /new FileOutputStream\(/, `${name} must not open raw-export artifacts directly`);
+    assert.doesNotMatch(source, /directory != null && !directory\.exists\(\) && !directory\.mkdirs\(\)/, `${name} must not keep nullable mkdir fallback`);
+  }
+
+  assert.match(repositoryFactStreamer, /RawExportSidecarFileOps\.ensureDirectory\(domainDir\)/);
+  assert.match(repositoryFactStreamer, /RawExportSidecarFileOps\.createUtf8JsonlWriter\(out\)/);
+  assert.match(repositoryFactStreamer, /RawExportSidecarFileOps\.writeJson\(gson, out, value\)/);
+  assert.match(repositoryFactStreamer, /RawExportEmptyJsonlWriter\.write\(out\)/);
+  assert.match(renderAssetCatalogWriter, /RawExportSidecarFileOps\.createUtf8JsonlWriter\(out\)/);
+  assert.match(renderAssetCatalogWriter, /RawExportSidecarFileOps\.writeJson\(gson, out, value\)/);
+  assert.match(renderAssetCatalogWriter, /RawExportSidecarFileOps\.copyOptional\(source, target\)/);
+  assert.match(renderAssetCatalogWriter, /RawExportEmptyJsonlWriter\.write\(out\)/);
+  assert.match(emptyJsonlWriter, /RawExportSidecarFileOps\.createUtf8JsonlWriter\(out\)/);
+  assert.match(factStreamDescriptorWriter, /RawExportSidecarFileOps\.writeJson\(new GsonBuilder\(\)\.setPrettyPrinting\(\)\.create\(\), output, report\)/);
+  assert.match(uiFamilyCensusWriter, /RawExportSidecarFileOps\.ensureDirectory\(rawDir\)/);
+  assert.match(uiFamilyCensusWriter, /RawExportSidecarFileOps\.writeJson\(gson, outputFile, report\)/);
+});
+
 test('raw fact stream registry owns provider order and identity validation', () => {
   for (const provider of [
     'RawRepositoryFactStreamProvider',
@@ -410,7 +460,9 @@ test('raw export semantic runtime report factory and file ops are split from sid
   assert.match(reportFactory, /RawExportReport build\(\)/);
   assert.match(sidecarFileOps, /purgeLegacyRawExportOutputs/);
   assert.match(sidecarFileOps, /Raw-export path exists but is not a directory/);
+  assert.match(sidecarFileOps, /Raw-export output path exists but is not a file/);
   assert.match(sidecarFileOps, /copyRequired\(File source, File target, String label\) throws IOException/);
+  assert.match(sidecarFileOps, /copyOptional\(File source, File target\) throws IOException/);
   assert.match(sidecarFileOps, /Missing required raw-export file for /);
   assert.doesNotMatch(sidecarFileOps, /copyIfPresent/);
   assert.match(

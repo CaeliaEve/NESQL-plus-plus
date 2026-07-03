@@ -10,15 +10,12 @@ import com.google.gson.JsonObject;
 
 import java.io.File;
 import java.io.FileInputStream;
-import java.io.FileOutputStream;
 import java.io.IOException;
 import java.io.OutputStreamWriter;
-import java.io.Writer;
 import java.nio.charset.StandardCharsets;
 import java.util.LinkedHashSet;
 import java.util.List;
 import java.util.Set;
-import java.util.zip.GZIPOutputStream;
 
 final class RawExportRenderAssetCatalogWriter {
     private final File repositoryDirectory;
@@ -290,11 +287,7 @@ final class RawExportRenderAssetCatalogWriter {
     private static long writeArrayAsJsonl(JsonArray array, File out) throws IOException {
         long count = 0L;
         Gson gson = new GsonBuilder().serializeNulls().create();
-        File parent = out.getParentFile();
-        if (parent != null) {
-            ensureDirectory(parent);
-        }
-        try (OutputStreamWriter writer = createUtf8Writer(out)) {
+        try (OutputStreamWriter writer = RawExportSidecarFileOps.createUtf8JsonlWriter(out)) {
             if (array != null) {
                 for (JsonElement element : array) {
                     gson.toJson(element, writer);
@@ -307,58 +300,15 @@ final class RawExportRenderAssetCatalogWriter {
     }
 
     private static void createEmptyJsonl(File out) throws IOException {
-        File parent = out.getParentFile();
-        if (parent != null) {
-            ensureDirectory(parent);
-        }
-        try (Writer ignored = createUtf8Writer(out)) {
-            // Empty JSONL remains valid when a source is unavailable for this run.
-        }
+        RawExportEmptyJsonlWriter.write(out);
     }
 
     private static void writeJson(Gson gson, File out, Object value) throws IOException {
-        File parent = out.getParentFile();
-        if (parent != null) {
-            ensureDirectory(parent);
-        }
-        try (FileOutputStream fos = new FileOutputStream(out);
-             OutputStreamWriter writer = new OutputStreamWriter(fos, StandardCharsets.UTF_8)) {
-            gson.toJson(value, writer);
-        }
+        RawExportSidecarFileOps.writeJson(gson, out, value);
     }
 
     private static void copyIfPresent(File source, File target) throws IOException {
-        if (source == null || !source.exists() || !source.isFile()) {
-            return;
-        }
-        File parent = target.getParentFile();
-        if (parent != null) {
-            ensureDirectory(parent);
-        }
-        byte[] buffer = new byte[1024 * 1024];
-        try (FileInputStream in = new FileInputStream(source);
-             FileOutputStream out = new FileOutputStream(target)) {
-            int read;
-            while ((read = in.read(buffer)) >= 0) {
-                if (read > 0) {
-                    out.write(buffer, 0, read);
-                }
-            }
-        }
-    }
-
-    private static void ensureDirectory(File directory) throws IOException {
-        if (directory != null && !directory.exists() && !directory.mkdirs()) {
-            throw new IOException("Failed to create directory: " + directory.getAbsolutePath());
-        }
-    }
-
-    private static OutputStreamWriter createUtf8Writer(File out) throws IOException {
-        FileOutputStream fos = new FileOutputStream(out);
-        if (out.getName().endsWith(".gz")) {
-            return new OutputStreamWriter(new GZIPOutputStream(fos), StandardCharsets.UTF_8);
-        }
-        return new OutputStreamWriter(fos, StandardCharsets.UTF_8);
+        RawExportSidecarFileOps.copyOptional(source, target);
     }
 
     private static void add(JsonObject object, String key, String value) {
