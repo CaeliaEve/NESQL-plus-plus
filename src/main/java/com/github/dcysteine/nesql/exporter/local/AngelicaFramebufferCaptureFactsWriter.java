@@ -6,14 +6,12 @@ import com.google.gson.GsonBuilder;
 import com.google.gson.JsonObject;
 
 import java.io.File;
-import java.io.FileOutputStream;
 import java.io.IOException;
 import java.io.OutputStreamWriter;
-import java.nio.charset.StandardCharsets;
+import java.util.ArrayList;
 import java.util.Collections;
 import java.util.List;
 import java.util.Locale;
-import java.util.zip.GZIPOutputStream;
 
 /** Streams framebuffer capture facts produced by native Angelica render dispatch. */
 final class AngelicaFramebufferCaptureFactsWriter {
@@ -23,16 +21,19 @@ final class AngelicaFramebufferCaptureFactsWriter {
     private final List<CanonicalRenderAsset> renderAssets;
 
     AngelicaFramebufferCaptureFactsWriter(String schemaRoot, List<CanonicalRenderAsset> renderAssets) {
+        if (schemaRoot == null) {
+            throw new IllegalArgumentException("Angelica framebuffer capture schema root must not be null");
+        }
+        if (renderAssets == null) {
+            throw new IllegalArgumentException("Angelica framebuffer capture render assets must not be null");
+        }
         this.schemaRoot = schemaRoot;
-        this.renderAssets = renderAssets == null
-                ? Collections.<CanonicalRenderAsset>emptyList()
-                : renderAssets;
+        this.renderAssets = Collections.unmodifiableList(new ArrayList<CanonicalRenderAsset>(renderAssets));
     }
 
     AngelicaFramebufferCaptureStreamCounts write(File out) throws IOException {
         AngelicaFramebufferCaptureStreamCounts counts = new AngelicaFramebufferCaptureStreamCounts();
-        ensureDirectory(out.getParentFile());
-        try (OutputStreamWriter writer = createUtf8JsonlWriter(out)) {
+        try (OutputStreamWriter writer = AngelicaRenderFactFileOps.createUtf8JsonlWriter(out)) {
             for (CanonicalRenderAsset asset : renderAssets) {
                 if (!isFramebufferCaptureAsset(asset)) {
                     continue;
@@ -108,17 +109,4 @@ final class AngelicaFramebufferCaptureFactsWriter {
         return value != null && token != null && value.toLowerCase(Locale.ROOT).contains(token.toLowerCase(Locale.ROOT));
     }
 
-    private static OutputStreamWriter createUtf8JsonlWriter(File out) throws IOException {
-        FileOutputStream fos = new FileOutputStream(out, false);
-        if (out.getName().endsWith(".gz")) {
-            return new OutputStreamWriter(new GZIPOutputStream(fos), StandardCharsets.UTF_8);
-        }
-        return new OutputStreamWriter(fos, StandardCharsets.UTF_8);
-    }
-
-    private static void ensureDirectory(File directory) throws IOException {
-        if (directory != null && !directory.exists() && !directory.mkdirs()) {
-            throw new IOException("Failed to create directory: " + directory.getAbsolutePath());
-        }
-    }
 }

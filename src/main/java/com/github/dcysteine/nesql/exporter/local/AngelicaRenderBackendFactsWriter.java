@@ -6,11 +6,9 @@ import com.google.gson.JsonObject;
 import org.lwjgl.opengl.GL11;
 
 import java.io.File;
-import java.io.FileOutputStream;
 import java.io.IOException;
 import java.io.OutputStreamWriter;
 import java.lang.reflect.Method;
-import java.nio.charset.StandardCharsets;
 import java.text.SimpleDateFormat;
 import java.util.Date;
 import java.util.Locale;
@@ -131,15 +129,8 @@ final class AngelicaRenderBackendFactsWriter {
     }
 
     private static void writeJson(File out, Object value) throws IOException {
-        ensureDirectory(out.getParentFile());
-        try (OutputStreamWriter writer = new OutputStreamWriter(new FileOutputStream(out, false), StandardCharsets.UTF_8)) {
+        try (OutputStreamWriter writer = AngelicaRenderFactFileOps.createUtf8JsonWriter(out)) {
             PRETTY_GSON.toJson(value, writer);
-        }
-    }
-
-    private static void ensureDirectory(File directory) throws IOException {
-        if (directory != null && !directory.exists() && !directory.mkdirs()) {
-            throw new IOException("Failed to create directory: " + directory.getAbsolutePath());
         }
     }
 

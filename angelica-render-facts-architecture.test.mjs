@@ -10,6 +10,10 @@ const backendFactsUrl = new URL(
   './src/main/java/com/github/dcysteine/nesql/exporter/local/AngelicaRenderBackendFactsWriter.java',
   import.meta.url,
 );
+const renderFactFileOpsUrl = new URL(
+  './src/main/java/com/github/dcysteine/nesql/exporter/local/AngelicaRenderFactFileOps.java',
+  import.meta.url,
+);
 const textureSpriteFactsUrl = new URL(
   './src/main/java/com/github/dcysteine/nesql/exporter/local/AngelicaRenderTextureSpriteFactsWriter.java',
   import.meta.url,
@@ -41,6 +45,7 @@ const rendererClassificationUrl = new URL(
 
 const renderFacts = readFileSync(renderFactsUrl, 'utf8');
 const backendFacts = readFileSync(backendFactsUrl, 'utf8');
+const renderFactFileOps = readFileSync(renderFactFileOpsUrl, 'utf8');
 const textureSpriteFacts = readFileSync(textureSpriteFactsUrl, 'utf8');
 const itemRendererFacts = readFileSync(itemRendererFactsUrl, 'utf8');
 const framebufferCaptureFacts = readFileSync(framebufferCaptureFactsUrl, 'utf8');
@@ -130,21 +135,54 @@ test('Angelica framebuffer capture facts live outside the render fact coordinato
   assert.doesNotMatch(renderFacts, /rendererContract/);
 });
 
-test('Angelica render facts writer owns strict input and directory contracts', () => {
+test('Angelica render facts writer owns strict input and delegates output contracts', () => {
   assert.match(renderFacts, /Angelica render facts entity manager must not be null/);
   assert.match(renderFacts, /Angelica render facts raw-export directory must not be null/);
   assert.match(renderFacts, /Angelica render facts render assets must not be null/);
   assert.match(renderFacts, /Collections\.unmodifiableList\(new ArrayList<CanonicalRenderAsset>\(renderAssets\)\)/);
-  assert.match(renderFacts, /Angelica render facts directory must not be null/);
-  assert.match(renderFacts, /Angelica render facts path exists but is not a directory/);
-  assert.match(renderFacts, /Failed to create Angelica render facts directory/);
+  assert.match(renderFacts, /AngelicaRenderFactFileOps\.ensureDirectory\(new File\(rawDir, "facts\/render"\)\)/);
   assert.doesNotMatch(renderFacts, /renderAssets == null\s*\?\s*Collections\.<CanonicalRenderAsset>emptyList\(\)/);
   assert.doesNotMatch(renderFacts, /Collections\.<CanonicalRenderAsset>emptyList\(\)/);
+  assert.doesNotMatch(renderFacts, /private\s+static\s+void\s+ensureDirectory\(/);
   assert.doesNotMatch(renderFacts, /directory != null && !directory\.exists\(\) && !directory\.mkdirs\(\)/);
+});
+
+test('Angelica render fact file ops own fail-closed artifact creation', () => {
+  assert.equal(existsSync(renderFactFileOpsUrl), true, 'AngelicaRenderFactFileOps must exist');
+  assert.match(renderFactFileOps, /final class AngelicaRenderFactFileOps/);
+  assert.match(renderFactFileOps, /static OutputStreamWriter createUtf8JsonWriter\(File out\) throws IOException/);
+  assert.match(renderFactFileOps, /static OutputStreamWriter createUtf8JsonlWriter\(File out\) throws IOException/);
+  assert.match(renderFactFileOps, /static void ensureOutputFile\(File out\) throws IOException/);
+  assert.match(renderFactFileOps, /Angelica render fact output file must not be null/);
+  assert.match(renderFactFileOps, /Angelica render fact output parent directory must not be null/);
+  assert.match(renderFactFileOps, /Angelica render fact output parent exists but is not a directory/);
+  assert.match(renderFactFileOps, /Angelica render fact output path exists but is not a file/);
+  assert.match(renderFactFileOps, /Failed to create Angelica render fact output directory/);
+  assert.match(renderFactFileOps, /new FileOutputStream\(out, false\)/);
+  assert.match(renderFactFileOps, /new GZIPOutputStream\(fos\)/);
+  assert.match(renderFactFileOps, /failure\.addSuppressed\(closeFailure\)/);
+});
+
+test('Angelica render fact writers share the fail-closed file ops boundary', () => {
+  assert.match(backendFacts, /AngelicaRenderFactFileOps\.createUtf8JsonWriter\(out\)/);
+  for (const source of [textureSpriteFacts, itemRendererFacts, framebufferCaptureFacts]) {
+    assert.match(source, /AngelicaRenderFactFileOps\.createUtf8JsonlWriter\(out\)/);
+    assert.doesNotMatch(source, /private\s+static\s+OutputStreamWriter\s+createUtf8JsonlWriter\(/);
+    assert.doesNotMatch(source, /private\s+static\s+void\s+ensureDirectory\(/);
+    assert.doesNotMatch(source, /new FileOutputStream\(out, false\)/);
+    assert.doesNotMatch(source, /directory != null && !directory\.exists\(\) && !directory\.mkdirs\(\)/);
+  }
+  assert.match(itemRendererFacts, /AngelicaRenderFactFileOps\.ensureOutputFile\(shaderOut\)/);
+  assert.doesNotMatch(backendFacts, /private\s+static\s+void\s+ensureDirectory\(/);
+  assert.doesNotMatch(backendFacts, /new FileOutputStream\(out, false\)/);
 });
 
 test('Angelica framebuffer capture writer owns capture filtering and capture stream rows', () => {
   assert.match(framebufferCaptureFacts, /final class AngelicaFramebufferCaptureFactsWriter/);
+  assert.match(framebufferCaptureFacts, /Angelica framebuffer capture schema root must not be null/);
+  assert.match(framebufferCaptureFacts, /Angelica framebuffer capture render assets must not be null/);
+  assert.match(framebufferCaptureFacts, /Collections\.unmodifiableList\(new ArrayList<CanonicalRenderAsset>\(renderAssets\)\)/);
+  assert.doesNotMatch(framebufferCaptureFacts, /Collections\.<CanonicalRenderAsset>emptyList\(\)/);
   assert.match(framebufferCaptureFacts, /isFramebufferCaptureAsset\(/);
   assert.match(framebufferCaptureFacts, /schemaRoot \+ "\/framebuffer-capture"/);
   assert.match(framebufferCaptureFacts, /existing-render-dispatcher-capture/);

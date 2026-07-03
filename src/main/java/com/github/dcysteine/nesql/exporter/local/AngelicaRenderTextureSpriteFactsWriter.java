@@ -10,17 +10,14 @@ import net.minecraft.client.renderer.texture.TextureMap;
 import net.minecraft.client.resources.data.AnimationMetadataSection;
 
 import java.io.File;
-import java.io.FileOutputStream;
 import java.io.IOException;
 import java.io.OutputStreamWriter;
 import java.lang.reflect.Field;
 import java.lang.reflect.Method;
-import java.nio.charset.StandardCharsets;
 import java.util.Collections;
 import java.util.IdentityHashMap;
 import java.util.Map;
 import java.util.Set;
-import java.util.zip.GZIPOutputStream;
 
 /**
  * Streams native texture atlas sprite facts captured from the live Minecraft/Angelica runtime.
@@ -41,8 +38,7 @@ final class AngelicaRenderTextureSpriteFactsWriter {
 
     AngelicaTextureSpriteStreamCounts write(File out) throws IOException {
         AngelicaTextureSpriteStreamCounts counts = new AngelicaTextureSpriteStreamCounts();
-        ensureDirectory(out.getParentFile());
-        try (OutputStreamWriter writer = createUtf8JsonlWriter(out)) {
+        try (OutputStreamWriter writer = AngelicaRenderFactFileOps.createUtf8JsonlWriter(out)) {
             Set<TextureMap> maps = collectTextureMaps();
             for (TextureMap textureMap : maps) {
                 if (textureMap == null) {
@@ -304,19 +300,6 @@ final class AngelicaRenderTextureSpriteFactsWriter {
         }
     }
 
-    private static OutputStreamWriter createUtf8JsonlWriter(File out) throws IOException {
-        FileOutputStream fos = new FileOutputStream(out, false);
-        if (out.getName().endsWith(".gz")) {
-            return new OutputStreamWriter(new GZIPOutputStream(fos), StandardCharsets.UTF_8);
-        }
-        return new OutputStreamWriter(fos, StandardCharsets.UTF_8);
-    }
-
-    private static void ensureDirectory(File directory) throws IOException {
-        if (directory != null && !directory.exists() && !directory.mkdirs()) {
-            throw new IOException("Failed to create directory: " + directory.getAbsolutePath());
-        }
-    }
 
     interface IntSupplier { int get(); }
     interface BooleanSupplier { boolean get(); }

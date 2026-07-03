@@ -13,13 +13,10 @@ import net.minecraftforge.client.IItemRenderer;
 import net.minecraftforge.client.MinecraftForgeClient;
 
 import java.io.File;
-import java.io.FileOutputStream;
 import java.io.IOException;
 import java.io.OutputStreamWriter;
 import java.lang.reflect.Method;
-import java.nio.charset.StandardCharsets;
 import java.util.List;
-import java.util.zip.GZIPOutputStream;
 
 /** Streams native item renderer and shader item facts from the live Minecraft renderer registry. */
 final class AngelicaRenderItemRendererFactsWriter {
@@ -36,10 +33,10 @@ final class AngelicaRenderItemRendererFactsWriter {
 
     AngelicaItemRendererStreamCounts write(File out, File shaderOut) throws IOException {
         AngelicaItemRendererStreamCounts counts = new AngelicaItemRendererStreamCounts();
-        ensureDirectory(out.getParentFile());
-        ensureDirectory(shaderOut.getParentFile());
-        try (OutputStreamWriter writer = createUtf8JsonlWriter(out);
-             OutputStreamWriter shaderWriter = createUtf8JsonlWriter(shaderOut)) {
+        AngelicaRenderFactFileOps.ensureOutputFile(out);
+        AngelicaRenderFactFileOps.ensureOutputFile(shaderOut);
+        try (OutputStreamWriter writer = AngelicaRenderFactFileOps.createUtf8JsonlWriter(out);
+             OutputStreamWriter shaderWriter = AngelicaRenderFactFileOps.createUtf8JsonlWriter(shaderOut)) {
             long offset = 0L;
             while (true) {
                 TypedQuery<Item> query = entityManager.createQuery(
@@ -289,19 +286,6 @@ final class AngelicaRenderItemRendererFactsWriter {
         }
     }
 
-    private static OutputStreamWriter createUtf8JsonlWriter(File out) throws IOException {
-        FileOutputStream fos = new FileOutputStream(out, false);
-        if (out.getName().endsWith(".gz")) {
-            return new OutputStreamWriter(new GZIPOutputStream(fos), StandardCharsets.UTF_8);
-        }
-        return new OutputStreamWriter(fos, StandardCharsets.UTF_8);
-    }
-
-    private static void ensureDirectory(File directory) throws IOException {
-        if (directory != null && !directory.exists() && !directory.mkdirs()) {
-            throw new IOException("Failed to create directory: " + directory.getAbsolutePath());
-        }
-    }
 
     interface IntSupplier { int get(); }
     interface ObjectSupplier { Object get(); }

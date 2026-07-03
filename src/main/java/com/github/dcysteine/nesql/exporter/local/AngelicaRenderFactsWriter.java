@@ -40,7 +40,7 @@ final class AngelicaRenderFactsWriter {
     }
 
     Counts write() throws IOException {
-        ensureDirectory(new File(rawDir, "facts/render"));
+        AngelicaRenderFactFileOps.ensureDirectory(new File(rawDir, "facts/render"));
         Counts counts = new Counts();
         counts.backend = new AngelicaRenderBackendFactsWriter(SCHEMA_ROOT)
                 .write(new File(rawDir, "facts/render/backend.json"));
@@ -85,23 +85,6 @@ final class AngelicaRenderFactsWriter {
         return result;
     }
 
-
-    private static void ensureDirectory(File directory) throws IOException {
-        if (directory == null) {
-            throw new IOException("Angelica render facts directory must not be null");
-        }
-        if (directory.exists()) {
-            if (!directory.isDirectory()) {
-                throw new IOException(
-                        "Angelica render facts path exists but is not a directory: "
-                                + directory.getAbsolutePath());
-            }
-            return;
-        }
-        if (!directory.mkdirs() && !directory.isDirectory()) {
-            throw new IOException("Failed to create Angelica render facts directory: " + directory.getAbsolutePath());
-        }
-    }
 
 
     static final class Counts {
