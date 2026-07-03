@@ -448,6 +448,7 @@ test('export control and debug planes have explicit filesystem ownership', () =>
   assert.match(controlPlaneWriter, /Writes stable ControlFS-style export descriptors/);
   assert.match(controlPlaneWriter, /RawExportFileCatalog\.rawExportDirectory/);
   assert.match(controlPlaneWriter, /RawExportFileCatalog\.CONTROL_DIRECTORY/);
+  assert.match(controlPlaneWriter, /static void write\(ExportContext exportContext, ExportModuleCatalog catalog\) throws Exception/);
   assert.match(controlPlaneWriter, /CONTROL_REPORTS = validateAndFreeze\(Arrays\.asList/);
   assert.match(controlPlaneWriter, /new ControlReportDescriptor\(ExportControlFile\.INDEX/);
   assert.match(controlPlaneWriter, /new ControlReportDescriptor\(ExportControlFile\.ABI/);
@@ -474,6 +475,9 @@ test('export control and debug planes have explicit filesystem ownership', () =>
   assert.match(controlPlaneWriter, /policy = ExportControlFile\.VALIDATION_PROBE_POLICY/);
   assert.match(controlPlaneWriter, /catalog\.descriptors\(\)/);
   assert.match(controlPlaneWriter, /catalog\.drivers\(\)/);
+  assert.match(controlPlaneWriter, /ControlFS directory must not be null/);
+  assert.match(controlPlaneWriter, /ControlFS path exists but is not a directory/);
+  assert.doesNotMatch(controlPlaneWriter, /Failed to write NESQL\+\+ export control plane/);
   assert.doesNotMatch(controlPlaneWriter, /writeJson\(controlFile\(controlDir, ExportControlFile\.INDEX\)/);
   assert.doesNotMatch(controlPlaneWriter, /writeJson\(controlFile\(controlDir, ExportControlFile\.VERSION\)/);
   assert.doesNotMatch(controlPlaneWriter, /stability = "stable"/);

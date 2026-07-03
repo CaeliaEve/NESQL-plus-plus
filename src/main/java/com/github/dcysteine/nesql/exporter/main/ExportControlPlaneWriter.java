@@ -48,15 +48,11 @@ final class ExportControlPlaneWriter {
 
     private ExportControlPlaneWriter() {}
 
-    static void write(ExportContext exportContext, ExportModuleCatalog catalog) {
-        try {
-            File controlDir = controlDirectory(exportContext);
-            ensureDirectory(controlDir);
-            for (ControlReportDescriptor descriptor : CONTROL_REPORTS) {
-                writeJson(controlFile(controlDir, descriptor.file()), descriptor.build(exportContext, catalog));
-            }
-        } catch (Exception e) {
-            Logger.MOD.warn("Failed to write NESQL++ export control plane", e);
+    static void write(ExportContext exportContext, ExportModuleCatalog catalog) throws Exception {
+        File controlDir = controlDirectory(exportContext);
+        ensureDirectory(controlDir);
+        for (ControlReportDescriptor descriptor : CONTROL_REPORTS) {
+            writeJson(controlFile(controlDir, descriptor.file()), descriptor.build(exportContext, catalog));
         }
     }
 
@@ -165,7 +161,16 @@ final class ExportControlPlaneWriter {
     }
 
     private static void ensureDirectory(File directory) throws Exception {
-        if (directory != null && !directory.exists() && !directory.mkdirs()) {
+        if (directory == null) {
+            throw new java.io.IOException("ControlFS directory must not be null");
+        }
+        if (directory.exists()) {
+            if (!directory.isDirectory()) {
+                throw new java.io.IOException("ControlFS path exists but is not a directory: " + directory.getAbsolutePath());
+            }
+            return;
+        }
+        if (!directory.mkdirs()) {
             throw new java.io.IOException("Failed to create directory: " + directory.getAbsolutePath());
         }
     }
