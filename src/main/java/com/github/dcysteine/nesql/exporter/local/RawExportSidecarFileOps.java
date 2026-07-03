@@ -85,15 +85,8 @@ final class RawExportSidecarFileOps {
     }
 
     static void purgeLegacyRawExportOutputs(File rawDir) throws IOException {
-        deleteIfExists(new File(rawDir, "recipes.jsonl"));
-        deleteIfExists(new File(rawDir, "items.jsonl"));
-        deleteIfExists(new File(rawDir, "fluids.jsonl"));
-        deleteIfExists(new File(rawDir, "entities.jsonl"));
-        deleteIfExists(new File(rawDir, "facts/items.jsonl"));
-        deleteIfExists(new File(rawDir, "facts/fluids.jsonl"));
-        deleteIfExists(new File(rawDir, "facts/recipes/all.jsonl"));
-        for (String domainId : RawExportRepositoryFactStreamer.specialDomainIds()) {
-            deleteIfExists(new File(rawDir, "special/" + domainId + "/recipes.jsonl"));
+        for (String relativePath : RawExportFileCatalog.prohibitedRootOutputs()) {
+            deleteIfExists(RawExportFileCatalog.rawExportFile(rawDir, relativePath));
         }
     }
 
