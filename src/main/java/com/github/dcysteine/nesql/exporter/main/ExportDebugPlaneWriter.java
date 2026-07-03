@@ -26,15 +26,12 @@ final class ExportDebugPlaneWriter {
     private static final List<DebugReportDescriptor> DEBUG_REPORTS = validateAndFreeze(Arrays.asList(
             new DebugReportDescriptor(
                     ExportDebugFile.STAGE_TIMING,
-                    "Failed to write NESQL++ stage timing report",
                     EnumChatFormatting.GREEN + "[NESQL] Stage timing report written: "),
             new DebugReportDescriptor(
                     ExportDebugFile.STAGE_CHECKPOINT,
-                    "Failed to write NESQL++ stage checkpoint report",
                     null),
             new DebugReportDescriptor(
                     ExportDebugFile.KERNEL_TRACE,
-                    "Failed to write NESQL++ export kernel trace",
                     null)));
 
     private ExportDebugPlaneWriter() {}
@@ -46,7 +43,7 @@ final class ExportDebugPlaneWriter {
     static void writeStageTimingReport(
             ExportContext exportContext,
             List<StageTiming> timings,
-            long totalElapsedMs) {
+            long totalElapsedMs) throws Exception {
         writeDebugReport(
                 exportContext,
                 ExportDebugFile.STAGE_TIMING,
@@ -62,7 +59,7 @@ final class ExportDebugPlaneWriter {
             ExportStage nextStage,
             String status,
             long elapsedMs,
-            String errorSummary) {
+            String errorSummary) throws Exception {
         writeDebugReport(
                 exportContext,
                 ExportDebugFile.STAGE_CHECKPOINT,
@@ -81,7 +78,7 @@ final class ExportDebugPlaneWriter {
     static void writeKernelTrace(
             ExportContext exportContext,
             ExportModuleCatalog catalog,
-            ExportKernelContext context) {
+            ExportKernelContext context) throws Exception {
         writeDebugReport(
                 exportContext,
                 ExportDebugFile.KERNEL_TRACE,
@@ -162,21 +159,17 @@ final class ExportDebugPlaneWriter {
     private static void writeDebugReport(
             ExportContext exportContext,
             ExportDebugFile file,
-            DebugReportFactory factory) {
+            DebugReportFactory factory) throws Exception {
         DebugReportDescriptor descriptor = debugReportDescriptor(file);
-        try {
-            if (factory == null) {
-                throw new IllegalArgumentException("DebugFS report factory must be non-null: " + file.name());
-            }
-            Object report = factory.build();
-            File validationAliasFile = validationAliasFile(exportContext, descriptor.file());
-            File debugFile = debugFile(exportContext, descriptor.file());
-            writeJson(validationAliasFile, report);
-            writeJson(debugFile, report);
-            descriptor.reportSuccess(validationAliasFile);
-        } catch (Exception e) {
-            Logger.MOD.warn(descriptor.failureMessage(), e);
+        if (factory == null) {
+            throw new IllegalArgumentException("DebugFS report factory must be non-null: " + file.name());
         }
+        Object report = factory.build();
+        File validationAliasFile = validationAliasFile(exportContext, descriptor.file());
+        File debugFile = debugFile(exportContext, descriptor.file());
+        writeJson(validationAliasFile, report);
+        writeJson(debugFile, report);
+        descriptor.reportSuccess(validationAliasFile);
     }
 
     private static DebugReportDescriptor debugReportDescriptor(ExportDebugFile file) {
@@ -208,7 +201,14 @@ final class ExportDebugPlaneWriter {
 
     private static void writeJson(File file, Object value) throws Exception {
         File parent = file.getParentFile();
-        if (parent != null && !parent.exists() && !parent.mkdirs()) {
+        if (parent == null) {
+            throw new java.io.IOException("DebugFS output parent must not be null: " + file.getAbsolutePath());
+        }
+        if (parent.exists()) {
+            if (!parent.isDirectory()) {
+                throw new java.io.IOException("DebugFS output path exists but is not a directory: " + parent.getAbsolutePath());
+            }
+        } else if (!parent.mkdirs()) {
             throw new java.io.IOException("Failed to create directory: " + parent.getAbsolutePath());
         }
         try (FileOutputStream fos = new FileOutputStream(file);
@@ -241,30 +241,20 @@ final class ExportDebugPlaneWriter {
 
     private static final class DebugReportDescriptor {
         private final ExportDebugFile file;
-        private final String failureMessage;
         private final String successMessagePrefix;
 
         private DebugReportDescriptor(
                 ExportDebugFile file,
-                String failureMessage,
                 String successMessagePrefix) {
             if (file == null) {
                 throw new IllegalArgumentException("DebugFS report file must be non-null");
             }
-            if (failureMessage == null || failureMessage.trim().isEmpty()) {
-                throw new IllegalArgumentException("DebugFS report failure message must be non-empty: " + file.name());
-            }
             this.file = file;
-            this.failureMessage = failureMessage;
             this.successMessagePrefix = successMessagePrefix;
         }
 
         private ExportDebugFile file() {
             return file;
-        }
-
-        private String failureMessage() {
-            return failureMessage;
         }
 
         private void reportSuccess(File validationAliasFile) {

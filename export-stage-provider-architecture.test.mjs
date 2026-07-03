@@ -394,6 +394,10 @@ test('export tracepoints are declared through a stable kernel catalog', () => {
   assert.match(tracepointCatalog, /public static List<String> all\(\)/);
   assert.match(debugPlaneWriter, /report\.tracepoints = ExportTracepoint\.all\(\)/);
   assert.match(runner, /ExportTracepoint\.STAGE_RUN/);
+  assert.match(runner, /Exception primaryFailure = null/);
+  assert.match(runner, /Exception finalizationFailure = null/);
+  assert.match(runner, /e\.addSuppressed\(checkpointFailure\)/);
+  assert.match(runner, /primaryFailure\.addSuppressed\(traceFailure\)/);
   assert.doesNotMatch(kernel, /trace\("export\./);
   assert.doesNotMatch(runner, /trace\("export\./);
   assert.doesNotMatch(kernelContext, /trace\("export\./);
@@ -486,6 +490,9 @@ test('export control and debug planes have explicit filesystem ownership', () =>
   assert.doesNotMatch(controlPlaneWriter, /nesqlpp\/raw-export\/alpha1/);
 
   assert.match(debugPlaneWriter, /Writes DebugFS-style export diagnostics/);
+  assert.match(debugPlaneWriter, /static void writeStageTimingReport\([\s\S]*\) throws Exception/);
+  assert.match(debugPlaneWriter, /static void writeStageCheckpointReport\([\s\S]*\) throws Exception/);
+  assert.match(debugPlaneWriter, /static void writeKernelTrace\([\s\S]*\) throws Exception/);
   assert.match(debugPlaneWriter, /RawExportFileCatalog\.RAW_EXPORT_DIRECTORY \+ "\/" \+ file\.validationAliasPath\(\)/);
   assert.match(debugPlaneWriter, /RawExportFileCatalog\.DEBUG_DIRECTORY/);
   assert.match(debugPlaneWriter, /DEBUG_REPORTS = validateAndFreeze\(Arrays\.asList/);
@@ -498,6 +505,8 @@ test('export control and debug planes have explicit filesystem ownership', () =>
   assert.match(debugPlaneWriter, /Object report = factory\.build\(\)/);
   assert.match(debugPlaneWriter, /writeJson\(validationAliasFile, report\)/);
   assert.match(debugPlaneWriter, /writeJson\(debugFile, report\)/);
+  assert.match(debugPlaneWriter, /DebugFS output parent must not be null/);
+  assert.match(debugPlaneWriter, /DebugFS output path exists but is not a directory/);
   assert.match(debugPlaneWriter, /Duplicate DebugFS report descriptor/);
   assert.match(debugPlaneWriter, /Missing DebugFS report descriptor/);
   assert.match(debugPlaneWriter, /DebugFS report factory must be non-null/);
@@ -508,6 +517,8 @@ test('export control and debug planes have explicit filesystem ownership', () =>
   assert.match(debugPlaneWriter, /ExportDebugFile\.KERNEL_TRACE\.schemaVersion\(\)/);
   assert.match(debugPlaneWriter, /validationAliasFile\(exportContext, descriptor\.file\(\)\)/);
   assert.match(debugPlaneWriter, /debugFile\(exportContext, descriptor\.file\(\)\)/);
+  assert.doesNotMatch(debugPlaneWriter, /Logger\.MOD\.warn\(descriptor\.failureMessage\(\), e\)/);
+  assert.doesNotMatch(debugPlaneWriter, /failureMessage/);
   assert.doesNotMatch(debugPlaneWriter, /writeJson\(validationAliasFile\(exportContext, ExportDebugFile\./);
   assert.doesNotMatch(debugPlaneWriter, /writeJson\(debugFile\(exportContext, ExportDebugFile\./);
   assert.doesNotMatch(debugPlaneWriter, /nesqlpp\/export-debug-/);

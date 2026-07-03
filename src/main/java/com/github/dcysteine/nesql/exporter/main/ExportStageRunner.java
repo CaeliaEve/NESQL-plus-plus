@@ -21,6 +21,8 @@ final class ExportStageRunner {
         ExportModuleCatalog moduleCatalog = ExportStageModules.defaultCatalog();
         ExportKernel kernel = new ExportKernel(moduleCatalog);
         ExportKernelContext kernelContext = new ExportKernelContext(exportContext);
+        Exception primaryFailure = null;
+        boolean preparationStopped = false;
 
         strategy.announceStartup(exportContext, repositoryDirectory);
         try {
@@ -87,24 +89,30 @@ final class ExportStageRunner {
             ExportIntegrityManifestWriter.write(exportContext);
             ExportWriterSupport.syncRawExportFinalReports(exportContext.paths.repositoryDirectory);
         } catch (RepositoryPreparationStoppedException ignored) {
+            preparationStopped = true;
             return;
         } catch (Exception e) {
+            primaryFailure = e;
             if (stageState.currentStage != null) {
                 kernelContext.trace(ExportTracepoint.STAGE_RUN, stageState.currentStage.name(), "failed", 0L);
             }
             File reportFile =
                     ExportDiagnosticsSupport.writeFailureReport(
                             exportContext, stageState.currentStage, e);
-            ExportDebugPlaneWriter.writeStageCheckpointReport(
-                    exportContext,
-                    null,
-                    0,
-                    exportContext.executionPlan.stages.size(),
-                    stageState.currentStage,
-                    null,
-                    "failed",
-                    0L,
-                    ExportDiagnosticsSupport.summarizeThrowable(e));
+            try {
+                ExportDebugPlaneWriter.writeStageCheckpointReport(
+                        exportContext,
+                        null,
+                        0,
+                        exportContext.executionPlan.stages.size(),
+                        stageState.currentStage,
+                        null,
+                        "failed",
+                        0L,
+                        ExportDiagnosticsSupport.summarizeThrowable(e));
+            } catch (Exception checkpointFailure) {
+                e.addSuppressed(checkpointFailure);
+            }
             Logger.chatMessage(
                     EnumChatFormatting.RED
                             + "[NESQL] Export failed at stage: "
@@ -121,12 +129,33 @@ final class ExportStageRunner {
                             + reportFile.getAbsolutePath());
             throw e;
         } finally {
+            Exception finalizationFailure = null;
             try {
                 kernel.exit(kernelContext);
-            } finally {
-                ExportDebugPlaneWriter.writeKernelTrace(exportContext, moduleCatalog, kernelContext);
+            } catch (Exception exitFailure) {
+                if (primaryFailure != null) {
+                    primaryFailure.addSuppressed(exitFailure);
+                } else {
+                    finalizationFailure = exitFailure;
+                }
+            }
+            if (!preparationStopped) {
+                try {
+                    ExportDebugPlaneWriter.writeKernelTrace(exportContext, moduleCatalog, kernelContext);
+                } catch (Exception traceFailure) {
+                    if (primaryFailure != null) {
+                        primaryFailure.addSuppressed(traceFailure);
+                    } else if (finalizationFailure != null) {
+                        finalizationFailure.addSuppressed(traceFailure);
+                    } else {
+                        finalizationFailure = traceFailure;
+                    }
+                }
             }
             ExportWriterSupport.deleteCanonicalStagingDirectory(exportContext.paths.repositoryDirectory);
+            if (finalizationFailure != null) {
+                throw finalizationFailure;
+            }
         }
         strategy.announceCompletion(exportContext, repositoryDirectory);
     }
