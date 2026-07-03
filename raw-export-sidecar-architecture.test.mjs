@@ -18,6 +18,14 @@ const validationUrl = new URL('./src/main/java/com/github/dcysteine/nesql/export
 const validationCatalogUrl = new URL('./src/main/java/com/github/dcysteine/nesql/exporter/local/RawExportValidationAbiCatalog.java', import.meta.url);
 const manifestBuilderUrl = new URL('./src/main/java/com/github/dcysteine/nesql/exporter/local/RawExportManifestBuilder.java', import.meta.url);
 const reportWriterUrl = new URL('./src/main/java/com/github/dcysteine/nesql/exporter/local/RawExportReportWriter.java', import.meta.url);
+const reportArtifactCatalogUrl = new URL(
+  './src/main/java/com/github/dcysteine/nesql/exporter/local/RawExportReportArtifactCatalog.java',
+  import.meta.url,
+);
+const sizeReportBuilderUrl = new URL(
+  './src/main/java/com/github/dcysteine/nesql/exporter/local/RawExportSizeReportBuilder.java',
+  import.meta.url,
+);
 const rawFileCatalogUrl = new URL('./src/main/java/com/github/dcysteine/nesql/exporter/local/RawExportFileCatalog.java', import.meta.url);
 const repositoryFactStreamerUrl = new URL('./src/main/java/com/github/dcysteine/nesql/exporter/local/RawExportRepositoryFactStreamer.java', import.meta.url);
 const repositoryFactResultUrl = new URL('./src/main/java/com/github/dcysteine/nesql/exporter/local/RawRepositoryFactStreamResult.java', import.meta.url);
@@ -65,6 +73,8 @@ const validation = readFileSync(validationUrl, 'utf8');
 const validationCatalog = readFileSync(validationCatalogUrl, 'utf8');
 const manifestBuilder = readFileSync(manifestBuilderUrl, 'utf8');
 const reportWriter = readFileSync(reportWriterUrl, 'utf8');
+const reportArtifactCatalog = readFileSync(reportArtifactCatalogUrl, 'utf8');
+const sizeReportBuilder = readFileSync(sizeReportBuilderUrl, 'utf8');
 const rawFileCatalog = readFileSync(rawFileCatalogUrl, 'utf8');
 const repositoryFactStreamer = readFileSync(repositoryFactStreamerUrl, 'utf8');
 const neiFactWriter = readFileSync(neiFactWriterUrl, 'utf8');
@@ -159,6 +169,8 @@ test('raw export manifest and report output are split from sidecar orchestration
   assert.equal(existsSync(reportPipelineUrl), true, 'RawExportSidecarReportPipeline must exist');
   assert.equal(existsSync(manifestBuilderUrl), true, 'RawExportManifestBuilder must exist');
   assert.equal(existsSync(reportWriterUrl), true, 'RawExportReportWriter must exist');
+  assert.equal(existsSync(reportArtifactCatalogUrl), true, 'RawExportReportArtifactCatalog must exist');
+  assert.equal(existsSync(sizeReportBuilderUrl), true, 'RawExportSizeReportBuilder must exist');
   assert.match(sidecar, /new RawExportSidecarReportPipeline\(/);
   assert.match(sidecar, /\.write\(factCounts\)/);
   assert.match(reportPipeline, /RawExportManifestBuilder\.build\(schemaVersion, generatedAt, exportContext, report\)/);
@@ -173,8 +185,20 @@ test('raw export manifest and report output are split from sidecar orchestration
   assert.match(manifestBuilder, /RawExportFileCatalog\.putManifestFiles/);
   assert.match(rawFileCatalog, /CAPABILITY_FACTS = "facts"/);
   assert.match(rawFileCatalog, /new ManifestFile\("exportReport", VALIDATION_EXPORT_REPORT_FILE\)/);
-  assert.match(reportWriter, /RawExportFileCatalog\.VALIDATION_EXPORT_REPORT_FILE/);
-  assert.match(reportWriter, /writeSizeReport\(gson, schemaVersion, generatedAt, rawDir\)/);
+  assert.match(reportWriter, /RawExportReportArtifactCatalog\.jsonArtifacts\(manifest, report\)/);
+  assert.match(reportWriter, /RawExportSidecarFileOps\.writeJson/);
+  assert.match(reportWriter, /RawExportSizeReportBuilder\.build\(schemaVersion, generatedAt, rawDir\)/);
+  assert.match(reportWriter, /RawExportEmptyJsonlWriter\.writeIfMissing/);
+  assert.doesNotMatch(reportWriter, /RawExportFileCatalog\.VALIDATION_EXPORT_REPORT_FILE/);
+  assert.doesNotMatch(reportWriter, /writeSizeReport\(/);
+  assert.doesNotMatch(reportWriter, /createEmptyJsonlIfMissing/);
+  assert.match(reportArtifactCatalog, /JSON_ARTIFACTS = validateAndFreeze\(Arrays\.asList\(/);
+  assert.match(reportArtifactCatalog, /RawExportFileCatalog\.VALIDATION_EXPORT_REPORT_FILE/);
+  assert.match(reportArtifactCatalog, /RawExportFileCatalog\.NEI_BROWSER_CONTRACT_FILE/);
+  assert.match(reportArtifactCatalog, /sizeReportFile\(File rawDir\)/);
+  assert.match(reportArtifactCatalog, /validationErrorsFile\(File rawDir\)/);
+  assert.match(sizeReportBuilder, /RawExportFileCatalog\.prohibitedRootOutputs\(\)/);
+  assert.match(sizeReportBuilder, /RawExportFileCatalog\.rawExportFile\(rawDir, relativePath\)/);
 });
 
 
@@ -366,6 +390,8 @@ test('raw export artifact writers share the fail-closed sidecar file ops boundar
   assert.match(renderAssetCatalogWriter, /RawExportSidecarFileOps\.copyOptional\(source, target\)/);
   assert.match(renderAssetCatalogWriter, /RawExportEmptyJsonlWriter\.write\(out\)/);
   assert.match(emptyJsonlWriter, /RawExportSidecarFileOps\.createUtf8JsonlWriter\(out\)/);
+  assert.match(emptyJsonlWriter, /writeIfMissing\(File out\) throws IOException/);
+  assert.match(emptyJsonlWriter, /Raw-export empty JSONL output path exists but is not a file/);
   assert.match(factStreamDescriptorWriter, /RawExportSidecarFileOps\.writeJson\(new GsonBuilder\(\)\.setPrettyPrinting\(\)\.create\(\), output, report\)/);
   assert.match(uiFamilyCensusWriter, /RawExportSidecarFileOps\.ensureDirectory\(rawDir\)/);
   assert.match(uiFamilyCensusWriter, /RawExportSidecarFileOps\.writeJson\(gson, outputFile, report\)/);

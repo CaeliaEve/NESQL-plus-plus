@@ -2,15 +2,9 @@ package com.github.dcysteine.nesql.exporter.local;
 
 import com.google.gson.Gson;
 import com.google.gson.GsonBuilder;
-import com.google.gson.JsonArray;
-import com.google.gson.JsonObject;
 
 import java.io.File;
-import java.io.FileOutputStream;
 import java.io.IOException;
-import java.io.OutputStreamWriter;
-import java.io.Writer;
-import java.nio.charset.StandardCharsets;
 
 final class RawExportReportWriter {
     private RawExportReportWriter() {}
@@ -18,93 +12,15 @@ final class RawExportReportWriter {
     static void write(String schemaVersion, String generatedAt, File rawDir, RawExportManifest manifest, RawExportReport report)
             throws IOException {
         Gson gson = new GsonBuilder().setPrettyPrinting().serializeNulls().create();
-        writeJson(gson, RawExportFileCatalog.rawExportFile(rawDir, RawExportFileCatalog.MANIFEST_FILE), manifest);
-        writeJson(gson, RawExportFileCatalog.rawExportFile(rawDir, RawExportFileCatalog.EXPORT_REPORT_FILE), report);
-        writeJson(gson, RawExportFileCatalog.rawExportFile(rawDir, RawExportFileCatalog.VALIDATION_EXPORT_REPORT_FILE), report);
-        if (report.neiBrowserContract != null) {
-            writeJson(
-                    gson,
-                    RawExportFileCatalog.rawExportFile(rawDir, RawExportFileCatalog.NEI_BROWSER_CONTRACT_FILE),
-                    report.neiBrowserContract);
+        for (RawExportReportArtifactCatalog.JsonArtifact artifact
+                : RawExportReportArtifactCatalog.jsonArtifacts(manifest, report)) {
+            RawExportSidecarFileOps.writeJson(gson, artifact.file(rawDir), artifact.value());
         }
-        writeSizeReport(gson, schemaVersion, generatedAt, rawDir);
-        createEmptyJsonlIfMissing(
-                RawExportFileCatalog.rawExportFile(rawDir, RawExportFileCatalog.VALIDATION_ERRORS_FILE));
-    }
-
-    private static void writeJson(Gson gson, File out, Object value) throws IOException {
-        File parent = out.getParentFile();
-        if (parent != null) {
-            ensureDirectory(parent);
-        }
-        try (FileOutputStream fos = new FileOutputStream(out);
-             OutputStreamWriter writer = new OutputStreamWriter(fos, StandardCharsets.UTF_8)) {
-            gson.toJson(value, writer);
-        }
-    }
-
-    private static void writeSizeReport(Gson gson, String schemaVersion, String generatedAt, File rawDir)
-            throws IOException {
-        JsonObject report = new JsonObject();
-        report.addProperty("schemaVersion", schemaVersion + RawExportFileCatalog.SIZE_REPORT_SCHEMA_SUFFIX);
-        report.addProperty("generatedAt", generatedAt);
-        report.addProperty("strategy", RawExportFileCatalog.SIZE_REPORT_STRATEGY);
-        report.addProperty("totalBytes", directorySize(rawDir));
-
-        JsonArray prohibited = new JsonArray();
-        for (String relativePath : RawExportFileCatalog.prohibitedRootOutputs()) {
-            addProhibitedFile(prohibited, rawDir, relativePath);
-        }
-        report.add("prohibitedOutputs", prohibited);
-        report.addProperty("status", prohibited.size() == 0 ? "pass" : "fail");
-        writeJson(gson, RawExportFileCatalog.rawExportFile(rawDir, RawExportFileCatalog.SIZE_REPORT_FILE), report);
-    }
-
-    private static void addProhibitedFile(JsonArray out, File rawDir, String relativePath) {
-        File file = new File(rawDir, relativePath.replace('/', File.separatorChar));
-        if (!file.exists()) {
-            return;
-        }
-        JsonObject entry = new JsonObject();
-        entry.addProperty("path", relativePath);
-        entry.addProperty("bytes", file.isFile() ? file.length() : directorySize(file));
-        out.add(entry);
-    }
-
-    private static long directorySize(File file) {
-        if (file == null || !file.exists()) {
-            return 0L;
-        }
-        if (file.isFile()) {
-            return file.length();
-        }
-        long total = 0L;
-        File[] children = file.listFiles();
-        if (children == null) {
-            return 0L;
-        }
-        for (File child : children) {
-            total += directorySize(child);
-        }
-        return total;
-    }
-
-    private static void createEmptyJsonlIfMissing(File out) throws IOException {
-        if (out.exists()) {
-            return;
-        }
-        File parent = out.getParentFile();
-        if (parent != null) {
-            ensureDirectory(parent);
-        }
-        try (Writer ignored = new OutputStreamWriter(new FileOutputStream(out), StandardCharsets.UTF_8)) {
-            // Empty JSONL remains valid when no validation errors were emitted.
-        }
-    }
-
-    private static void ensureDirectory(File directory) throws IOException {
-        if (directory != null && !directory.exists() && !directory.mkdirs()) {
-            throw new IOException("Failed to create directory: " + directory.getAbsolutePath());
-        }
+        RawExportSidecarFileOps.writeJson(
+                gson,
+                RawExportReportArtifactCatalog.sizeReportFile(rawDir),
+                RawExportSizeReportBuilder.build(schemaVersion, generatedAt, rawDir));
+        RawExportEmptyJsonlWriter.writeIfMissing(
+                RawExportReportArtifactCatalog.validationErrorsFile(rawDir));
     }
 }
