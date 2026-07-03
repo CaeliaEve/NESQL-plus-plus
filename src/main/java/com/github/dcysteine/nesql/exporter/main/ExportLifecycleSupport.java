@@ -25,6 +25,11 @@ public final class ExportLifecycleSupport {
 
     public static boolean ensureRepositoryDirectory(File repositoryDirectory, String repositoryName, boolean failIfExists) {
         if (repositoryDirectory.exists()) {
+            if (!repositoryDirectory.isDirectory()) {
+                throw new IllegalStateException(
+                        "Repository path exists but is not a directory: "
+                                + repositoryDirectory.getAbsolutePath());
+            }
             if (failIfExists) {
                 Logger.chatMessage(
                         EnumChatFormatting.RED
@@ -35,10 +40,11 @@ public final class ExportLifecycleSupport {
         }
 
         if (!repositoryDirectory.mkdirs()) {
-            Logger.chatMessage(
-                    EnumChatFormatting.RED
-                            + String.format("Failed to create repository \"%s\"!", repositoryName));
-            return false;
+            throw new IllegalStateException(
+                    String.format(
+                            "Failed to create repository \"%s\": %s",
+                            repositoryName,
+                            repositoryDirectory.getAbsolutePath()));
         }
         return true;
     }

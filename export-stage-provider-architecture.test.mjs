@@ -59,6 +59,10 @@ const actionContext = readFileSync(
   new URL('./src/main/java/com/github/dcysteine/nesql/exporter/main/ExportStageActionContext.java', import.meta.url),
   'utf8',
 );
+const lifecycleSupport = readFileSync(
+  new URL('./src/main/java/com/github/dcysteine/nesql/exporter/main/ExportLifecycleSupport.java', import.meta.url),
+  'utf8',
+);
 const controlPlaneWriter = readFileSync(
   new URL('./src/main/java/com/github/dcysteine/nesql/exporter/main/ExportControlPlaneWriter.java', import.meta.url),
   'utf8',
@@ -361,6 +365,15 @@ test('export lifecycle resources are owned by the kernel managed-resource stack'
   assert.match(lifecycle, /context\.kernelContext\.resources\(\)\.add\(\s*"export\.runtime"/);
   assert.match(lifecycle, /context\.kernelContext\.resources\(\)\.add\(\s*"export\.session"/);
   assert.match(lifecycle, /ExportLifecycleSupport\.closeSession/);
+});
+
+test('export repository path lifecycle fails closed on invalid filesystem shape', () => {
+  assert.match(lifecycleSupport, /public static boolean ensureRepositoryDirectory/);
+  assert.match(lifecycleSupport, /if \(!repositoryDirectory\.isDirectory\(\)\)/);
+  assert.match(lifecycleSupport, /Repository path exists but is not a directory/);
+  assert.match(lifecycleSupport, /throw new IllegalStateException\(/);
+  assert.match(lifecycleSupport, /Failed to create repository/);
+  assert.doesNotMatch(lifecycleSupport, /String\.format\("Failed to create repository \\"%s\\"!"[\s\S]*return false;/);
 });
 
 test('export tracepoints are declared through a stable kernel catalog', () => {
