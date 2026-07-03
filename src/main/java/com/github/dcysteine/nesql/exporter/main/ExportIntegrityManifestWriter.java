@@ -11,6 +11,7 @@ import net.minecraft.util.EnumChatFormatting;
 import java.io.File;
 import java.io.FileInputStream;
 import java.io.FileOutputStream;
+import java.io.IOException;
 import java.io.InputStreamReader;
 import java.io.OutputStreamWriter;
 import java.nio.charset.StandardCharsets;
@@ -82,56 +83,50 @@ final class ExportIntegrityManifestWriter {
 
     private ExportIntegrityManifestWriter() {}
 
-    static void write(ExportContext exportContext) {
-        try {
-            File repositoryDirectory = exportContext.paths.repositoryDirectory;
-            File rawDir = RawExportFileCatalog.rawExportDirectory(repositoryDirectory);
-            File validationDir = RawExportFileCatalog.validationDirectory(rawDir);
-            if (!validationDir.exists()) {
-                validationDir.mkdirs();
-            }
+    static void write(ExportContext exportContext) throws Exception {
+        File repositoryDirectory = exportContext.paths.repositoryDirectory;
+        File rawDir = RawExportFileCatalog.rawExportDirectory(repositoryDirectory);
+        File validationDir = RawExportFileCatalog.validationDirectory(rawDir);
+        ensureDirectory(validationDir);
 
-            File checksumFile = new File(validationDir, RawExportFileCatalog.STAGE_CHECKSUMS_FILE_NAME);
-            Map<String, ArtifactChecksum> previousArtifacts = readPreviousArtifacts(checksumFile);
-            List<ArtifactChecksum> artifacts = collectArtifacts(repositoryDirectory, rawDir);
-            annotateChanges(artifacts, previousArtifacts);
-            ExportManifest manifest = new ExportManifest();
-            manifest.schemaVersion = ExportSchemaCatalog.EXPORT_MANIFEST;
-            manifest.generatedAtEpochMs = System.currentTimeMillis();
-            manifest.repository = exportContext.paths.repositoryName;
-            manifest.profile = exportContext.profile.profileId;
-            manifest.selection = exportContext.selection.describe();
-            manifest.nesqlImplementationVersion = implementationVersion();
-            manifest.databaseFile = relative(repositoryDirectory, exportContext.paths.databaseFile);
-            manifest.imageDirectory = relative(repositoryDirectory, exportContext.paths.imageDirectory);
-            manifest.rawExportDirectory = RawExportFileCatalog.RAW_EXPORT_DIRECTORY;
-            manifest.artifacts = artifacts;
+        File checksumFile = new File(validationDir, RawExportFileCatalog.STAGE_CHECKSUMS_FILE_NAME);
+        Map<String, ArtifactChecksum> previousArtifacts = readPreviousArtifacts(checksumFile);
+        List<ArtifactChecksum> artifacts = collectArtifacts(repositoryDirectory, rawDir);
+        annotateChanges(artifacts, previousArtifacts);
+        ExportManifest manifest = new ExportManifest();
+        manifest.schemaVersion = ExportSchemaCatalog.EXPORT_MANIFEST;
+        manifest.generatedAtEpochMs = System.currentTimeMillis();
+        manifest.repository = exportContext.paths.repositoryName;
+        manifest.profile = exportContext.profile.profileId;
+        manifest.selection = exportContext.selection.describe();
+        manifest.nesqlImplementationVersion = implementationVersion();
+        manifest.databaseFile = relative(repositoryDirectory, exportContext.paths.databaseFile);
+        manifest.imageDirectory = relative(repositoryDirectory, exportContext.paths.imageDirectory);
+        manifest.rawExportDirectory = RawExportFileCatalog.RAW_EXPORT_DIRECTORY;
+        manifest.artifacts = artifacts;
 
-            ChecksumReport checksumReport = new ChecksumReport();
-            checksumReport.schemaVersion = ExportSchemaCatalog.STAGE_CHECKSUMS;
-            checksumReport.generatedAtEpochMs = manifest.generatedAtEpochMs;
-            checksumReport.repository = manifest.repository;
-            checksumReport.profile = manifest.profile;
-            checksumReport.selection = manifest.selection;
-            checksumReport.artifacts = artifacts;
+        ChecksumReport checksumReport = new ChecksumReport();
+        checksumReport.schemaVersion = ExportSchemaCatalog.STAGE_CHECKSUMS;
+        checksumReport.generatedAtEpochMs = manifest.generatedAtEpochMs;
+        checksumReport.repository = manifest.repository;
+        checksumReport.profile = manifest.profile;
+        checksumReport.selection = manifest.selection;
+        checksumReport.artifacts = artifacts;
 
-            writeJson(new File(validationDir, RawExportFileCatalog.EXPORT_MANIFEST_FILE_NAME), manifest);
-            writeJson(new File(validationDir, RawExportFileCatalog.EXPORT_MANIFEST_DASH_FILE_NAME), manifest);
-            writeJson(checksumFile, checksumReport);
-            writeJson(new File(validationDir, RawExportFileCatalog.STAGE_CHECKSUMS_DASH_FILE_NAME), checksumReport);
+        writeJson(new File(validationDir, RawExportFileCatalog.EXPORT_MANIFEST_FILE_NAME), manifest);
+        writeJson(new File(validationDir, RawExportFileCatalog.EXPORT_MANIFEST_DASH_FILE_NAME), manifest);
+        writeJson(checksumFile, checksumReport);
+        writeJson(new File(validationDir, RawExportFileCatalog.STAGE_CHECKSUMS_DASH_FILE_NAME), checksumReport);
 
-            Logger.chatMessage(
-                    EnumChatFormatting.GREEN
-                            + "[NESQL] Export manifest/checksums written: "
-                            + new File(
-                                    validationDir,
-                                    RawExportFileCatalog.EXPORT_MANIFEST_FILE_NAME).getAbsolutePath());
-        } catch (Exception e) {
-            Logger.MOD.warn("Failed to write NESQL++ export manifest/checksums", e);
-        }
+        Logger.chatMessage(
+                EnumChatFormatting.GREEN
+                        + "[NESQL] Export manifest/checksums written: "
+                        + new File(
+                                validationDir,
+                                RawExportFileCatalog.EXPORT_MANIFEST_FILE_NAME).getAbsolutePath());
     }
 
-    private static List<ArtifactChecksum> collectArtifacts(File repositoryDirectory, File rawDir) {
+    private static List<ArtifactChecksum> collectArtifacts(File repositoryDirectory, File rawDir) throws Exception {
         List<ArtifactChecksum> artifacts = new ArrayList<ArtifactChecksum>();
         addFileArtifacts(artifacts, repositoryDirectory, rawDir, FILE_ARTIFACTS_BEFORE_DYNAMIC);
         for (ExportControlFile file : ExportControlFile.values()) {
@@ -159,7 +154,7 @@ final class ExportIntegrityManifestWriter {
             List<ArtifactChecksum> artifacts,
             File repositoryDirectory,
             File rawDir,
-            List<FileArtifactDescriptor> descriptors) {
+            List<FileArtifactDescriptor> descriptors) throws Exception {
         for (FileArtifactDescriptor descriptor : descriptors) {
             addFile(
                     artifacts,
@@ -169,7 +164,7 @@ final class ExportIntegrityManifestWriter {
         }
     }
 
-    private static void addFile(List<ArtifactChecksum> artifacts, File root, File file, String stage) {
+    private static void addFile(List<ArtifactChecksum> artifacts, File root, File file, String stage) throws Exception {
         ArtifactChecksum artifact = new ArtifactChecksum();
         artifact.stage = stage;
         artifact.family = stage;
@@ -187,7 +182,7 @@ final class ExportIntegrityManifestWriter {
             File root,
             File rawDir,
             ExportControlFile file,
-            String stage) {
+            String stage) throws Exception {
         addFile(artifacts, root, new File(rawDir, file.rawExportPath().replace('/', File.separatorChar)), stage);
     }
 
@@ -196,11 +191,14 @@ final class ExportIntegrityManifestWriter {
             File root,
             File rawDir,
             ExportDebugFile file,
-            String stage) {
+            String stage) throws Exception {
         addFile(artifacts, root, new File(rawDir, file.rawExportDebugPath().replace('/', File.separatorChar)), stage);
     }
 
-    private static void addDirectoryArtifacts(List<ArtifactChecksum> artifacts, File repositoryDirectory, File rawDir) {
+    private static void addDirectoryArtifacts(
+            List<ArtifactChecksum> artifacts,
+            File repositoryDirectory,
+            File rawDir) throws Exception {
         for (DirectoryArtifactDescriptor descriptor : DIRECTORY_ARTIFACTS) {
             addDirectorySummary(
                     artifacts,
@@ -218,25 +216,36 @@ final class ExportIntegrityManifestWriter {
         return new File(root, descriptor.relativePath.replace('/', File.separatorChar));
     }
 
-    private static void addDirectorySummary(List<ArtifactChecksum> artifacts, File root, File dir, String stage) {
+    private static void addDirectorySummary(
+            List<ArtifactChecksum> artifacts,
+            File root,
+            File dir,
+            String stage) throws Exception {
+        if (dir.exists() && !dir.isDirectory()) {
+            throw new IOException(
+                    "Export integrity directory artifact path exists but is not a directory: "
+                            + dir.getAbsolutePath());
+        }
         DirectoryStats stats = new DirectoryStats();
-        collectDirectoryStats(dir, stats);
+        if (dir.exists()) {
+            collectDirectoryStats(dir, stats);
+        }
         ArtifactChecksum artifact = new ArtifactChecksum();
         artifact.stage = stage;
         artifact.family = stage;
         artifact.path = relative(root, dir);
-        artifact.exists = dir.exists() && dir.isDirectory();
+        artifact.exists = dir.exists();
         artifact.fileCount = stats.fileCount;
         artifact.bytes = stats.bytes;
         artifact.sha256 = stats.digest();
         artifacts.add(artifact);
     }
 
-    private static void collectDirectoryStats(File file, DirectoryStats stats) {
+    private static void collectDirectoryStats(File file, DirectoryStats stats) throws Exception {
         collectDirectoryStats(file, file, stats);
     }
 
-    private static void collectDirectoryStats(File root, File file, DirectoryStats stats) {
+    private static void collectDirectoryStats(File root, File file, DirectoryStats stats) throws Exception {
         if (file == null || !file.exists()) {
             return;
         }
@@ -248,29 +257,41 @@ final class ExportIntegrityManifestWriter {
         }
         File[] children = file.listFiles();
         if (children == null) {
-            return;
+            throw new IOException("Failed to list export integrity artifact directory: " + file.getAbsolutePath());
         }
         for (File child : children) {
             collectDirectoryStats(root, child, stats);
         }
     }
 
-    private static Map<String, ArtifactChecksum> readPreviousArtifacts(File checksumFile) {
+    private static Map<String, ArtifactChecksum> readPreviousArtifacts(File checksumFile) throws Exception {
         Map<String, ArtifactChecksum> previous = new HashMap<String, ArtifactChecksum>();
-        if (checksumFile == null || !checksumFile.exists()) {
+        if (checksumFile == null) {
+            throw new IOException("Export integrity checksum file must not be null");
+        }
+        if (!checksumFile.exists()) {
             return previous;
+        }
+        if (!checksumFile.isFile()) {
+            throw new IOException(
+                    "Export integrity checksum path exists but is not a file: " + checksumFile.getAbsolutePath());
         }
         try (InputStreamReader reader =
                      new InputStreamReader(new FileInputStream(checksumFile), StandardCharsets.UTF_8)) {
             ChecksumReport report = new Gson().fromJson(reader, ChecksumReport.class);
-            if (report == null || report.artifacts == null) {
-                return previous;
+            if (report == null) {
+                throw new IOException(
+                        "Export integrity checksum report is empty or null JSON: "
+                                + checksumFile.getAbsolutePath());
+            }
+            if (report.artifacts == null) {
+                throw new IOException(
+                        "Export integrity checksum report artifacts must not be null: "
+                                + checksumFile.getAbsolutePath());
             }
             for (ArtifactChecksum artifact : report.artifacts) {
                 previous.put(artifactKey(artifact), artifact);
             }
-        } catch (Exception e) {
-            Logger.MOD.warn("Failed to read previous NESQL++ stage checksums", e);
         }
         return previous;
     }
@@ -303,23 +324,18 @@ final class ExportIntegrityManifestWriter {
         return left == null ? right == null : left.equals(right);
     }
 
-    private static String sha256(File file) {
-        try {
-            MessageDigest digest = MessageDigest.getInstance("SHA-256");
-            byte[] buffer = new byte[1024 * 1024];
-            try (FileInputStream fis = new FileInputStream(file)) {
-                int read;
-                while ((read = fis.read(buffer)) >= 0) {
-                    if (read > 0) {
-                        digest.update(buffer, 0, read);
-                    }
+    private static String sha256(File file) throws Exception {
+        MessageDigest digest = MessageDigest.getInstance("SHA-256");
+        byte[] buffer = new byte[1024 * 1024];
+        try (FileInputStream fis = new FileInputStream(file)) {
+            int read;
+            while ((read = fis.read(buffer)) >= 0) {
+                if (read > 0) {
+                    digest.update(buffer, 0, read);
                 }
             }
-            return toHex(digest.digest());
-        } catch (Exception e) {
-            Logger.MOD.warn("Failed to hash export artifact {}", file.getAbsolutePath(), e);
-            return null;
         }
+        return toHex(digest.digest());
     }
 
     private static String relative(File root, File file) {
@@ -330,11 +346,26 @@ final class ExportIntegrityManifestWriter {
         }
     }
 
+    private static void ensureDirectory(File directory) throws Exception {
+        if (directory == null) {
+            throw new IOException("Export integrity output directory must not be null");
+        }
+        if (directory.exists()) {
+            if (!directory.isDirectory()) {
+                throw new IOException(
+                        "Export integrity output path exists but is not a directory: "
+                                + directory.getAbsolutePath());
+            }
+            return;
+        }
+        if (!directory.mkdirs() && !directory.isDirectory()) {
+            throw new IOException("Failed to create export integrity output directory: " + directory.getAbsolutePath());
+        }
+    }
+
     private static void writeJson(File file, Object payload) throws Exception {
         File parent = file.getParentFile();
-        if (parent != null && !parent.exists()) {
-            parent.mkdirs();
-        }
+        ensureDirectory(parent);
         try (FileOutputStream fos = new FileOutputStream(file, false);
              OutputStreamWriter writer = new OutputStreamWriter(fos, StandardCharsets.UTF_8)) {
             new GsonBuilder().setPrettyPrinting().create().toJson(payload, writer);

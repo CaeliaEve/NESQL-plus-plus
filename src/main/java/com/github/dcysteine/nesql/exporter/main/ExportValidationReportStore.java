@@ -10,6 +10,7 @@ import com.google.gson.GsonBuilder;
 import java.io.File;
 import java.io.FileInputStream;
 import java.io.FileOutputStream;
+import java.io.IOException;
 import java.io.InputStreamReader;
 import java.io.OutputStreamWriter;
 import java.nio.charset.StandardCharsets;
@@ -21,7 +22,7 @@ final class ExportValidationReportStore {
 
     private ExportValidationReportStore() {}
 
-    static void applyPreviousDelta(File validationDirectory, ValidationReport report) {
+    static void applyPreviousDelta(File validationDirectory, ValidationReport report) throws Exception {
         ValidationReport previousReport = readPreviousReport(reportFile(validationDirectory));
         if (previousReport == null) {
             return;
@@ -38,16 +39,25 @@ final class ExportValidationReportStore {
         return files;
     }
 
-    private static ValidationReport readPreviousReport(File reportFile) {
-        if (reportFile == null || !reportFile.exists()) {
+    private static ValidationReport readPreviousReport(File reportFile) throws Exception {
+        if (reportFile == null) {
+            throw new IOException("Validation report file must not be null");
+        }
+        if (!reportFile.exists()) {
             return null;
+        }
+        if (!reportFile.isFile()) {
+            throw new IOException(
+                    "Validation report path exists but is not a file: " + reportFile.getAbsolutePath());
         }
         try (FileInputStream fis = new FileInputStream(reportFile);
              InputStreamReader reader = new InputStreamReader(fis, StandardCharsets.UTF_8)) {
-            return READ_GSON.fromJson(reader, ValidationReport.class);
-        } catch (Exception e) {
-            Logger.MOD.warn("Failed to read previous NESQL++ validation report", e);
-            return null;
+            ValidationReport report = READ_GSON.fromJson(reader, ValidationReport.class);
+            if (report == null) {
+                throw new IOException(
+                        "Validation report file is empty or null JSON: " + reportFile.getAbsolutePath());
+            }
+            return report;
         }
     }
 
@@ -75,17 +85,30 @@ final class ExportValidationReportStore {
         return delta;
     }
 
-    private static File reportFile(File validationDirectory) {
+    private static File reportFile(File validationDirectory) throws Exception {
+        requireDirectoryRoot(validationDirectory);
         return new File(validationDirectory, RawExportFileCatalog.EXPORT_VALIDATION_REPORT_FILE_NAME);
     }
 
-    private static File healthReportFile(File validationDirectory) {
+    private static File healthReportFile(File validationDirectory) throws Exception {
+        requireDirectoryRoot(validationDirectory);
         return new File(validationDirectory, RawExportFileCatalog.EXPORT_HEALTH_REPORT_FILE_NAME);
     }
 
+    private static void requireDirectoryRoot(File directory) throws Exception {
+        if (directory == null) {
+            throw new IOException("Validation report directory must not be null");
+        }
+        if (directory.exists() && !directory.isDirectory()) {
+            throw new IOException(
+                    "Validation report path exists but is not a directory: " + directory.getAbsolutePath());
+        }
+    }
+
     private static void ensureDirectory(File directory) throws Exception {
-        if (directory != null && !directory.exists() && !directory.mkdirs()) {
-            throw new java.io.IOException("Failed to create directory: " + directory.getAbsolutePath());
+        requireDirectoryRoot(directory);
+        if (!directory.exists() && !directory.mkdirs() && !directory.isDirectory()) {
+            throw new IOException("Failed to create validation report directory: " + directory.getAbsolutePath());
         }
     }
 

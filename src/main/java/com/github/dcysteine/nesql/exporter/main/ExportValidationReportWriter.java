@@ -8,36 +8,32 @@ import net.minecraft.util.EnumChatFormatting;
 import java.util.ArrayList;
 import java.util.List;
 
-/** Writes a lightweight post-export integrity summary without changing exported data contracts. */
+/** Writes a lightweight post-export validation summary without changing exported data contracts. */
 final class ExportValidationReportWriter {
     private ExportValidationReportWriter() {}
 
-    static void write(ExportContext exportContext) {
-        try {
-            ExportValidationProbeContext context = ExportValidationProbeContext.from(exportContext);
-            ValidationReport report = new ValidationReport();
-            for (ExportValidationProbe probe : ExportValidationProbeCatalog.defaultProbes()) {
-                probe.inspect(context, report);
-            }
-            report.validationProbes = ExportValidationProbeCatalog.descriptors();
-            report.validationProbeCount = report.validationProbes.size();
+    static void write(ExportContext exportContext) throws Exception {
+        ExportValidationProbeContext context = ExportValidationProbeContext.from(exportContext);
+        ValidationReport report = new ValidationReport();
+        for (ExportValidationProbe probe : ExportValidationProbeCatalog.defaultProbes()) {
+            probe.inspect(context, report);
+        }
+        report.validationProbes = ExportValidationProbeCatalog.descriptors();
+        report.validationProbeCount = report.validationProbes.size();
 
-            ExportValidationReportStore.ReportFiles reportFiles =
-                    ExportValidationReportStore.write(context.validationDir, report);
+        ExportValidationReportStore.ReportFiles reportFiles =
+                ExportValidationReportStore.write(context.validationDir, report);
 
+        Logger.chatMessage(
+                EnumChatFormatting.GREEN
+                        + "[NESQL] Export validation report written: "
+                        + reportFiles.reportFile.getAbsolutePath());
+        if (!report.warnings.isEmpty()) {
             Logger.chatMessage(
-                    EnumChatFormatting.GREEN
-                            + "[NESQL] Export validation report written: "
-                            + reportFiles.reportFile.getAbsolutePath());
-            if (!report.warnings.isEmpty()) {
-                Logger.chatMessage(
-                        EnumChatFormatting.YELLOW
-                                + "[NESQL] Validation warnings: "
-                                + report.warnings.size()
-                                + " (see report)");
-            }
-        } catch (Exception e) {
-            Logger.MOD.warn("Failed to write NESQL++ validation report", e);
+                    EnumChatFormatting.YELLOW
+                            + "[NESQL] Validation warnings: "
+                            + report.warnings.size()
+                            + " (see report)");
         }
     }
 

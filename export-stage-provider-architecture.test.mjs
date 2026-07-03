@@ -538,10 +538,21 @@ test('export control and debug planes have explicit filesystem ownership', () =>
   assert.match(rawManifestBuilder, /file\.manifestKey\(\), file\.rawExportDebugPath\(\)/);
   assert.match(integrityManifestWriter, /ExportSchemaCatalog\.EXPORT_MANIFEST/);
   assert.match(integrityManifestWriter, /ExportSchemaCatalog\.STAGE_CHECKSUMS/);
+  assert.match(integrityManifestWriter, /static void write\(ExportContext exportContext\) throws Exception/);
+  assert.match(integrityManifestWriter, /ensureDirectory\(validationDir\)/);
+  assert.match(integrityManifestWriter, /Export integrity output directory must not be null/);
+  assert.match(integrityManifestWriter, /Export integrity output path exists but is not a directory/);
+  assert.match(integrityManifestWriter, /Export integrity checksum path exists but is not a file/);
+  assert.match(integrityManifestWriter, /Export integrity checksum report is empty or null JSON/);
+  assert.match(integrityManifestWriter, /Export integrity checksum report artifacts must not be null/);
+  assert.match(integrityManifestWriter, /Export integrity directory artifact path exists but is not a directory/);
   assert.match(integrityManifestWriter, /for \(ExportControlFile file : ExportControlFile\.values\(\)\)/);
   assert.match(integrityManifestWriter, /RawExportFileCatalog\.controlArtifactStage\(file\)/);
   assert.match(integrityManifestWriter, /for \(ExportDebugFile file : ExportDebugFile\.values\(\)\)/);
   assert.match(integrityManifestWriter, /RawExportFileCatalog\.debugArtifactStage\(file\)/);
+  assert.doesNotMatch(integrityManifestWriter, /Failed to write NESQL\+\+ export manifest\/checksums/);
+  assert.doesNotMatch(integrityManifestWriter, /Failed to read previous NESQL\+\+ stage checksums/);
+  assert.doesNotMatch(integrityManifestWriter, /Failed to hash export artifact/);
 });
 
 test('export validation probe catalog owns report collection order and capabilities', () => {
@@ -588,6 +599,7 @@ test('export validation probe catalog owns report collection order and capabilit
   assert.match(validationProbeDescriptor, /final String id/);
   assert.match(validationProbeDescriptor, /final List<String> capabilities/);
   assert.match(validationReportWriter, /ExportValidationProbeContext\.from\(exportContext\)/);
+  assert.match(validationReportWriter, /static void write\(ExportContext exportContext\) throws Exception/);
   assert.match(validationReportWriter, /for \(ExportValidationProbe probe : ExportValidationProbeCatalog\.defaultProbes\(\)\)/);
   assert.match(validationReportWriter, /probe\.inspect\(context, report\)/);
   assert.match(validationReportWriter, /report\.validationProbes = ExportValidationProbeCatalog\.descriptors\(\)/);
@@ -597,6 +609,10 @@ test('export validation probe catalog owns report collection order and capabilit
   assert.match(validationRepositoryProbe, /new File\(context\.repositoryDirectory, "items"\)/);
   assert.match(validationBrowserProbe, /ExportValidationBrowserAtlasProbe\.inspect\(context\.rawDir, report\)/);
   assert.match(validationBrowserProbe, /RawExportFileCatalog\.NEI_ORDER_FILE/);
+  assert.match(
+    validationPreviousDeltaProbe,
+    /public void inspect\([\s\S]*ExportValidationReportWriter\.ValidationReport report\) throws Exception/,
+  );
   assert.match(validationPreviousDeltaProbe, /ExportValidationReportStore\.applyPreviousDelta\(context\.validationDir, report\)/);
   assert.match(validationHealthPolicyProbe, /ExportValidationHealthPolicy\.evaluate\(report\)/);
   assert.match(validationHealthSectionProbe, /ExportValidationHealthSectionBuilder\.populate\(context\.repositoryDirectory, report\)/);
@@ -645,17 +661,24 @@ test('export validation probe catalog owns report collection order and capabilit
   assert.doesNotMatch(validationReportWriter, /RawExportFileCatalog\.VALIDATION_ERRORS_FILE/);
   assert.doesNotMatch(validationReportWriter, /nesqlpp\/export-error\/v1/);
   assert.doesNotMatch(validationReportWriter, /new File\(repositoryDirectory, "raw-export"/);
+  assert.doesNotMatch(validationReportWriter, /Failed to write NESQL\+\+ validation report/);
 });
 
 test('export validation report persistence and delta metadata are store-owned', () => {
   assert.match(validationReportStore, /Owns validation report persistence, aliases, previous-run snapshot, and delta metadata/);
-  assert.match(validationReportStore, /static void applyPreviousDelta\(File validationDirectory, ValidationReport report\)/);
+  assert.match(validationReportStore, /static void applyPreviousDelta\(File validationDirectory, ValidationReport report\) throws Exception/);
   assert.match(validationReportStore, /static ReportFiles write\(File validationDirectory, ValidationReport report\) throws Exception/);
   assert.match(validationReportStore, /readPreviousReport\(reportFile\(validationDirectory\)\)/);
+  assert.match(validationReportStore, /readPreviousReport\(File reportFile\) throws Exception/);
   assert.match(validationReportStore, /previousSnapshot\(previousReport\)/);
   assert.match(validationReportStore, /deltaSnapshot\(report, previousReport\)/);
   assert.match(validationReportStore, /RawExportFileCatalog\.EXPORT_VALIDATION_REPORT_FILE_NAME/);
   assert.match(validationReportStore, /RawExportFileCatalog\.EXPORT_HEALTH_REPORT_FILE_NAME/);
+  assert.match(validationReportStore, /Validation report directory must not be null/);
+  assert.match(validationReportStore, /Validation report path exists but is not a directory/);
+  assert.match(validationReportStore, /Validation report path exists but is not a file/);
+  assert.match(validationReportStore, /Validation report file is empty or null JSON/);
+  assert.match(validationReportStore, /Failed to create validation report directory/);
   assert.match(rawFileCatalog, /EXPORT_VALIDATION_REPORT_FILE_NAME = "export_validation_report\.json"/);
   assert.match(rawFileCatalog, /EXPORT_HEALTH_REPORT_FILE_NAME = "export-health-report\.json"/);
   assert.match(validationReportStore, /WRITE_GSON\.toJson\(value, writer\)/);
@@ -667,4 +690,6 @@ test('export validation report persistence and delta metadata are store-owned', 
   assert.doesNotMatch(validationReportWriter, /readPreviousReport/);
   assert.doesNotMatch(validationReportWriter, /new File\(validationDir, "export_validation_report\.json"\)/);
   assert.doesNotMatch(validationReportWriter, /new File\(validationDir, "export-health-report\.json"\)/);
+  assert.doesNotMatch(validationReportStore, /Failed to read previous NESQL\+\+ validation report/);
+  assert.doesNotMatch(validationReportStore, /Logger\.MOD\.warn/);
 });

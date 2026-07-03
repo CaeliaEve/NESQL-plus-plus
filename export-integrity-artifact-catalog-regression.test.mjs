@@ -10,6 +10,7 @@ const integrity = readSource(
 );
 
 test('export integrity artifact checksums are emitted from a validated descriptor catalog', () => {
+  assert.match(integrity, /static void write\(ExportContext exportContext\) throws Exception/);
   assert.match(integrity, /ARTIFACT_CATALOG =\s*\r?\n\s*IntegrityArtifactCatalog\.validateAndFreeze\(/);
   assert.match(integrity, /private static final class IntegrityArtifactCatalog/);
   assert.match(integrity, /private static final class FileArtifactDescriptor/);
@@ -27,6 +28,25 @@ test('export integrity artifact checksums are emitted from a validated descripto
   const debugIndex = integrity.indexOf('for (ExportDebugFile file : ExportDebugFile.values())');
   const afterIndex = integrity.indexOf('addFileArtifacts(artifacts, repositoryDirectory, rawDir, FILE_ARTIFACTS_AFTER_DYNAMIC)');
   assert.equal(beforeIndex < controlIndex && controlIndex < debugIndex && debugIndex < afterIndex, true);
+});
+
+test('export integrity manifest and checksum persistence fails closed', () => {
+  assert.match(integrity, /ensureDirectory\(validationDir\)/);
+  assert.match(integrity, /private static void ensureDirectory\(File directory\) throws Exception/);
+  assert.match(integrity, /Export integrity output directory must not be null/);
+  assert.match(integrity, /Export integrity output path exists but is not a directory/);
+  assert.match(integrity, /Failed to create export integrity output directory/);
+  assert.match(integrity, /readPreviousArtifacts\(File checksumFile\) throws Exception/);
+  assert.match(integrity, /Export integrity checksum file must not be null/);
+  assert.match(integrity, /Export integrity checksum path exists but is not a file/);
+  assert.match(integrity, /Export integrity checksum report is empty or null JSON/);
+  assert.match(integrity, /Export integrity checksum report artifacts must not be null/);
+  assert.match(integrity, /sha256\(File file\) throws Exception/);
+  assert.match(integrity, /collectDirectoryStats\(File root, File file, DirectoryStats stats\) throws Exception/);
+  assert.match(integrity, /Failed to list export integrity artifact directory/);
+  assert.doesNotMatch(integrity, /Failed to write NESQL\+\+ export manifest\/checksums/);
+  assert.doesNotMatch(integrity, /Failed to read previous NESQL\+\+ stage checksums/);
+  assert.doesNotMatch(integrity, /Failed to hash export artifact/);
 });
 
 test('export integrity artifact catalog fails closed on malformed descriptors', () => {
