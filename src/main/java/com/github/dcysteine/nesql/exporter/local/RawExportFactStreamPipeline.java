@@ -24,8 +24,9 @@ final class RawExportFactStreamPipeline {
                 rawDir,
                 renderAssets,
                 schemaVersion);
-        this.providers = RawExportFactStreamRegistry.defaultProviders();
-        this.descriptors = RawExportFactStreamRegistry.describe(providers);
+        RawExportFactStreamCatalog catalog = RawExportFactStreamRegistry.defaultCatalog();
+        this.providers = catalog.providers();
+        this.descriptors = catalog.descriptors();
     }
 
     List<RawExportFactStreamDescriptor> descriptors() {

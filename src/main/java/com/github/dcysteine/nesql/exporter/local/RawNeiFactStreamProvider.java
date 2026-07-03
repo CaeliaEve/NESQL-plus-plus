@@ -3,30 +3,8 @@ package com.github.dcysteine.nesql.exporter.local;
 import com.github.dcysteine.nesql.exporter.nativeui.NativeUiExportValidator;
 
 import java.io.IOException;
-import java.util.List;
 
 final class RawNeiFactStreamProvider implements RawExportFactStreamProvider {
-    @Override
-    public String id() {
-        return "raw.nei-facts";
-    }
-
-    @Override
-    public List<String> capabilities() {
-        return RawExportFactStreamProvider.list(
-                "raw.nei.browser-order",
-                "raw.nei.handler-metadata",
-                "raw.native-ui.handler-layouts");
-    }
-
-    @Override
-    public List<String> outputFamilies() {
-        return RawExportFactStreamProvider.list(
-                "facts/nei",
-                "facts/native-ui",
-                "validation/nei-browser-contract");
-    }
-
     @Override
     public void write(RawExportFactStreamContext context, RawFactCounts counts) throws IOException {
         RawNeiFactCounts nei =

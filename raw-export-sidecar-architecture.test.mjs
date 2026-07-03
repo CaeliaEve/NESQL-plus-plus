@@ -7,6 +7,7 @@ const factStreamPipelineUrl = new URL('./src/main/java/com/github/dcysteine/nesq
 const factStreamContextUrl = new URL('./src/main/java/com/github/dcysteine/nesql/exporter/local/RawExportFactStreamContext.java', import.meta.url);
 const factStreamProviderUrl = new URL('./src/main/java/com/github/dcysteine/nesql/exporter/local/RawExportFactStreamProvider.java', import.meta.url);
 const factStreamRegistryUrl = new URL('./src/main/java/com/github/dcysteine/nesql/exporter/local/RawExportFactStreamRegistry.java', import.meta.url);
+const factStreamCatalogUrl = new URL('./src/main/java/com/github/dcysteine/nesql/exporter/local/RawExportFactStreamCatalog.java', import.meta.url);
 const factStreamDescriptorUrl = new URL('./src/main/java/com/github/dcysteine/nesql/exporter/local/RawExportFactStreamDescriptor.java', import.meta.url);
 const factStreamDescriptorWriterUrl = new URL('./src/main/java/com/github/dcysteine/nesql/exporter/local/RawExportFactStreamDescriptorWriter.java', import.meta.url);
 const repositoryProviderUrl = new URL('./src/main/java/com/github/dcysteine/nesql/exporter/local/RawRepositoryFactStreamProvider.java', import.meta.url);
@@ -62,6 +63,7 @@ const factStreamPipeline = readFileSync(factStreamPipelineUrl, 'utf8');
 const factStreamContext = readFileSync(factStreamContextUrl, 'utf8');
 const factStreamProvider = readFileSync(factStreamProviderUrl, 'utf8');
 const factStreamRegistry = readFileSync(factStreamRegistryUrl, 'utf8');
+const factStreamCatalog = readFileSync(factStreamCatalogUrl, 'utf8');
 const factStreamDescriptor = readFileSync(factStreamDescriptorUrl, 'utf8');
 const factStreamDescriptorWriter = readFileSync(factStreamDescriptorWriterUrl, 'utf8');
 const repositoryProvider = readFileSync(repositoryProviderUrl, 'utf8');
@@ -207,6 +209,7 @@ test('raw repository fact streaming is split from sidecar orchestration', () => 
   assert.equal(existsSync(factStreamContextUrl), true, 'RawExportFactStreamContext must exist');
   assert.equal(existsSync(factStreamProviderUrl), true, 'RawExportFactStreamProvider must exist');
   assert.equal(existsSync(factStreamRegistryUrl), true, 'RawExportFactStreamRegistry must exist');
+  assert.equal(existsSync(factStreamCatalogUrl), true, 'RawExportFactStreamCatalog must exist');
   assert.equal(existsSync(factStreamDescriptorUrl), true, 'RawExportFactStreamDescriptor must exist');
   assert.equal(existsSync(factStreamDescriptorWriterUrl), true, 'RawExportFactStreamDescriptorWriter must exist');
   assert.equal(existsSync(repositoryProviderUrl), true, 'RawRepositoryFactStreamProvider must exist');
@@ -214,14 +217,16 @@ test('raw repository fact streaming is split from sidecar orchestration', () => 
   assert.equal(existsSync(repositoryFactResultUrl), true, 'RawRepositoryFactStreamResult must exist');
   assert.match(sidecar, /new RawExportFactStreamPipeline\(/);
   assert.match(sidecar, /\.write\(\)/);
-  assert.match(factStreamPipeline, /RawExportFactStreamRegistry\.defaultProviders\(\)/);
+  assert.match(factStreamPipeline, /RawExportFactStreamRegistry\.defaultCatalog\(\)/);
+  assert.match(factStreamPipeline, /this\.providers = catalog\.providers\(\)/);
+  assert.match(factStreamPipeline, /this\.descriptors = catalog\.descriptors\(\)/);
   assert.match(factStreamPipeline, /for \(RawExportFactStreamProvider provider : providers\)/);
   assert.match(factStreamProvider, /interface RawExportFactStreamProvider/);
-  assert.match(factStreamProvider, /String id\(\)/);
-  assert.match(factStreamProvider, /List<String> capabilities\(\)/);
-  assert.match(factStreamProvider, /List<String> outputFamilies\(\)/);
   assert.match(factStreamProvider, /void write\(RawExportFactStreamContext context, RawFactCounts counts\) throws IOException/);
-  assert.match(factStreamProvider, /static List<String> list\(String\.\.\. values\)/);
+  assert.doesNotMatch(factStreamProvider, /String id\(\)/);
+  assert.doesNotMatch(factStreamProvider, /List<String> capabilities\(\)/);
+  assert.doesNotMatch(factStreamProvider, /List<String> outputFamilies\(\)/);
+  assert.doesNotMatch(factStreamProvider, /static List<String> list\(String\.\.\. values\)/);
   assert.match(factStreamContext, /final EntityManager entityManager/);
   assert.match(factStreamContext, /final File repositoryDirectory/);
   assert.match(factStreamContext, /final File rawDir/);
@@ -399,36 +404,47 @@ test('raw export artifact writers share the fail-closed sidecar file ops boundar
 
 test('raw fact stream registry owns provider order and identity validation', () => {
   assert.match(factStreamRegistry, /PROVIDER_DESCRIPTORS = validateDescriptorCatalog\(Arrays\.asList\(/);
-  assert.match(factStreamRegistry, /providerDescriptor\("raw\.repository-facts", RawRepositoryFactStreamProvider::new\)/);
-  assert.match(factStreamRegistry, /providerDescriptor\("raw\.nei-facts", RawNeiFactStreamProvider::new\)/);
-  assert.match(factStreamRegistry, /providerDescriptor\("raw\.render-asset-facts", RawRenderAssetFactStreamProvider::new\)/);
+  assert.match(factStreamRegistry, /providerDescriptor\(\s*"raw\.repository-facts",\s*RawRepositoryFactStreamProvider::new,/);
+  assert.match(factStreamRegistry, /providerDescriptor\(\s*"raw\.nei-facts",\s*RawNeiFactStreamProvider::new,/);
+  assert.match(factStreamRegistry, /providerDescriptor\(\s*"raw\.render-asset-facts",\s*RawRenderAssetFactStreamProvider::new,/);
   assert.match(
     factStreamRegistry,
-    /providerDescriptor\("raw\.entity-render-backend-facts", RawEntityAndRenderBackendFactStreamProvider::new\)/,
+    /providerDescriptor\(\s*"raw\.entity-render-backend-facts",\s*RawEntityAndRenderBackendFactStreamProvider::new,/,
   );
-  assert.match(factStreamRegistry, /DEFAULT_PROVIDERS =\s*\r?\n?\s*instantiateAndFreeze\(PROVIDER_DESCRIPTORS\)/);
-  assert.match(factStreamRegistry, /static List<RawExportFactStreamProvider> defaultProviders\(\) \{\s*return DEFAULT_PROVIDERS;/);
+  assert.match(factStreamRegistry, /DEFAULT_CATALOG =\s*\r?\n?\s*instantiateAndFreeze\(PROVIDER_DESCRIPTORS\)/);
+  assert.match(factStreamRegistry, /static RawExportFactStreamCatalog defaultCatalog\(\) \{\s*return DEFAULT_CATALOG;/);
+  assert.match(factStreamRegistry, /static List<RawExportFactStreamProvider> defaultProviders\(\) \{\s*return DEFAULT_CATALOG\.providers\(\);/);
+  assert.match(factStreamRegistry, /static List<RawExportFactStreamDescriptor> defaultDescriptors\(\) \{\s*return DEFAULT_CATALOG\.descriptors\(\);/);
   assert.match(factStreamRegistry, /instantiateAndFreeze\(\s*\r?\n?\s*List<ProviderDescriptor> descriptors\)/);
   assert.match(factStreamRegistry, /descriptor\.factory\.build\(\)/);
   assert.match(factStreamRegistry, /validateProvider\(provider, descriptor\.id\)/);
+  assert.match(factStreamRegistry, /reports\.add\(descriptor\.toReportDescriptor\(\)\)/);
+  assert.match(factStreamRegistry, /return new RawExportFactStreamCatalog\(providers, reports\)/);
   assert.match(factStreamRegistry, /validateDescriptorCatalog\(List<ProviderDescriptor> descriptors\)/);
   assert.match(factStreamRegistry, /Raw export fact stream provider descriptor catalog must not be empty/);
   assert.match(factStreamRegistry, /Duplicate raw export fact stream provider descriptor id/);
-  assert.match(factStreamRegistry, /Raw export fact stream provider id does not match descriptor/);
   assert.match(factStreamRegistry, /validateNonEmptyStringList/);
+  assert.match(factStreamRegistry, /private final List<String> capabilities/);
+  assert.match(factStreamRegistry, /private final List<String> outputFamilies/);
+  assert.match(factStreamRegistry, /private RawExportFactStreamDescriptor toReportDescriptor\(\)/);
   assert.doesNotMatch(factStreamRegistry, /providerList\(/);
   assert.doesNotMatch(factStreamRegistry, /new RawRepositoryFactStreamProvider\(\)/);
   assert.doesNotMatch(factStreamRegistry, /new RawNeiFactStreamProvider\(\)/);
   assert.doesNotMatch(factStreamRegistry, /new RawRenderAssetFactStreamProvider\(\)/);
   assert.doesNotMatch(factStreamRegistry, /new RawEntityAndRenderBackendFactStreamProvider\(\)/);
-  assert.match(factStreamRegistry, /validateAndFreeze/);
-  assert.match(factStreamRegistry, /static List<RawExportFactStreamDescriptor> describe/);
-  assert.match(factStreamRegistry, /Raw export fact stream provider id must be non-empty/);
+  assert.doesNotMatch(factStreamRegistry, /static List<RawExportFactStreamDescriptor> describe/);
+  assert.doesNotMatch(factStreamRegistry, /provider\.id\(\)/);
+  assert.doesNotMatch(factStreamRegistry, /provider\.capabilities\(\)/);
+  assert.doesNotMatch(factStreamRegistry, /provider\.outputFamilies\(\)/);
   assert.match(factStreamRegistry, /Raw export fact stream provider capabilities must be non-empty/);
   assert.match(factStreamRegistry, /Raw export fact stream provider output families must be non-empty/);
-  assert.match(factStreamRegistry, /Duplicate raw export fact stream provider id/);
+  assert.match(factStreamCatalog, /final class RawExportFactStreamCatalog/);
+  assert.match(factStreamCatalog, /private final List<RawExportFactStreamProvider> providers/);
+  assert.match(factStreamCatalog, /private final List<RawExportFactStreamDescriptor> descriptors/);
+  assert.match(factStreamCatalog, /providers\.size\(\) != descriptors\.size\(\)/);
   assert.match(factStreamPipeline, /private final List<RawExportFactStreamDescriptor> descriptors/);
-  assert.match(factStreamPipeline, /this\.descriptors = RawExportFactStreamRegistry\.describe\(providers\)/);
+  assert.match(factStreamPipeline, /RawExportFactStreamCatalog catalog = RawExportFactStreamRegistry\.defaultCatalog\(\)/);
+  assert.match(factStreamPipeline, /this\.descriptors = catalog\.descriptors\(\)/);
   assert.match(factStreamPipeline, /List<RawExportFactStreamDescriptor> descriptors\(\)/);
   assert.match(factStreamPipeline, /RawExportFactStreamDescriptorWriter\.write\(context\.rawDir, descriptors\)/);
   assert.match(factStreamDescriptor, /final String id/);
@@ -446,18 +462,18 @@ test('raw fact stream registry owns provider order and identity validation', () 
     [entityRenderProvider, 'raw.entity-render-backend-facts'],
   ]) {
     assert.match(source, /implements RawExportFactStreamProvider/);
-    assert.equal(source.includes(`return "${id}";`), true, `provider missing id ${id}`);
-    assert.match(source, /public List<String> capabilities\(\)/);
-    assert.match(source, /public List<String> outputFamilies\(\)/);
+    assert.equal(source.includes(`return "${id}";`), false, `provider must not own id ${id}`);
+    assert.doesNotMatch(source, /public List<String> capabilities\(\)/);
+    assert.doesNotMatch(source, /public List<String> outputFamilies\(\)/);
   }
-  assert.match(repositoryProvider, /raw\.items/);
-  assert.match(repositoryProvider, /facts\/recipes/);
-  assert.match(neiProvider, /raw\.native-ui\.handler-layouts/);
-  assert.match(neiProvider, /facts\/native-ui/);
-  assert.match(renderAssetProvider, /raw\.render\.browser-atlas-assets/);
-  assert.match(renderAssetProvider, /assets\/browser-atlas/);
-  assert.match(entityRenderProvider, /raw\.render\.framebuffer-captures/);
-  assert.match(entityRenderProvider, /facts\/render-backend/);
+  assert.match(factStreamRegistry, /raw\.items/);
+  assert.match(factStreamRegistry, /facts\/recipes/);
+  assert.match(factStreamRegistry, /raw\.native-ui\.handler-layouts/);
+  assert.match(factStreamRegistry, /facts\/native-ui/);
+  assert.match(factStreamRegistry, /raw\.render\.browser-atlas-assets/);
+  assert.match(factStreamRegistry, /assets\/browser-atlas/);
+  assert.match(factStreamRegistry, /raw\.render\.framebuffer-captures/);
+  assert.match(factStreamRegistry, /facts\/render-backend/);
 });
 
 

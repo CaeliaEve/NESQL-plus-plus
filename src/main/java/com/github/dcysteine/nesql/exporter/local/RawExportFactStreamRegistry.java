@@ -14,40 +14,55 @@ final class RawExportFactStreamRegistry {
             "Raw export fact stream provider output families must be non-empty";
 
     private static final List<ProviderDescriptor> PROVIDER_DESCRIPTORS = validateDescriptorCatalog(Arrays.asList(
-            providerDescriptor("raw.repository-facts", RawRepositoryFactStreamProvider::new),
-            providerDescriptor("raw.nei-facts", RawNeiFactStreamProvider::new),
-            providerDescriptor("raw.render-asset-facts", RawRenderAssetFactStreamProvider::new),
-            providerDescriptor("raw.entity-render-backend-facts", RawEntityAndRenderBackendFactStreamProvider::new)));
+            providerDescriptor(
+                    "raw.repository-facts",
+                    RawRepositoryFactStreamProvider::new,
+                    list("raw.items", "raw.fluids", "raw.recipes"),
+                    list("facts/items", "facts/fluids", "facts/recipes")),
+            providerDescriptor(
+                    "raw.nei-facts",
+                    RawNeiFactStreamProvider::new,
+                    list("raw.nei.browser-order", "raw.nei.handler-metadata", "raw.native-ui.handler-layouts"),
+                    list("facts/nei", "facts/native-ui", "validation/nei-browser-contract")),
+            providerDescriptor(
+                    "raw.render-asset-facts",
+                    RawRenderAssetFactStreamProvider::new,
+                    list("raw.render.textures", "raw.render.animations", "raw.render.browser-atlas-assets"),
+                    list("facts/render-assets", "assets/browser-atlas")),
+            providerDescriptor(
+                    "raw.entity-render-backend-facts",
+                    RawEntityAndRenderBackendFactStreamProvider::new,
+                    list("raw.entities", "raw.render.angelica-backend", "raw.render.framebuffer-captures"),
+                    list("models/entities", "models/multiblocks", "facts/render-backend"))));
 
-    private static final List<RawExportFactStreamProvider> DEFAULT_PROVIDERS =
+    private static final RawExportFactStreamCatalog DEFAULT_CATALOG =
             instantiateAndFreeze(PROVIDER_DESCRIPTORS);
 
     private RawExportFactStreamRegistry() {}
 
+    static RawExportFactStreamCatalog defaultCatalog() {
+        return DEFAULT_CATALOG;
+    }
+
     static List<RawExportFactStreamProvider> defaultProviders() {
-        return DEFAULT_PROVIDERS;
+        return DEFAULT_CATALOG.providers();
     }
 
-    static List<RawExportFactStreamDescriptor> describe(List<RawExportFactStreamProvider> providers) {
-        List<RawExportFactStreamDescriptor> descriptors = new ArrayList<RawExportFactStreamDescriptor>();
-        for (RawExportFactStreamProvider provider : validateAndFreeze(providers)) {
-            descriptors.add(new RawExportFactStreamDescriptor(
-                    provider.id(),
-                    provider.capabilities(),
-                    provider.outputFamilies()));
-        }
-        return Collections.unmodifiableList(descriptors);
+    static List<RawExportFactStreamDescriptor> defaultDescriptors() {
+        return DEFAULT_CATALOG.descriptors();
     }
 
-    private static List<RawExportFactStreamProvider> instantiateAndFreeze(
+    private static RawExportFactStreamCatalog instantiateAndFreeze(
             List<ProviderDescriptor> descriptors) {
         List<RawExportFactStreamProvider> providers = new ArrayList<RawExportFactStreamProvider>();
+        List<RawExportFactStreamDescriptor> reports = new ArrayList<RawExportFactStreamDescriptor>();
         for (ProviderDescriptor descriptor : descriptors) {
             RawExportFactStreamProvider provider = descriptor.factory.build();
             validateProvider(provider, descriptor.id);
             providers.add(provider);
+            reports.add(descriptor.toReportDescriptor());
         }
-        return Collections.unmodifiableList(providers);
+        return new RawExportFactStreamCatalog(providers, reports);
     }
 
     private static List<ProviderDescriptor> validateDescriptorCatalog(List<ProviderDescriptor> descriptors) {
@@ -71,53 +86,26 @@ final class RawExportFactStreamRegistry {
                 throw new IllegalStateException(
                         "Duplicate raw export fact stream provider descriptor id: " + descriptor.id);
             }
+            validateNonEmptyStringList(
+                    "Raw export fact stream provider capabilities",
+                    CAPABILITIES_EMPTY_MESSAGE,
+                    descriptor.id,
+                    descriptor.capabilities);
+            validateNonEmptyStringList(
+                    "Raw export fact stream provider output families",
+                    OUTPUT_FAMILIES_EMPTY_MESSAGE,
+                    descriptor.id,
+                    descriptor.outputFamilies);
             validated.add(descriptor);
         }
         return Collections.unmodifiableList(validated);
     }
 
-    private static List<RawExportFactStreamProvider> validateAndFreeze(List<RawExportFactStreamProvider> providers) {
-        if (providers == null || providers.isEmpty()) {
-            throw new IllegalArgumentException("Raw export fact stream provider catalog must not be empty");
-        }
-        Set<String> ids = new LinkedHashSet<String>();
-        List<RawExportFactStreamProvider> validated = new ArrayList<RawExportFactStreamProvider>();
-        for (RawExportFactStreamProvider provider : providers) {
-            String id = validateProvider(provider, null);
-            if (!ids.add(id)) {
-                throw new IllegalArgumentException("Duplicate raw export fact stream provider id: " + id);
-            }
-            validated.add(provider);
-        }
-        return Collections.unmodifiableList(validated);
-    }
-
-    private static String validateProvider(RawExportFactStreamProvider provider, String expectedId) {
+    private static void validateProvider(RawExportFactStreamProvider provider, String descriptorId) {
         if (provider == null) {
-            throw new IllegalArgumentException("Raw export fact stream provider must be non-null");
+            throw new IllegalArgumentException(
+                    "Raw export fact stream provider factory returned null: " + descriptorId);
         }
-        String id = provider.id();
-        if (id == null || id.trim().isEmpty()) {
-            throw new IllegalArgumentException("Raw export fact stream provider id must be non-empty");
-        }
-        if (expectedId != null && !expectedId.equals(id)) {
-            throw new IllegalStateException(
-                    "Raw export fact stream provider id does not match descriptor: "
-                            + expectedId
-                            + " != "
-                            + id);
-        }
-        validateNonEmptyStringList(
-                "Raw export fact stream provider capabilities",
-                CAPABILITIES_EMPTY_MESSAGE,
-                id,
-                provider.capabilities());
-        validateNonEmptyStringList(
-                "Raw export fact stream provider output families",
-                OUTPUT_FAMILIES_EMPTY_MESSAGE,
-                id,
-                provider.outputFamilies());
-        return id;
     }
 
     private static void validateNonEmptyStringList(
@@ -140,8 +128,16 @@ final class RawExportFactStreamRegistry {
         }
     }
 
-    private static ProviderDescriptor providerDescriptor(String id, ProviderFactory factory) {
-        return new ProviderDescriptor(id, factory);
+    private static ProviderDescriptor providerDescriptor(
+            String id,
+            ProviderFactory factory,
+            List<String> capabilities,
+            List<String> outputFamilies) {
+        return new ProviderDescriptor(id, factory, capabilities, outputFamilies);
+    }
+
+    private static List<String> list(String... values) {
+        return Collections.unmodifiableList(Arrays.asList(values));
     }
 
     private interface ProviderFactory {
@@ -151,10 +147,22 @@ final class RawExportFactStreamRegistry {
     private static final class ProviderDescriptor {
         private final String id;
         private final ProviderFactory factory;
+        private final List<String> capabilities;
+        private final List<String> outputFamilies;
 
-        private ProviderDescriptor(String id, ProviderFactory factory) {
+        private ProviderDescriptor(
+                String id,
+                ProviderFactory factory,
+                List<String> capabilities,
+                List<String> outputFamilies) {
             this.id = id;
             this.factory = factory;
+            this.capabilities = Collections.unmodifiableList(new ArrayList<String>(capabilities));
+            this.outputFamilies = Collections.unmodifiableList(new ArrayList<String>(outputFamilies));
+        }
+
+        private RawExportFactStreamDescriptor toReportDescriptor() {
+            return new RawExportFactStreamDescriptor(id, capabilities, outputFamilies);
         }
     }
 }
