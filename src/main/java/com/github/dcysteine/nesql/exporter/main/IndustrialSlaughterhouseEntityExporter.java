@@ -13,6 +13,7 @@ import net.minecraft.util.EnumChatFormatting;
 
 import java.io.File;
 import java.io.FileOutputStream;
+import java.io.IOException;
 import java.io.OutputStreamWriter;
 import java.lang.reflect.Field;
 import java.lang.reflect.Method;
@@ -29,6 +30,10 @@ import java.util.Set;
 /** Exports live-rendered mob previews for Extreme Entity Crusher / industrial slaughterhouse recipes. */
 public final class IndustrialSlaughterhouseEntityExporter {
     private static final Gson GSON = new GsonBuilder().disableHtmlEscaping().serializeNulls().create();
+    private static final String ENTITY_PREVIEW_SCHEMA_VERSION = "nesqlpp/entity-previews/v1";
+    private static final String ENTITY_MODEL_MANIFEST_SCHEMA_VERSION = "nesqlpp/entity-models/v1";
+    private static final String ENTITY_MODEL_EXPORT_STATUS_EXPORTED = "exported";
+    private static final String ENTITY_MODEL_EXPORT_STATUS_SKIPPED = "skipped";
     private static final String ENTITY_PREVIEW_MANIFEST_RELATIVE_PATH =
             "canonical" + File.separator + "entity-previews.json";
     private static final String ENTITY_MODEL_MANIFEST_RELATIVE_PATH =
@@ -83,12 +88,12 @@ public final class IndustrialSlaughterhouseEntityExporter {
 
         List<RenderJob> jobs = new ArrayList<RenderJob>(mobNames.size());
         EntityPreviewManifest manifest = new EntityPreviewManifest();
-        manifest.schemaVersion = "nesqlpp/entity-previews/v1";
+        manifest.schemaVersion = ENTITY_PREVIEW_SCHEMA_VERSION;
         manifest.generatedAtEpochMs = System.currentTimeMillis();
         manifest.repositoryName = repositoryName;
         manifest.iconDimension = ConfigOptions.ICON_DIMENSION.get();
         EntityModelManifest modelManifest = new EntityModelManifest();
-        modelManifest.schemaVersion = "nesqlpp/entity-models/v1";
+        modelManifest.schemaVersion = ENTITY_MODEL_MANIFEST_SCHEMA_VERSION;
         modelManifest.generatedAtEpochMs = System.currentTimeMillis();
         modelManifest.repositoryName = repositoryName;
 
@@ -104,7 +109,7 @@ public final class IndustrialSlaughterhouseEntityExporter {
                 continue;
             }
 
-            EntityModelContractExporter.ExportedEntityModel exportedEntityModel =
+            EntityModelContractExporter.EntityModelExportResult modelResult =
                     EntityModelContractExporter.export(
                             exportPaths.repositoryDirectory,
                             exportPaths.imageDirectory,
@@ -113,9 +118,11 @@ public final class IndustrialSlaughterhouseEntityExporter {
                             request.getModId(),
                             request.getEntity(),
                             usedRelativeModelPaths);
-            if (exportedEntityModel != null) {
-                modelManifest.entries.add(buildModelManifestEntry(request, exportedEntityModel));
+            if (modelResult.exported()) {
+                modelManifest.entries.add(buildModelManifestEntry(request, modelResult.model()));
                 exportedModels++;
+            } else {
+                modelManifest.skippedEntries.add(buildModelSkippedEntry(request, modelResult.skipReason()));
             }
 
             jobs.add(RenderJob.ofEntity(request));
@@ -151,16 +158,35 @@ public final class IndustrialSlaughterhouseEntityExporter {
         Logger.MOD.info("Industrial slaughterhouse entity preview export complete: {}", manifestFile.getAbsolutePath());
         Logger.MOD.info("Rendered entity previews: {}", manifest.entries.size());
         Logger.MOD.info("Exported entity 3D models: {}", modelManifest.entries.size());
+        Logger.MOD.info("Skipped entity 3D models: {}", modelManifest.skippedEntries.size());
         Logger.chatMessage(EnumChatFormatting.GREEN + "Industrial slaughterhouse entity preview export complete!");
         Logger.chatMessage(EnumChatFormatting.YELLOW + "Output: " + manifestFile.getAbsolutePath());
         Logger.chatMessage(EnumChatFormatting.YELLOW + "3D model manifest: " + modelManifestFile.getAbsolutePath());
         Logger.chatMessage(EnumChatFormatting.YELLOW + "Rendered previews: " + manifest.entries.size());
         Logger.chatMessage(EnumChatFormatting.YELLOW + "Exported 3D models: " + exportedModels);
+        Logger.chatMessage(EnumChatFormatting.YELLOW + "Skipped 3D models: " + modelManifest.skippedEntries.size());
     }
 
-    private static void ensureDirectory(File directory, String label) {
-        if (!directory.exists() && !directory.mkdirs()) {
-            throw new IllegalStateException("Failed to create " + label + " directory: " + directory.getAbsolutePath());
+    private static void ensureDirectory(File directory, String label) throws IOException {
+        if (directory == null) {
+            throw new IOException("EEC entity preview " + label + " directory must not be null");
+        }
+        if (directory.exists()) {
+            if (!directory.isDirectory()) {
+                throw new IOException(
+                        "EEC entity preview "
+                                + label
+                                + " path exists but is not a directory: "
+                                + directory.getAbsolutePath());
+            }
+            return;
+        }
+        if (!directory.mkdirs() && !directory.isDirectory()) {
+            throw new IOException(
+                    "Failed to create EEC entity preview "
+                            + label
+                            + " directory: "
+                            + directory.getAbsolutePath());
         }
     }
 
@@ -349,15 +375,21 @@ public final class IndustrialSlaughterhouseEntityExporter {
         entry.relativeModelPath = normalizePath(exportedEntityModel.relativeModelPath);
         entry.componentCount = exportedEntityModel.componentCount;
         entry.renderMode = exportedEntityModel.renderMode;
+        entry.status = ENTITY_MODEL_EXPORT_STATUS_EXPORTED;
+        return entry;
+    }
+
+    private static EntityModelSkippedEntry buildModelSkippedEntry(EntityPreviewRequest request, String reason) {
+        EntityModelSkippedEntry entry = new EntityModelSkippedEntry();
+        entry.mobName = request.getMobName();
+        entry.localizedName = request.getLocalizedName();
+        entry.modId = request.getModId();
+        entry.status = ENTITY_MODEL_EXPORT_STATUS_SKIPPED;
+        entry.reason = reason;
         return entry;
     }
 
     private static void writeManifest(File manifestFile, EntityPreviewManifest manifest) throws Exception {
-        File parent = manifestFile.getParentFile();
-        if (parent != null && !parent.exists()) {
-            parent.mkdirs();
-        }
-
         Collections.sort(
                 manifest.entries,
                 new Comparator<EntityPreviewManifestEntry>() {
@@ -366,19 +398,10 @@ public final class IndustrialSlaughterhouseEntityExporter {
                         return left.mobName.compareTo(right.mobName);
                     }
                 });
-
-        try (OutputStreamWriter writer =
-                     new OutputStreamWriter(new FileOutputStream(manifestFile, false), StandardCharsets.UTF_8)) {
-            GSON.toJson(manifest, writer);
-        }
+        writeJsonManifest(manifestFile, manifest);
     }
 
     private static void writeModelManifest(File manifestFile, EntityModelManifest manifest) throws Exception {
-        File parent = manifestFile.getParentFile();
-        if (parent != null && !parent.exists()) {
-            parent.mkdirs();
-        }
-
         Collections.sort(
                 manifest.entries,
                 new Comparator<EntityModelManifestEntry>() {
@@ -387,7 +410,30 @@ public final class IndustrialSlaughterhouseEntityExporter {
                         return left.mobName.compareTo(right.mobName);
                     }
                 });
+        Collections.sort(
+                manifest.skippedEntries,
+                new Comparator<EntityModelSkippedEntry>() {
+                    @Override
+                    public int compare(EntityModelSkippedEntry left, EntityModelSkippedEntry right) {
+                        return left.mobName.compareTo(right.mobName);
+                    }
+                });
 
+        manifest.exportedCount = manifest.entries.size();
+        manifest.skippedCount = manifest.skippedEntries.size();
+        writeJsonManifest(manifestFile, manifest);
+    }
+
+    private static void writeJsonManifest(File manifestFile, Object manifest) throws Exception {
+        if (manifestFile == null) {
+            throw new IOException("EEC entity preview manifest file must not be null");
+        }
+        if (manifestFile.exists() && !manifestFile.isFile()) {
+            throw new IOException(
+                    "EEC entity preview manifest path exists but is not a file: "
+                            + manifestFile.getAbsolutePath());
+        }
+        ensureDirectory(manifestFile.getParentFile(), "manifest parent");
         try (OutputStreamWriter writer =
                      new OutputStreamWriter(new FileOutputStream(manifestFile, false), StandardCharsets.UTF_8)) {
             GSON.toJson(manifest, writer);
@@ -433,7 +479,10 @@ public final class IndustrialSlaughterhouseEntityExporter {
         String schemaVersion;
         long generatedAtEpochMs;
         String repositoryName;
+        int exportedCount;
+        int skippedCount;
         List<EntityModelManifestEntry> entries = new ArrayList<EntityModelManifestEntry>();
+        List<EntityModelSkippedEntry> skippedEntries = new ArrayList<EntityModelSkippedEntry>();
     }
 
     private static final class EntityModelManifestEntry {
@@ -443,5 +492,14 @@ public final class IndustrialSlaughterhouseEntityExporter {
         String relativeModelPath;
         int componentCount;
         String renderMode;
+        String status;
+    }
+
+    private static final class EntityModelSkippedEntry {
+        String mobName;
+        String localizedName;
+        String modId;
+        String status;
+        String reason;
     }
 }

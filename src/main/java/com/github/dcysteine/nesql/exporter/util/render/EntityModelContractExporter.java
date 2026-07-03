@@ -1,6 +1,5 @@
 package com.github.dcysteine.nesql.exporter.util.render;
 
-import com.github.dcysteine.nesql.exporter.main.Logger;
 import com.github.dcysteine.nesql.exporter.util.IdUtil;
 import com.google.gson.Gson;
 import com.google.gson.GsonBuilder;
@@ -38,8 +37,8 @@ import java.util.Set;
  *
  * <p>This is intentionally reflective and defensive because GTNH mixes many renderer styles.
  * When a renderer exposes a {@link ModelBase} plus texture resource, we capture a scene graph of
- * textured quads. Unsupported entities simply return {@code null} and the caller can fall back to
- * GIF previews.</p>
+ * textured quads. Unsupported entities return an explicit skipped result; IO, path, and input
+ * contract failures are propagated to the caller.</p>
  */
 public final class EntityModelContractExporter {
     private static final Gson GSON =
@@ -50,65 +49,78 @@ public final class EntityModelContractExporter {
 
     private EntityModelContractExporter() {}
 
-    public static ExportedEntityModel export(
+    public static EntityModelExportResult export(
             File repositoryDirectory,
             File imageDirectory,
             String mobName,
             String localizedName,
             String modId,
             EntityLiving entity,
-            Set<String> usedRelativeModelPaths) {
-        if (repositoryDirectory == null
-                || imageDirectory == null
-                || mobName == null
-                || mobName.trim().isEmpty()
-                || entity == null) {
-            return null;
+            Set<String> usedRelativeModelPaths) throws Exception {
+        requireExportInput(repositoryDirectory, imageDirectory, mobName, entity, usedRelativeModelPaths);
+
+        tickEntityForModelCapture(entity);
+
+        EntityModelFile file = new EntityModelFile();
+        file.schemaVersion = MODEL_SCHEMA_VERSION;
+        file.mobName = mobName;
+        file.localizedName = localizedName;
+        file.modId = modId;
+        file.unitScale = 16;
+
+        addComponent(file.components, "base", entity, new ComponentTransform(), imageDirectory);
+
+        Entity[] parts = entity.getParts();
+        if (parts != null) {
+            for (int i = 0; i < parts.length; i++) {
+                Entity part = parts[i];
+                if (part == null || part == entity) {
+                    continue;
+                }
+                tickPartForModelCapture(part);
+                ComponentTransform transform = ComponentTransform.relativeTo(entity, part);
+                addComponent(file.components, "part_" + i, part, transform, imageDirectory);
+            }
         }
 
-        try {
-            tickEntityForModelCapture(entity);
+        if (file.components.isEmpty()) {
+            return EntityModelExportResult.skipped("no-model-components");
+        }
 
-            EntityModelFile file = new EntityModelFile();
-            file.schemaVersion = MODEL_SCHEMA_VERSION;
-            file.mobName = mobName;
-            file.localizedName = localizedName;
-            file.modId = modId;
-            file.unitScale = 16;
+        String relativeModelPath = allocateRelativeModelPath(mobName, modId, usedRelativeModelPaths);
+        File canonicalDir = new File(repositoryDirectory, "canonical");
+        File outputFile = new File(canonicalDir, relativeModelPath);
+        ensureOutputFile(outputFile);
 
-            addComponent(file.components, "base", entity, new ComponentTransform(), imageDirectory);
+        try (OutputStreamWriter writer =
+                     new OutputStreamWriter(new FileOutputStream(outputFile, false), StandardCharsets.UTF_8)) {
+            GSON.toJson(file, writer);
+        }
 
-            Entity[] parts = entity.getParts();
-            if (parts != null) {
-                for (int i = 0; i < parts.length; i++) {
-                    Entity part = parts[i];
-                    if (part == null || part == entity) {
-                        continue;
-                    }
-                    tickPartForModelCapture(part);
-                    ComponentTransform transform = ComponentTransform.relativeTo(entity, part);
-                    addComponent(file.components, "part_" + i, part, transform, imageDirectory);
-                }
-            }
+        return EntityModelExportResult.exported(
+                new ExportedEntityModel(relativeModelPath, file.components.size(), DEFAULT_RENDER_MODE));
+    }
 
-            if (file.components.isEmpty()) {
-                return null;
-            }
-
-            String relativeModelPath = allocateRelativeModelPath(mobName, modId, usedRelativeModelPaths);
-            File canonicalDir = new File(repositoryDirectory, "canonical");
-            File outputFile = new File(canonicalDir, relativeModelPath);
-            ensureParentDirectory(outputFile);
-
-            try (OutputStreamWriter writer =
-                         new OutputStreamWriter(new FileOutputStream(outputFile, false), StandardCharsets.UTF_8)) {
-                GSON.toJson(file, writer);
-            }
-
-            return new ExportedEntityModel(relativeModelPath, file.components.size(), DEFAULT_RENDER_MODE);
-        } catch (Exception e) {
-            Logger.MOD.warn("Failed to export 3D entity model for {}", mobName, e);
-            return null;
+    private static void requireExportInput(
+            File repositoryDirectory,
+            File imageDirectory,
+            String mobName,
+            EntityLiving entity,
+            Set<String> usedRelativeModelPaths) {
+        if (repositoryDirectory == null) {
+            throw new IllegalArgumentException("Entity model repository directory must not be null");
+        }
+        if (imageDirectory == null) {
+            throw new IllegalArgumentException("Entity model image directory must not be null");
+        }
+        if (mobName == null || mobName.trim().isEmpty()) {
+            throw new IllegalArgumentException("Entity model mob name must be non-empty");
+        }
+        if (entity == null) {
+            throw new IllegalArgumentException("Entity model source entity must not be null");
+        }
+        if (usedRelativeModelPaths == null) {
+            throw new IllegalArgumentException("Entity model path ownership set must not be null");
         }
     }
 
@@ -539,20 +551,22 @@ public final class EntityModelContractExporter {
         String relativePath = "entity-model-textures/" + domain + "/" + resourcePath;
         File outputFile = new File(imageDirectory, relativePath.replace('/', File.separatorChar));
         if (outputFile.exists()) {
+            if (!outputFile.isFile()) {
+                throw new IOException(
+                        "Entity model texture output path exists but is not a file: "
+                                + outputFile.getAbsolutePath());
+            }
             return relativePath;
         }
 
-        ensureParentDirectory(outputFile);
+        ensureOutputFile(outputFile);
         IResource resource = minecraft.getResourceManager().getResource(textureLocation);
         if (resource == null) {
             return null;
         }
 
-        InputStream inputStream = null;
-        FileOutputStream outputStream = null;
-        try {
-            inputStream = resource.getInputStream();
-            outputStream = new FileOutputStream(outputFile, false);
+        try (InputStream inputStream = resource.getInputStream();
+             FileOutputStream outputStream = new FileOutputStream(outputFile, false)) {
             byte[] buffer = new byte[16 * 1024];
             int read;
             while ((read = inputStream.read(buffer)) >= 0) {
@@ -560,19 +574,6 @@ public final class EntityModelContractExporter {
                     continue;
                 }
                 outputStream.write(buffer, 0, read);
-            }
-        } finally {
-            if (inputStream != null) {
-                try {
-                    inputStream.close();
-                } catch (IOException ignored) {
-                }
-            }
-            if (outputStream != null) {
-                try {
-                    outputStream.close();
-                } catch (IOException ignored) {
-                }
             }
         }
 
@@ -632,10 +633,28 @@ public final class EntityModelContractExporter {
         return input.replaceAll("[<>:\"\\\\|?*]", "").replace(':', '_');
     }
 
-    private static void ensureParentDirectory(File outputFile) {
+    private static void ensureOutputFile(File outputFile) throws IOException {
+        if (outputFile == null) {
+            throw new IOException("Entity model output file must not be null");
+        }
+        if (outputFile.exists() && !outputFile.isFile()) {
+            throw new IOException(
+                    "Entity model output path exists but is not a file: " + outputFile.getAbsolutePath());
+        }
         File parentDir = outputFile.getParentFile();
-        if (parentDir != null && !parentDir.exists()) {
-            parentDir.mkdirs();
+        if (parentDir == null) {
+            throw new IOException("Entity model output parent must not be null: " + outputFile.getAbsolutePath());
+        }
+        if (parentDir.exists()) {
+            if (!parentDir.isDirectory()) {
+                throw new IOException(
+                        "Entity model output parent exists but is not a directory: "
+                                + parentDir.getAbsolutePath());
+            }
+            return;
+        }
+        if (!parentDir.mkdirs() && !parentDir.isDirectory()) {
+            throw new IOException("Failed to create entity model output parent: " + parentDir.getAbsolutePath());
         }
     }
 
@@ -693,6 +712,42 @@ public final class EntityModelContractExporter {
 
     private static float round(float value) {
         return Math.round(value * 10000.0f) / 10000.0f;
+    }
+
+    public static final class EntityModelExportResult {
+        private final ExportedEntityModel model;
+        private final String skipReason;
+
+        private EntityModelExportResult(ExportedEntityModel model, String skipReason) {
+            this.model = model;
+            this.skipReason = skipReason;
+        }
+
+        private static EntityModelExportResult exported(ExportedEntityModel model) {
+            if (model == null) {
+                throw new IllegalArgumentException("Exported entity model must not be null");
+            }
+            return new EntityModelExportResult(model, null);
+        }
+
+        private static EntityModelExportResult skipped(String reason) {
+            if (reason == null || reason.trim().isEmpty()) {
+                throw new IllegalArgumentException("Entity model skip reason must be non-empty");
+            }
+            return new EntityModelExportResult(null, reason);
+        }
+
+        public boolean exported() {
+            return model != null;
+        }
+
+        public ExportedEntityModel model() {
+            return model;
+        }
+
+        public String skipReason() {
+            return skipReason;
+        }
     }
 
     public static final class ExportedEntityModel {
