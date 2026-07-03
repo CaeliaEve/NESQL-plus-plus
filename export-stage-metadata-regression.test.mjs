@@ -12,6 +12,8 @@ const debugPlaneWriter = readSource('src/main/java/com/github/dcysteine/nesql/ex
 const debugFileCatalog = readSource('src/main/java/com/github/dcysteine/nesql/elysium/kernel/ExportDebugFile.java');
 const selection = readSource('src/main/java/com/github/dcysteine/nesql/exporter/main/ExportSelection.java');
 const executionPlan = readSource('src/main/java/com/github/dcysteine/nesql/exporter/main/ExportExecutionPlan.java');
+const exportProfile = readSource('src/main/java/com/github/dcysteine/nesql/exporter/main/ExportProfile.java');
+const executionStrategy = readSource('src/main/java/com/github/dcysteine/nesql/exporter/main/ExportExecutionStrategy.java');
 const exporter = readSource('src/main/java/com/github/dcysteine/nesql/exporter/main/Exporter.java');
 const commandModeSpec = readSource('src/main/java/com/github/dcysteine/nesql/exporter/main/ExportCommandModeSpec.java');
 const commandParser = readSource('src/main/java/com/github/dcysteine/nesql/exporter/main/ExportCommandParser.java');
@@ -308,21 +310,26 @@ test('guided export GUI exposes selectable lanes and keeps command entrypoint co
   assert.equal(gui.includes('ExportCommandDispatcher.startSelectedExport(repositoryName, selection)'), true);
 });
 
-test('native UI export has an explicit fast stage plan while full export remains complete', () => {
+test('native UI export has an explicit compiler stage plan while full export remains complete', () => {
   assert.equal(selection.includes('ExportSelection nativeUiExport()'), true);
   assert.equal(selection.includes('boolean isNativeUiExport()'), true);
-  assert.equal(selection.includes('.renderImages(false)'), true);
-  assert.equal(selection.includes('.writeAtlasPacks(false)'), true);
-  assert.equal(selection.includes('.writeAnimatedAtlasPacks(false)'), true);
+  assert.equal(selection.includes('.renderImages(true)'), true);
+  assert.equal(selection.includes('.writeRenderManifests(true)'), true);
+  assert.equal(selection.includes('.writeAtlasPacks(true)'), true);
+  assert.equal(selection.includes('.writeAnimatedAtlasPacks(true)'), true);
   assert.equal(selection.includes('.commitDatabase(false)'), true);
   assert.equal(exporter.includes('static Exporter nativeUiExport(String repositoryName)'), true);
-  assert.equal(exporter.includes('ExportProfile.DATA_ONLY_V104'), true);
-  assert.equal(commandDispatcher.includes('Native UI Fast Export / v1.04-data /'), true);
-  assert.equal(commandDispatcher.includes('Skipping render/atlas/database-commit lanes'), true);
+  assert.equal(exporter.includes('ExportProfile.NATIVE_UI_V104'), true);
+  assert.equal(exportProfile.includes('NATIVE_UI_V104'), true);
+  assert.equal(executionStrategy.includes('case NATIVE_UI_V104:'), true);
+  assert.equal(executionStrategy.includes('NativeUiExecutionStrategy'), true);
+  assert.equal(commandDispatcher.includes('Native UI Compiler Export / v1.04-native-ui /'), true);
+  assert.equal(commandDispatcher.includes('Rendering browser atlas lanes; skipping multiblock/block-face/database-commit lanes'), true);
 
   assert.equal(executionPlan.includes('if (profile.renderImages && selection.includesStage(ExportStage.RENDER_IMAGES, profile))'), true);
   assert.equal(executionPlan.includes('addIfSelected(stages, ExportStage.WRITE_ATLAS_PACKS, profile, selection)'), true);
   assert.equal(executionPlan.includes('addIfSelected(stages, ExportStage.WRITE_ANIMATED_ATLAS_PACKS, profile, selection)'), true);
+  assert.equal(executionPlan.includes('addIfSelected(stages, ExportStage.WRITE_BROWSER_ATLAS_INDEX, profile, selection)'), true);
   assert.equal(selection.includes('public static ExportSelection full()'), true);
   assert.equal(selection.includes('return new Builder().build();'), true);
   assert.equal(selection.includes('&& renderImages\n                && writeRenderManifests'), true);

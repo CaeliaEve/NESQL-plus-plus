@@ -33,6 +33,8 @@ interface ExportExecutionStrategy {
                 return new FullV104ExecutionStrategy();
             case DATA_ONLY_V104:
                 return new DataOnlyExecutionStrategy();
+            case NATIVE_UI_V104:
+                return new NativeUiExecutionStrategy();
             case IMAGES_ONLY:
                 return new ImagesOnlyExecutionStrategy();
             default:
@@ -176,6 +178,90 @@ interface ExportExecutionStrategy {
         public void finishTransaction(ExportContext exportContext, EntityTransaction transaction) {
             Logger.MOD.info("v1.04 file export complete; skipping database commit");
             Logger.chatMessage(EnumChatFormatting.YELLOW + "Skipping database commit (data files already exported)");
+            ExportLifecycleSupport.finishTransaction(transaction, false);
+        }
+    }
+
+    final class NativeUiExecutionStrategy implements ExportExecutionStrategy {
+        @Override
+        public void announceStartup(ExportContext exportContext, File repositoryDirectory) {
+            Logger.MOD.info("============================================================");
+            Logger.MOD.info("=== NESQL++ v1.04 Native UI Compiler Export STARTED ===");
+            Logger.MOD.info("============================================================");
+            ExportLifecycleSupport.announceProfile(
+                    exportContext,
+                    repositoryDirectory,
+                    "Starting NESQL++ v1.04 native UI compiler export...");
+            Logger.MOD.info("Database: {}", exportContext.paths.databaseFile.getAbsolutePath());
+            Logger.chatMessage(EnumChatFormatting.YELLOW + "Note: Browser atlas rendering is enabled for compiler ABI.");
+            Logger.chatMessage(EnumChatFormatting.YELLOW + "Note: Database commit is disabled for this export lane.");
+        }
+
+        @Override
+        public void announceCompletion(ExportContext exportContext, File repositoryDirectory) {
+            Logger.MOD.info("============================================================");
+            Logger.MOD.info("=== NESQL++ v1.04 Native UI Compiler Export COMPLETE ===");
+            Logger.MOD.info("============================================================");
+            Logger.MOD.info("Export directory: {}", repositoryDirectory.getAbsolutePath());
+            Logger.chatMessage(EnumChatFormatting.GREEN + "Native UI compiler export complete!");
+            Logger.chatMessage(EnumChatFormatting.YELLOW + "Export location: " + repositoryDirectory.getAbsolutePath());
+        }
+
+        @Override
+        public boolean requiresFreshRepository(ExportContext exportContext) {
+            return false;
+        }
+
+        @Override
+        public boolean shouldLogEntityManagerClose() {
+            return true;
+        }
+
+        @Override
+        public ExportRuntime createRuntime(ExportContext exportContext) {
+            return ExportDatabaseSupport.createFileRuntime(exportContext.paths.databaseFile);
+        }
+
+        @Override
+        public boolean initializeRendering(ExportContext exportContext, File imageDirectory) {
+            if (!exportContext.selection.renderImages) {
+                throw new IllegalStateException("Native UI compiler export requires browser atlas rendering.");
+            }
+            if (!ConfigOptions.RENDER_ICONS.get()) {
+                throw new IllegalStateException("Native UI compiler export requires ConfigOptions.RENDER_ICONS.");
+            }
+            try {
+                RenderLifecycleSupport.initializeRendererOrThrow(imageDirectory);
+            } catch (Exception e) {
+                throw new IllegalStateException("Native UI compiler export renderer initialization failed.", e);
+            }
+            return true;
+        }
+
+        @Override
+        public ExportSession startSession(ExportContext exportContext, ExportRuntime exportRuntime) {
+            Logger.MOD.info("Initializing plugins for native UI compiler export...");
+            return ExportLifecycleSupport.startSession(
+                    exportRuntime,
+                    "Initializing plugins for native UI compiler export.",
+                    "Exporting native UI compiler data and browser atlas assets...");
+        }
+
+        @Override
+        public void runCollectionStage(ExportContext exportContext, ExportRuntime exportRuntime) {
+            try {
+                Logger.MOD.debug("Native UI compiler export: running plugin pipeline");
+                exportRuntime.runPluginPipeline();
+                Logger.MOD.debug("Native UI compiler export collection complete");
+            } finally {
+                ExportPluginTimingReportWriter.write(exportContext, exportRuntime);
+            }
+        }
+
+        @Override
+        public void finishTransaction(ExportContext exportContext, EntityTransaction transaction) {
+            Logger.MOD.info("Native UI compiler export complete; skipping database commit");
+            Logger.chatMessage(EnumChatFormatting.YELLOW + "Skipping database commit (native UI compiler export files already written)");
             ExportLifecycleSupport.finishTransaction(transaction, false);
         }
     }

@@ -37,12 +37,11 @@ public final class ExportSelection {
     }
 
     /**
-     * Fast export lane for NeoNEI native recipe UI capture.
+     * Native UI compiler export lane.
      *
-     * <p>This intentionally keeps the data/UI facts needed by the native UI compiler while skipping
-     * heavyweight render, atlas, multiblock/block-face, and legacy database-commit work. It is not a
-     * compatibility shortcut for {@link #full()}; callers choose it explicitly when they only need a
-     * raw-export for the native UI pack pipeline.</p>
+     * <p>The compiler requires both captured UI facts and browser atlas artifacts, so this selection
+     * keeps render/atlas lanes authoritative while skipping unrelated multiblock, block-face, and
+     * database-commit work.</p>
      */
     public static ExportSelection nativeUiExport() {
         return new Builder()
@@ -52,10 +51,10 @@ public final class ExportSelection {
                 .writeUiTemplateCatalog(true)
                 .writeMultiblocks(false)
                 .writeBlockFaces(false)
-                .renderImages(false)
-                .writeRenderManifests(false)
-                .writeAtlasPacks(false)
-                .writeAnimatedAtlasPacks(false)
+                .renderImages(true)
+                .writeRenderManifests(true)
+                .writeAtlasPacks(true)
+                .writeAnimatedAtlasPacks(true)
                 .writeBrowserIndexes(true)
                 .commitDatabase(false)
                 .build();
@@ -88,10 +87,10 @@ public final class ExportSelection {
                 && !writeCanonicalSnapshot
                 && !writeMultiblocks
                 && !writeBlockFaces
-                && !renderImages
-                && !writeRenderManifests
-                && !writeAtlasPacks
-                && !writeAnimatedAtlasPacks
+                && renderImages
+                && writeRenderManifests
+                && writeAtlasPacks
+                && writeAnimatedAtlasPacks
                 && writeBrowserIndexes
                 && !commitDatabase;
     }

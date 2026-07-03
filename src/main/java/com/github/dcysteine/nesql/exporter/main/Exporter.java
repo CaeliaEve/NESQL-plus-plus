@@ -24,7 +24,7 @@ public final class Exporter {
     public static Exporter nativeUiExport(String repositoryName) {
         return new Exporter(
                 ExportContext.forProfile(
-                        ExportProfile.DATA_ONLY_V104,
+                        ExportProfile.NATIVE_UI_V104,
                         ExportSelection.nativeUiExport(),
                         repositoryName));
     }

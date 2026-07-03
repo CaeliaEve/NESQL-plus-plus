@@ -32,11 +32,11 @@ final class ExportCommandDispatcher {
         if (request.mode == ExportCommandMode.NATIVE_UI_EXPORT) {
             Logger.chatMessage(
                     EnumChatFormatting.AQUA
-                            + "[NESQL] Starting fast native UI export for repository: "
+                            + "[NESQL] Starting native UI compiler export for repository: "
                             + request.repositoryName);
             Logger.chatMessage(
                     EnumChatFormatting.YELLOW
-                            + "[NESQL] Skipping render/atlas/database-commit lanes; use --full-export for full assets.");
+                            + "[NESQL] Rendering browser atlas lanes; skipping multiblock/block-face/database-commit lanes.");
             startNativeUiExport(request.repositoryName);
             return;
         }
@@ -67,7 +67,7 @@ final class ExportCommandDispatcher {
     }
 
     static void startNativeUiExport(String repositoryName) {
-        startExport(repositoryName, Exporter.nativeUiExport(repositoryName), "Native UI Fast Export / v1.04-data / ");
+        startExport(repositoryName, Exporter.nativeUiExport(repositoryName), "Native UI Compiler Export / v1.04-native-ui / ");
     }
 
     static void startSelectedExport(String repositoryName, ExportSelection selection) {

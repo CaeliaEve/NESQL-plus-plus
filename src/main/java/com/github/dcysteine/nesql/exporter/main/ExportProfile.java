@@ -22,6 +22,13 @@ public enum ExportProfile {
             true,
             true,
             true),
+    NATIVE_UI_V104(
+            "v1.04-native-ui",
+            true,
+            false,
+            true,
+            true,
+            true),
     IMAGES_ONLY(
             "images-only",
             true,
