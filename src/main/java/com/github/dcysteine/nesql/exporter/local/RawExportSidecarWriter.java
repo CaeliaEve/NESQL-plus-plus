@@ -9,6 +9,9 @@ import net.minecraft.util.EnumChatFormatting;
 
 import java.io.File;
 import java.io.IOException;
+import java.util.ArrayList;
+import java.util.Arrays;
+import java.util.Collections;
 import java.util.List;
 
 /**
@@ -23,6 +26,28 @@ import java.util.List;
 public final class RawExportSidecarWriter {
     private static final String OUTPUT_DIRECTORY = "raw-export";
     private static final String SCHEMA_VERSION = ExportSchemaCatalog.RAW_EXPORT_ABI;
+    private static final List<FinalReportCopy> FINAL_REPORT_COPIES =
+            Collections.unmodifiableList(Arrays.asList(
+                    new FinalReportCopy(
+                            "export stage timings",
+                            "export_stage_timings.json",
+                            "export_stage_timings.json"),
+                    new FinalReportCopy(
+                            "stage checkpoint",
+                            "stage_checkpoint.json",
+                            "stage_checkpoint.json"),
+                    new FinalReportCopy(
+                            "stage checksums",
+                            "stage_checksums.json",
+                            "stage_checksums.json"),
+                    new FinalReportCopy(
+                            "export manifest",
+                            "export_manifest.json",
+                            "export_manifest.json"),
+                    new FinalReportCopy(
+                            "export health report",
+                            "export-health-report.json",
+                            "validation_report.json")));
 
     private final EntityManager entityManager;
     private final File repositoryDirectory;
@@ -37,9 +62,10 @@ public final class RawExportSidecarWriter {
         this.entityManager = entityManager;
         this.repositoryDirectory = repositoryDirectory;
         this.exportContext = exportContext;
-        this.renderAssets = renderAssets == null
-                ? java.util.Collections.<CanonicalRenderAsset>emptyList()
-                : renderAssets;
+        if (renderAssets == null) {
+            throw new IllegalArgumentException("Raw-export sidecar requires precollected render assets");
+        }
+        this.renderAssets = Collections.unmodifiableList(new ArrayList<CanonicalRenderAsset>(renderAssets));
     }
 
     public void export() throws IOException {
@@ -80,21 +106,23 @@ public final class RawExportSidecarWriter {
         File rawValidationDir = new File(rawDir, "validation");
         RawExportSidecarFileOps.ensureDirectory(rawValidationDir);
 
-        RawExportSidecarFileOps.copyIfPresent(
-                new File(rawValidationDir, "export_stage_timings.json"),
-                new File(rawDir, "export_stage_timings.json"));
-        RawExportSidecarFileOps.copyIfPresent(
-                new File(rawValidationDir, "stage_checkpoint.json"),
-                new File(rawDir, "stage_checkpoint.json"));
-        RawExportSidecarFileOps.copyIfPresent(
-                new File(rawValidationDir, "stage_checksums.json"),
-                new File(rawDir, "stage_checksums.json"));
-        RawExportSidecarFileOps.copyIfPresent(
-                new File(rawValidationDir, "export_manifest.json"),
-                new File(rawDir, "export_manifest.json"));
-        RawExportSidecarFileOps.copyIfPresent(
-                new File(rawValidationDir, "export-health-report.json"),
-                new File(rawDir, "validation_report.json"));
+        for (FinalReportCopy report : FINAL_REPORT_COPIES) {
+            RawExportSidecarFileOps.copyRequired(
+                    new File(rawValidationDir, report.sourceFile),
+                    new File(rawDir, report.targetFile),
+                    report.label);
+        }
     }
 
+    private static final class FinalReportCopy {
+        private final String label;
+        private final String sourceFile;
+        private final String targetFile;
+
+        private FinalReportCopy(String label, String sourceFile, String targetFile) {
+            this.label = label;
+            this.sourceFile = sourceFile;
+            this.targetFile = targetFile;
+        }
+    }
 }

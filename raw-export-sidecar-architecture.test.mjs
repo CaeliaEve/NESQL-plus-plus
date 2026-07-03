@@ -35,6 +35,7 @@ const reportAssemblerUrl = new URL('./src/main/java/com/github/dcysteine/nesql/e
 const semanticRuntimeBuilderUrl = new URL('./src/main/java/com/github/dcysteine/nesql/exporter/local/RawExportSemanticRuntimeBuilder.java', import.meta.url);
 const reportFactoryUrl = new URL('./src/main/java/com/github/dcysteine/nesql/exporter/local/RawExportReportFactory.java', import.meta.url);
 const sidecarFileOpsUrl = new URL('./src/main/java/com/github/dcysteine/nesql/exporter/local/RawExportSidecarFileOps.java', import.meta.url);
+const exportWriterSupportUrl = new URL('./src/main/java/com/github/dcysteine/nesql/exporter/main/ExportWriterSupport.java', import.meta.url);
 const dtoFiles = [
   'RawExportManifest.java',
   'RawExportReport.java',
@@ -70,6 +71,7 @@ const reportAssembler = readFileSync(reportAssemblerUrl, 'utf8');
 const semanticRuntimeBuilder = readFileSync(semanticRuntimeBuilderUrl, 'utf8');
 const reportFactory = readFileSync(reportFactoryUrl, 'utf8');
 const sidecarFileOps = readFileSync(sidecarFileOpsUrl, 'utf8');
+const exportWriterSupport = readFileSync(exportWriterSupportUrl, 'utf8');
 
 test('raw export validation logic lives outside RawExportSidecarWriter', () => {
   assert.match(reportPipeline, /RawExportValidationSupport\.apply\(report\)/);
@@ -376,12 +378,18 @@ test('raw export semantic runtime report factory and file ops are split from sid
   assert.equal(existsSync(semanticRuntimeBuilderUrl), true, 'RawExportSemanticRuntimeBuilder must exist');
   assert.equal(existsSync(reportFactoryUrl), true, 'RawExportReportFactory must exist');
   assert.equal(existsSync(sidecarFileOpsUrl), true, 'RawExportSidecarFileOps must exist');
+  assert.equal(existsSync(exportWriterSupportUrl), true, 'ExportWriterSupport must exist');
   assert.match(reportPipeline, /new RawExportSemanticRuntimeBuilder\(exportContext\)\.build\(\)/);
   assert.match(reportPipeline, /new RawExportReportFactory\(/);
   assert.doesNotMatch(sidecar, /new RawExportSemanticRuntimeBuilder/);
   assert.doesNotMatch(sidecar, /new RawExportReportFactory/);
   assert.match(sidecar, /RawExportSidecarFileOps\.purgeLegacyRawExportOutputs\(rawDir\)/);
-  assert.match(sidecar, /RawExportSidecarFileOps\.copyIfPresent\(/);
+  assert.match(sidecar, /FINAL_REPORT_COPIES =/);
+  assert.match(sidecar, /for \(FinalReportCopy report : FINAL_REPORT_COPIES\)/);
+  assert.match(sidecar, /RawExportSidecarFileOps\.copyRequired\(/);
+  assert.match(sidecar, /throw new IllegalArgumentException\("Raw-export sidecar requires precollected render assets"\)/);
+  assert.doesNotMatch(sidecar, /Collections\.<CanonicalRenderAsset>emptyList\(\)/);
+  assert.doesNotMatch(sidecar, /copyIfPresent/);
   assert.doesNotMatch(sidecar, /buildSemanticRuleRuntimeMetadata/);
   assert.doesNotMatch(sidecar, /safeMinecraftVersion/);
   assert.doesNotMatch(sidecar, /safeForgeVersion/);
@@ -394,4 +402,13 @@ test('raw export semantic runtime report factory and file ops are split from sid
   assert.match(semanticRuntimeBuilder, /SemanticRulePack\.RuntimeMetadata/);
   assert.match(reportFactory, /RawExportReport build\(\)/);
   assert.match(sidecarFileOps, /purgeLegacyRawExportOutputs/);
+  assert.match(sidecarFileOps, /Raw-export path exists but is not a directory/);
+  assert.match(sidecarFileOps, /copyRequired\(File source, File target, String label\) throws IOException/);
+  assert.match(sidecarFileOps, /Missing required raw-export file for /);
+  assert.doesNotMatch(sidecarFileOps, /copyIfPresent/);
+  assert.match(
+    exportWriterSupport,
+    /public static void syncRawExportFinalReports\(File repositoryDirectory\) throws Exception \{\s*RawExportSidecarWriter\.syncFinalReports\(repositoryDirectory\);\s*\}/,
+  );
+  assert.doesNotMatch(exportWriterSupport, /Failed to sync raw-export final reports/);
 });

@@ -9,14 +9,27 @@ final class RawExportSidecarFileOps {
     private RawExportSidecarFileOps() {}
 
     static void ensureDirectory(File directory) throws IOException {
-        if (!directory.exists() && !directory.mkdirs()) {
+        if (directory.exists()) {
+            if (!directory.isDirectory()) {
+                throw new IOException("Raw-export path exists but is not a directory: " + directory.getAbsolutePath());
+            }
+            return;
+        }
+        if (!directory.mkdirs()) {
             throw new IOException("Failed to create directory: " + directory.getAbsolutePath());
         }
     }
 
-    static void copyIfPresent(File source, File target) throws IOException {
-        if (source == null || !source.exists() || !source.isFile()) {
-            return;
+    static void copyRequired(File source, File target, String label) throws IOException {
+        if (source == null) {
+            throw new IOException("Missing required raw-export file source for " + label);
+        }
+        if (!source.exists() || !source.isFile()) {
+            throw new IOException(
+                    "Missing required raw-export file for "
+                            + label
+                            + ": "
+                            + source.getAbsolutePath());
         }
         File parent = target.getParentFile();
         if (parent != null) {

@@ -329,12 +329,8 @@ public final class ExportWriterSupport {
         }
     }
 
-    public static void syncRawExportFinalReports(File repositoryDirectory) {
-        try {
-            RawExportSidecarWriter.syncFinalReports(repositoryDirectory);
-        } catch (Exception e) {
-            Logger.MOD.warn("Failed to sync raw-export final reports", e);
-        }
+    public static void syncRawExportFinalReports(File repositoryDirectory) throws Exception {
+        RawExportSidecarWriter.syncFinalReports(repositoryDirectory);
     }
 
     public static void deleteCanonicalStagingDirectory(File repositoryDirectory) {
