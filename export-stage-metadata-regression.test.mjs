@@ -108,7 +108,9 @@ test('native NEI handler layouts export GT dynamic primitives and background reg
   assert.equal(rawNeiFactWriter.includes('throw new IOException("Failed to materialize required GT NEI ModularUI background asset: " + location, e)'), true);
   assert.equal(rawNeiFactWriter.includes('Logger.MOD.warn("Could not materialize GT NEI ModularUI background asset'), false);
   assert.equal(rawNeiFactWriter.includes('StandardCopyOption.ATOMIC_MOVE'), true);
-  assert.equal(rawFileCatalog.includes('new ManifestFile("uiBackgrounds", NativeUiExportAbi.UI_BACKGROUNDS_DIRECTORY)'), true);
+  assert.equal(nativeUiAbi.includes('UI_BACKGROUNDS_DIRECTORY'), true);
+  assert.equal(rawFileCatalog.includes('new ManifestFile("uiBackgrounds", NativeUiExportAbi.UI_BACKGROUNDS_DIRECTORY)'), false);
+  assert.equal(rawFileCatalog.includes('new ManifestFile("browserAtlasAssets", BROWSER_ATLAS_ASSETS_DIRECTORY)'), false);
   assert.equal(rawFileCatalog.includes('new ManifestFile("nativeUiValidation", NativeUiExportAbi.NATIVE_UI_VALIDATION_FILE)'), true);
   assert.equal(integrity.includes('RawExportFileCatalog.NATIVE_UI_VALIDATION_FILE'), true);
   assert.equal(integrity.includes('"native-ui-validation"'), true);

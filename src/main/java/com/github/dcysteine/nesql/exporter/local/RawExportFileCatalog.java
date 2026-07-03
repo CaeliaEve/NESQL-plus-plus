@@ -138,7 +138,6 @@ public final class RawExportFileCatalog {
                     new ManifestFile("neiGuidFilters", NEI_GUID_FILTERS_FILE),
                     new ManifestFile("neiHiddenItems", NEI_HIDDEN_ITEMS_FILE),
                     new ManifestFile("textures", TEXTURE_INDEX_FILE),
-                    new ManifestFile("uiBackgrounds", NativeUiExportAbi.UI_BACKGROUNDS_DIRECTORY),
                     new ManifestFile("animations", ANIMATION_INDEX_FILE),
                     new ManifestFile("nativeSprites", NATIVE_SPRITES_FILE),
                     new ManifestFile("renderedGifs", RENDERED_GIFS_FILE),
@@ -148,7 +147,6 @@ public final class RawExportFileCatalog {
                     new ManifestFile("renderShaderItems", RENDER_SHADER_ITEMS_FILE),
                     new ManifestFile("renderFramebufferCaptures", RENDER_FRAMEBUFFER_CAPTURES_FILE),
                     new ManifestFile("browserAtlasIndex", BROWSER_ATLAS_INDEX_FILE),
-                    new ManifestFile("browserAtlasAssets", BROWSER_ATLAS_ASSETS_DIRECTORY),
                     new ManifestFile("neiHandlers", NativeUiExportAbi.NEI_HANDLERS_FILE),
                     new ManifestFile("neiHandlerLayouts", NativeUiExportAbi.NEI_HANDLER_LAYOUTS_FILE)),
             Arrays.asList(
