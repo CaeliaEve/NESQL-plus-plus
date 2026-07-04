@@ -72,11 +72,13 @@ public final class Main {
     }
 
     private void registerClientCommands() {
-        registerOptionalClientCommand(new ExportCommand(), "/nesql"); // Complete export (data + images)
-        Logger.MOD.info("Legacy/debug client export commands are disabled. Use /nesql for GUI stage selection.");
+        registerOptionalClientCommand(new ExportCommand(), "/nesql"); // Guided/native UI export entrypoint.
+        Logger.MOD.info("Legacy/debug client export commands are disabled. Use /nesql for guided/native UI export.");
 
         Logger.MOD.info("Client export command registration finished.");
-        Logger.MOD.info("  /nesql - Complete export (data + images) [profile={}]", ExportProfile.FULL_V104.profileId);
+        Logger.MOD.info("  /nesql - Guided raw-export selection [profile={}]", ExportProfile.FULL_V104.profileId);
+        Logger.MOD.info("  /nesql --native-ui-export elysium-dev - Native UI compiler export [profile={}]",
+                ExportProfile.NATIVE_UI_V104.profileId);
     }
 
     private void registerServerCommand(FMLServerStartingEvent event, ICommand command, String label) {

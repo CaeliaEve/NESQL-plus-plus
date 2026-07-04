@@ -1,11 +1,11 @@
 [
 {
     "modid": "nesql-exporter",
-    "name": "Not Enough SQL Exporter",
-    "description": "Exports recipes and other data into an H2 SQL database",
+    "name": "NESQL++",
+    "description": "Exports GTNH raw-export data, native UI facts, and browser atlas artifacts for the Elysium/NeoNEI compiler pipeline.",
     "version": "${version}",
     "mcversion": "${mcversion}",
-    "url": "https://github.com/D-Cysteine/nesql-exporter",
-    "authorList": ["D-Cysteine"]
+    "url": "https://github.com/CaeliaEve/NESQL-plus-plus",
+    "authorList": ["CaeliaEve"]
 }
 ]

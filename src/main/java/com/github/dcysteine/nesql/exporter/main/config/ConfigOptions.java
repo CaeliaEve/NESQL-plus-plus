@@ -14,110 +14,127 @@ public final class ConfigOptions {
 
     public static final Option<String> REPOSITORY_NAME =
             new StringOption(
-                    Category.OPTIONS, "repository_name", "nesql-repository",
-                    "The default name of the exported repository.")
+                    Category.OPTIONS, "repository_name", "elysium-dev",
+                    "Default raw-export repository name used when /nesql is run without"
+                            + " an explicit target."
+                            + "\nFinal Elysium validation should use:"
+                            + " /nesql --native-ui-export elysium-dev")
                     .register();
 
     public static final Option<List<String>> ENABLED_PLUGINS =
             new StringListOption(
                     Category.OPTIONS, "enabled_plugins", Plugin.NAMES,
-                    "The list of enabled plugins."
-                            + " You should not normally need to modify this.")
+                    "Plugin-backed fact exporters enabled for the GTNH raw-export."
+                            + " Do not trim this list for the native UI compiler export unless"
+                            + " you are deliberately debugging a single plugin.")
                     .register();
 
     public static final Option<Boolean> AUTO_EXPORT_ON_CONNECT =
             new BooleanOption(
                     Category.OPTIONS, "auto_export_on_connect", false,
-                    "Whether to automatically export upon connecting to a world."
-                            + "\nThe default repository name will be used.")
+                    "Whether to automatically start the default full export upon connecting"
+                            + " to a world."
+                            + "\nFor final Elysium/NeoNEI validation, prefer the explicit"
+                            + " native UI compiler export command:"
+                            + " /nesql --native-ui-export elysium-dev")
                     .register();
 
     public static final Option<Boolean> ENABLE_CONFIG_FILE =
             new BooleanOption(
                     Category.OPTIONS, "enable_config_file", false,
-                    "Whether to generate a config file."
-                            + "\nConfig changes will be forgotten if this option is not enabled!"
-                            + "\nDISABLING THIS OPTION WILL DELETE YOUR CONFIG FILE!")
+                    "Whether to persist these in-game config values to"
+                            + " config/NESQL-Exporter.cfg."
+                            + "\nWhen false, NESQL++ keeps the built-in Elysium defaults and"
+                            + " removes the generated config file after initialization."
+                            + "\nEnable only if you need to override export tuning locally.")
                     .register();
 
     public static final Option<Integer> ICON_DIMENSION =
             new IntegerOption(
                     Category.OPTIONS, "icon_dimension", 64,
-                    "The size of rendered icons, in pixels. Should probably be a multiple of 32."
+                    "Rendered item/fluid icon size in pixels for raw-export browser atlas"
+                            + " artifacts."
+                            + "\n64 is the Elysium/NeoNEI compiler ABI default."
                             + "\nHas no effect if render_icons is false.")
                     .register();
 
     public static final Option<Boolean> RENDER_ICONS =
             new BooleanOption(
                     Category.OPTIONS, "render_icons", true,
-                    "Whether to render item and fluid icons when exporting.")
+                    "Whether to render item and fluid icons during export."
+                            + "\nMust remain true for /nesql --native-ui-export because the"
+                            + " compiler requires browser atlas assets and render manifests.")
                     .register();
 
     public static final Option<Integer> RENDER_ICONS_PER_TICK =
             new IntegerOption(
                     Category.OPTIONS, "render_icons_per_tick", 512,
-                    "The number of icons to render per tick. Lower this if your computer"
-                            + " can't handle the default. NeoNEI export defaults to a high-throughput"
-                            + " value so full data+image exports finish faster on GTNH-sized packs.")
+                    "Maximum icon render jobs processed per client tick."
+                            + "\n512 is the current high-throughput GTNH default used by the"
+                            + " native UI/compiler export lane."
+                            + "\nLower this only if the client becomes unstable during rendering.")
                     .register();
 
     public static final Option<Integer> LOGGING_FREQUENCY =
             new IntegerOption(
                     Category.OPTIONS, "logging_frequency", 100,
-                    "How often to log progress. Lower is more frequent."
-                            + " Set to <=0 to disable.")
+                    "How often to log export progress, in processed-record intervals."
+                            + "\nLower is more frequent; set to <=0 to disable progress logs.")
                     .register();
 
     // GIF Animation Options
     public static final Option<Boolean> EXPORT_GIF =
             new BooleanOption(
                     Category.OPTIONS, "export_gif", true,
-                    "Whether to export animated GIF for items with texture animations."
-                            + "\nNOTE: This will significantly increase export time (4-10x slower)."
-                            + "\nOnly enable if you need to capture animated item textures.")
+                    "Whether to export animated GIF/atlas frames for items with texture"
+                            + " animations."
+                            + "\nKeep enabled for compiler-complete animated atlas output."
+                            + "\nDisable only for local render debugging.")
                     .register();
 
     public static final Option<Boolean> EXPORT_FRAMEBUFFER_GIF =
             new BooleanOption(
                     Category.OPTIONS, "export_framebuffer_gif", true,
-                    "Whether the main export may capture multi-frame GIFs by repeatedly rendering"
-                            + " inventory items through the client OpenGL framebuffer."
-                            + "\nDefault is true so custom-rendered GTNH animations are exported exactly"
-                            + " as they appear in NEI; stability is handled by render isolation and"
-                            + " crash diagnostics, not by disabling GIF output.")
+                    "Whether framebuffer-rendered items may be captured as multi-frame"
+                            + " animations."
+                            + "\nDefault is true so custom-rendered GTNH animations enter the"
+                            + " animated atlas ABI exactly as they appear in NEI; stability is"
+                            + " handled by render isolation and diagnostics.")
                     .register();
 
     public static final Option<Integer> GIF_FRAMES =
             new IntegerOption(
                     Category.OPTIONS, "gif_frames", 8,
-                    "Number of frames to capture for each GIF animation."
-                            + "\nMore frames = smoother animation but larger file size and memory usage."
-                            + "\nWARNING: Requires at least 4GB JVM heap to avoid OutOfMemoryError!"
-                            + "\nRecommended: Allocate 6-8GB memory (-Xmx6G or -Xmx8G)")
+                    "Number of frames to capture for animated item/fluid atlas entries."
+                            + "\nMore frames increase animation smoothness, export time, and raw"
+                            + " artifact size."
+                            + "\nRecommended for GTNH native UI export: 8 frames with 6-8GB JVM heap.")
                     .register();
 
     public static final Option<Integer> GIF_LOOP_COUNT =
             new IntegerOption(
                     Category.OPTIONS, "gif_loop_count", 0,
-                    "Number of times to loop the animation."
-                            + "\n0 = infinite loop (recommended).")
+                    "GIF animation loop count written for compatibility previews."
+                            + "\n0 = infinite loop and is the expected NeoNEI/browser preview default.")
                     .register();
 
     public static final Option<Boolean> FORCE_ALL_ITEMS_ANIMATED =
             new BooleanOption(
                     Category.OPTIONS, "force_all_items_animated", false,
-                    "Force ALL items and fluids to be captured as multi-frame animations."
-                            + "\nThis will capture every item/fluid with multiple frames to detect any animations."
-                            + "\nWARNING: This will increase export time by 10-20x!"
-                            + "\nUse this to discover which items/fluids have animated textures."
-                            + "\nRecommended: Set gif_frames to 5-10 for faster initial discovery.")
+                    "Force every item/fluid through multi-frame capture."
+                            + "\nLeave false for normal /nesql --native-ui-export; NESQL++ now"
+                            + " detects known animated textures and framebuffer renderers without"
+                            + " forcing the entire item set."
+                            + "\nUse true only for local animation-discovery diagnostics.")
                     .register();
 
     public static final Option<String> TEST_MOD_FILTER =
             new StringOption(
                     Category.OPTIONS, "test_mod_filter", "",
-                    "TEST MODE: Only export items from this mod (e.g., 'Avaritia')."
-                            + "\nLeave empty to export all mods.")
+                    "Debug-only mod-id filter for item export experiments"
+                            + " (for example, Avaritia)."
+                            + "\nLeave empty for final Elysium native UI export so all GTNH mods"
+                            + " are included.")
                     .register();
 
     public enum Category {
@@ -277,7 +294,9 @@ public final class ConfigOptions {
     private ConfigOptions() {}
 
     static void setCategoryComments() {
-        Config.CONFIG.setCategoryComment(Category.OPTIONS.toString(), "General usage options.");
+        Config.CONFIG.setCategoryComment(
+                Category.OPTIONS.toString(),
+                "NESQL++ raw-export and native UI compiler export options.");
     }
 
     static ImmutableList<Option<?>> getAllOptions() {
