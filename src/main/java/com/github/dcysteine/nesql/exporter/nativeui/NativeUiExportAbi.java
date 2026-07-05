@@ -27,9 +27,11 @@ public final class NativeUiExportAbi {
     public static final int SLOT_PITCH = 18;
 
     public static final String BACKGROUND_STATUS_CAPTURED = "captured";
+    public static final String BACKGROUND_STATUS_SEMANTIC = "semantic";
     public static final String BACKGROUND_STATUS_MISSING = "missing";
     public static final String BACKGROUND_KIND_TEXTURE_REGION = "texture-region";
     public static final String BACKGROUND_KIND_GT_MODULAR_UI = "gt-modular-ui";
+    public static final String BACKGROUND_KIND_CANONICAL_NEI_TEMPLATE = "canonical-nei-template";
     public static final String BACKGROUND_KIND_UNKNOWN = "unknown";
     public static final String BACKGROUND_SCALING_NINE_SLICE = "nine-slice";
     public static final String INTERACTION_PAYLOAD_SCHEMA = "neonei/native-ui-interaction/v1";

@@ -251,6 +251,9 @@ interface ExportExecutionStrategy {
         public void runCollectionStage(ExportContext exportContext, ExportRuntime exportRuntime) {
             try {
                 Logger.MOD.debug("Native UI compiler export: running plugin pipeline");
+                exportRuntime.activePlugins.get(com.github.dcysteine.nesql.sql.Plugin.BASE)
+                        .getDatabase()
+                        .setLegacyBasePostProcessingEnabled(false);
                 exportRuntime.runPluginPipeline();
                 Logger.MOD.debug("Native UI compiler export collection complete");
             } finally {

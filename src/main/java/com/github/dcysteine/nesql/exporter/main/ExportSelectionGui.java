@@ -210,9 +210,6 @@ public final class ExportSelectionGui extends GuiScreen {
             options.get(6).enabled = false;
             options.get(7).enabled = false;
         }
-        if (!options.get(0).enabled) {
-            options.get(8).enabled = false;
-        }
     }
 
     private static final class Option {

@@ -9,7 +9,6 @@ import java.io.IOException;
 import java.io.OutputStream;
 import java.io.OutputStreamWriter;
 import java.nio.charset.StandardCharsets;
-import java.util.zip.GZIPOutputStream;
 
 final class RawExportSidecarFileOps {
     private static final int COPY_BUFFER_BYTES = 1024 * 1024;
@@ -95,7 +94,7 @@ final class RawExportSidecarFileOps {
         FileOutputStream fos = new FileOutputStream(out, false);
         try {
             if (out.getName().endsWith(".gz")) {
-                return new GZIPOutputStream(fos);
+                return new RawExportFastGzipOutputStream(fos);
             }
             return fos;
         } catch (IOException e) {

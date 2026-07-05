@@ -33,7 +33,6 @@ import java.util.List;
 import java.util.Map;
 import java.util.Set;
 import java.util.TimeZone;
-import java.util.zip.GZIPOutputStream;
 
 final class RawExportNeiFactWriter {
     private static final Map<String, String> MACHINE_CATALYST_RULES = loadBundledMachineCatalystRules();
@@ -338,6 +337,8 @@ final class RawExportNeiFactWriter {
             String imageResource = trimToEmpty(readString(source, "imageResource", null));
             String family = NeiUiFamilyClassifier.classifyHandlerFamily(handlerClass, itemName, modId);
             String layoutKind = NeiUiFamilyClassifier.inferLayoutKind(handlerClass, itemName, family);
+            width = NeiUiTemplateLayoutSpecs.boundedSurfaceWidth(layoutKind, width);
+            height = NeiUiTemplateLayoutSpecs.boundedSurfaceHeight(layoutKind, height);
             JsonObject nativeBackground = buildNativeBackground(source, family, layoutKind, width, height, yShift);
             requiresGtNeiBackgroundAsset = requiresGtNeiBackgroundAsset
                     || isGtModularUiBackground(nativeBackground);
@@ -409,9 +410,6 @@ final class RawExportNeiFactWriter {
             int width,
             int height,
             int yShift) {
-        String imageResource = trimToEmpty(readString(source, "imageResource", null));
-        int imageWidth = parseInt(readString(source, "imageWidth", null), 0);
-        int imageHeight = parseInt(readString(source, "imageHeight", null), 0);
         JsonObject background = new JsonObject();
         background.addProperty("schemaVersion", NativeUiExportAbi.schema(schemaVersion, "native-ui-background"));
         background.addProperty("width", width);
@@ -422,18 +420,6 @@ final class RawExportNeiFactWriter {
         background.addProperty("coordinateSpace", NativeUiExportAbi.COORDINATE_SPACE);
         background.addProperty("scaleMode", NativeUiExportAbi.SCALE_MODE);
         background.addProperty("anchor", NativeUiExportAbi.ANCHOR);
-        if (!imageResource.trim().isEmpty() && imageWidth > 0 && imageHeight > 0) {
-            background.addProperty("status", NativeUiExportAbi.BACKGROUND_STATUS_CAPTURED);
-            background.addProperty("kind", NativeUiExportAbi.BACKGROUND_KIND_TEXTURE_REGION);
-            background.addProperty("resource", imageResource);
-            JsonObject region = new JsonObject();
-            region.addProperty("x", parseInt(readString(source, "imageX", null), 0));
-            region.addProperty("y", parseInt(readString(source, "imageY", null), 0));
-            region.addProperty("width", imageWidth);
-            region.addProperty("height", imageHeight);
-            background.add("region", region);
-            return background;
-        }
         if ("gregtech-machine".equals(family)) {
             background.addProperty("status", NativeUiExportAbi.BACKGROUND_STATUS_CAPTURED);
             background.addProperty("kind", NativeUiExportAbi.BACKGROUND_KIND_GT_MODULAR_UI);
@@ -441,28 +427,40 @@ final class RawExportNeiFactWriter {
             background.addProperty("drawable", "GTUITextures.BACKGROUND_NEI_SINGLE_RECIPE");
             background.addProperty("assetRef", NativeUiExportAbi.GT_NEI_BACKGROUND_ASSET_REF);
             background.addProperty("resource", NativeUiExportAbi.GT_NEI_BACKGROUND_RESOURCE);
-            background.addProperty("scaling", NativeUiExportAbi.BACKGROUND_SCALING_NINE_SLICE);
-            JsonObject texture = new JsonObject();
-            texture.addProperty("width", 64);
-            texture.addProperty("height", 64);
-            texture.addProperty("borderU", 2);
-            texture.addProperty("borderV", 2);
-            background.add("texture", texture);
-            JsonObject offset = new JsonObject();
-            offset.addProperty("x", 3);
-            offset.addProperty("y", 3);
-            background.add("recipeBackgroundOffset", offset);
-            JsonObject size = new JsonObject();
-            size.addProperty("width", Math.max(0, width - 6));
-            size.addProperty("height", Math.max(0, height - yShift - 6));
-            background.add("recipeBackgroundSize", size);
+            addNineSliceBackgroundGeometry(background, 3, 3, Math.max(0, width - 6), Math.max(0, height - yShift - 6));
             background.addProperty("captureRequired", false);
             return background;
         }
-        background.addProperty("status", NativeUiExportAbi.BACKGROUND_STATUS_MISSING);
-        background.addProperty("kind", NativeUiExportAbi.BACKGROUND_KIND_UNKNOWN);
-        background.addProperty("captureRequired", true);
+        background.addProperty("status", NativeUiExportAbi.BACKGROUND_STATUS_SEMANTIC);
+        background.addProperty("kind", NativeUiExportAbi.BACKGROUND_KIND_CANONICAL_NEI_TEMPLATE);
+        background.addProperty("source", "NeiUiTemplateLayoutSpecs.defaultLayoutSlots");
+        background.addProperty("drawable", "Native NEI canonical semantic panel");
+        addNineSliceBackgroundGeometry(background, 0, 0, width, height);
+        background.addProperty("captureRequired", false);
         return background;
+    }
+
+    private static void addNineSliceBackgroundGeometry(
+            JsonObject background,
+            int offsetX,
+            int offsetY,
+            int targetWidth,
+            int targetHeight) {
+        background.addProperty("scaling", NativeUiExportAbi.BACKGROUND_SCALING_NINE_SLICE);
+        JsonObject texture = new JsonObject();
+        texture.addProperty("width", 64);
+        texture.addProperty("height", 64);
+        texture.addProperty("borderU", 2);
+        texture.addProperty("borderV", 2);
+        background.add("texture", texture);
+        JsonObject offset = new JsonObject();
+        offset.addProperty("x", offsetX);
+        offset.addProperty("y", offsetY);
+        background.add("recipeBackgroundOffset", offset);
+        JsonObject size = new JsonObject();
+        size.addProperty("width", targetWidth);
+        size.addProperty("height", targetHeight);
+        background.add("recipeBackgroundSize", size);
     }
 
     private static JsonObject cloneJsonObject(JsonObject source) {
@@ -768,7 +766,7 @@ final class RawExportNeiFactWriter {
     private static OutputStreamWriter createUtf8Writer(File out) throws IOException {
         FileOutputStream fos = new FileOutputStream(out);
         if (out.getName().endsWith(".gz")) {
-            return new OutputStreamWriter(new GZIPOutputStream(fos), StandardCharsets.UTF_8);
+            return new OutputStreamWriter(new RawExportFastGzipOutputStream(fos), StandardCharsets.UTF_8);
         }
         return new OutputStreamWriter(fos, StandardCharsets.UTF_8);
     }

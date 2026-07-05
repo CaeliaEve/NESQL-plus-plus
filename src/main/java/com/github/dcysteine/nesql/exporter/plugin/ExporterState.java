@@ -18,6 +18,7 @@ public class ExporterState {
     private final EntityManager entityManager;
     private int itemCount;
     private int fluidCount;
+    private boolean legacyBasePostProcessingEnabled;
 
     // TODO do we want to provide some sort of RecipeType registry here?
     // If so, something like: Map<Class<T>, T> where T is a plugin-custom recipe repository class.
@@ -34,6 +35,7 @@ public class ExporterState {
         this.entityManager = entityManager;
         this.itemCount = 0;
         this.fluidCount = 0;
+        this.legacyBasePostProcessingEnabled = true;
         this.itemListeners = new ArrayList<>();
     }
 
@@ -68,5 +70,13 @@ public class ExporterState {
 
     public void invokeItemListeners(Item item, ItemStack itemStack) {
         itemListeners.forEach(listener -> listener.accept(item, itemStack));
+    }
+
+    public boolean isLegacyBasePostProcessingEnabled() {
+        return legacyBasePostProcessingEnabled;
+    }
+
+    public void setLegacyBasePostProcessingEnabled(boolean legacyBasePostProcessingEnabled) {
+        this.legacyBasePostProcessingEnabled = legacyBasePostProcessingEnabled;
     }
 }

@@ -36,7 +36,7 @@ final class ExportCommandDispatcher {
                             + request.repositoryName);
             Logger.chatMessage(
                     EnumChatFormatting.YELLOW
-                            + "[NESQL] Rendering browser atlas lanes; skipping multiblock/block-face/database-commit lanes.");
+                            + "[NESQL] Rendering browser atlas lanes; skipping legacy per-mod JSON, multiblock, block-face, and database-commit lanes.");
             startNativeUiExport(request.repositoryName);
             return;
         }

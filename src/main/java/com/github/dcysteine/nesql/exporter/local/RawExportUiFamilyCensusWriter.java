@@ -3,6 +3,7 @@ package com.github.dcysteine.nesql.exporter.local;
 import com.github.dcysteine.nesql.exporter.plugin.nei.metadata.NeiHandlerMetadataEntry;
 import com.github.dcysteine.nesql.exporter.plugin.nei.metadata.NeiHandlerMetadataRepository;
 import com.github.dcysteine.nesql.exporter.plugin.nei.metadata.NeiUiFamilyClassifier;
+import com.github.dcysteine.nesql.exporter.plugin.nei.metadata.NeiUiTemplateLayoutSpecs;
 import com.github.dcysteine.nesql.exporter.main.Logger;
 import com.github.dcysteine.nesql.exporter.nativeui.NativeUiExportAbi;
 import com.google.gson.Gson;
@@ -74,6 +75,8 @@ public final class RawExportUiFamilyCensusWriter {
             String layoutKind = NeiUiFamilyClassifier.inferLayoutKind(handler, itemName, family);
             int width = entry.getHandlerWidthInt() == null ? 166 : entry.getHandlerWidthInt().intValue();
             int height = entry.getHandlerHeightInt() == null ? 65 : entry.getHandlerHeightInt().intValue();
+            width = NeiUiTemplateLayoutSpecs.boundedSurfaceWidth(layoutKind, width);
+            height = NeiUiTemplateLayoutSpecs.boundedSurfaceHeight(layoutKind, height);
             int yShift = entry.getYShiftInt() == null ? 0 : entry.getYShiftInt().intValue();
             int maxRecipesPerPage = entry.getMaxRecipesPerPageInt() == null
                     ? 1
@@ -201,20 +204,6 @@ public final class RawExportUiFamilyCensusWriter {
         background.coordinateSpace = NativeUiExportAbi.COORDINATE_SPACE;
         background.scaleMode = NativeUiExportAbi.SCALE_MODE;
         background.anchor = NativeUiExportAbi.ANCHOR;
-        String imageResource = trimToEmpty(entry.getImageResource());
-        Integer imageWidth = entry.getImageWidthInt();
-        Integer imageHeight = entry.getImageHeightInt();
-        if (!imageResource.isEmpty() && imageWidth != null && imageHeight != null && imageWidth.intValue() > 0 && imageHeight.intValue() > 0) {
-            background.status = NativeUiExportAbi.BACKGROUND_STATUS_CAPTURED;
-            background.kind = NativeUiExportAbi.BACKGROUND_KIND_TEXTURE_REGION;
-            background.resource = imageResource;
-            background.region = new UiRect();
-            background.region.x = entry.getImageXInt() == null ? 0 : entry.getImageXInt().intValue();
-            background.region.y = entry.getImageYInt() == null ? 0 : entry.getImageYInt().intValue();
-            background.region.width = imageWidth.intValue();
-            background.region.height = imageHeight.intValue();
-            return background;
-        }
         if ("gregtech-machine".equals(family)) {
             background.status = NativeUiExportAbi.BACKGROUND_STATUS_CAPTURED;
             background.kind = NativeUiExportAbi.BACKGROUND_KIND_GT_MODULAR_UI;
@@ -222,25 +211,37 @@ public final class RawExportUiFamilyCensusWriter {
             background.resource = NativeUiExportAbi.GT_NEI_BACKGROUND_RESOURCE;
             background.source = "GTNEIDefaultHandler.drawUI(ModularWindow.getBackground)";
             background.drawable = "GTUITextures.BACKGROUND_NEI_SINGLE_RECIPE";
-            background.scaling = NativeUiExportAbi.BACKGROUND_SCALING_NINE_SLICE;
-            background.texture = new UiTexture();
-            background.texture.width = 64;
-            background.texture.height = 64;
-            background.texture.borderU = 2;
-            background.texture.borderV = 2;
-            background.recipeBackgroundOffset = new UiPoint();
-            background.recipeBackgroundOffset.x = 3;
-            background.recipeBackgroundOffset.y = 3;
-            background.recipeBackgroundSize = new UiSize();
-            background.recipeBackgroundSize.width = Math.max(0, width - 6);
-            background.recipeBackgroundSize.height = Math.max(0, height - yShift - 6);
+            applyNineSliceBackgroundGeometry(background, 3, 3, Math.max(0, width - 6), Math.max(0, height - yShift - 6));
             background.captureRequired = false;
             return background;
         }
-        background.status = NativeUiExportAbi.BACKGROUND_STATUS_MISSING;
-        background.kind = NativeUiExportAbi.BACKGROUND_KIND_UNKNOWN;
-        background.captureRequired = true;
+        background.status = NativeUiExportAbi.BACKGROUND_STATUS_SEMANTIC;
+        background.kind = NativeUiExportAbi.BACKGROUND_KIND_CANONICAL_NEI_TEMPLATE;
+        background.source = "NeiUiTemplateLayoutSpecs.defaultLayoutSlots";
+        background.drawable = "Native NEI canonical semantic panel";
+        applyNineSliceBackgroundGeometry(background, 0, 0, width, height);
+        background.captureRequired = false;
         return background;
+    }
+
+    private static void applyNineSliceBackgroundGeometry(
+            UiNativeBackground background,
+            int offsetX,
+            int offsetY,
+            int targetWidth,
+            int targetHeight) {
+        background.scaling = NativeUiExportAbi.BACKGROUND_SCALING_NINE_SLICE;
+        background.texture = new UiTexture();
+        background.texture.width = 64;
+        background.texture.height = 64;
+        background.texture.borderU = 2;
+        background.texture.borderV = 2;
+        background.recipeBackgroundOffset = new UiPoint();
+        background.recipeBackgroundOffset.x = offsetX;
+        background.recipeBackgroundOffset.y = offsetY;
+        background.recipeBackgroundSize = new UiSize();
+        background.recipeBackgroundSize.width = targetWidth;
+        background.recipeBackgroundSize.height = targetHeight;
     }
 
     private static String normalizeKeyPart(String value) {

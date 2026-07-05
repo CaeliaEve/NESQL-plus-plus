@@ -33,7 +33,7 @@ import java.util.Set;
 final class RawExportRepositoryFactStreamer {
     private static final int ITEM_BATCH_SIZE = 4096;
     private static final int FLUID_BATCH_SIZE = 2048;
-    private static final int RECIPE_BATCH_SIZE = 512;
+    private static final int RECIPE_BATCH_SIZE = 2048;
 
     private final EntityManager entityManager;
     private final File rawDir;

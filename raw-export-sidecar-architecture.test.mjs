@@ -367,7 +367,7 @@ test('raw export artifact writers share the fail-closed sidecar file ops boundar
     'writeJson(Gson gson, File out, Object value)',
     'copyOptional(File source, File target)',
     'new FileOutputStream(out, false)',
-    'new GZIPOutputStream(fos)',
+    'new RawExportFastGzipOutputStream(fos)',
     'failure.addSuppressed(closeFailure)',
   ]) {
     assert.equal(sidecarFileOps.includes(required), true, `sidecar file ops missing ${required}`);

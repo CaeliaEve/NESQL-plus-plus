@@ -159,7 +159,7 @@ test('Angelica render fact file ops own fail-closed artifact creation', () => {
   assert.match(renderFactFileOps, /Angelica render fact output path exists but is not a file/);
   assert.match(renderFactFileOps, /Failed to create Angelica render fact output directory/);
   assert.match(renderFactFileOps, /new FileOutputStream\(out, false\)/);
-  assert.match(renderFactFileOps, /new GZIPOutputStream\(fos\)/);
+  assert.match(renderFactFileOps, /new RawExportFastGzipOutputStream\(fos\)/);
   assert.match(renderFactFileOps, /failure\.addSuppressed\(closeFailure\)/);
 });
 

@@ -3,11 +3,16 @@ package com.github.dcysteine.nesql.exporter.local;
 import com.github.dcysteine.nesql.exporter.canonical.CanonicalRenderAsset;
 
 import javax.imageio.ImageIO;
+import javax.imageio.IIOImage;
+import javax.imageio.ImageWriteParam;
+import javax.imageio.ImageWriter;
+import javax.imageio.stream.ImageOutputStream;
 import java.awt.Graphics2D;
 import java.awt.image.BufferedImage;
 import java.io.File;
 import java.io.IOException;
 import java.util.ArrayList;
+import java.util.Iterator;
 import java.util.List;
 
 final class AtlasPackingSupport {
@@ -61,9 +66,30 @@ final class AtlasPackingSupport {
     static void writeAtlasImage(File atlasFile, PackLayout layout) throws IOException {
         BufferedImage atlasImage = renderAtlas(layout);
         try {
-            ImageIO.write(atlasImage, "PNG", atlasFile);
+            writePngFast(atlasImage, atlasFile);
         } finally {
             atlasImage.flush();
+        }
+    }
+
+    private static void writePngFast(BufferedImage image, File atlasFile) throws IOException {
+        Iterator<ImageWriter> writers = ImageIO.getImageWritersByFormatName("png");
+        if (!writers.hasNext()) {
+            ImageIO.write(image, "PNG", atlasFile);
+            return;
+        }
+
+        ImageWriter writer = writers.next();
+        try (ImageOutputStream output = ImageIO.createImageOutputStream(atlasFile)) {
+            writer.setOutput(output);
+            ImageWriteParam param = writer.getDefaultWriteParam();
+            if (param.canWriteCompressed()) {
+                param.setCompressionMode(ImageWriteParam.MODE_EXPLICIT);
+                param.setCompressionQuality(1.0f);
+            }
+            writer.write(null, new IIOImage(image, null, null), param);
+        } finally {
+            writer.dispose();
         }
     }
 

@@ -324,14 +324,19 @@ test('native UI export has an explicit compiler stage plan while full export rem
   assert.equal(executionStrategy.includes('case NATIVE_UI_V104:'), true);
   assert.equal(executionStrategy.includes('NativeUiExecutionStrategy'), true);
   assert.equal(commandDispatcher.includes('Native UI Compiler Export / v1.04-native-ui /'), true);
-  assert.equal(commandDispatcher.includes('Rendering browser atlas lanes; skipping multiblock/block-face/database-commit lanes'), true);
+  assert.equal(commandDispatcher.includes('Rendering browser atlas lanes; skipping legacy per-mod JSON, multiblock, block-face, and database-commit lanes'), true);
 
   assert.equal(executionPlan.includes('if (profile.renderImages && selection.includesStage(ExportStage.RENDER_IMAGES, profile))'), true);
+  assert.equal(executionPlan.includes('profile.writeModBasedItems && selection.includesStage(ExportStage.WRITE_BROWSER_LAYOUT_INDEX, profile)'), false);
+  assert.equal(executionPlan.includes('if (selection.includesStage(ExportStage.WRITE_BROWSER_LAYOUT_INDEX, profile))'), true);
   assert.equal(executionPlan.includes('addIfSelected(stages, ExportStage.WRITE_ATLAS_PACKS, profile, selection)'), true);
   assert.equal(executionPlan.includes('addIfSelected(stages, ExportStage.WRITE_ANIMATED_ATLAS_PACKS, profile, selection)'), true);
   assert.equal(executionPlan.includes('addIfSelected(stages, ExportStage.WRITE_BROWSER_ATLAS_INDEX, profile, selection)'), true);
   assert.equal(selection.includes('public static ExportSelection full()'), true);
   assert.equal(selection.includes('return new Builder().build();'), true);
+  assert.equal(selection.includes('.writeItems(false)'), true);
+  assert.equal(selection.includes('.writeRecipes(false)'), true);
+  assert.equal(exportProfile.includes('NATIVE_UI_V104(\n            "v1.04-native-ui",\n            true,\n            false,\n            false,\n            false,'), true);
   assert.equal(selection.includes('&& renderImages\n                && writeRenderManifests'), true);
   assert.equal(selection.includes('&& writeAtlasPacks\n                && writeAnimatedAtlasPacks'), true);
 });

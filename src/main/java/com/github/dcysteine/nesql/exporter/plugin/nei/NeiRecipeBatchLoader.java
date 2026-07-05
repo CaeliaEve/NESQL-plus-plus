@@ -66,6 +66,24 @@ public class NeiRecipeBatchLoader {
                     processedHandlers.incrementAndGet();
                     continue;
                 }
+                if (shouldSkipCraftingHandler(baseHandler)) {
+                    Logger.MOD.info(
+                            "Skipping NEI handler {} ({}) because another exporter owns its canonical facts.",
+                            handlerName,
+                            baseHandler.getClass().getName());
+                    processedHandlers.incrementAndGet();
+                    recordHandlerTiming(
+                            handlerIndex,
+                            baseHandler,
+                            baseHandler instanceof TemplateRecipeHandler,
+                            false,
+                            0,
+                            0,
+                            0L,
+                            0L,
+                            handlerStartedAt);
+                    continue;
+                }
                 Logger.MOD.info("Processing handler {}/{}: {}",
                         handlerIndex, GuiCraftingRecipe.craftinghandlers.size(), handlerName);
 
@@ -419,6 +437,11 @@ public class NeiRecipeBatchLoader {
                 return overlayCount;
             }
 
+            Integer allRecipesCount = tryLoadAllRecipes(handler);
+            if (allRecipesCount != null && allRecipesCount > 0) {
+                return allRecipesCount;
+            }
+
             // Clear any existing recipes
             handler.arecipes.clear();
 
@@ -482,6 +505,24 @@ public class NeiRecipeBatchLoader {
         // preserving the same handler-generated recipe objects. If a handler returns nothing
         // here, the caller falls back to the full scan.
         return overlayId != null && !overlayId.trim().isEmpty();
+    }
+
+    private static Integer tryLoadAllRecipes(TemplateRecipeHandler handler) {
+        try {
+            java.lang.reflect.Method method = handler.getClass().getMethod("loadAllRecipes");
+            handler.arecipes.clear();
+            method.setAccessible(true);
+            method.invoke(handler);
+            int loaded = handler.numRecipes();
+            Logger.MOD.info("Loaded {} recipes for handler {} via loadAllRecipes()",
+                    loaded, handler.getRecipeName());
+            return loaded;
+        } catch (NoSuchMethodException ignored) {
+            return null;
+        } catch (Exception e) {
+            Logger.MOD.warn("Failed loadAllRecipes() recipe load for handler: " + handler.getRecipeName(), e);
+            return null;
+        }
     }
 
     /**
@@ -591,5 +632,26 @@ public class NeiRecipeBatchLoader {
 
         // Default to scanning for correctness.
         return true;
+    }
+
+    private static boolean shouldSkipCraftingHandler(ICraftingHandler handler) {
+        if (handler == null) {
+            return false;
+        }
+        String handlerId = handler.getHandlerId() == null ? "" : handler.getHandlerId();
+        String className = handler.getClass().getName();
+
+        // GregTech machine recipes are exported through GregTechRecipeProcessor with machine
+        // metadata. The NEI GTNEIDefaultHandler path loaded 195k duplicate display rows in the
+        // latest GTNH export but produced zero NESQL recipe facts because those rows have no
+        // canonical result stack for RecipeBuilder. Skipping it preserves exported facts and saves
+        // the full item-universe scan.
+        if ("gregtech.nei.GTNEIDefaultHandler".equals(handlerId)
+                || "gregtech.nei.GTNEIDefaultHandler".equals(className)) {
+            return true;
+        }
+
+        // CreativeCore's IRecipeInfo handler is an informational NEI surface, not a recipe source.
+        return "com.creativemd.creativecore.api.nei.NEIRecipeInfoHandler".equals(className);
     }
 }

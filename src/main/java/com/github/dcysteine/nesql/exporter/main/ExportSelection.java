@@ -40,13 +40,14 @@ public final class ExportSelection {
      * Native UI compiler export lane.
      *
      * <p>The compiler requires both captured UI facts and browser atlas artifacts, so this selection
-     * keeps render/atlas lanes authoritative while skipping unrelated multiblock, block-face, and
-     * database-commit work.</p>
+     * keeps render/atlas lanes authoritative while skipping unrelated legacy per-mod JSON,
+     * multiblock, block-face, and database-commit work. Raw-export still writes item and recipe
+     * facts directly from the export database.</p>
      */
     public static ExportSelection nativeUiExport() {
         return new Builder()
-                .writeItems(true)
-                .writeRecipes(true)
+                .writeItems(false)
+                .writeRecipes(false)
                 .writeUiFamilyCensus(true)
                 .writeUiTemplateCatalog(true)
                 .writeMultiblocks(false)
@@ -80,9 +81,7 @@ public final class ExportSelection {
     }
 
     public boolean isNativeUiExport() {
-        return writeItems
-                && writeRecipes
-                && writeUiFamilyCensus
+        return writeUiFamilyCensus
                 && writeUiTemplateCatalog
                 && !writeCanonicalSnapshot
                 && !writeMultiblocks
@@ -123,7 +122,7 @@ public final class ExportSelection {
             case WRITE_ANIMATED_ATLAS_PACKS:
                 return renderImages && writeAnimatedAtlasPacks;
             case WRITE_BROWSER_LAYOUT_INDEX:
-                return writeBrowserIndexes && writeItems;
+                return writeBrowserIndexes;
             case WRITE_BROWSER_ATLAS_INDEX:
                 return renderImages && writeBrowserIndexes;
             case COMMIT_DATABASE:

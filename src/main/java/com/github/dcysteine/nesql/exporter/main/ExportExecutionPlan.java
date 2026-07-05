@@ -46,7 +46,7 @@ public final class ExportExecutionPlan {
         if (profile.writeCanonicalSnapshot && selection.includesStage(ExportStage.WRITE_CANONICAL_SNAPSHOT, profile)) {
             stages.add(ExportStage.WRITE_CANONICAL_SNAPSHOT);
         }
-        if (profile.writeModBasedItems && selection.includesStage(ExportStage.WRITE_BROWSER_LAYOUT_INDEX, profile)) {
+        if (selection.includesStage(ExportStage.WRITE_BROWSER_LAYOUT_INDEX, profile)) {
             stages.add(ExportStage.WRITE_BROWSER_LAYOUT_INDEX);
         }
 

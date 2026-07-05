@@ -31,7 +31,6 @@ import java.util.Map;
 import java.util.Set;
 import java.util.TimeZone;
 import java.util.zip.GZIPInputStream;
-import java.util.zip.GZIPOutputStream;
 
 /**
  * Diagnostic-only semantic item identity audit.
@@ -924,7 +923,7 @@ public final class SemanticItemIdentityDiagnosticsWriter {
             }
             FileOutputStream fos = new FileOutputStream(out);
             this.writer = out.getName().endsWith(".gz")
-                    ? new OutputStreamWriter(new GZIPOutputStream(fos), StandardCharsets.UTF_8)
+                    ? new OutputStreamWriter(new RawExportFastGzipOutputStream(fos), StandardCharsets.UTF_8)
                     : new OutputStreamWriter(fos, StandardCharsets.UTF_8);
         }
 

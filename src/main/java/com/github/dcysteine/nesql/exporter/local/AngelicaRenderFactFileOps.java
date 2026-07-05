@@ -6,7 +6,6 @@ import java.io.IOException;
 import java.io.OutputStream;
 import java.io.OutputStreamWriter;
 import java.nio.charset.StandardCharsets;
-import java.util.zip.GZIPOutputStream;
 
 /** Owns fail-closed file creation for Angelica render fact artifacts. */
 final class AngelicaRenderFactFileOps {
@@ -60,7 +59,7 @@ final class AngelicaRenderFactFileOps {
         FileOutputStream fos = new FileOutputStream(out, false);
         try {
             if (out.getName().endsWith(".gz")) {
-                return new GZIPOutputStream(fos);
+                return new RawExportFastGzipOutputStream(fos);
             }
             return fos;
         } catch (IOException e) {

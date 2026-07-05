@@ -15,6 +15,11 @@ public class BasePluginExporter extends PluginExporter {
 
     @Override
     public void postProcess() {
+        if (!exporterState.isLegacyBasePostProcessingEnabled()) {
+            logger.info(
+                    "Skipping legacy base post-process indices; native raw-export streams derive recipe facts directly.");
+            return;
+        }
         new ItemGroupPostProcessor(this).postProcess();
         new RecipePostProcessor(this).postProcess();
     }

@@ -37,6 +37,30 @@ public final class NeiUiTemplateLayoutSpecs {
         return slots;
     }
 
+    public static int boundedSurfaceWidth(String layoutKind, int requestedWidth) {
+        return Math.max(Math.max(1, requestedWidth), minimumSurfaceWidth(layoutKind));
+    }
+
+    public static int boundedSurfaceHeight(String layoutKind, int requestedHeight) {
+        return Math.max(Math.max(1, requestedHeight), minimumSurfaceHeight(layoutKind));
+    }
+
+    public static int minimumSurfaceWidth(String layoutKind) {
+        int right = 1;
+        for (UiTemplateSlot slot : defaultLayoutSlots(layoutKind)) {
+            right = Math.max(right, slot.x + Math.max(0, slot.columns - 1) * slot.pitchX + slot.slotWidth);
+        }
+        return right;
+    }
+
+    public static int minimumSurfaceHeight(String layoutKind) {
+        int bottom = 1;
+        for (UiTemplateSlot slot : defaultLayoutSlots(layoutKind)) {
+            bottom = Math.max(bottom, slot.y + Math.max(0, slot.rows - 1) * slot.pitchY + slot.slotHeight);
+        }
+        return bottom;
+    }
+
     public static JsonArray defaultLayoutSlotsJson(String layoutKind) {
         JsonArray slots = new JsonArray();
         for (UiTemplateSlot slot : defaultLayoutSlots(layoutKind)) {
