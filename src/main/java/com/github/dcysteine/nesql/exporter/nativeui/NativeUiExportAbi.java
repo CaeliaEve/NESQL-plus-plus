@@ -15,6 +15,9 @@ public final class NativeUiExportAbi {
     public static final String NEI_HANDLERS_FILE = "facts/nei/handlers.jsonl.gz";
     public static final String NEI_HANDLER_LAYOUTS_FILE = "facts/nei/handler-layouts.jsonl.gz";
     public static final String UI_BACKGROUNDS_DIRECTORY = "assets/ui-backgrounds";
+    public static final String NATIVE_NEI_FRAMES_DIRECTORY = "assets/nei-native-frames";
+    public static final String NATIVE_FRAME_STATUS_CAPTURED = "captured";
+    public static final String NATIVE_FRAME_SOURCE_IN_GAME_NEI_RENDER = "in-game-nei-render";
     public static final String GT_NEI_BACKGROUND_ASSET_REF =
             UI_BACKGROUNDS_DIRECTORY + "/gregtech/nei_single_recipe.png";
     public static final String GT_NEI_BACKGROUND_RESOURCE =

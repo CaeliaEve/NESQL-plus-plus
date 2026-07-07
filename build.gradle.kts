@@ -396,3 +396,14 @@ artifacts {
     archives(sqlJar)
 }
 
+// GTNH 1.7.10 loads production Minecraft classes with SRG method names. A plain
+// `gradlew jar` output still uses MCP development method names and will fail at
+// integrated-server command registration (for example ICommand#getCommandAliases
+// becomes AbstractMethodError when CommandHandler invokes func_71514_a).
+//
+// Make the common local build/deploy path safe: `gradlew jar` and `gradlew build`
+// both leave build/libs/NESQL++-<version>.jar as the reobfuscated production jar.
+tasks.named("jar") {
+    finalizedBy("reobf")
+}
+

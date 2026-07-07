@@ -3,6 +3,7 @@ package com.github.dcysteine.nesql.exporter.main;
 import net.minecraft.command.ICommand;
 import net.minecraft.command.ICommandSender;
 
+import java.util.Collections;
 import java.util.List;
 
 /** Minecraft command adapter for the registry-backed NESQL++ export command. */
@@ -20,7 +21,7 @@ final class ExportCommand implements ICommand {
     @Override
     @SuppressWarnings("rawtypes")
     public List getCommandAliases() {
-        return null;
+        return Collections.emptyList();
     }
 
     @Override
@@ -36,7 +37,7 @@ final class ExportCommand implements ICommand {
     @Override
     @SuppressWarnings("rawtypes")
     public List addTabCompletionOptions(ICommandSender unused, String[] args) {
-        return null;
+        return Collections.emptyList();
     }
 
     @Override

@@ -9,6 +9,7 @@ import codechicken.nei.recipe.IUsageHandler;
 import com.github.dcysteine.nesql.exporter.plugin.nei.metadata.NeiHandlerMetadataEntry;
 import com.github.dcysteine.nesql.exporter.plugin.nei.metadata.NeiHandlerMetadataRepository;
 import com.github.dcysteine.nesql.exporter.main.Logger;
+import com.github.dcysteine.nesql.exporter.nativeui.NativeNeiFrameExportRegistry;
 import com.github.dcysteine.nesql.exporter.plugin.PluginExporter;
 import com.github.dcysteine.nesql.exporter.plugin.PluginHelper;
 import com.github.dcysteine.nesql.exporter.plugin.base.factory.ItemFactory;
@@ -90,6 +91,9 @@ public class NeiRecipeExportProcessor extends PluginHelper {
         } catch (Exception e) {
             Logger.chatMessage("NEI export error: " + e.getMessage());
             logger.error("Error exporting NEI recipes", e);
+            if (NativeNeiFrameExportRegistry.isEnabled()) {
+                throw new IllegalStateException("Native NEI frame export failed during NEI recipe export", e);
+            }
         }
     }
 
@@ -1984,11 +1988,17 @@ public class NeiRecipeExportProcessor extends PluginHelper {
                 continue;
             }
             try {
-                if (exportSingleMobsInfoMobRecipe(handlerId, handler, recipeType, recipe)) {
+                if (exportSingleMobsInfoMobRecipe(handlerId, handler, recipeType, recipe, i)) {
                     exported++;
                 }
             } catch (Exception e) {
                 logger.error("Error exporting MobsInfo/EEC recipe {} from handler {}", i, handlerId, e);
+                if (NativeNeiFrameExportRegistry.isEnabled()) {
+                    throw new IllegalStateException(
+                            "Native NEI frame export failed for MobsInfo/EEC recipe " + i
+                                    + " from handler " + handlerId,
+                            e);
+                }
             }
         }
 
@@ -2006,11 +2016,17 @@ public class NeiRecipeExportProcessor extends PluginHelper {
                 continue;
             }
             try {
-                if (exportSingleMobsInfoInfernalRecipe(handlerId, handler, recipeType, recipe)) {
+                if (exportSingleMobsInfoInfernalRecipe(handlerId, handler, recipeType, recipe, i)) {
                     exported++;
                 }
             } catch (Exception e) {
                 logger.error("Error exporting MobsInfo infernal recipe {} from handler {}", i, handlerId, e);
+                if (NativeNeiFrameExportRegistry.isEnabled()) {
+                    throw new IllegalStateException(
+                            "Native NEI frame export failed for MobsInfo infernal recipe " + i
+                                    + " from handler " + handlerId,
+                            e);
+                }
             }
         }
 
@@ -2021,7 +2037,8 @@ public class NeiRecipeExportProcessor extends PluginHelper {
             String handlerId,
             ICraftingHandler handler,
             RecipeType recipeType,
-            Object recipe) {
+            Object recipe,
+            int recipeIndex) {
         String mobName = asString(readFieldValue(recipe, "mobname"), "");
         Object eecRecipe = lookupKubaTechEecRecipe(mobName);
         if (eecRecipe == null) {
@@ -2064,6 +2081,7 @@ public class NeiRecipeExportProcessor extends PluginHelper {
         com.github.dcysteine.nesql.sql.base.recipe.Recipe builtRecipe = builder.build();
         registerHandlerMetadata(handler, handlerId, builtRecipe);
         registerMobsInfoMobMetadata(recipe, builtRecipe, eecRecipe, outputCount, !inputCandidates.isEmpty());
+        registerNativeFrameMetadata(builtRecipe, handler, recipeIndex);
         return true;
     }
 
@@ -2071,7 +2089,8 @@ public class NeiRecipeExportProcessor extends PluginHelper {
             String handlerId,
             ICraftingHandler handler,
             RecipeType recipeType,
-            Object recipe) {
+            Object recipe,
+            int recipeIndex) {
         RecipeBuilder builder = new RecipeBuilder(exporter, recipeType);
 
         List<PositionedStack> outputs = readPositionedStacks(recipe, "getOutputs", "all");
@@ -2092,6 +2111,7 @@ public class NeiRecipeExportProcessor extends PluginHelper {
         com.github.dcysteine.nesql.sql.base.recipe.Recipe builtRecipe = builder.build();
         registerHandlerMetadata(handler, handlerId, builtRecipe);
         registerMobsInfoInfernalMetadata(recipe, builtRecipe, outputCount);
+        registerNativeFrameMetadata(builtRecipe, handler, recipeIndex);
         return true;
     }
 
@@ -2410,6 +2430,7 @@ public class NeiRecipeExportProcessor extends PluginHelper {
                             result,
                             ingredients,
                             others);
+                    registerNativeFrameMetadata(builtRecipe, handler, i);
                     exported++;
 
                 } catch (Exception e) {
@@ -2457,6 +2478,12 @@ public class NeiRecipeExportProcessor extends PluginHelper {
                     logger.error("Exception type: {}", e.getClass().getName());
                     logger.error("Exception message: {}", e.getMessage());
                     logger.error("Stack trace:", e);
+                    if (NativeNeiFrameExportRegistry.isEnabled()) {
+                        throw new IllegalStateException(
+                                "Native NEI frame export failed for recipe " + i
+                                        + " from handler " + handlerName,
+                                e);
+                    }
 
                     // 婵犵鈧啿鈧綊鎮樻径鎰強闁汇儲绗搖sh闂佺儵鏅濋…鍫ュ矗瑜嶉锝夊磼濮樺崬鐓戦梺鎸庣☉閻吋绔熼幒妤€绀嗘い鎰剁悼閸ㄥジ鎮?
                     if (e.getMessage() != null) {
@@ -2475,6 +2502,11 @@ public class NeiRecipeExportProcessor extends PluginHelper {
 
         } catch (Exception e) {
             logger.error("Error exporting handler: " + handlerName, e);
+            if (NativeNeiFrameExportRegistry.isEnabled()) {
+                throw new IllegalStateException(
+                        "Native NEI frame export failed for handler " + handlerName,
+                        e);
+            }
             return 0;
         }
     }
@@ -2528,6 +2560,7 @@ public class NeiRecipeExportProcessor extends PluginHelper {
                             result,
                             ingredients,
                             others);
+                    registerNativeFrameMetadata(builtRecipe, handler, i);
                     exported++;
 
                 } catch (Exception e) {
@@ -2537,6 +2570,12 @@ public class NeiRecipeExportProcessor extends PluginHelper {
                     logger.error("Exception type: {}", e.getClass().getName());
                     logger.error("Exception message: {}", e.getMessage());
                     logger.error("Stack trace:", e);
+                    if (NativeNeiFrameExportRegistry.isEnabled()) {
+                        throw new IllegalStateException(
+                                "Native NEI frame export failed for usage recipe " + i
+                                        + " from handler " + handlerName,
+                                e);
+                    }
 
                     // 闂佸搫绉村ú鈺咁敊閸ｄ勾ush闂備焦瀵ч悷銊╊敋?
                     if (e.getMessage() != null && e.getMessage().toLowerCase().contains("detached")) {
@@ -2549,8 +2588,40 @@ public class NeiRecipeExportProcessor extends PluginHelper {
 
         } catch (Exception e) {
             logger.error("Error exporting usage handler: " + handlerName, e);
+            if (NativeNeiFrameExportRegistry.isEnabled()) {
+                throw new IllegalStateException(
+                        "Native NEI frame export failed for usage handler " + handlerName,
+                        e);
+            }
             return 0;
         }
+    }
+
+    private void registerNativeFrameMetadata(
+            com.github.dcysteine.nesql.sql.base.recipe.Recipe builtRecipe,
+            IRecipeHandler handler,
+            int recipeIndex) {
+        if (!NativeNeiFrameExportRegistry.isEnabled()) {
+            return;
+        }
+        if (builtRecipe == null || handler == null) {
+            throw new IllegalStateException("Native NEI frame export requires a built recipe and live NEI handler");
+        }
+        Map<String, Object> nativeFrame = NativeNeiFrameExportRegistry.captureRecipeFrame(
+                builtRecipe.getId(),
+                handler,
+                recipeIndex);
+        if (nativeFrame == null) {
+            throw new IllegalStateException(
+                    "Native NEI frame export did not produce nativeFrame ABI for recipe "
+                            + builtRecipe.getId());
+        }
+        Map<String, Object> data = new LinkedHashMap<String, Object>();
+        data.put("nativeFrame", nativeFrame);
+        com.github.dcysteine.nesql.exporter.util.SpecialRecipeMetadataRegistry.registerMetadata(
+                builtRecipe.getId(),
+                new com.github.dcysteine.nesql.exporter.util.SpecialRecipeMetadataRegistry.SpecialRecipeMetadata(
+                        "NativeNEI_Frame", data));
     }
 }
 

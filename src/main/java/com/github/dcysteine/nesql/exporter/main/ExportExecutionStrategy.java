@@ -251,12 +251,16 @@ interface ExportExecutionStrategy {
         public void runCollectionStage(ExportContext exportContext, ExportRuntime exportRuntime) {
             try {
                 Logger.MOD.debug("Native UI compiler export: running plugin pipeline");
+                com.github.dcysteine.nesql.exporter.nativeui.NativeNeiFrameExportRegistry.begin(
+                        exportContext.paths.repositoryDirectory,
+                        true);
                 exportRuntime.activePlugins.get(com.github.dcysteine.nesql.sql.Plugin.BASE)
                         .getDatabase()
                         .setLegacyBasePostProcessingEnabled(false);
                 exportRuntime.runPluginPipeline();
                 Logger.MOD.debug("Native UI compiler export collection complete");
             } finally {
+                com.github.dcysteine.nesql.exporter.nativeui.NativeNeiFrameExportRegistry.end();
                 ExportPluginTimingReportWriter.write(exportContext, exportRuntime);
             }
         }

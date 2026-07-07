@@ -1,5 +1,6 @@
 package com.github.dcysteine.nesql.exporter.plugin.gregtech;
 
+import com.github.dcysteine.nesql.exporter.nativeui.NativeNeiFrameExportRegistry;
 import com.github.dcysteine.nesql.exporter.main.Logger;
 import com.github.dcysteine.nesql.exporter.plugin.PluginExporter;
 import com.github.dcysteine.nesql.exporter.plugin.PluginHelper;
@@ -10,16 +11,20 @@ import com.github.dcysteine.nesql.exporter.plugin.gregtech.util.GregTechUtil;
 import com.github.dcysteine.nesql.exporter.plugin.gregtech.util.Voltage;
 import com.github.dcysteine.nesql.sql.base.recipe.Recipe;
 import com.github.dcysteine.nesql.sql.base.recipe.RecipeType;
+import gregtech.nei.GTNEIDefaultHandler;
 import gregtech.api.util.GTRecipe;
 import net.minecraft.item.ItemStack;
 import net.minecraftforge.fluids.FluidStack;
 
 import java.util.ArrayList;
 import java.util.Collection;
+import java.util.LinkedHashMap;
 import java.util.List;
+import java.util.Map;
 
 public class GregTechRecipeProcessor extends PluginHelper {
     private final GregTechRecipeTypeHandler recipeTypeHandler;
+    private int nativeFrameQueueCount = 0;
 
     public GregTechRecipeProcessor(
             PluginExporter exporter, GregTechRecipeTypeHandler recipeTypeHandler) {
@@ -78,7 +83,14 @@ public class GregTechRecipeProcessor extends PluginHelper {
                     Recipe recipeEntity = builder.build();
                     gregTechRecipeFactory.get(
                             recipeEntity, GTRecipeMap, recipe, voltageTier, voltage, specialItems);
+                    registerNativeGtFrame(recipeEntity, GTRecipeMap, recipe);
                 } catch (Exception e) {
+                    if (NativeNeiFrameExportRegistry.isEnabled()) {
+                        throw new IllegalStateException(
+                                "Native GregTech NEI frame export failed for recipe map "
+                                        + GTRecipeMap.getName(),
+                                e);
+                    }
                     // This try-catch is sadly necessary. There's a few weird exceptions that get
                     // thrown. There's even some that lack a stack trace!
                     logger.error("Caught exception processing GregTech recipe!", e);
@@ -92,10 +104,47 @@ public class GregTechRecipeProcessor extends PluginHelper {
             }
 
             exporterState.flushEntityManager();
+            NativeNeiFrameExportRegistry.awaitPendingFrames();
             logger.info("Processed GregTech recipe map {} of {}", recipeMapCount, recipeMapTotal);
         }
 
+        NativeNeiFrameExportRegistry.awaitPendingFrames();
         logger.info("Finished processing GregTech recipe maps!");
+    }
+
+    private void registerNativeGtFrame(Recipe recipeEntity, GTRecipeMap recipeMap, GTRecipe gtRecipe) {
+        if (recipeEntity == null || recipeMap == null || gtRecipe == null
+                || !NativeNeiFrameExportRegistry.isEnabled()) {
+            return;
+        }
+        try {
+            GTNEIDefaultHandler handler =
+                    new GTNEIDefaultHandler(recipeMap.getRecipeMap().getDefaultRecipeCategory());
+            handler.arecipes.add(handler.new CachedDefaultRecipe(gtRecipe));
+            Map<String, Object> nativeFrame = NativeNeiFrameExportRegistry.captureRecipeFrame(
+                    recipeEntity.getId(),
+                    handler,
+                    0);
+            if (nativeFrame == null) {
+                throw new IllegalStateException(
+                        "Native GregTech NEI frame ABI was not produced for recipe "
+                                + recipeEntity.getId());
+            }
+            Map<String, Object> data = new LinkedHashMap<String, Object>();
+            data.put("nativeFrame", nativeFrame);
+            com.github.dcysteine.nesql.exporter.util.SpecialRecipeMetadataRegistry.registerMetadata(
+                    recipeEntity.getId(),
+                    new com.github.dcysteine.nesql.exporter.util.SpecialRecipeMetadataRegistry.SpecialRecipeMetadata(
+                            "NativeNEI_Frame", data));
+            nativeFrameQueueCount++;
+            if (nativeFrameQueueCount % 64 == 0) {
+                NativeNeiFrameExportRegistry.awaitPendingFrames();
+            }
+        } catch (Exception e) {
+            throw new IllegalStateException(
+                    "Failed to queue native GregTech NEI frame for recipe " + recipeEntity.getId(),
+                    e);
+        }
     }
 
 }

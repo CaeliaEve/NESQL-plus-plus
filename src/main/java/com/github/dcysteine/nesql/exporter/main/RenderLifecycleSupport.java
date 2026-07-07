@@ -2,6 +2,7 @@ package com.github.dcysteine.nesql.exporter.main;
 
 import com.github.dcysteine.nesql.exporter.util.render.RenderDispatcher;
 import com.github.dcysteine.nesql.exporter.util.render.Renderer;
+import com.github.dcysteine.nesql.exporter.util.render.NativeNeiFrameRenderer;
 import cpw.mods.fml.common.FMLCommonHandler;
 import cpw.mods.fml.common.Loader;
 import net.minecraft.util.EnumChatFormatting;
@@ -87,7 +88,8 @@ public final class RenderLifecycleSupport {
             return;
         }
         FMLCommonHandler.instance().bus().register(Renderer.INSTANCE);
+        FMLCommonHandler.instance().bus().register(NativeNeiFrameRenderer.INSTANCE);
         rendererHookRegistered = true;
-        Logger.MOD.info("Renderer tick hook registered lazily for export.");
+        Logger.MOD.info("Renderer tick hooks registered lazily for export.");
     }
 }

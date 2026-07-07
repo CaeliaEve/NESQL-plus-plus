@@ -8,6 +8,7 @@ import codechicken.nei.recipe.IUsageHandler;
 import codechicken.nei.recipe.TemplateRecipeHandler;
 
 import com.github.dcysteine.nesql.exporter.main.Logger;
+import com.github.dcysteine.nesql.exporter.nativeui.NativeNeiFrameExportRegistry;
 import com.github.dcysteine.nesql.exporter.util.IdUtil;
 
 import net.minecraft.item.ItemStack;
@@ -150,6 +151,7 @@ public class NeiRecipeBatchLoader {
                     // Export this handler immediately
                     long exportStartedAt = System.currentTimeMillis();
                     int exported = exporter.exportSingleCraftingHandler(handlerId, handlerName, workingHandler);
+                    NativeNeiFrameExportRegistry.awaitPendingFrames();
                     exportElapsedMs = System.currentTimeMillis() - exportStartedAt;
                     exportedForHandler = exported;
                     totalRecipes.addAndGet(exported);
@@ -191,6 +193,11 @@ public class NeiRecipeBatchLoader {
                 }
 
             } catch (Exception e) {
+                if (NativeNeiFrameExportRegistry.isEnabled()) {
+                    throw new IllegalStateException(
+                            "Native NEI frame export failed for handler " + handlerName,
+                            e);
+                }
                 Logger.MOD.error("Error processing handler: " + handlerName, e);
                 Logger.chatMessage(String.format("[%d/%d] Skipped: %s (error)",
                         handlerIndex, GuiCraftingRecipe.craftinghandlers.size(), handlerName));
@@ -268,6 +275,7 @@ public class NeiRecipeBatchLoader {
                         baseHandler.getHandlerId(),
                         handlerName,
                         baseHandler);
+                NativeNeiFrameExportRegistry.awaitPendingFrames();
                 Logger.chatMessage(String.format("[%d/%d] Completed: %s (%d recipes)",
                         handlerIndex, totalHandlers, handlerName, exported));
                 return exported;
@@ -291,7 +299,14 @@ public class NeiRecipeBatchLoader {
                             derived.getHandlerId(),
                             derived.getRecipeName(),
                             derived);
-                } catch (Exception ignored) {
+                    NativeNeiFrameExportRegistry.awaitPendingFrames();
+                } catch (Exception e) {
+                    if (NativeNeiFrameExportRegistry.isEnabled()) {
+                        throw new IllegalStateException(
+                                "Native NEI frame export failed while processing derived handler "
+                                        + handlerName,
+                                e);
+                    }
                 }
             }
 
@@ -303,6 +318,11 @@ public class NeiRecipeBatchLoader {
             }
             return exported;
         } catch (Exception e) {
+            if (NativeNeiFrameExportRegistry.isEnabled()) {
+                throw new IllegalStateException(
+                        "Native NEI frame export failed for non-template handler " + handlerName,
+                        e);
+            }
             Logger.MOD.error("Error processing non-template crafting handler: " + handlerName, e);
             Logger.chatMessage(String.format("[%d/%d] Skipped: %s (error)",
                     handlerIndex, totalHandlers, handlerName));

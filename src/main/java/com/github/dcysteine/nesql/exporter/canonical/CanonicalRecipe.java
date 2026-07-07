@@ -22,6 +22,7 @@ public class CanonicalRecipe {
     public List<Map<String, Object>> fluidOutputs;
     public Map<String, Object> probabilities;
     public Map<String, Object> metadata;
+    public Map<String, Object> nativeFrame;
     public Map<String, Object> renderHints;
     public Map<String, Object> extensions;
 }
