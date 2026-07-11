@@ -58,8 +58,9 @@ final class NativeSpriteMetadataExtractor {
             metadata.maxU = sprite.getMaxU();
             metadata.minV = sprite.getMinV();
             metadata.maxV = sprite.getMaxV();
-            metadata.animated = sprite.hasAnimationMetadata();
             metadata.frameCount = sprite.getFrameCount();
+            metadata.animated = sprite.hasAnimationMetadata()
+                    || (metadata.frameCount != null && metadata.frameCount > 1);
 
             AnimationTimeline resolvedTimeline = resolveAnimationTimeline(sprite, job, metadata.frameCount);
             if (resolvedTimeline != null) {
@@ -168,9 +169,7 @@ final class NativeSpriteMetadataExtractor {
             return timelineFromRuntimeMetadata(animation, runtimeFrameCount);
         }
 
-        if (Boolean.TRUE.equals(sprite.hasAnimationMetadata())
-                && runtimeFrameCount != null
-                && runtimeFrameCount > 0) {
+        if (runtimeFrameCount != null && runtimeFrameCount > 1) {
             return createSequentialTimeline(runtimeFrameCount, 1);
         }
 

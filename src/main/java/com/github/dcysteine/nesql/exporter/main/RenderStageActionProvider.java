@@ -39,7 +39,6 @@ final class RenderStageActionProvider implements ExportStageActionProvider {
     public void register(EnumMap<ExportStage, ExportStageAction> actions, ExportStageActionContext context) {
         actions.put(ExportStage.RENDER_IMAGES, () -> {
             if (context.stageState.renderingImages) {
-                com.github.dcysteine.nesql.exporter.nativeui.NativeNeiFrameExportRegistry.awaitPendingFrames();
                 RenderLifecycleSupport.awaitRenderCompletion();
                 context.stageState.renderAssets =
                         ExportWriterSupport.collectRenderAssets(context.exportContext.paths.repositoryDirectory);

@@ -9,7 +9,6 @@ import com.google.gson.JsonArray;
 import com.google.gson.JsonElement;
 import com.google.gson.JsonObject;
 import com.google.gson.JsonParser;
-import net.minecraft.util.ResourceLocation;
 
 import java.io.BufferedReader;
 import java.io.File;
@@ -21,9 +20,6 @@ import java.io.InputStreamReader;
 import java.io.OutputStreamWriter;
 import java.io.Writer;
 import java.nio.charset.StandardCharsets;
-import java.nio.file.AtomicMoveNotSupportedException;
-import java.nio.file.Files;
-import java.nio.file.StandardCopyOption;
 import java.text.SimpleDateFormat;
 import java.util.ArrayList;
 import java.util.Date;
@@ -313,7 +309,6 @@ final class RawExportNeiFactWriter {
         JsonArray handlerRows = new JsonArray();
         JsonArray layoutRows = new JsonArray();
         Set<String> seenHandlers = new LinkedHashSet<String>();
-        boolean requiresGtNeiBackgroundAsset = false;
         int ordinal = 0;
         for (JsonElement element : sourceEntries) {
             if (element == null || !element.isJsonObject()) {
@@ -340,8 +335,6 @@ final class RawExportNeiFactWriter {
             width = NeiUiTemplateLayoutSpecs.boundedSurfaceWidth(layoutKind, width);
             height = NeiUiTemplateLayoutSpecs.boundedSurfaceHeight(layoutKind, height);
             JsonObject nativeBackground = buildNativeBackground(source, family, layoutKind, width, height, yShift);
-            requiresGtNeiBackgroundAsset = requiresGtNeiBackgroundAsset
-                    || isGtModularUiBackground(nativeBackground);
 
             JsonObject handler = new JsonObject();
             handler.addProperty("schemaVersion", NativeUiExportAbi.schema(schemaVersion, "nei-handler"));
@@ -388,19 +381,9 @@ final class RawExportNeiFactWriter {
         }
 
         HandlerMetadataCounts counts = new HandlerMetadataCounts();
-        if (requiresGtNeiBackgroundAsset) {
-            materializeGtNeiBackgroundAsset(rawDir);
-        }
         counts.handlers = writeArrayAsJsonl(handlerRows, new File(rawDir, NativeUiExportAbi.NEI_HANDLERS_FILE));
         counts.layouts = writeArrayAsJsonl(layoutRows, new File(rawDir, NativeUiExportAbi.NEI_HANDLER_LAYOUTS_FILE));
         return counts;
-    }
-
-    private static boolean isGtModularUiBackground(JsonObject background) {
-        return background != null
-                && "gt-modular-ui".equals(readString(background, "kind", ""))
-                && ("captured".equals(readString(background, "status", ""))
-                || "semantic".equals(readString(background, "status", "")));
     }
 
     private JsonObject buildNativeBackground(
@@ -421,12 +404,10 @@ final class RawExportNeiFactWriter {
         background.addProperty("scaleMode", NativeUiExportAbi.SCALE_MODE);
         background.addProperty("anchor", NativeUiExportAbi.ANCHOR);
         if ("gregtech-machine".equals(family)) {
-            background.addProperty("status", NativeUiExportAbi.BACKGROUND_STATUS_CAPTURED);
+            background.addProperty("status", NativeUiExportAbi.BACKGROUND_STATUS_SEMANTIC);
             background.addProperty("kind", NativeUiExportAbi.BACKGROUND_KIND_GT_MODULAR_UI);
-            background.addProperty("source", "GTNEIDefaultHandler.drawUI(ModularWindow.getBackground)");
+            background.addProperty("source", "GTNEIDefaultHandler slot geometry reference");
             background.addProperty("drawable", "GTUITextures.BACKGROUND_NEI_SINGLE_RECIPE");
-            background.addProperty("assetRef", NativeUiExportAbi.GT_NEI_BACKGROUND_ASSET_REF);
-            background.addProperty("resource", NativeUiExportAbi.GT_NEI_BACKGROUND_RESOURCE);
             addNineSliceBackgroundGeometry(background, 3, 3, Math.max(0, width - 6), Math.max(0, height - yShift - 6));
             background.addProperty("captureRequired", false);
             return background;
@@ -465,42 +446,6 @@ final class RawExportNeiFactWriter {
 
     private static JsonObject cloneJsonObject(JsonObject source) {
         return new JsonParser().parse(source.toString()).getAsJsonObject();
-    }
-
-    private static void materializeGtNeiBackgroundAsset(File rawDir) throws IOException {
-        File target = new File(rawDir, NativeUiExportAbi.GT_NEI_BACKGROUND_ASSET_REF.replace('/', File.separatorChar));
-        File parent = target.getParentFile();
-        if (parent != null) {
-            ensureDirectory(parent);
-        }
-        File temporary = new File(parent, target.getName() + ".tmp");
-        deleteIfExists(temporary);
-            ResourceLocation location = new ResourceLocation(NativeUiExportAbi.GT_NEI_BACKGROUND_RESOURCE);
-        try (InputStream input = net.minecraft.client.Minecraft.getMinecraft()
-                .getResourceManager()
-                .getResource(location)
-                .getInputStream();
-             FileOutputStream output = new FileOutputStream(temporary)) {
-            byte[] buffer = new byte[64 * 1024];
-            int read;
-            while ((read = input.read(buffer)) >= 0) {
-                if (read > 0) {
-                    output.write(buffer, 0, read);
-                }
-            }
-        } catch (Exception e) {
-            deleteIfExists(temporary);
-            throw new IOException("Failed to materialize required GT NEI ModularUI background asset: " + location, e);
-        }
-        if (!temporary.isFile() || temporary.length() <= 0L) {
-            deleteIfExists(temporary);
-            throw new IOException("Materialized GT NEI ModularUI background asset is empty: " + location);
-        }
-        try {
-            Files.move(temporary.toPath(), target.toPath(), StandardCopyOption.REPLACE_EXISTING, StandardCopyOption.ATOMIC_MOVE);
-        } catch (AtomicMoveNotSupportedException ignored) {
-            Files.move(temporary.toPath(), target.toPath(), StandardCopyOption.REPLACE_EXISTING);
-        }
     }
 
     private static void addImageRegion(JsonObject layout, JsonObject source) {
@@ -743,23 +688,6 @@ final class RawExportNeiFactWriter {
     private static void ensureDirectory(File directory) throws IOException {
         if (directory != null && !directory.exists() && !directory.mkdirs()) {
             throw new IOException("Failed to create directory: " + directory.getAbsolutePath());
-        }
-    }
-
-    private static void deleteIfExists(File file) throws IOException {
-        if (file == null || !file.exists()) {
-            return;
-        }
-        if (file.isDirectory()) {
-            File[] children = file.listFiles();
-            if (children != null) {
-                for (File child : children) {
-                    deleteIfExists(child);
-                }
-            }
-        }
-        if (!file.delete() && file.exists()) {
-            throw new IOException("Failed to delete file: " + file.getAbsolutePath());
         }
     }
 

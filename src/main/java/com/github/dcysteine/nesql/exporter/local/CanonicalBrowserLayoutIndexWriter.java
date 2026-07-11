@@ -244,8 +244,17 @@ public class CanonicalBrowserLayoutIndexWriter {
 
     private BrowserLayoutIndex buildNeiRuntimeIndex(List<BrowserItemCandidate> candidates) {
         try {
-            List<net.minecraft.item.ItemStack> runtimeItems = collectNeiRuntimeItems();
+            List<net.minecraft.item.ItemStack> runtimeItems = collectNeiRuntimeItems(candidates.size());
             if (runtimeItems.isEmpty()) {
+                return null;
+            }
+            int minimumSaneRuntimeItems = Math.min(1000, Math.max(100, candidates.size() / 10));
+            if (candidates.size() > minimumSaneRuntimeItems && runtimeItems.size() < minimumSaneRuntimeItems) {
+                Logger.MOD.warn(
+                        "NEI runtime item snapshot is suspiciously small: {} runtime stacks for {} visible candidates. "
+                                + "Ignoring it so the exporter falls back to deterministic full-browser ordering.",
+                        runtimeItems.size(),
+                        candidates.size());
                 return null;
             }
 
@@ -303,38 +312,15 @@ public class CanonicalBrowserLayoutIndexWriter {
                 assignments.put(candidate.itemId, assignment);
             }
 
-            // Keep augmented/export-only stacks available after the true NEI list so recipe-only variants
-            // (for example synthesized Thaumcraft wand combinations) do not disappear from NeoNEI.
-            List<BrowserItemCandidate> missingCandidates = new ArrayList<>();
+            // When the runtime NEI ItemPanel is available, it is the browser source of truth.
+            // Do not append export-only recipe display stacks here: those include EEC/MobsInfo
+            // NBT drops and other recipe-only variants that belong in recipe details, not the
+            // right-side NEI browser. Keep a count for diagnostics only.
+            int suppressedExportOnlyItems = 0;
             for (BrowserItemCandidate candidate : candidates) {
                 if (!seenItemIds.contains(candidate.itemId)) {
-                    missingCandidates.add(candidate);
+                    suppressedExportOnlyItems++;
                 }
-            }
-            missingCandidates.sort(CanonicalBrowserLayoutIndexWriter::compareBrowserOrder);
-            Map<String, BrowserAssignment> fallbackAssignments = buildFallbackAssignments(missingCandidates);
-            for (BrowserItemCandidate candidate : missingCandidates) {
-                candidate.browserOrder = browserOrder++;
-                orderedCandidates.add(candidate);
-                BrowserAssignment assignment = fallbackAssignments.get(candidate.itemId);
-                if (assignment == null) {
-                    assignment = new BrowserAssignment();
-                    assignment.itemId = candidate.itemId;
-                    assignment.groupSize = 1;
-                    assignment.representativeItemId = candidate.itemId;
-                }
-                if (assignment.groupKey == null || assignment.groupSize <= 1) {
-                    assignment.groupSortOrder = nextGroupSortOrder++;
-                } else {
-                    String fallbackGroupKey = "fallback:" + assignment.groupKey;
-                    assignment.groupKey = fallbackGroupKey;
-                    assignment.groupSource = "fallback";
-                    if (!groupSortOrders.containsKey(fallbackGroupKey)) {
-                        groupSortOrders.put(fallbackGroupKey, nextGroupSortOrder++);
-                    }
-                    assignment.groupSortOrder = groupSortOrders.get(fallbackGroupKey);
-                }
-                assignments.put(candidate.itemId, assignment);
             }
 
             for (Map.Entry<String, List<String>> entry : groupMembers.entrySet()) {
@@ -361,7 +347,8 @@ public class CanonicalBrowserLayoutIndexWriter {
                     "nei-collapsibleitems-runtime:v1");
             index.neiRuntimeSnapshot = true;
             index.neiRuntimeItemCount = runtimeItems.size();
-            index.exportOnlyItemCount = missingCandidates.size();
+            index.exportOnlyItemCount = suppressedExportOnlyItems;
+            index.exportOnlyItemsSuppressed = true;
             return index;
         } catch (Throwable t) {
             Logger.MOD.warn("Failed to build NEI runtime browser snapshot; falling back", t);
@@ -385,15 +372,32 @@ public class CanonicalBrowserLayoutIndexWriter {
         return itemId != null && itemId.startsWith("i~") ? itemId.substring(2) : itemId;
     }
 
-    private static List<net.minecraft.item.ItemStack> collectNeiRuntimeItems() {
+    private static List<net.minecraft.item.ItemStack> collectNeiRuntimeItems(int visibleCandidateCount) {
         List<net.minecraft.item.ItemStack> panelItems = ItemPanels.itemPanel != null
                 ? ItemPanels.itemPanel.getItems()
                 : null;
-        if (panelItems != null && !panelItems.isEmpty()) {
-            return new ArrayList<>(panelItems);
-        }
         if (ItemList.items != null && !ItemList.items.isEmpty()) {
+            if (panelItems != null
+                    && !panelItems.isEmpty()
+                    && panelItems.size() < ItemList.items.size()) {
+                Logger.MOD.info(
+                        "NEI ItemPanel snapshot has {} entries but global ItemList has {} entries; "
+                                + "using global ItemList to avoid exporting the active search/filter view as the browser.",
+                        panelItems.size(),
+                        ItemList.items.size());
+            }
+            Logger.MOD.info(
+                    "Using NEI global ItemList for browser order: {} stacks, {} visible NESQL candidates.",
+                    ItemList.items.size(),
+                    visibleCandidateCount);
             return new ArrayList<>(ItemList.items);
+        }
+        if (panelItems != null && !panelItems.isEmpty()) {
+            Logger.MOD.info(
+                    "Using NEI ItemPanel browser snapshot: {} stacks, {} visible NESQL candidates.",
+                    panelItems.size(),
+                    visibleCandidateCount);
+            return new ArrayList<>(panelItems);
         }
         return new ArrayList<>();
     }
@@ -1316,6 +1320,7 @@ public class CanonicalBrowserLayoutIndexWriter {
         boolean neiRuntimeSnapshot;
         int neiRuntimeItemCount;
         int exportOnlyItemCount;
+        boolean exportOnlyItemsSuppressed;
         int guidFilterRuleCount;
         int hiddenItemRuleCount;
         int hiddenItemCount;

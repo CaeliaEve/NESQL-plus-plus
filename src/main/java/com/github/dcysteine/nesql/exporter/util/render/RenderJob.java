@@ -78,6 +78,10 @@ public abstract class RenderJob {
             return false;
         }
 
+        if (getType() == JobType.ITEM && hasAnimatedCompositeTexture(getItem())) {
+            return false;
+        }
+
         if (getType() == JobType.ITEM && shouldTrustNativeSpriteDespiteInventoryRenderer(getItem())) {
             return true;
         }
@@ -163,6 +167,18 @@ public abstract class RenderJob {
             return "animated-custom-renderer";
         }
 
+        if (hasAnimatedRenderPassTexture(stack)) {
+            return "animated-render-pass-texture";
+        }
+
+        if (hasAnimatedAuxiliaryTexture(stack)) {
+            return "animated-auxiliary-texture";
+        }
+
+        if (hasAnimatedContainedFluidTexture(stack)) {
+            return "animated-contained-fluid";
+        }
+
         if (hasAnimatedTexture(stack)) {
             return "animated-texture";
         }
@@ -213,6 +229,9 @@ public abstract class RenderJob {
                 || hasGregTechAnimation(stack)
                 || hasGregTechMachineAnimation(stack)
                 || hasAnimatedCustomRenderer(stack)
+                || hasAnimatedRenderPassTexture(stack)
+                || hasAnimatedAuxiliaryTexture(stack)
+                || hasAnimatedContainedFluidTexture(stack)
                 || hasAnimatedTexture(stack);
     }
 
@@ -243,6 +262,7 @@ public abstract class RenderJob {
         return AnimatedItemRegistry.INSTANCE.requiresFramebufferAnimationCapture(stack)
                 || hasAnimatedTexture(stack)
                 || hasAnimatedRenderPassTexture(stack)
+                || hasAnimatedContainedFluidTexture(stack)
                 || hasAnimatedAuxiliaryTexture(stack);
     }
 
@@ -294,6 +314,7 @@ public abstract class RenderJob {
         markAuxiliaryAnimatedTexture(item, "getMaskTexture", new Class<?>[0], new Object[0]);
         markAuxiliaryAnimatedTexture(item, "getHaloTexture", new Class<?>[0], new Object[0]);
         markAuxiliaryAnimatedTexture(item, "getOverlayIcon", new Class<?>[0], new Object[0]);
+        markContainedFluidTexture(stack);
     }
 
     /**
@@ -387,6 +408,48 @@ public abstract class RenderJob {
         return false;
     }
 
+    private boolean hasAnimatedCompositeTexture(ItemStack stack) {
+        return hasSecondaryAnimatedRenderPassTexture(stack)
+                || hasAnimatedAuxiliaryTexture(stack)
+                || hasAnimatedContainedFluidTexture(stack);
+    }
+
+    private boolean hasSecondaryAnimatedRenderPassTexture(ItemStack stack) {
+        if (stack == null || stack.getItem() == null) {
+            return false;
+        }
+
+        net.minecraft.item.Item item = stack.getItem();
+        int passes = 1;
+        try {
+            if (item.requiresMultipleRenderPasses()) {
+                passes = Math.max(passes, item.getRenderPasses(stack.getItemDamage()));
+            }
+        } catch (Throwable ignored) {
+        }
+
+        if (passes <= 1) {
+            return false;
+        }
+
+        for (int pass = 1; pass < passes; pass++) {
+            try {
+                if (isAnimatedIcon(item.getIcon(stack, pass))) {
+                    return true;
+                }
+            } catch (Throwable ignored) {
+            }
+            try {
+                if (isAnimatedIcon(item.getIconFromDamageForRenderPass(stack.getItemDamage(), pass))) {
+                    return true;
+                }
+            } catch (Throwable ignored) {
+            }
+        }
+
+        return false;
+    }
+
     private boolean hasAnimatedAuxiliaryTexture(ItemStack stack) {
         if (stack == null || stack.getItem() == null) {
             return false;
@@ -428,6 +491,19 @@ public abstract class RenderJob {
                         new Object[0]);
     }
 
+    private boolean hasAnimatedContainedFluidTexture(ItemStack stack) {
+        FluidStack containedFluid = resolveContainedFluid(stack);
+        if (containedFluid == null || containedFluid.getFluid() == null) {
+            return false;
+        }
+
+        try {
+            return isAnimatedIcon(containedFluid.getFluid().getIcon(containedFluid));
+        } catch (Throwable ignored) {
+            return false;
+        }
+    }
+
     /**
      * Check if an icon supports animation (implements IPatchedTextureAtlasSprite).
      */
@@ -457,6 +533,30 @@ public abstract class RenderJob {
             Method method = target.getClass().getMethod(methodName, parameterTypes);
             TextureAnimationInspector.markIconForAnimationUpdate(method.invoke(target, args));
         } catch (Throwable ignored) {
+        }
+    }
+
+    private void markContainedFluidTexture(ItemStack stack) {
+        FluidStack containedFluid = resolveContainedFluid(stack);
+        if (containedFluid == null || containedFluid.getFluid() == null) {
+            return;
+        }
+
+        try {
+            TextureAnimationInspector.markIconForAnimationUpdate(containedFluid.getFluid().getIcon(containedFluid));
+        } catch (Throwable ignored) {
+        }
+    }
+
+    private FluidStack resolveContainedFluid(ItemStack stack) {
+        if (stack == null || stack.getItem() == null) {
+            return null;
+        }
+
+        try {
+            return gregtech.api.util.GTUtility.getFluidForFilledItem(stack, true);
+        } catch (Throwable ignored) {
+            return null;
         }
     }
 

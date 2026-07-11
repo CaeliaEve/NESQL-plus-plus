@@ -8,8 +8,9 @@ abstract class FacadeSemanticFamily extends AbstractSemanticFamily {
     @Override
     public Map<String, String> facets(Item item, ParsedNbt nbt) {
         Map<String, String> facets = newFacets();
-        putIfPresent(facets, "block", firstNbtValue(nbt, "block", "source_block", "sourceBlock"));
-        putIfPresent(facets, "metadata", firstNbtValue(nbt, "metadata", "meta"));
+        putIfPresent(facets, "block", firstNbtValue(nbt, "block", "source_block", "sourceBlock", "sourceBlockId", "itemname"));
+        putIfPresent(facets, "metadata", firstNbtValue(nbt, "metadata", "meta", "sourceBlockMeta"));
+        putIfPresent(facets, "mod", firstNbtValue(nbt, "modid"));
         putIfPresent(facets, "hollow", firstNbtValue(nbt, "hollow"));
         putIfPresent(facets, "transparent", firstNbtValue(nbt, "transparent"));
         putIfPresent(facets, "facadeType", firstNbtValue(nbt, "type", "facadeType"));

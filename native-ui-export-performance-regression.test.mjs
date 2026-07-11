@@ -27,6 +27,9 @@ test('NEI loader avoids duplicate or informational full item-universe scans', ()
 
   assert.match(neiBatchLoader, /shouldSkipCraftingHandler\(baseHandler\)/);
   assert.match(neiBatchLoader, /gregtech\.nei\.GTNEIDefaultHandler/);
+  assert.match(neiBatchLoader, /codechicken\.nei\.recipe\.ShapedRecipeHandler/);
+  assert.match(neiBatchLoader, /codechicken\.nei\.recipe\.ShapelessRecipeHandler/);
+  assert.match(neiBatchLoader, /codechicken\.nei\.recipe\.FurnaceRecipeHandler/);
   assert.match(neiBatchLoader, /NEIRecipeInfoHandler/);
   assert.match(neiBatchLoader, /tryLoadAllRecipes\(handler\)/);
   assert.match(neiBatchLoader, /getMethod\("loadAllRecipes"\)/);

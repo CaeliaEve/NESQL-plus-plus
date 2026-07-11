@@ -25,7 +25,12 @@ final class GregTechToolFamily extends AbstractSemanticFamily {
         putIfPresent(facets, "primaryMaterial", firstNbtValue(nbt, "PrimaryMaterial", "primaryMaterial"));
         putIfPresent(facets, "secondaryMaterial", firstNbtValue(nbt, "SecondaryMaterial", "secondaryMaterial"));
         putIfPresent(facets, "voltage", firstNbtValue(nbt, "Voltage", "voltage"));
-        putIfPresent(facets, "charge", firstNbtValue(nbt, "Charge", "Energy", "Electric"));
+        putIfPresent(facets, "charge", firstNbtValue(nbt, "Charge", "Energy", "Electric", "GT.ItemCharge"));
+        putIfPresent(facets, "fluid", firstNbtValue(nbt, "mFluid", "FluidName", "fluidName"));
+        putIfPresent(facets, "fluidAmount", firstNbtValue(nbt, "mFluidAmount", "Amount", "amount"));
+        putIfPresent(facets, "capacity", firstNbtValue(nbt, "mCapacity", "Capacity", "capacity"));
+        putIfPresent(facets, "meta", firstNbtValue(nbt, "mMeta", "meta"));
+        putIfPresent(facets, "toolDamage", String.valueOf(item.getItemDamage()));
         return facets;
     }
 }
@@ -95,6 +100,8 @@ final class TConstructToolFamily extends AbstractSemanticFamily {
         putIfPresent(facets, "handle", firstNbtValue(nbt, "RenderHandle", "Handle"));
         putIfPresent(facets, "accessory", firstNbtValue(nbt, "RenderAccessory", "Accessory"));
         putIfPresent(facets, "durability", firstNbtValue(nbt, "TotalDurability", "Durability"));
+        putIfPresent(facets, "loaded", firstNbtValue(nbt, "Loaded"));
+        putIfPresent(facets, "toolType", item.getInternalName());
         return facets;
     }
 }

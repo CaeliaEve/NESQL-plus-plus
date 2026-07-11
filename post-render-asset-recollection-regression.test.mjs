@@ -4,7 +4,7 @@ import assert from 'node:assert/strict';
 const renderStageProvider = fs.readFileSync(
   'src/main/java/com/github/dcysteine/nesql/exporter/main/RenderStageActionProvider.java',
   'utf8',
-);
+).replaceAll('\r\n', '\n');
 
 const renderStage = renderStageProvider.match(/actions\.put\(ExportStage\.RENDER_IMAGES,[\s\S]*?\n        \}\);/);
 assert(renderStage, 'RENDER_IMAGES stage action must exist');

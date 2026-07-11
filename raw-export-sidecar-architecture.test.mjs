@@ -284,7 +284,8 @@ test('raw NEI browser and handler facts are split from sidecar orchestration', (
   assert.match(neiFactWriter, /writeGuidFilterRules/);
   assert.match(neiFactWriter, /writeHiddenItemRules/);
   assert.match(neiFactWriter, /writeHandlerMetadata/);
-  assert.match(neiFactWriter, /materializeGtNeiBackgroundAsset/);
+  assert.doesNotMatch(neiFactWriter, /materializeGtNeiBackgroundAsset/);
+  assert.match(neiFactWriter, /GTNEIDefaultHandler slot geometry reference/);
 });
 
 test('native UI ABI validator owns bounds and missing-surface validation', () => {

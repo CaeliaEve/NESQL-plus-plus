@@ -8,7 +8,7 @@ abstract class EntityCaptureSemanticFamily extends AbstractSemanticFamily {
     @Override
     public Map<String, String> facets(Item item, ParsedNbt nbt) {
         Map<String, String> facets = newFacets();
-        putIfPresent(facets, "entity", firstNbtValue(nbt, "Name", "EntityId", "EntityID", "mobType", "MobType", "id"));
+        putIfPresent(facets, "entity", firstNbtValue(nbt, "Name", "EntityId", "EntityID", "mobType", "MobType", "mob", "entity", "id"));
         putIfPresent(facets, "skeletonType", firstNbtValue(nbt, "SkeletonType"));
         return facets;
     }

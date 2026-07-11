@@ -195,8 +195,6 @@ public final class RawExportUiTemplateCatalogWriter {
             if (template.nativeBackground != null) {
                 canonical.append(nullToEmpty(template.nativeBackground.status)).append(':')
                         .append(nullToEmpty(template.nativeBackground.kind)).append(':')
-                        .append(nullToEmpty(template.nativeBackground.assetRef)).append(':')
-                        .append(nullToEmpty(template.nativeBackground.resource)).append(':')
                         .append(nullToEmpty(template.nativeBackground.drawable)).append(':')
                         .append(nullToEmpty(template.nativeBackground.scaling));
                 if (template.nativeBackground.texture != null) {

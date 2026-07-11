@@ -9,10 +9,36 @@ abstract class GeneticsSemanticFamily extends AbstractSemanticFamily {
     public Map<String, String> facets(Item item, ParsedNbt nbt) {
         Map<String, String> facets = newFacets();
         putIfPresent(facets, "root", firstNbtValue(nbt, "root"));
-        putIfPresent(facets, "species", firstNbtValue(nbt, "species", "Species"));
-        putIfPresent(facets, "allele", firstNbtValue(nbt, "allele"));
+        putIfPresent(facets, "species", firstNbtValue(nbt, "species", "Species", "UID0"));
+        putIfPresent(facets, "allele", firstNbtValue(nbt, "allele", "UID1"));
         putIfPresent(facets, "chromosomes", firstNbtValue(nbt, "Chromosomes", "chromo"));
+        putIfPresent(facets, "analyzed", firstNbtValue(nbt, "IsAnalyzed"));
+        putIfPresent(facets, "health", firstNbtValue(nbt, "Health", "MaxH"));
+        putIfPresent(facets, "kind", geneticsKind(item));
         return facets;
+    }
+
+    private static String geneticsKind(Item item) {
+        String internal = lower(item.getInternalName());
+        if (internal.contains("queen")) {
+            return "queen";
+        }
+        if (internal.contains("princess")) {
+            return "princess";
+        }
+        if (internal.contains("drone")) {
+            return "drone";
+        }
+        if (internal.contains("larvae") || internal.contains("larva")) {
+            return "larvae";
+        }
+        if (internal.contains("serum")) {
+            return "serum";
+        }
+        if (internal.contains("template")) {
+            return "template";
+        }
+        return null;
     }
 }
 

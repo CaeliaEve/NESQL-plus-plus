@@ -7,6 +7,7 @@ import com.google.gson.JsonArray;
 import com.google.gson.JsonElement;
 import com.google.gson.JsonObject;
 import com.google.gson.JsonParser;
+import com.google.gson.JsonPrimitive;
 import net.minecraft.util.EnumChatFormatting;
 
 import java.io.BufferedReader;
@@ -95,6 +96,7 @@ final class SemanticIdentityQuickCheckRunner {
             SemanticItemIdentityDiagnosticsWriter.SemanticAuditSummary summary) throws Exception {
         refreshReportFile(new File(rawExportDirectory, "export_report.json"), summary);
         refreshReportFile(new File(rawExportDirectory, "validation/export_report.json"), summary);
+        refreshValidationReportFile(new File(rawExportDirectory, "validation_report.json"), rawExportDirectory, summary);
         refreshManifestFile(new File(rawExportDirectory, "manifest.json"), summary);
     }
 
@@ -133,6 +135,41 @@ final class SemanticIdentityQuickCheckRunner {
         writeJson(manifestFile, root);
     }
 
+    private static void refreshValidationReportFile(
+            File validationReportFile,
+            File rawExportDirectory,
+            SemanticItemIdentityDiagnosticsWriter.SemanticAuditSummary summary) throws Exception {
+        if (!validationReportFile.exists()) {
+            return;
+        }
+        JsonObject root = readJsonObject(validationReportFile);
+        if (root == null) {
+            return;
+        }
+        JsonObject semanticAudit = readJsonObject(
+                new File(rawExportDirectory, "validation/semantic/parametric-family-audit.json"));
+        JsonArray missingFacetFamilies = semanticAudit == null
+                ? new JsonArray()
+                : array(semanticAudit, "missingFacetFamilies");
+        JsonArray missingSortKeyFamilies = semanticAudit == null
+                ? new JsonArray()
+                : array(semanticAudit, "missingSortKeyFamilies");
+        JsonArray topUnclassifiedFamilyActions = semanticAudit == null
+                ? new JsonArray()
+                : array(semanticAudit, "topUnclassifiedFamilyActions");
+
+        applyFlatSemanticCounts(root, summary);
+        root.addProperty("semanticClassificationCoverageRatio", ratio(summary.classifiedTaggedItems, summary.taggedItems));
+        root.addProperty("semanticMissingFacetFamilyCount", missingFacetFamilies.size());
+        root.addProperty("semanticMissingSortKeyFamilyCount", missingSortKeyFamilies.size());
+        root.add("semanticMissingFacetFamilies", missingFacetFamilies);
+        root.add("semanticMissingSortKeyFamilies", missingSortKeyFamilies);
+        root.add("semanticTopUnclassifiedFamilyActions", topUnclassifiedFamilyActions);
+        rewriteSemanticWarnings(root, missingFacetFamilies.size(), missingSortKeyFamilies.size());
+        refreshReadinessFromIssuesAndWarnings(root);
+        writeJson(validationReportFile, root);
+    }
+
     private static void applySemanticCounts(
             JsonObject counts,
             SemanticItemIdentityDiagnosticsWriter.SemanticAuditSummary summary) {
@@ -146,6 +183,68 @@ final class SemanticIdentityQuickCheckRunner {
         counts.addProperty("semanticVariants", summary.variants);
         counts.addProperty("semanticPayloads", summary.payloads);
         counts.addProperty("semanticIdentityMapRows", summary.identityMapRows);
+    }
+
+    private static void applyFlatSemanticCounts(
+            JsonObject root,
+            SemanticItemIdentityDiagnosticsWriter.SemanticAuditSummary summary) {
+        root.addProperty("semanticTotalItems", summary.totalItems);
+        root.addProperty("semanticTaggedItems", summary.taggedItems);
+        root.addProperty("semanticClassifiedTaggedItems", summary.classifiedTaggedItems);
+        root.addProperty("semanticUnclassifiedTaggedItems", summary.unclassifiedTaggedItems);
+        root.addProperty("semanticFamilyCount", summary.familyCount);
+        root.addProperty("semanticItems", summary.semanticItems);
+        root.addProperty("semanticVariants", summary.variants);
+        root.addProperty("semanticPayloads", summary.payloads);
+        root.addProperty("semanticIdentityMapRows", summary.identityMapRows);
+    }
+
+    private static double ratio(long numerator, long denominator) {
+        if (denominator <= 0L) {
+            return 1.0d;
+        }
+        return Math.round(((double) numerator / (double) denominator) * 10000.0d) / 10000.0d;
+    }
+
+    private static void rewriteSemanticWarnings(
+            JsonObject root,
+            int missingFacetFamilyCount,
+            int missingSortKeyFamilyCount) {
+        JsonArray existing = array(root, "warnings");
+        JsonArray updated = new JsonArray();
+        for (int i = 0; i < existing.size(); i++) {
+            JsonElement element = existing.get(i);
+            String warning = element == null || element.isJsonNull() ? "" : element.getAsString();
+            if (warning.startsWith("Semantic families missing facet extraction:")
+                    || warning.startsWith("Semantic families missing stable sort keys:")) {
+                continue;
+            }
+            updated.add(new JsonPrimitive(warning));
+        }
+        if (missingFacetFamilyCount > 0) {
+            updated.add(new JsonPrimitive("Semantic families missing facet extraction: " + missingFacetFamilyCount));
+        }
+        if (missingSortKeyFamilyCount > 0) {
+            updated.add(new JsonPrimitive("Semantic families missing stable sort keys: " + missingSortKeyFamilyCount));
+        }
+        root.add("warnings", updated);
+    }
+
+    private static void refreshReadinessFromIssuesAndWarnings(JsonObject root) {
+        JsonArray blockedIssues = array(root, "blockedIssues");
+        JsonArray warnings = array(root, "warnings");
+        if (blockedIssues.size() > 0) {
+            root.addProperty("healthStatus", "blocked");
+            root.addProperty("compileReadinessStatus", "blocked");
+            return;
+        }
+        if (warnings.size() > 0) {
+            root.addProperty("healthStatus", "warning");
+            root.addProperty("compileReadinessStatus", "ready-with-warnings");
+            return;
+        }
+        root.addProperty("healthStatus", "ok");
+        root.addProperty("compileReadinessStatus", "ready");
     }
 
     private static void upsertSemanticIdentityGate(

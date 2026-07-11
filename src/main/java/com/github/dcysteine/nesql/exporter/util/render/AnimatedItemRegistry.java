@@ -233,7 +233,7 @@ public enum AnimatedItemRegistry {
                 itemId,
                 modId,
                 safeUnlocalizedName(stack),
-                safeUnlocalizedName(stack));
+                safeDisplayName(stack));
 
         if (containsIgnoreCase(singularityModIds, modId)) {
             return containsAny(haystack,
@@ -241,6 +241,10 @@ public enum AnimatedItemRegistry {
                     "infinity",
                     "infinite",
                     "cosmic",
+                    "spacetime",
+                    "space_time",
+                    "space-time",
+                    "space time",
                     "neutronium",
                     "eternal",
                     "universium",
@@ -255,9 +259,20 @@ public enum AnimatedItemRegistry {
                 "universalsingularity",
                 "infinity_",
                 "infinity ",
+                "spacetime",
+                "space_time",
+                "space-time",
+                "space time",
                 "cosmicneutronium",
                 "transcendentmetal",
-                "universium");
+                "universium",
+                "pyrotheum",
+                "cryotheum",
+                "烈焰",
+                "赤焰",
+                "极寒",
+                "凛冰",
+                "超时空");
     }
 
     private void logAnimatedItem(String itemId, int damage) {

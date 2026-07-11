@@ -1,6 +1,6 @@
 ﻿import test from 'node:test';
 import assert from 'node:assert/strict';
-import { readFileSync } from 'node:fs';
+import { existsSync, readFileSync } from 'node:fs';
 import { join } from 'node:path';
 
 const repoRoot = process.cwd();
@@ -10,9 +10,7 @@ const abi = readSource('src/main/java/com/github/dcysteine/nesql/exporter/native
 const rawNeiFactWriter = readSource('src/main/java/com/github/dcysteine/nesql/exporter/local/RawExportNeiFactWriter.java');
 const uiFamilyCensusWriter = readSource('src/main/java/com/github/dcysteine/nesql/exporter/local/RawExportUiFamilyCensusWriter.java');
 const templateLayoutSpecs = readSource('src/main/java/com/github/dcysteine/nesql/exporter/plugin/nei/metadata/NeiUiTemplateLayoutSpecs.java');
-const nativeFrameRegistry = readSource('src/main/java/com/github/dcysteine/nesql/exporter/nativeui/NativeNeiFrameExportRegistry.java');
-const nativeFrameRenderer = readSource('src/main/java/com/github/dcysteine/nesql/exporter/util/render/NativeNeiFrameRenderer.java');
-const neiRecipeExportProcessor = readSource('src/main/java/com/github/dcysteine/nesql/exporter/plugin/nei/NeiRecipeExportProcessor.java');
+const exportExecutionStrategy = readSource('src/main/java/com/github/dcysteine/nesql/exporter/main/ExportExecutionStrategy.java');
 const handlerMetadata = JSON.parse(readSource('src/main/resources/nesql/nei/handler-metadata.json')).entries;
 
 function valueText(value) {
@@ -96,29 +94,24 @@ test('native UI background ABI has semantic canonical non-GT surface contract', 
   }
 });
 
-test('native NEI frame export is the required recipe display authority', () => {
-  assert.match(abi, /NATIVE_NEI_FRAMES_DIRECTORY = "assets\/nei-native-frames"/);
-  assert.match(abi, /NATIVE_FRAME_SOURCE_IN_GAME_NEI_RENDER = "in-game-nei-render"/);
-  assert.match(nativeFrameRegistry, /nativeFrame\.put\("handlerClass", handler\.getClass\(\)\.getName\(\)\)/);
-  assert.match(nativeFrameRegistry, /nativeFrame\.put\("recipeIndex", recipeIndex\)/);
-  assert.match(nativeFrameRenderer, /request\.getHandler\(\)\.drawBackground\(request\.getRecipeIndex\(\)\)/);
-  assert.match(nativeFrameRenderer, /GuiContainerManager\.drawItem\(stack\.relx, stack\.rely, stack\.item\)/);
-  assert.match(nativeFrameRenderer, /request\.getHandler\(\)\.drawForeground\(request\.getRecipeIndex\(\)\)/);
-  assert.match(nativeFrameRenderer, /installRecipeScreenContext\(request, width, height\)/);
-  assert.match(nativeFrameRenderer, /Minecraft\.getMinecraft\(\)\.currentScreen = previousScreen/);
-  assert.match(nativeFrameRenderer, /instantiateRecipeScreen\(\s*GuiCraftingRecipe\.class/);
-  assert.match(nativeFrameRenderer, /instantiateRecipeScreen\(\s*GuiUsageRecipe\.class/);
-  assert.match(nativeFrameRenderer, /recipeScreenClass\.getDeclaredConstructor\(ArrayList\.class\)/);
-  assert.match(nativeFrameRenderer, /catch \(NoSuchMethodException ignored\)/);
-  assert.match(nativeFrameRenderer, /parameterTypes\[i \+ 1\] = argument instanceof Boolean \? Boolean\.TYPE : argument\.getClass\(\)/);
-  assert.match(nativeFrameRenderer, /tryLimitToOneRecipe\(recipeScreen\)/);
-  assert.match(nativeFrameRenderer, /getMethod\("limitToOneRecipe"\)\.invoke\(recipeScreen\)/);
-  assert.match(nativeFrameRenderer, /prepareCachedRecipeForNativeDraw\(request\)/);
-  assert.match(nativeFrameRenderer, /PurificationUnitParticleExtractorFrontend/);
-  assert.match(nativeFrameRenderer, /ensureListFieldSize\(recipe, "mInputs", 2\)/);
-  assert.match(nativeFrameRenderer, /readFieldValue\(request\.getHandler\(\), "frontend"\)/);
-  assert.match(neiRecipeExportProcessor, /registerNativeFrameMetadata\(builtRecipe, handler, i\)/);
-  assert.match(neiRecipeExportProcessor, /Native NEI frame export did not produce nativeFrame ABI/);
+test('native NEI frame and background PNG export are removed from native-ui-export', () => {
+  assert.equal(existsSync(join(repoRoot, 'src/main/java/com/github/dcysteine/nesql/exporter/nativeui/NativeNeiFrameExportRegistry.java')), false);
+  assert.equal(existsSync(join(repoRoot, 'src/main/java/com/github/dcysteine/nesql/exporter/util/render/NativeNeiFrameRenderer.java')), false);
+  assert.match(exportExecutionStrategy, /Native UI reference export: running plugin pipeline without NEI frame\/background PNG capture/);
+  assert.doesNotMatch(exportExecutionStrategy, /NativeNeiFrameExportRegistry/);
+  assert.match(rawNeiFactWriter, /BACKGROUND_STATUS_SEMANTIC/);
+  assert.match(rawNeiFactWriter, /GTNEIDefaultHandler slot geometry reference/);
+  assert.doesNotMatch(rawNeiFactWriter, /materializeGtNeiBackgroundAsset/);
+  assert.doesNotMatch(rawNeiFactWriter, /GT_NEI_BACKGROUND_ASSET_REF/);
+  assert.doesNotMatch(rawNeiFactWriter, /GT_NEI_BACKGROUND_RESOURCE/);
+  assert.doesNotMatch(uiFamilyCensusWriter, /String assetRef/);
+  assert.doesNotMatch(uiFamilyCensusWriter, /String resource;\s*String source/);
+  assert.doesNotMatch(uiFamilyCensusWriter, /GT_NEI_BACKGROUND_ASSET_REF/);
+  assert.doesNotMatch(uiFamilyCensusWriter, /GT_NEI_BACKGROUND_RESOURCE/);
+  assert.doesNotMatch(abi, /assets\/nei-native-frames/);
+  assert.doesNotMatch(abi, /assets\/ui-backgrounds/);
+  assert.doesNotMatch(abi, /GT_NEI_BACKGROUND_ASSET_REF/);
+  assert.doesNotMatch(abi, /GT_NEI_BACKGROUND_RESOURCE/);
 });
 
 test('native UI template surfaces are expanded to contain every default slot in bundled metadata', () => {

@@ -103,7 +103,6 @@ public final class CanonicalExportMapper {
         canonical.fluidOutputs = mapFluidOutputs(recipe.getFluidOutputs());
         canonical.probabilities = buildProbabilityMap(recipe);
         canonical.metadata = buildMetadata(recipe, gregTechRecipe);
-        canonical.nativeFrame = buildNativeFrame(recipe);
         canonical.renderHints = buildRenderHints(recipe);
         canonical.extensions = buildExtensions(recipe, gregTechRecipe);
 
@@ -375,17 +374,6 @@ public final class CanonicalExportMapper {
         renderHints.put("renderMode", "render-asset-ref");
         return renderHints;
     }
-
-    @SuppressWarnings("unchecked")
-    private static Map<String, Object> buildNativeFrame(Recipe recipe) {
-        Map<String, Object> specialMetadata = readSpecialMetadata(recipe.getId());
-        Object nativeFrame = specialMetadata.get("nativeFrame");
-        if (!(nativeFrame instanceof Map<?, ?>)) {
-            return null;
-        }
-        return new LinkedHashMap<String, Object>((Map<String, Object>) nativeFrame);
-    }
-
     private static Map<String, Object> buildExtensions(Recipe recipe, GregTechRecipe gregTechRecipe) {
         Map<String, Object> extensions = new LinkedHashMap<>();
         if (gregTechRecipe != null) {

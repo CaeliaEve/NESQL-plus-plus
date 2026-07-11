@@ -91,6 +91,38 @@ test('semantic family plugin foundation is present for native NBT semantics', ()
   assert.equal(mapper.includes('semanticFacets(String family, Item item, ParsedNbt parsedNbt)'), true);
 });
 
+test('semantic facets cover current GTNH high-volume NBT key shapes', () => {
+  const genetics = readSource('src/main/java/com/github/dcysteine/nesql/exporter/semantic/GeneticsSemanticFamilies.java');
+  const entity = readSource('src/main/java/com/github/dcysteine/nesql/exporter/semantic/EntityCaptureSemanticFamilies.java');
+  const facades = readSource('src/main/java/com/github/dcysteine/nesql/exporter/semantic/FacadeSemanticFamilies.java');
+  const misc = readSource('src/main/java/com/github/dcysteine/nesql/exporter/semantic/MiscSemanticFamilies.java');
+  const tools = readSource('src/main/java/com/github/dcysteine/nesql/exporter/semantic/ToolSemanticFamilies.java');
+
+  for (const sourceNeedle of [
+    [genetics, '"UID0"'],
+    [genetics, '"UID1"'],
+    [genetics, '"IsAnalyzed"'],
+    [genetics, 'geneticsKind(item)'],
+    [entity, '"mob"'],
+    [entity, '"entity"'],
+    [facades, '"sourceBlockId"'],
+    [facades, '"sourceBlockMeta"'],
+    [facades, '"itemname"'],
+    [facades, '"modid"'],
+    [misc, '"oc:color"'],
+    [misc, '"oc:lightColor"'],
+    [misc, '"carrier"'],
+    [tools, '"GT.ItemCharge"'],
+    [tools, '"mFluid"'],
+    [tools, '"mCapacity"'],
+    [tools, '"Loaded"'],
+    [tools, '"toolType"'],
+  ]) {
+    const [source, needle] = sourceNeedle;
+    assert.equal(source.includes(needle), true, `missing semantic facet key ${needle}`);
+  }
+});
+
 test('semantic stream writer validates one identity row per raw item', () => {
   const writer = readSource('src/main/java/com/github/dcysteine/nesql/exporter/local/SemanticItemIdentityDiagnosticsWriter.java');
 
@@ -160,8 +192,12 @@ test('quick semantic check refreshes raw export readiness reports', () => {
 
   assert.equal(quickCheck.includes('refreshRawExportReports(rawExportDirectory, summary);'), true);
   assert.equal(quickCheck.includes('export_report.json'), true);
+  assert.equal(quickCheck.includes('validation_report.json'), true);
   assert.equal(quickCheck.includes('semantic-identity'), true);
   assert.equal(quickCheck.includes('semanticIdentityMapRows'), true);
+  assert.equal(quickCheck.includes('semanticMissingFacetFamilyCount'), true);
+  assert.equal(quickCheck.includes('Semantic families missing facet extraction:'), true);
+  assert.equal(quickCheck.includes('Semantic families missing stable sort keys:'), true);
 });
 
 test('semantic identity real export samples keep public variants and facets', () => {

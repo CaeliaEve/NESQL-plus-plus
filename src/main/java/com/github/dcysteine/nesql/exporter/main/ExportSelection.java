@@ -37,12 +37,12 @@ public final class ExportSelection {
     }
 
     /**
-     * Native UI compiler export lane.
+     * Web-authored UI reference export lane.
      *
-     * <p>The compiler requires both captured UI facts and browser atlas artifacts, so this selection
-     * keeps render/atlas lanes authoritative while skipping unrelated legacy per-mod JSON,
-     * multiblock, block-face, and database-commit work. Raw-export still writes item and recipe
-     * facts directly from the export database.</p>
+     * <p>NeoNEI now treats hand-authored web components as the final recipe UI. This selection keeps
+     * layout/reference facts and item/fluid browser atlas artifacts, while intentionally avoiding
+     * captured NEI frame/background PNG authority. Raw-export still writes item and recipe facts
+     * directly from the export database.</p>
      */
     public static ExportSelection nativeUiExport() {
         return new Builder()

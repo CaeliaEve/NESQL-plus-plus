@@ -49,6 +49,9 @@ final class EncodedPatternFamily extends AbstractSemanticFamily {
         Map<String, String> facets = newFacets();
         putIfPresent(facets, "encodedPattern", firstNbtValue(nbt, "encodedPattern", "EncodedPattern"));
         putIfPresent(facets, "output", firstNbtValue(nbt, "out", "output"));
+        putIfPresent(facets, "meta", firstNbtValue(nbt, "meta"));
+        putIfPresent(facets, "itemDamage", String.valueOf(item.getItemDamage()));
+        putIfPresent(facets, "carrier", item.getInternalName());
         return facets;
     }
 }
@@ -70,9 +73,10 @@ final class CosmeticColorFamily extends AbstractSemanticFamily {
     @Override
     public Map<String, String> facets(Item item, ParsedNbt nbt) {
         Map<String, String> facets = newFacets();
-        putIfPresent(facets, "color", firstNbtValue(nbt, "color", "colour"));
+        putIfPresent(facets, "color", firstNbtValue(nbt, "color", "colour", "oc:color", "oc:lightColor"));
         putIfPresent(facets, "color1", firstNbtValue(nbt, "color1"));
         putIfPresent(facets, "color2", firstNbtValue(nbt, "color2"));
+        putIfPresent(facets, "itemDamage", String.valueOf(item.getItemDamage()));
         return facets;
     }
 }

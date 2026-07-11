@@ -205,11 +205,9 @@ public final class RawExportUiFamilyCensusWriter {
         background.scaleMode = NativeUiExportAbi.SCALE_MODE;
         background.anchor = NativeUiExportAbi.ANCHOR;
         if ("gregtech-machine".equals(family)) {
-            background.status = NativeUiExportAbi.BACKGROUND_STATUS_CAPTURED;
+            background.status = NativeUiExportAbi.BACKGROUND_STATUS_SEMANTIC;
             background.kind = NativeUiExportAbi.BACKGROUND_KIND_GT_MODULAR_UI;
-            background.assetRef = NativeUiExportAbi.GT_NEI_BACKGROUND_ASSET_REF;
-            background.resource = NativeUiExportAbi.GT_NEI_BACKGROUND_RESOURCE;
-            background.source = "GTNEIDefaultHandler.drawUI(ModularWindow.getBackground)";
+            background.source = "GTNEIDefaultHandler slot geometry reference";
             background.drawable = "GTUITextures.BACKGROUND_NEI_SINGLE_RECIPE";
             applyNineSliceBackgroundGeometry(background, 3, 3, Math.max(0, width - 6), Math.max(0, height - yShift - 6));
             background.captureRequired = false;
@@ -321,8 +319,6 @@ public final class RawExportUiFamilyCensusWriter {
         String coordinateSpace;
         String scaleMode;
         String anchor;
-        String assetRef;
-        String resource;
         String source;
         String drawable;
         String scaling;
