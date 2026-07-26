@@ -45,8 +45,8 @@ final class ExportValidationAbiCatalog {
     private static final List<StringDescriptor> COMPILE_READINESS_DESCRIPTORS = validateStringDescriptors(
             "export validation compile readiness",
             Arrays.asList(
-                    descriptor("ready", "ready"),
-                    descriptor("readyWithWarnings", "ready-with-warnings")),
+                    descriptor("ready", ExportValidationReadiness.READY),
+                    descriptor("readyWithWarnings", ExportValidationReadiness.READY_WITH_WARNINGS)),
             "ready",
             "readyWithWarnings");
 

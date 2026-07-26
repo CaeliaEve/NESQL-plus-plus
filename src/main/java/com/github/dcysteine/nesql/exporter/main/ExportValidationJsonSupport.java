@@ -107,12 +107,29 @@ final class ExportValidationJsonSupport {
     }
 
     static int countFiles(File root, String suffix) {
-        if (root == null || !root.exists()) {
-            return 0;
+        return countFilesBySuffix(root, suffix)[0];
+    }
+
+    static int[] countFilesBySuffix(File root, String... suffixes) {
+        return countFilesBySuffix(root, null, suffixes);
+    }
+
+    static int[] countFilesBySuffix(
+            File root, DirectoryVisitObserver directoryVisitObserver, String... suffixes) {
+        if (suffixes == null) {
+            throw new IllegalArgumentException("suffixes must not be null");
         }
-        Counter counter = new Counter();
-        countFiles(root, suffix, counter);
-        return counter.value;
+        for (String suffix : suffixes) {
+            if (suffix == null) {
+                throw new IllegalArgumentException("suffix must not be null");
+            }
+        }
+        int[] counts = new int[suffixes.length];
+        if (root == null || !root.exists() || counts.length == 0) {
+            return counts;
+        }
+        countFilesBySuffix(root, suffixes, counts, directoryVisitObserver);
+        return counts;
     }
 
     static long countGzipJsonl(File file) {
@@ -157,15 +174,24 @@ final class ExportValidationJsonSupport {
         return null;
     }
 
-    private static void countFiles(File file, String suffix, Counter counter) {
+    private static void countFilesBySuffix(
+            File file, String[] suffixes, int[] counts, DirectoryVisitObserver directoryVisitObserver) {
         if (file == null || !file.exists()) {
             return;
         }
         if (file.isFile()) {
-            if (file.getName().endsWith(suffix)) {
-                counter.value++;
+            String name = file.getName();
+            for (int index = 0; index < suffixes.length; index++) {
+                String suffix = suffixes[index];
+                if (suffix != null && name.endsWith(suffix)) {
+                    counts[index]++;
+                }
             }
             return;
+        }
+
+        if (directoryVisitObserver != null) {
+            directoryVisitObserver.visited(file);
         }
 
         File[] children = file.listFiles();
@@ -173,11 +199,11 @@ final class ExportValidationJsonSupport {
             return;
         }
         for (File child : children) {
-            countFiles(child, suffix, counter);
+            countFilesBySuffix(child, suffixes, counts, directoryVisitObserver);
         }
     }
 
-    private static final class Counter {
-        int value;
+    interface DirectoryVisitObserver {
+        void visited(File directory);
     }
 }

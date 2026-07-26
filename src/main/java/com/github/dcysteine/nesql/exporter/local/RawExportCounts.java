@@ -55,6 +55,14 @@ final class RawExportCounts {
     List<String> nativeUiInteractionContractViolationSamples = new ArrayList<String>();
     long rawTextures;
     long rawAnimations;
+    long animationFrameMaterializations;
+    long materializedAnimations;
+    long staticAnimationFrames;
+    long unavailableAnimationFrames;
+    long facadeResolutions;
+    long resolvedFacades;
+    long partialFacades;
+    long unresolvedFacades;
     long rawEntities;
     long rawBrowserAtlasAssets;
     long renderBackendFacts;

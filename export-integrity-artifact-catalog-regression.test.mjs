@@ -35,7 +35,9 @@ test('export integrity artifact checksums are emitted from a validated descripto
 
 test('export integrity manifest and checksum persistence fails closed', () => {
   assert.match(integrity, /ExportIntegrityOutputFileCatalog\.ensureDirectory\(validationDir\)/);
-  assert.match(integrity, /ExportIntegrityOutputFileCatalog\.checksumFile\(validationDir\)/);
+  assert.match(integrity, /ExportIntegrityOutputFileCatalog\.checksumFile\(previousValidationDir\)/);
+  assert.match(integrity, /exportContext\.authoritativeRawExportDirectory\(\)/);
+  assert.match(integrity, /rawExportArtifactPath\(descriptor\.relativePath\)/);
   assert.match(integrity, /ExportIntegrityOutputFileCatalog\.outputFiles\(validationDir, manifest, checksumReport\)/);
   assert.match(integrityOutputCatalog, /OUTPUTS = validateAndFreeze\(Arrays\.asList\(/);
   assert.match(integrityOutputCatalog, /RawExportFileCatalog\.EXPORT_MANIFEST_FILE_NAME/);

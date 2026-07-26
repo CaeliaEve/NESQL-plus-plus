@@ -4,6 +4,7 @@ import com.github.dcysteine.nesql.elysium.kernel.ExportKernel;
 import com.github.dcysteine.nesql.elysium.kernel.ExportKernelContext;
 import com.github.dcysteine.nesql.elysium.kernel.ExportModuleCatalog;
 import com.github.dcysteine.nesql.elysium.kernel.ExportTracepoint;
+import com.github.dcysteine.nesql.exporter.local.RawExportGenerationFinalizer;
 import net.minecraft.util.EnumChatFormatting;
 
 import java.io.File;
@@ -23,6 +24,9 @@ final class ExportStageRunner {
         ExportKernelContext kernelContext = new ExportKernelContext(exportContext);
         Exception primaryFailure = null;
         boolean preparationStopped = false;
+        boolean kernelExited = false;
+        boolean kernelTraceWritten = false;
+        boolean generationPublished = false;
 
         strategy.announceStartup(exportContext, repositoryDirectory);
         try {
@@ -80,6 +84,10 @@ final class ExportStageRunner {
                     "complete",
                     System.currentTimeMillis() - exportStartedAt,
                     null);
+            kernel.exit(kernelContext);
+            kernelExited = true;
+            ExportDebugPlaneWriter.writeKernelTrace(exportContext, moduleCatalog, kernelContext);
+            kernelTraceWritten = true;
             ExportDebugPlaneWriter.writeStageTimingReport(
                     exportContext,
                     timings,
@@ -87,7 +95,10 @@ final class ExportStageRunner {
             ExportValidationReportWriter.write(exportContext);
             ExportControlPlaneWriter.write(exportContext, moduleCatalog);
             ExportIntegrityManifestWriter.write(exportContext);
-            ExportWriterSupport.syncRawExportFinalReports(exportContext.paths.repositoryDirectory);
+            ExportWriterSupport.syncRawExportFinalReports(exportContext.rawExportDirectory());
+            RawExportGenerationFinalizer.finalizeGeneration(exportContext.rawExportDirectory());
+            exportContext.publishRawExportGeneration();
+            generationPublished = true;
         } catch (RepositoryPreparationStoppedException ignored) {
             preparationStopped = true;
             return;
@@ -96,22 +107,29 @@ final class ExportStageRunner {
             if (stageState.currentStage != null) {
                 kernelContext.trace(ExportTracepoint.STAGE_RUN, stageState.currentStage.name(), "failed", 0L);
             }
+            try {
+                exportContext.ensureRawExportGeneration();
+            } catch (Exception generationFailure) {
+                e.addSuppressed(generationFailure);
+            }
             File reportFile =
                     ExportDiagnosticsSupport.writeFailureReport(
                             exportContext, stageState.currentStage, e);
-            try {
-                ExportDebugPlaneWriter.writeStageCheckpointReport(
-                        exportContext,
-                        null,
-                        0,
-                        exportContext.executionPlan.stages.size(),
-                        stageState.currentStage,
-                        null,
-                        "failed",
-                        0L,
-                        ExportDiagnosticsSupport.summarizeThrowable(e));
-            } catch (Exception checkpointFailure) {
-                e.addSuppressed(checkpointFailure);
+            if (exportContext.hasActiveRawExportGeneration()) {
+                try {
+                    ExportDebugPlaneWriter.writeStageCheckpointReport(
+                            exportContext,
+                            null,
+                            0,
+                            exportContext.executionPlan.stages.size(),
+                            stageState.currentStage,
+                            null,
+                            "failed",
+                            0L,
+                            ExportDiagnosticsSupport.summarizeThrowable(e));
+                } catch (Exception checkpointFailure) {
+                    e.addSuppressed(checkpointFailure);
+                }
             }
             Logger.chatMessage(
                     EnumChatFormatting.RED
@@ -130,18 +148,25 @@ final class ExportStageRunner {
             throw e;
         } finally {
             Exception finalizationFailure = null;
-            try {
-                kernel.exit(kernelContext);
-            } catch (Exception exitFailure) {
-                if (primaryFailure != null) {
-                    primaryFailure.addSuppressed(exitFailure);
-                } else {
-                    finalizationFailure = exitFailure;
+            if (!kernelExited) {
+                try {
+                    kernel.exit(kernelContext);
+                    kernelExited = true;
+                } catch (Exception exitFailure) {
+                    if (primaryFailure != null) {
+                        primaryFailure.addSuppressed(exitFailure);
+                    } else {
+                        finalizationFailure = exitFailure;
+                    }
                 }
             }
-            if (!preparationStopped) {
+            if (!preparationStopped
+                    && !generationPublished
+                    && !kernelTraceWritten
+                    && exportContext.hasActiveRawExportGeneration()) {
                 try {
                     ExportDebugPlaneWriter.writeKernelTrace(exportContext, moduleCatalog, kernelContext);
+                    kernelTraceWritten = true;
                 } catch (Exception traceFailure) {
                     if (primaryFailure != null) {
                         primaryFailure.addSuppressed(traceFailure);
@@ -149,6 +174,19 @@ final class ExportStageRunner {
                         finalizationFailure.addSuppressed(traceFailure);
                     } else {
                         finalizationFailure = traceFailure;
+                    }
+                }
+            }
+            if (!generationPublished) {
+                try {
+                    exportContext.abortRawExportGeneration();
+                } catch (Exception abortFailure) {
+                    if (primaryFailure != null) {
+                        primaryFailure.addSuppressed(abortFailure);
+                    } else if (finalizationFailure != null) {
+                        finalizationFailure.addSuppressed(abortFailure);
+                    } else {
+                        finalizationFailure = abortFailure;
                     }
                 }
             }

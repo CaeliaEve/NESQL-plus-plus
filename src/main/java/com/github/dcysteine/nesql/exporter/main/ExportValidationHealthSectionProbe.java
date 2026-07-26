@@ -15,6 +15,6 @@ final class ExportValidationHealthSectionProbe implements ExportValidationProbe 
     public void inspect(
             ExportValidationProbeContext context,
             ExportValidationReport report) {
-        ExportValidationHealthSectionBuilder.populate(context.repositoryDirectory, report);
+        ExportValidationHealthSectionBuilder.populate(context.rawDir, report);
     }
 }

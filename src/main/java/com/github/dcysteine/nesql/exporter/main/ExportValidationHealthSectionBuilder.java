@@ -9,7 +9,7 @@ import java.io.File;
 final class ExportValidationHealthSectionBuilder {
     private ExportValidationHealthSectionBuilder() {}
 
-    static void populate(File repositoryDirectory, ExportValidationReport report) {
+    static void populate(File rawDir, ExportValidationReport report) {
         report.itemTotals = new ExportValidationReport.ItemTotals();
         report.itemTotals.rawItems = report.rawItems;
         report.itemTotals.browserItems = report.rawBrowserItems;
@@ -49,7 +49,7 @@ final class ExportValidationHealthSectionBuilder {
                 report.animatedAtlasManifestAssets - report.browserAtlasAnimatedItems);
         report.animationTotals.missingTimingData = ExportValidationJsonSupport.readLongMember(
                 ExportValidationJsonSupport.readCountsObject(RawExportFileCatalog.rawExportFile(
-                        RawExportFileCatalog.rawExportDirectory(repositoryDirectory),
+                        rawDir,
                         RawExportFileCatalog.EXPORT_REPORT_FILE)),
                 ExportValidationEvidenceCatalog.RawCount.RENDER_TEXTURE_SPRITES_MISSING_TIMING);
         report.animationTotals.staticWhenAnimationExpected = report.suspiciousStaticSingularityAssets;
@@ -84,7 +84,7 @@ final class ExportValidationHealthSectionBuilder {
         report.recipeTotals.recipeTypes = report.rawRecipeTypes;
         report.recipeTotals.neiHandlers = report.rawNeiHandlers;
         report.recipeTotals.neiHandlerLayouts = report.rawNeiHandlerLayouts;
-        inspectRecipeHandlerAnomalies(repositoryDirectory, report.recipeTotals);
+        inspectRecipeHandlerAnomalies(rawDir, report.recipeTotals);
 
         report.nativeUiTotals = new ExportValidationReport.NativeUiTotals();
         report.nativeUiTotals.layouts = report.nativeUiLayouts;
@@ -117,19 +117,19 @@ final class ExportValidationHealthSectionBuilder {
         report.runtimeManifestMetadata.exporterSchemaVersion = report.schemaVersion;
         report.runtimeManifestMetadata.exportTimestamp = ExportValidationJsonSupport.readStringMember(
                 ExportValidationJsonSupport.readJsonObject(RawExportFileCatalog.rawExportFile(
-                        RawExportFileCatalog.rawExportDirectory(repositoryDirectory),
+                        rawDir,
                         RawExportFileCatalog.MANIFEST_FILE)),
                 ExportValidationEvidenceCatalog.MEMBER_GENERATED_AT);
         report.runtimeManifestMetadata.healthStatus = report.healthStatus;
         report.runtimeManifestMetadata.compileReadinessStatus = report.compileReadinessStatus;
-        report.runtimeManifestMetadata.assetHash = readExportAssetHash(repositoryDirectory);
+        report.runtimeManifestMetadata.assetHash = readExportAssetHash(rawDir);
     }
 
     private static void inspectRecipeHandlerAnomalies(
-            File repositoryDirectory,
+            File rawDir,
             ExportValidationReport.RecipeTotals totals) {
         JsonObject root = ExportValidationJsonSupport.readJsonObject(RawExportFileCatalog.rawExportFile(
-                RawExportFileCatalog.rawExportDirectory(repositoryDirectory),
+                rawDir,
                 RawExportFileCatalog.NEI_HANDLER_ANOMALIES_FILE));
         if (root == null || !root.has(ExportValidationEvidenceCatalog.OBJECT_SUMMARY) || !root.get(ExportValidationEvidenceCatalog.OBJECT_SUMMARY).isJsonObject()) {
             return;
@@ -147,9 +147,9 @@ final class ExportValidationHealthSectionBuilder {
         totals.zeroRecipeStatus = ExportValidationJsonSupport.readStringMember(summary, ExportValidationEvidenceCatalog.MEMBER_STATUS);
     }
 
-    private static String readExportAssetHash(File repositoryDirectory) {
+    private static String readExportAssetHash(File rawDir) {
         JsonObject root = ExportValidationJsonSupport.readJsonObject(RawExportFileCatalog.rawExportFile(
-                RawExportFileCatalog.rawExportDirectory(repositoryDirectory),
+                rawDir,
                 RawExportFileCatalog.validationPath(RawExportFileCatalog.STAGE_CHECKSUMS_FILE_NAME)));
         if (root == null) {
             return null;

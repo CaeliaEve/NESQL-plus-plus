@@ -24,13 +24,15 @@ final class ExportValidationRepositoryProbe implements ExportValidationProbe {
                 new File(context.repositoryDirectory, "items"), ".json.gz");
         report.recipeJsonGzFiles = ExportValidationJsonSupport.countFiles(
                 new File(context.repositoryDirectory, "recipes"), ".json.gz");
-        report.imagePngFiles =
-                ExportValidationJsonSupport.countFiles(context.exportContext.paths.imageDirectory, ".png");
-        report.imageGifFiles =
-                ExportValidationJsonSupport.countFiles(context.exportContext.paths.imageDirectory, ".gif");
-        report.renderJsonFiles =
-                ExportValidationJsonSupport.countFiles(context.exportContext.paths.imageDirectory, ".render.json");
-        report.spriteJsonFiles =
-                ExportValidationJsonSupport.countFiles(context.exportContext.paths.imageDirectory, ".sprite.json");
+        int[] imageFileCounts = ExportValidationJsonSupport.countFilesBySuffix(
+                context.exportContext.paths.imageDirectory,
+                ".png",
+                ".gif",
+                ".render.json",
+                ".sprite.json");
+        report.imagePngFiles = imageFileCounts[0];
+        report.imageGifFiles = imageFileCounts[1];
+        report.renderJsonFiles = imageFileCounts[2];
+        report.spriteJsonFiles = imageFileCounts[3];
     }
 }

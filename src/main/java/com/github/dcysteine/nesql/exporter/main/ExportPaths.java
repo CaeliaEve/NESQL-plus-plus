@@ -27,7 +27,18 @@ public final class ExportPaths {
         this.imageDirectory = new File(repositoryDirectory, IMAGE_DIRECTORY_PATH);
     }
 
+    private ExportPaths(String repositoryName, File repositoryDirectory) {
+        this.repositoryName = repositoryName;
+        this.repositoryDirectory = repositoryDirectory;
+        this.databaseFile = new File(repositoryDirectory, DATABASE_FILE_PATH);
+        this.imageDirectory = new File(repositoryDirectory, IMAGE_DIRECTORY_PATH);
+    }
+
     public static ExportPaths forRepository(String repositoryName) {
         return new ExportPaths(repositoryName);
+    }
+
+    static ExportPaths forRepositoryDirectory(String repositoryName, File repositoryDirectory) {
+        return new ExportPaths(repositoryName, repositoryDirectory);
     }
 }

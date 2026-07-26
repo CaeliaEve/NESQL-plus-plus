@@ -29,8 +29,7 @@ jobs:
           node-version: '20'
 
       - name: Run stable JavaScript regression checks
-        run: |
-          node semantic-identity-regression.test.mjs
+        run: node scripts/run-regression-tests.mjs
 
       - name: Verify Gradle wrapper is present
         run: |
@@ -71,11 +70,11 @@ jobs:
       - name: Prepare ForgeGradle CI workspace
         run: ./gradlew setupCIWorkspace --no-daemon --stacktrace
 
-      - name: Build diagnostics
-        run: |
-          if ! ./gradlew build -x test --no-daemon --stacktrace; then
-            echo "::warning::Gradle build could not complete on hosted CI. This project still depends on local/legacy GTNH artifacts; source-gate remains authoritative until dependency vendoring is completed."
-          fi
+      - name: Build and run Gradle behavior checks
+        run: ./gradlew build -x test --no-daemon --stacktrace
+
+      - name: Run regression checks against built jars
+        run: node scripts/run-regression-tests.mjs
 
       - name: Upload jars when produced
         uses: actions/upload-artifact@v4

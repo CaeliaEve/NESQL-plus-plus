@@ -47,6 +47,14 @@ final class RawFactCounts {
         List<String> nativeUiInteractionContractViolationSamples = new ArrayList<String>();
         long textures;
         long animations;
+        long animationFrameMaterializations;
+        long materializedAnimations;
+        long staticAnimationFrames;
+        long unavailableAnimationFrames;
+        long facadeResolutions;
+        long resolvedFacades;
+        long partialFacades;
+        long unresolvedFacades;
         long entities;
         long browserAtlasAssets;
         long renderBackendFacts;

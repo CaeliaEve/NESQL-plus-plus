@@ -510,7 +510,7 @@ test('export control and debug planes have explicit filesystem ownership', () =>
   assert.match(rawFileCatalog, /DEBUG_DIRECTORY = "debug"/);
 
   assert.match(controlPlaneWriter, /Writes stable ControlFS-style export descriptors/);
-  assert.match(controlPlaneWriter, /RawExportFileCatalog\.rawExportDirectory/);
+  assert.match(controlPlaneWriter, /exportContext\.rawExportDirectory\(\)/);
   assert.match(controlPlaneWriter, /RawExportFileCatalog\.CONTROL_DIRECTORY/);
   assert.match(controlPlaneWriter, /static void write\(ExportContext exportContext, ExportModuleCatalog catalog\) throws Exception/);
   assert.match(controlPlaneWriter, /CONTROL_REPORTS = validateAndFreeze\(Arrays\.asList/);
@@ -553,7 +553,8 @@ test('export control and debug planes have explicit filesystem ownership', () =>
   assert.match(debugPlaneWriter, /static void writeStageTimingReport\([\s\S]*\) throws Exception/);
   assert.match(debugPlaneWriter, /static void writeStageCheckpointReport\([\s\S]*\) throws Exception/);
   assert.match(debugPlaneWriter, /static void writeKernelTrace\([\s\S]*\) throws Exception/);
-  assert.match(debugPlaneWriter, /RawExportFileCatalog\.RAW_EXPORT_DIRECTORY \+ "\/" \+ file\.validationAliasPath\(\)/);
+  assert.match(debugPlaneWriter, /exportContext\.rawExportDirectory\(\)/);
+  assert.match(debugPlaneWriter, /file\.validationAliasPath\(\)\.replace/);
   assert.match(debugPlaneWriter, /RawExportFileCatalog\.DEBUG_DIRECTORY/);
   assert.match(debugPlaneWriter, /DEBUG_REPORTS = validateAndFreeze\(Arrays\.asList/);
   assert.match(debugPlaneWriter, /new DebugReportDescriptor\(\s*ExportDebugFile\.STAGE_TIMING/);
@@ -644,7 +645,8 @@ test('export validation probe catalog owns report collection order and capabilit
   assert.match(validationProbeInterface, /List<String> capabilities\(\)/);
   assert.match(validationProbeInterface, /void inspect\(/);
   assert.match(validationProbeContext, /Immutable filesystem and export context shared by validation probes/);
-  assert.match(validationProbeContext, /RawExportFileCatalog\.rawExportDirectory\(repositoryDirectory\)/);
+  assert.match(validationProbeContext, /File rawDir = exportContext\.rawExportDirectory\(\)/);
+  assert.match(validationProbeContext, /File previousRawDir = exportContext\.authoritativeRawExportDirectory\(\)/);
   assert.match(validationProbeCatalog, /Owns validation probe ordering, identity checks, and probe capability descriptors/);
   assert.match(validationProbeCatalog, /new ExportValidationRepositoryProbe\(\)/);
   assert.match(validationProbeCatalog, /new ExportValidationRawCountsValidationProbe\(\)/);
@@ -683,9 +685,9 @@ test('export validation probe catalog owns report collection order and capabilit
     validationPreviousDeltaProbe,
     /public void inspect\([\s\S]*ExportValidationReport report\) throws Exception/,
   );
-  assert.match(validationPreviousDeltaProbe, /ExportValidationReportStore\.applyPreviousDelta\(context\.validationDir, report\)/);
+  assert.match(validationPreviousDeltaProbe, /ExportValidationReportStore\.applyPreviousDelta\(context\.previousValidationDir, report\)/);
   assert.match(validationHealthPolicyProbe, /ExportValidationHealthPolicy\.evaluate\(report\)/);
-  assert.match(validationHealthSectionProbe, /ExportValidationHealthSectionBuilder\.populate\(context\.repositoryDirectory, report\)/);
+  assert.match(validationHealthSectionProbe, /ExportValidationHealthSectionBuilder\.populate\(context\.rawDir, report\)/);
   assert.match(validationJsonSupport, /Shared low-level JSON, counting, and ratio helpers/);
   assert.match(validationEvidenceCatalog, /Stable ABI\/catalog surface for validation evidence JSON member names/);
   assert.match(validationEvidenceCatalog, /OBJECT_COUNTS = descriptorValue\(OBJECT_DESCRIPTORS, "counts"\)/);
@@ -758,7 +760,7 @@ test('export validation report persistence and delta metadata are store-owned', 
   assert.match(rawFileCatalog, /EXPORT_VALIDATION_REPORT_FILE_NAME = "export_validation_report\.json"/);
   assert.match(rawFileCatalog, /EXPORT_HEALTH_REPORT_FILE_NAME = "export-health-report\.json"/);
   assert.match(validationReportStore, /WRITE_GSON\.toJson\(value, writer\)/);
-  assert.match(validationPreviousDeltaProbe, /ExportValidationReportStore\.applyPreviousDelta\(context\.validationDir, report\)/);
+  assert.match(validationPreviousDeltaProbe, /ExportValidationReportStore\.applyPreviousDelta\(context\.previousValidationDir, report\)/);
   assert.match(validationReportWriter, /ExportValidationReportStore\.write\(context\.validationDir, report\)/);
   assert.match(validationReportWriter, /reportFiles\.reportFile\.getAbsolutePath\(\)/);
   assert.match(validationReportModel, /static class PreviousSnapshot/);

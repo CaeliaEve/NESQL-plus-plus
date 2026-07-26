@@ -4,9 +4,11 @@ import com.github.dcysteine.nesql.exporter.canonical.CanonicalExportMapper;
 import com.github.dcysteine.nesql.exporter.canonical.CanonicalFluid;
 import com.github.dcysteine.nesql.exporter.canonical.CanonicalItem;
 import com.github.dcysteine.nesql.exporter.canonical.CanonicalRenderAsset;
+import com.github.dcysteine.nesql.exporter.canonical.ResourceAuthorityContract;
 import com.github.dcysteine.nesql.exporter.main.config.ConfigOptions;
 import com.github.dcysteine.nesql.exporter.main.Logger;
 import com.github.dcysteine.nesql.exporter.util.render.GifRenderer;
+import com.github.dcysteine.nesql.exporter.util.render.NativeSpriteFrameMaterializer;
 import com.google.gson.Gson;
 import com.google.gson.stream.JsonReader;
 import com.github.dcysteine.nesql.sql.base.fluid.Fluid;
@@ -46,24 +48,38 @@ public final class CanonicalRenderAssetCollector {
     private final Map<String, Map<String, Object>> imageSizeCache = new HashMap<>();
 
     public CanonicalRenderAssetCollector(EntityManager entityManager, File exportDirectory) {
+        if (entityManager == null) {
+            throw new IllegalArgumentException("Render asset collection requires a live EntityManager");
+        }
         this.entityManager = entityManager;
-        this.exportDirectory = exportDirectory;
+        this.exportDirectory = requireExportDirectory(exportDirectory);
+    }
+
+    private CanonicalRenderAssetCollector(File exportDirectory) {
+        this.entityManager = null;
+        this.exportDirectory = requireExportDirectory(exportDirectory);
     }
 
     public List<CanonicalRenderAsset> collectAll() {
         List<CanonicalRenderAsset> assets = new ArrayList<>();
-        if (entityManager != null) {
-            assets.addAll(collectItemAssets());
-            assets.addAll(collectFluidAssets());
-        }
-        if (!assets.isEmpty()) {
-            return assets;
-        }
-
-        Logger.MOD.warn("No render assets available from database; falling back to exported file scan.");
-        assets.addAll(collectItemAssetsFromFiles());
-        assets.addAll(collectFluidAssetsFromFiles());
+        assets.addAll(collectItemAssets());
+        assets.addAll(collectFluidAssets());
         return assets;
+    }
+
+    public static List<CanonicalRenderAsset> collectFromExportedFiles(File exportDirectory) {
+        CanonicalRenderAssetCollector collector = new CanonicalRenderAssetCollector(exportDirectory);
+        List<CanonicalRenderAsset> assets = new ArrayList<>();
+        assets.addAll(collector.collectItemAssetsFromFiles());
+        assets.addAll(collector.collectFluidAssetsFromFiles());
+        return assets;
+    }
+
+    private static File requireExportDirectory(File exportDirectory) {
+        if (exportDirectory == null) {
+            throw new IllegalArgumentException("Render asset export directory is required");
+        }
+        return exportDirectory;
     }
 
     private List<CanonicalRenderAsset> collectItemAssets() {
@@ -73,8 +89,11 @@ public final class CanonicalRenderAssetCollector {
         int processed = 0;
         for (Item item : items) {
             CanonicalItem canonical = CanonicalExportMapper.mapItem(item);
-            CanonicalRenderAsset asset =
-                    buildAssetFromImagePath(canonical.renderAssetRef, "item", item.getImageFilePath());
+            CanonicalRenderAsset asset = buildCurrentCanonicalAsset(
+                    canonical.renderAssetRef,
+                    "item",
+                    canonical.itemId,
+                    item.getImageFilePath());
             if (asset != null) {
                 assets.add(asset);
             }
@@ -93,8 +112,11 @@ public final class CanonicalRenderAssetCollector {
         int processed = 0;
         for (Fluid fluid : fluids) {
             CanonicalFluid canonical = CanonicalExportMapper.mapFluid(fluid);
-            CanonicalRenderAsset asset =
-                    buildAssetFromImagePath(canonical.renderAssetRef, "fluid", fluid.getImageFilePath());
+            CanonicalRenderAsset asset = buildCurrentCanonicalAsset(
+                    canonical.renderAssetRef,
+                    "fluid",
+                    canonical.fluidId,
+                    fluid.getImageFilePath());
             if (asset != null) {
                 assets.add(asset);
             }
@@ -104,6 +126,64 @@ public final class CanonicalRenderAssetCollector {
             }
         }
         return assets;
+    }
+
+    private CanonicalRenderAsset buildCurrentCanonicalAsset(
+            String assetId,
+            String familyDirectory,
+            String canonicalId,
+            String storedImageFilePath) {
+        String deterministicPath = canonicalImageFilePath(familyDirectory, canonicalId);
+        CanonicalRenderAsset asset = buildAssetFromImagePath(
+                assetId,
+                familyDirectory,
+                deterministicPath);
+        if (asset != null) {
+            return asset;
+        }
+        if (storedImageFilePath == null
+                || storedImageFilePath.trim().isEmpty()
+                || storedImageFilePath.equals(deterministicPath)) {
+            return null;
+        }
+        return buildAssetFromImagePath(
+                assetId,
+                familyDirectory,
+                storedImageFilePath);
+    }
+
+    static String canonicalImageFilePath(
+            String familyDirectory,
+            String canonicalId) {
+        String expectedPrefix;
+        if ("item".equals(familyDirectory)) {
+            expectedPrefix = "i~";
+        } else if ("fluid".equals(familyDirectory)) {
+            expectedPrefix = "f~";
+        } else {
+            return null;
+        }
+        if (canonicalId == null || !canonicalId.startsWith(expectedPrefix)) {
+            return null;
+        }
+        String rawId = canonicalId.substring(expectedPrefix.length());
+        int separator = rawId.indexOf('~');
+        if (separator <= 0 || separator >= rawId.length() - 1) {
+            return null;
+        }
+        String modId = rawId.substring(0, separator);
+        String remainder = rawId.substring(separator + 1);
+        if (!safeCanonicalPathSegment(modId) || !safeCanonicalPathSegment(remainder)) {
+            return null;
+        }
+        return familyDirectory + "/" + modId + "/" + remainder + ".png";
+    }
+
+    private static boolean safeCanonicalPathSegment(String value) {
+        return value != null
+                && !value.isEmpty()
+                && value.indexOf('/') < 0
+                && value.indexOf('\\') < 0;
     }
 
     private List<CanonicalRenderAsset> collectItemAssetsFromFiles() {
@@ -502,7 +582,8 @@ public final class CanonicalRenderAssetCollector {
         asset.staticFile = relativizeFromExportDirectory(baseFile);
         applyRenderContractMetadata(asset, renderContractFile);
         applyNativeSpriteMetadata(asset, baseFile);
-        boolean nativeAnimated = isNativeSpriteAnimated(asset);
+        boolean primaryNativeAnimated = isNativeSpriteAnimated(asset)
+                && shouldTreatNativeSpriteAsPrimary(asset);
         GifAnimationInfo gifAnimation = inspectGifAnimation(baseFile);
         boolean nativeSnapshot = isNativeSpriteSnapshot(asset) && !gifAnimation.animated;
 
@@ -515,7 +596,7 @@ public final class CanonicalRenderAssetCollector {
             frameFiles = findFrameFiles(baseFile);
             asset.contentHash = computeAssetFingerprint(baseFile, metadataFile, renderContractFile, frameFiles);
         }
-        if (!nativeAnimated && !nativeSnapshot && !gifAnimation.animated) {
+        if (!primaryNativeAnimated && !nativeSnapshot && !gifAnimation.animated) {
             asset.frames = new ArrayList<>();
             asset.timeline = new ArrayList<>();
             asset.frames.add(frameDescriptor(baseFile, 0));
@@ -528,7 +609,7 @@ public final class CanonicalRenderAssetCollector {
             asset.capturedFrameCount = asset.frames.size();
         }
 
-        if (nativeAnimated) {
+        if (primaryNativeAnimated) {
             asset.mode = "native_sprite_animation";
             asset.animationMode = "native_sprite";
             asset.captureMethod = "native_sprite_metadata";
@@ -539,8 +620,8 @@ public final class CanonicalRenderAssetCollector {
             asset.atlasCandidate = Boolean.TRUE;
             asset.frames = null;
             asset.framePattern = null;
-            asset.capturedFrameCount = 0;
-            asset.configuredFrameCount = 0;
+            asset.capturedFrameCount = asset.materializedFrameCount;
+            asset.configuredFrameCount = asset.declaredFrameCount;
         } else if (gifAnimation.animated) {
             asset.mode = "rendered_frames";
             asset.animationMode = "gif_sequence";
@@ -575,8 +656,8 @@ public final class CanonicalRenderAssetCollector {
             asset.atlasCandidate = Boolean.TRUE;
             asset.frames = null;
             asset.framePattern = null;
-            asset.capturedFrameCount = 0;
-            asset.configuredFrameCount = 0;
+            asset.capturedFrameCount = asset.materializedFrameCount;
+            asset.configuredFrameCount = asset.declaredFrameCount;
         } else if (!frameFiles.isEmpty()) {
             asset.mode = "rendered_frames";
             asset.animationMode = "frame_sequence";
@@ -783,11 +864,12 @@ public final class CanonicalRenderAssetCollector {
                 asset.captureMethod = "native_sprite_metadata";
             }
             asset.atlasTexture = stringValue(metadata.get("atlasTexture"), null);
+            asset.iconName = stringValue(metadata.get("iconName"), null);
             asset.atlasExportFile = stringValue(metadata.get("atlasExportFile"), null);
             asset.spriteMetadataFile = relativizeFromExportDirectory(metadataFile);
             asset.nativeSpriteAtlasFile = stringValue(metadata.get("nativeSpriteAtlasFile"), null);
+            File inferredSpriteAtlasFile = inferNativeSpriteAtlasFile(baseFile);
             if ((asset.nativeSpriteAtlasFile == null || asset.nativeSpriteAtlasFile.isEmpty())) {
-                File inferredSpriteAtlasFile = inferNativeSpriteAtlasFile(baseFile);
                 if (inferredSpriteAtlasFile != null && inferredSpriteAtlasFile.exists()) {
                     asset.nativeSpriteAtlasFile = relativizeFromExportDirectory(inferredSpriteAtlasFile);
                 }
@@ -806,6 +888,15 @@ public final class CanonicalRenderAssetCollector {
             if (frameCount != null) {
                 asset.frameCount = frameCount;
             }
+            asset.runtimeFrameCount = integerValue(metadata.get("runtimeFrameCount"));
+            asset.declaredFrameCount = integerValue(metadata.get("declaredFrameCount"));
+            asset.materializedFrameCount = integerValue(metadata.get("materializedFrameCount"));
+            asset.distinctFrameCount = integerValue(metadata.get("distinctFrameCount"));
+            asset.materializationStatus =
+                    stringValue(metadata.get("materializationStatus"), null);
+            asset.materializationReason =
+                    stringValue(metadata.get("materializationReason"), null);
+            asset.materializedFrames = castMapList(metadata.get("materializedFrames"), null);
             Integer width = integerValue(metadata.get("width"));
             Integer height = integerValue(metadata.get("height"));
             if (width != null && height != null) {
@@ -813,6 +904,12 @@ public final class CanonicalRenderAssetCollector {
                 asset.baseSize.put("width", width);
                 asset.baseSize.put("height", height);
             }
+            backfillLegacyNativeSpriteMaterialization(
+                    asset,
+                    inferredSpriteAtlasFile,
+                    width,
+                    height,
+                    frameCount);
             Integer defaultFrameTime = integerValue(metadata.get("defaultFrameTime"));
             if (defaultFrameTime != null) {
                 asset.frameDurationMs = defaultFrameTime * 50;
@@ -824,7 +921,8 @@ public final class CanonicalRenderAssetCollector {
                 List<Map<String, Object>> nativeTimeline = (List<Map<String, Object>>) timeline;
                 asset.timeline = new ArrayList<>(nativeTimeline);
             }
-            if (Boolean.TRUE.equals(metadata.get("animated"))) {
+            if (ResourceAuthorityContract.isNativeSpriteAnimation(
+                    asset.materializationStatus)) {
                 if (primaryNativeSprite) {
                     asset.animationMode = "native_sprite";
                 } else if (asset.animationMode == null || asset.animationMode.isEmpty() || "none".equals(asset.animationMode)) {
@@ -848,6 +946,81 @@ public final class CanonicalRenderAssetCollector {
         } catch (Exception e) {
             Logger.MOD.warn("Failed to read native sprite metadata for {}", baseFile.getAbsolutePath(), e);
         }
+    }
+
+    static boolean backfillLegacyNativeSpriteMaterialization(
+            CanonicalRenderAsset asset,
+            File spriteAtlasFile,
+            Integer frameWidth,
+            Integer frameHeight,
+            Integer legacyFrameCount) {
+        if (asset == null || hasCompleteMaterializationContract(asset)) {
+            return false;
+        }
+        int declaredSignal = maximumNonNegative(
+                legacyFrameCount,
+                asset.runtimeFrameCount,
+                asset.declaredFrameCount);
+        if (declaredSignal <= 1) {
+            return false;
+        }
+
+        NativeSpriteFrameMaterializer.Result materialization =
+                NativeSpriteFrameMaterializer.inspectVerticalAtlas(
+                        spriteAtlasFile,
+                        frameWidth == null ? 0 : frameWidth.intValue(),
+                        frameHeight == null ? 0 : frameHeight.intValue());
+        asset.runtimeFrameCount = asset.runtimeFrameCount == null
+                ? Integer.valueOf(declaredSignal)
+                : asset.runtimeFrameCount;
+        asset.declaredFrameCount = asset.declaredFrameCount == null
+                ? Integer.valueOf(declaredSignal)
+                : asset.declaredFrameCount;
+        asset.materializedFrameCount = Integer.valueOf(
+                materialization.materializedFrameCount());
+        asset.distinctFrameCount = Integer.valueOf(
+                materialization.distinctFrameCount());
+        asset.materializationStatus = materialization.status();
+        asset.materializationReason = materialization.reason();
+        asset.materializedFrames = materialization.descriptors(
+                frameWidth == null ? 0 : frameWidth.intValue(),
+                frameHeight == null ? 0 : frameHeight.intValue());
+        return true;
+    }
+
+    private static boolean hasCompleteMaterializationContract(
+            CanonicalRenderAsset asset) {
+        if (asset.materializedFrameCount == null
+                || asset.distinctFrameCount == null
+                || asset.materializationStatus == null
+                || asset.materializationStatus.trim().isEmpty()
+                || asset.materializationReason == null
+                || asset.materializationReason.trim().isEmpty()
+                || asset.materializedFrames == null
+                || asset.materializedFrames.size() != asset.materializedFrameCount.intValue()) {
+            return false;
+        }
+        try {
+            return asset.materializationStatus.equals(
+                    ResourceAuthorityContract.animationStatus(
+                            asset.materializedFrameCount.intValue(),
+                            asset.distinctFrameCount.intValue()));
+        } catch (IllegalArgumentException ignored) {
+            return false;
+        }
+    }
+
+    private static int maximumNonNegative(Integer... values) {
+        int maximum = 0;
+        if (values == null) {
+            return maximum;
+        }
+        for (Integer value : values) {
+            if (value != null && value.intValue() > maximum) {
+                maximum = value.intValue();
+            }
+        }
+        return maximum;
     }
 
     private boolean shouldTreatNativeSpriteAsPrimary(CanonicalRenderAsset asset) {
@@ -887,7 +1060,8 @@ public final class CanonicalRenderAssetCollector {
     }
 
     private boolean isNativeSpriteAnimated(CanonicalRenderAsset asset) {
-        return "native_sprite".equals(asset.animationMode) || "native_sprite_animation".equals(asset.mode);
+        return ResourceAuthorityContract.isNativeSpriteAnimation(
+                asset.materializationStatus);
     }
 
     private boolean isNativeSpriteSnapshot(CanonicalRenderAsset asset) {
@@ -1129,6 +1303,7 @@ public final class CanonicalRenderAssetCollector {
         copy.playbackHint = source.playbackHint;
         copy.sourceFormat = source.sourceFormat;
         copy.sourcePath = source.sourcePath;
+        copy.iconName = source.iconName;
         copy.atlasTexture = source.atlasTexture;
         copy.atlasExportFile = source.atlasExportFile;
         copy.spriteMetadataFile = source.spriteMetadataFile;
@@ -1138,6 +1313,12 @@ public final class CanonicalRenderAssetCollector {
         copy.staticFile = source.staticFile;
         copy.framePattern = source.framePattern;
         copy.frameCount = source.frameCount;
+        copy.runtimeFrameCount = source.runtimeFrameCount;
+        copy.declaredFrameCount = source.declaredFrameCount;
+        copy.materializedFrameCount = source.materializedFrameCount;
+        copy.distinctFrameCount = source.distinctFrameCount;
+        copy.materializationStatus = source.materializationStatus;
+        copy.materializationReason = source.materializationReason;
         copy.configuredFrameCount = source.configuredFrameCount;
         copy.capturedFrameCount = source.capturedFrameCount;
         copy.loopMode = source.loopMode;
@@ -1147,6 +1328,7 @@ public final class CanonicalRenderAssetCollector {
         copy.atlasCandidate = source.atlasCandidate;
         copy.atlasFile = source.atlasFile;
         copy.frames = copyNestedMapList(source.frames);
+        copy.materializedFrames = copyNestedMapList(source.materializedFrames);
         copy.timeline = copyNestedMapList(source.timeline);
         copy.frameDurationMs = source.frameDurationMs;
         copy.frameDurationSource = source.frameDurationSource;

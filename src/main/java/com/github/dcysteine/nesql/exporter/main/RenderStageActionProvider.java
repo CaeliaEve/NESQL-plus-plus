@@ -41,7 +41,9 @@ final class RenderStageActionProvider implements ExportStageActionProvider {
             if (context.stageState.renderingImages) {
                 RenderLifecycleSupport.awaitRenderCompletion();
                 context.stageState.renderAssets =
-                        ExportWriterSupport.collectRenderAssets(context.exportContext.paths.repositoryDirectory);
+                        ExportWriterSupport.collectRenderAssets(
+                                context.stageState.runtime.entityManager,
+                                context.exportContext.paths.repositoryDirectory);
             }
         });
         actions.put(ExportStage.WRITE_RENDER_ASSET_MANIFEST, () -> {

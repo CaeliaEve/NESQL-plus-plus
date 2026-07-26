@@ -20,7 +20,6 @@ import jakarta.persistence.TypedQuery;
 import java.io.File;
 import java.io.IOException;
 
-import java.io.Writer;
 import java.util.ArrayList;
 import java.util.Collections;
 import java.util.Comparator;
@@ -70,106 +69,96 @@ final class RawExportRepositoryFactStreamer {
 
         RawRepositoryFactStreamResult result = new RawRepositoryFactStreamResult();
         Gson gson = new GsonBuilder().serializeNulls().create();
-        Map<String, RecipeShardState> shards = new LinkedHashMap<String, RecipeShardState>();
+        Map<String, RawExportRecipeShardWriterPool.Shard> shards =
+                new LinkedHashMap<String, RawExportRecipeShardWriterPool.Shard>();
         Set<String> usedShardFileNames = new LinkedHashSet<String>();
         Map<String, SpecialDomainStreamState> domains = createSpecialDomainStreamStates();
-        JsonlWriter itemFacts = null;
-        JsonlWriter fluidFacts = null;
+        RawExportJsonlWriter itemFacts = null;
+        RawExportJsonlWriter fluidFacts = null;
+        RawExportRecipeShardWriterPool shardWriters = null;
         try {
-            itemFacts = new JsonlWriter(new File(rawDir, "facts/items.jsonl.gz"), gson);
-            fluidFacts = new JsonlWriter(new File(rawDir, "facts/fluids.jsonl.gz"), gson);
+            shardWriters = new RawExportRecipeShardWriterPool(rawDir, gson);
+            itemFacts = new RawExportJsonlWriter(new File(rawDir, "facts/items.jsonl.gz"), gson);
+            fluidFacts = new RawExportJsonlWriter(new File(rawDir, "facts/fluids.jsonl.gz"), gson);
 
-            result.items = streamDatabaseItems(itemFacts, gson);
-            result.fluids = streamDatabaseFluids(fluidFacts, gson);
+            result.items = streamDatabaseItems(itemFacts);
+            result.fluids = streamDatabaseFluids(fluidFacts);
             result.recipes =
                     streamDatabaseRecipes(
                             shards,
                             usedShardFileNames,
                             domains,
-                            gson);
+                            gson,
+                            shardWriters);
+            final long recipeCount = result.recipes;
+            shardWriters.finish(shards.values(), new RawExportRecipeShardWriterPool.IndexPublisher() {
+                @Override
+                public void publish() throws IOException {
+                    writeRecipeIndex(shards, recipeCount);
+                }
+            });
         } finally {
             closeQuietly(itemFacts);
             closeQuietly(fluidFacts);
-            for (RecipeShardState shard : shards.values()) {
-                closeQuietly(shard.writer);
-            }
+            closeQuietly(shardWriters);
             for (SpecialDomainStreamState domain : domains.values()) {
                 closeQuietly(domain.payloadWriter);
             }
         }
 
-        writeRecipeIndex(shards, result.recipes);
         writeSpecialIndexes(domains);
         return result;
     }
 
-    private long streamDatabaseItems(JsonlWriter primary, Gson gson) throws IOException {
+    private long streamDatabaseItems(RawExportJsonlWriter primary) throws IOException {
         long written = 0L;
-        int offset = 0;
+        String lastId = null;
         while (true) {
-            TypedQuery<com.github.dcysteine.nesql.sql.base.item.Item> query = entityManager.createQuery(
-                    "SELECT i FROM Item i ORDER BY i.id",
-                    com.github.dcysteine.nesql.sql.base.item.Item.class);
-            List<com.github.dcysteine.nesql.sql.base.item.Item> items = query
-                    .setFirstResult(offset)
-                    .setMaxResults(ITEM_BATCH_SIZE)
-                    .getResultList();
+            List<com.github.dcysteine.nesql.sql.base.item.Item> items =
+                    loadItemBatch(lastId, ITEM_BATCH_SIZE);
             if (items.isEmpty()) {
                 break;
             }
             for (com.github.dcysteine.nesql.sql.base.item.Item item : items) {
                 CanonicalItem mapped = CanonicalExportMapper.mapItem(item);
-                JsonElement element = gson.toJsonTree(mapped, CanonicalItem.class);
-                primary.write(element);
+                primary.write(mapped, CanonicalItem.class);
                 written++;
             }
-            offset += items.size();
+            lastId = items.get(items.size() - 1).getId();
             entityManager.clear();
         }
         return written;
     }
 
-    private long streamDatabaseFluids(JsonlWriter primary, Gson gson) throws IOException {
+    private long streamDatabaseFluids(RawExportJsonlWriter primary) throws IOException {
         long written = 0L;
-        int offset = 0;
+        String lastId = null;
         while (true) {
-            TypedQuery<Fluid> query = entityManager.createQuery(
-                    "SELECT f FROM Fluid f ORDER BY f.id",
-                    Fluid.class);
-            List<Fluid> fluids = query
-                    .setFirstResult(offset)
-                    .setMaxResults(FLUID_BATCH_SIZE)
-                    .getResultList();
+            List<Fluid> fluids = loadFluidBatch(lastId, FLUID_BATCH_SIZE);
             if (fluids.isEmpty()) {
                 break;
             }
             for (Fluid fluid : fluids) {
                 CanonicalFluid mapped = CanonicalExportMapper.mapFluid(fluid);
-                JsonElement element = gson.toJsonTree(mapped, CanonicalFluid.class);
-                primary.write(element);
+                primary.write(mapped, CanonicalFluid.class);
                 written++;
             }
-            offset += fluids.size();
+            lastId = fluids.get(fluids.size() - 1).getId();
             entityManager.clear();
         }
         return written;
     }
 
     private long streamDatabaseRecipes(
-            Map<String, RecipeShardState> shards,
+            Map<String, RawExportRecipeShardWriterPool.Shard> shards,
             Set<String> usedShardFileNames,
             Map<String, SpecialDomainStreamState> domains,
-            Gson gson) throws IOException {
+            Gson gson,
+            RawExportRecipeShardWriterPool shardWriters) throws IOException {
         long written = 0L;
-        int offset = 0;
+        String lastId = null;
         while (true) {
-            TypedQuery<Recipe> query = entityManager.createQuery(
-                    "SELECT r FROM Recipe r LEFT JOIN FETCH r.recipeType ORDER BY r.id",
-                    Recipe.class);
-            List<Recipe> recipes = query
-                    .setFirstResult(offset)
-                    .setMaxResults(RECIPE_BATCH_SIZE)
-                    .getResultList();
+            List<Recipe> recipes = loadRecipeBatch(lastId, RECIPE_BATCH_SIZE);
             if (recipes.isEmpty()) {
                 break;
             }
@@ -177,14 +166,49 @@ final class RawExportRepositoryFactStreamer {
             for (Recipe recipe : recipes) {
                 CanonicalRecipe mapped = CanonicalExportMapper.mapRecipe(recipe, gtByRecipeId.get(recipe.getId()));
                 JsonElement element = gson.toJsonTree(mapped, CanonicalRecipe.class);
-                writeRecipeElement(element, shards, usedShardFileNames, domains, gson);
+                writeRecipeElement(element, shards, usedShardFileNames, domains, shardWriters);
                 written++;
             }
-            offset += recipes.size();
+            lastId = recipes.get(recipes.size() - 1).getId();
             gtByRecipeId.clear();
             entityManager.clear();
         }
         return written;
+    }
+
+    List<com.github.dcysteine.nesql.sql.base.item.Item> loadItemBatch(String lastId, int batchSize) {
+        String jpql = lastId == null
+                ? "SELECT i FROM Item i ORDER BY i.id"
+                : "SELECT i FROM Item i WHERE i.id > :lastId ORDER BY i.id";
+        TypedQuery<com.github.dcysteine.nesql.sql.base.item.Item> query = entityManager.createQuery(
+                jpql, com.github.dcysteine.nesql.sql.base.item.Item.class);
+        if (lastId != null) {
+            query.setParameter("lastId", lastId);
+        }
+        return query.setMaxResults(batchSize).getResultList();
+    }
+
+    List<Fluid> loadFluidBatch(String lastId, int batchSize) {
+        String jpql = lastId == null
+                ? "SELECT f FROM Fluid f ORDER BY f.id"
+                : "SELECT f FROM Fluid f WHERE f.id > :lastId ORDER BY f.id";
+        TypedQuery<Fluid> query = entityManager.createQuery(jpql, Fluid.class);
+        if (lastId != null) {
+            query.setParameter("lastId", lastId);
+        }
+        return query.setMaxResults(batchSize).getResultList();
+    }
+
+    List<Recipe> loadRecipeBatch(String lastId, int batchSize) {
+        String jpql = lastId == null
+                ? "SELECT r FROM Recipe r LEFT JOIN FETCH r.recipeType ORDER BY r.id"
+                : "SELECT r FROM Recipe r LEFT JOIN FETCH r.recipeType "
+                        + "WHERE r.id > :lastId ORDER BY r.id";
+        TypedQuery<Recipe> query = entityManager.createQuery(jpql, Recipe.class);
+        if (lastId != null) {
+            query.setParameter("lastId", lastId);
+        }
+        return query.setMaxResults(batchSize).getResultList();
     }
 
     private Map<String, GregTechRecipe> loadGregTechRecipeBatch(List<Recipe> recipes) {
@@ -214,20 +238,19 @@ final class RawExportRepositoryFactStreamer {
 
     private void writeRecipeElement(
             JsonElement element,
-            Map<String, RecipeShardState> shards,
+            Map<String, RawExportRecipeShardWriterPool.Shard> shards,
             Set<String> usedShardFileNames,
             Map<String, SpecialDomainStreamState> domains,
-            Gson gson) throws IOException {
+            RawExportRecipeShardWriterPool shardWriters) throws IOException {
         String handlerId = inferRecipeHandlerId(element);
-        RecipeShardState shard = shards.get(handlerId);
+        RawExportRecipeShardWriterPool.Shard shard = shards.get(handlerId);
         if (shard == null) {
             String fileName = uniqueShardFileName(handlerId, usedShardFileNames);
             String path = "facts/recipes/by-handler/" + fileName;
-            shard = new RecipeShardState(handlerId, path, new JsonlWriter(new File(rawDir, path), gson));
+            shard = shardWriters.createShard(handlerId, path);
             shards.put(handlerId, shard);
         }
-        shard.writer.write(element);
-        shard.recipeCount++;
+        shardWriters.write(shard, element);
 
         if (element != null && element.isJsonObject()) {
             JsonObject recipe = element.getAsJsonObject();
@@ -242,11 +265,12 @@ final class RawExportRepositoryFactStreamer {
         }
     }
 
-    private void writeRecipeIndex(Map<String, RecipeShardState> shardsByHandler, long recipeCount)
+    private void writeRecipeIndex(
+            Map<String, RawExportRecipeShardWriterPool.Shard> shardsByHandler, long recipeCount)
             throws IOException {
         Gson gson = new GsonBuilder().setPrettyPrinting().serializeNulls().create();
         JsonArray shards = new JsonArray();
-        for (RecipeShardState entry : shardsByHandler.values()) {
+        for (RawExportRecipeShardWriterPool.Shard entry : shardsByHandler.values()) {
             JsonObject shard = new JsonObject();
             shard.addProperty("handlerId", entry.handlerId);
             shard.addProperty("path", entry.path);
@@ -260,7 +284,8 @@ final class RawExportRepositoryFactStreamer {
         index.addProperty("recipeCount", recipeCount);
         index.addProperty("shardCount", shards.size());
         index.add("shards", shards);
-        writeJson(gson, new File(rawDir, "facts/recipes/index.json"), index);
+        RawExportSidecarFileOps.writeJsonAtomically(
+                gson, new File(rawDir, "facts/recipes/index.json"), index);
     }
 
     private void writeSpecialIndexes(Map<String, SpecialDomainStreamState> domains) throws IOException {
@@ -306,7 +331,7 @@ final class RawExportRepositoryFactStreamer {
             states.put(spec[0], new SpecialDomainStreamState(
                     spec[0],
                     spec[1],
-                    new JsonlWriter(new File(domainDir, "payloads.jsonl.gz"), gson)));
+                    new RawExportJsonlWriter(new File(domainDir, "payloads.jsonl.gz"), gson)));
         }
         return states;
     }
@@ -396,34 +421,14 @@ final class RawExportRepositoryFactStreamer {
         return out;
     }
 
-    private static void closeQuietly(JsonlWriter writer) {
-        if (writer == null) {
+    private static void closeQuietly(java.io.Closeable closeable) {
+        if (closeable == null) {
             return;
         }
         try {
-            writer.close();
+            closeable.close();
         } catch (IOException ignored) {
             // best-effort cleanup after export failure
-        }
-    }
-
-    private static final class JsonlWriter implements java.io.Closeable {
-        private final Gson gson;
-        private final Writer writer;
-
-        JsonlWriter(File out, Gson gson) throws IOException {
-            this.gson = gson;
-            this.writer = RawExportSidecarFileOps.createUtf8JsonlWriter(out);
-        }
-
-        void write(JsonElement element) throws IOException {
-            gson.toJson(element, writer);
-            writer.write('\n');
-        }
-
-        @Override
-        public void close() throws IOException {
-            writer.close();
         }
     }
 
@@ -433,23 +438,10 @@ final class RawExportRepositoryFactStreamer {
         long recipes;
     }
 
-    private static final class RecipeShardState {
-        final String handlerId;
-        final String path;
-        final JsonlWriter writer;
-        long recipeCount;
-
-        RecipeShardState(String handlerId, String path, JsonlWriter writer) {
-            this.handlerId = handlerId;
-            this.path = path;
-            this.writer = writer;
-        }
-    }
-
     private static final class SpecialDomainStreamState {
         final String domainId;
         final String needles;
-        final JsonlWriter payloadWriter;
+        final RawExportJsonlWriter payloadWriter;
         final Map<String, Integer> families = new LinkedHashMap<String, Integer>();
         final Map<String, Integer> recipeTypes = new LinkedHashMap<String, Integer>();
         final Map<String, Integer> sourcePlugins = new LinkedHashMap<String, Integer>();
@@ -460,7 +452,7 @@ final class RawExportRepositoryFactStreamer {
         long payloadCount;
         int payloadOrdinal;
 
-        SpecialDomainStreamState(String domainId, String needles, JsonlWriter payloadWriter) {
+        SpecialDomainStreamState(String domainId, String needles, RawExportJsonlWriter payloadWriter) {
             this.domainId = domainId;
             this.needles = needles;
             this.payloadWriter = payloadWriter;

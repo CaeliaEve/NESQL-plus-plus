@@ -31,7 +31,8 @@ public final class RenderContractsExporter {
             throw new IllegalStateException("Repository does not exist: " + exportPaths.repositoryDirectory.getAbsolutePath());
         }
 
-        List<CanonicalRenderAsset> assets = ExportWriterSupport.collectRenderAssets(exportPaths.repositoryDirectory);
+        List<CanonicalRenderAsset> assets =
+                ExportWriterSupport.collectRenderAssetsFromFiles(exportPaths.repositoryDirectory);
         Logger.chatMessage(EnumChatFormatting.AQUA + "Collected " + assets.size() + " render assets for rebuild.");
 
         ExportWriterSupport.writeRenderAssetManifest(null, exportPaths.repositoryDirectory, assets);

@@ -1,6 +1,7 @@
 package com.github.dcysteine.nesql.exporter.main;
 
 import com.github.dcysteine.nesql.exporter.local.SemanticItemIdentityDiagnosticsWriter;
+import com.github.dcysteine.nesql.exporter.local.RawExportGenerationFinalizer;
 import com.google.gson.Gson;
 import com.google.gson.GsonBuilder;
 import com.google.gson.JsonArray;
@@ -17,6 +18,8 @@ import java.io.FileOutputStream;
 import java.io.InputStreamReader;
 import java.io.OutputStreamWriter;
 import java.nio.charset.StandardCharsets;
+import java.nio.file.Files;
+import java.nio.file.StandardCopyOption;
 import java.util.zip.GZIPInputStream;
 
 /**
@@ -40,23 +43,37 @@ final class SemanticIdentityQuickCheckRunner {
 
     static void run(String repositoryName) throws Exception {
         ExportPaths paths = ExportPaths.forRepository(repositoryName);
-        File rawExportDirectory = new File(paths.repositoryDirectory, "raw-export");
-        if (!rawExportDirectory.exists() && !rawExportDirectory.mkdirs()) {
-            throw new IllegalStateException("Failed to create raw-export directory: " + rawExportDirectory);
-        }
-        File rawItemsFile = new File(rawExportDirectory, "facts/items.jsonl.gz");
-        if (!rawItemsFile.exists()) {
-            throw new IllegalStateException(
-                    "No raw item fact stream found for repository '"
-                            + repositoryName
-                            + "'. Run one normal export first.");
-        }
-
+        ExportContext exportContext = ExportContext.forProfile(ExportProfile.FULL_V104, repositoryName);
+        exportContext.beginRawExportGeneration();
+        boolean published = false;
         long startedAt = System.currentTimeMillis();
-        SemanticItemIdentityDiagnosticsWriter.SemanticAuditSummary summary =
-                SemanticItemIdentityDiagnosticsWriter.writeFromRawItems(rawExportDirectory);
-        JsonlValidationSummary validation = validateSemanticStreams(rawExportDirectory);
-        refreshRawExportReports(rawExportDirectory, summary);
+        SemanticItemIdentityDiagnosticsWriter.SemanticAuditSummary summary;
+        JsonlValidationSummary validation;
+        File authorityDirectory;
+        try {
+            authorityDirectory = exportContext.authoritativeRawExportDirectory();
+            File rawItemsFile = new File(authorityDirectory, "facts/items.jsonl.gz");
+            if (!rawItemsFile.exists()) {
+                throw new IllegalStateException(
+                        "No current raw item fact stream found for repository '"
+                                + repositoryName
+                                + "'. Run one normal export first.");
+            }
+            File rawExportDirectory = exportContext.rawExportDirectory();
+            copyDirectory(authorityDirectory, rawExportDirectory);
+            summary = SemanticItemIdentityDiagnosticsWriter.writeFromRawItems(rawExportDirectory);
+            validation = validateSemanticStreams(rawExportDirectory);
+            refreshRawExportReports(rawExportDirectory, summary);
+            ExportIntegrityManifestWriter.write(exportContext);
+            ExportWriterSupport.syncRawExportFinalReports(rawExportDirectory);
+            RawExportGenerationFinalizer.finalizeGeneration(rawExportDirectory);
+            exportContext.publishRawExportGeneration();
+            published = true;
+        } finally {
+            if (!published) {
+                exportContext.abortRawExportGeneration();
+            }
+        }
 
         Logger.chatMessage(
                 EnumChatFormatting.GREEN
@@ -86,7 +103,7 @@ final class SemanticIdentityQuickCheckRunner {
         Logger.chatMessage(
                 EnumChatFormatting.YELLOW
                         + "[NESQL] Output: "
-                        + new File(rawExportDirectory, "facts/items").getAbsolutePath());
+                        + new File(authorityDirectory, "facts/items").getAbsolutePath());
         ExportWriterSupport.deleteCanonicalStagingDirectory(paths.repositoryDirectory);
     }
 
@@ -96,6 +113,14 @@ final class SemanticIdentityQuickCheckRunner {
             SemanticItemIdentityDiagnosticsWriter.SemanticAuditSummary summary) throws Exception {
         refreshReportFile(new File(rawExportDirectory, "export_report.json"), summary);
         refreshReportFile(new File(rawExportDirectory, "validation/export_report.json"), summary);
+        refreshValidationReportFile(
+                new File(rawExportDirectory, "validation/export_validation_report.json"),
+                rawExportDirectory,
+                summary);
+        refreshValidationReportFile(
+                new File(rawExportDirectory, "validation/export-health-report.json"),
+                rawExportDirectory,
+                summary);
         refreshValidationReportFile(new File(rawExportDirectory, "validation_report.json"), rawExportDirectory, summary);
         refreshManifestFile(new File(rawExportDirectory, "manifest.json"), summary);
     }
@@ -235,16 +260,18 @@ final class SemanticIdentityQuickCheckRunner {
         JsonArray warnings = array(root, "warnings");
         if (blockedIssues.size() > 0) {
             root.addProperty("healthStatus", "blocked");
-            root.addProperty("compileReadinessStatus", "blocked");
+            root.addProperty("compileReadinessStatus", ExportValidationReadiness.BLOCKED);
             return;
         }
         if (warnings.size() > 0) {
             root.addProperty("healthStatus", "warning");
-            root.addProperty("compileReadinessStatus", "ready-with-warnings");
+            root.addProperty(
+                    "compileReadinessStatus",
+                    ExportValidationReadiness.READY_WITH_WARNINGS);
             return;
         }
         root.addProperty("healthStatus", "ok");
-        root.addProperty("compileReadinessStatus", "ready");
+        root.addProperty("compileReadinessStatus", ExportValidationReadiness.READY);
     }
 
     private static void upsertSemanticIdentityGate(
@@ -353,6 +380,47 @@ final class SemanticIdentityQuickCheckRunner {
                              new InputStreamReader(new FileInputStream(file), StandardCharsets.UTF_8))) {
             JsonElement parsed = new JsonParser().parse(reader);
             return parsed != null && parsed.isJsonObject() ? parsed.getAsJsonObject() : null;
+        }
+    }
+
+    private static void copyDirectory(File source, File target) throws Exception {
+        if (source == null || !source.exists() || !source.isDirectory()) {
+            throw new IllegalStateException(
+                    "Raw-export authority directory is missing: "
+                            + (source == null ? "<null>" : source.getAbsolutePath()));
+        }
+        if (Files.isSymbolicLink(source.toPath())) {
+            throw new IllegalStateException(
+                    "Raw-export authority must not be a symbolic link: " + source.getAbsolutePath());
+        }
+        File[] children = source.listFiles();
+        if (children == null) {
+            throw new IllegalStateException(
+                    "Failed to list raw-export authority directory: " + source.getAbsolutePath());
+        }
+        for (File child : children) {
+            if (Files.isSymbolicLink(child.toPath())) {
+                throw new IllegalStateException(
+                        "Raw-export authority contains a symbolic link: " + child.getAbsolutePath());
+            }
+            File destination = new File(target, child.getName());
+            if (child.isDirectory()) {
+                if (!destination.exists() && !destination.mkdirs() && !destination.isDirectory()) {
+                    throw new IllegalStateException(
+                            "Failed to create raw-export generation directory: "
+                                    + destination.getAbsolutePath());
+                }
+                copyDirectory(child, destination);
+            } else if (child.isFile()) {
+                Files.copy(
+                        child.toPath(),
+                        destination.toPath(),
+                        StandardCopyOption.REPLACE_EXISTING,
+                        StandardCopyOption.COPY_ATTRIBUTES);
+            } else {
+                throw new IllegalStateException(
+                        "Unsupported raw-export authority entry: " + child.getAbsolutePath());
+            }
         }
     }
 

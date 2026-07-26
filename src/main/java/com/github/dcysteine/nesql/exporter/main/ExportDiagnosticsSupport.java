@@ -97,7 +97,17 @@ final class ExportDiagnosticsSupport {
             ExportStage stage,
             Throwable error,
             File reportFile) {
-        File rawDirectory = RawExportFileCatalog.rawExportDirectory(exportContext.paths.repositoryDirectory);
+        if (!exportContext.hasActiveRawExportGeneration()) {
+            Logger.MOD.warn("Skipping raw-export failure JSON because no isolated generation is active");
+            return;
+        }
+        File rawDirectory;
+        try {
+            rawDirectory = exportContext.rawExportDirectory();
+        } catch (Exception resolutionError) {
+            Logger.MOD.error("Failed to resolve active raw-export generation for validation/errors.jsonl", resolutionError);
+            return;
+        }
         File validationDirectory = RawExportFileCatalog.validationDirectory(rawDirectory);
         if (!validationDirectory.exists() && !validationDirectory.mkdirs()) {
             Logger.MOD.warn("Failed to create NESQL validation directory: {}", validationDirectory.getAbsolutePath());

@@ -9,6 +9,9 @@ import java.io.IOException;
 import java.io.OutputStream;
 import java.io.OutputStreamWriter;
 import java.nio.charset.StandardCharsets;
+import java.nio.file.AtomicMoveNotSupportedException;
+import java.nio.file.Files;
+import java.nio.file.StandardCopyOption;
 
 final class RawExportSidecarFileOps {
     private static final int COPY_BUFFER_BYTES = 1024 * 1024;
@@ -83,9 +86,62 @@ final class RawExportSidecarFileOps {
         return true;
     }
 
-    static void purgeLegacyRawExportOutputs(File rawDir) throws IOException {
-        for (String relativePath : RawExportFileCatalog.prohibitedRootOutputs()) {
-            deleteIfExists(RawExportFileCatalog.rawExportFile(rawDir, relativePath));
+    static void writeJsonAtomically(Gson gson, File out, Object value) throws IOException {
+        ensureOutputFile(out);
+        File parent = out.getParentFile();
+        File temp = Files.createTempFile(parent.toPath(), "." + out.getName() + ".", ".tmp").toFile();
+        boolean published = false;
+        try {
+            writeJson(gson, temp, value);
+            atomicMove(temp, out);
+            published = true;
+        } finally {
+            if (!published && temp.exists() && !temp.delete()) {
+                temp.deleteOnExit();
+            }
+        }
+    }
+
+    static void atomicMove(File source, File target) throws IOException {
+        if (source == null || target == null) {
+            throw new IOException("Raw-export atomic move requires source and target paths");
+        }
+        File parent = target.getParentFile();
+        if (parent != null) {
+            ensureDirectory(parent);
+        }
+        try {
+            Files.move(
+                    source.toPath(),
+                    target.toPath(),
+                    StandardCopyOption.ATOMIC_MOVE,
+                    StandardCopyOption.REPLACE_EXISTING);
+        } catch (AtomicMoveNotSupportedException e) {
+            throw new IOException(
+                    "Raw-export publication requires same-filesystem atomic move: "
+                            + source.getAbsolutePath()
+                            + " -> "
+                            + target.getAbsolutePath(),
+                    e);
+        }
+    }
+
+    static void gzipRequired(File source, File target, String label) throws IOException {
+        if (source == null || !source.exists() || !source.isFile()) {
+            throw new IOException("Missing raw-export gzip source for " + label);
+        }
+        if (target == null || !target.getName().endsWith(".gz")) {
+            throw new IOException("Raw-export gzip target must end with .gz for " + label);
+        }
+        byte[] buffer = new byte[COPY_BUFFER_BYTES];
+        try (FileInputStream in = new FileInputStream(source);
+             OutputStream out = openOutput(target)) {
+            int read;
+            while ((read = in.read(buffer)) >= 0) {
+                if (read > 0) {
+                    out.write(buffer, 0, read);
+                }
+            }
         }
     }
 
@@ -131,20 +187,4 @@ final class RawExportSidecarFileOps {
         }
     }
 
-    private static void deleteIfExists(File file) throws IOException {
-        if (file == null || !file.exists()) {
-            return;
-        }
-        if (file.isDirectory()) {
-            File[] children = file.listFiles();
-            if (children != null) {
-                for (File child : children) {
-                    deleteIfExists(child);
-                }
-            }
-        }
-        if (!file.delete() && file.exists()) {
-            throw new IOException("Failed to delete legacy raw-export output: " + file.getAbsolutePath());
-        }
-    }
 }

@@ -1,6 +1,7 @@
 package com.github.dcysteine.nesql.exporter.local;
 
 import com.github.dcysteine.nesql.exporter.canonical.CanonicalRenderAsset;
+import com.github.dcysteine.nesql.exporter.canonical.ResourceAuthorityContract;
 import com.github.dcysteine.nesql.exporter.main.Logger;
 import com.google.gson.Gson;
 import com.google.gson.GsonBuilder;
@@ -49,10 +50,12 @@ final class RawExportRenderAssetCatalogWriter {
                 }
             }
         }
+        JsonArray materializationSourceRows = textureRows;
         if (textureRows.size() == 0) {
             JsonObject renderManifest = readObject(new File(repositoryDirectory, "canonical/render-assets.json"));
             if (renderManifest != null && renderManifest.has("assets") && renderManifest.get("assets").isJsonArray()) {
                 JsonArray assets = renderManifest.getAsJsonArray("assets");
+                materializationSourceRows = assets;
                 counts.textures = writeArrayAsJsonl(assets, new File(rawDir, "assets/textures/index.jsonl.gz"));
                 JsonArray animated = new JsonArray();
                 JsonArray nativeSprites = new JsonArray();
@@ -83,17 +86,30 @@ final class RawExportRenderAssetCatalogWriter {
             writeArrayAsJsonl(nativeSpriteRows, new File(rawDir, "assets/animations/native-sprites.jsonl.gz"));
             writeArrayAsJsonl(renderedGifRows, new File(rawDir, "assets/animations/rendered-gifs.jsonl.gz"));
         }
-        counts.browserAtlasAssets = writeBrowserAtlasIndexAndAssets();
+        BrowserAtlasMaterializationResult browserAtlas = writeBrowserAtlasIndexAndAssets();
+        materializePromotedAnimationAtlases(
+                materializationSourceRows,
+                browserAtlas.animationPromotionAssetIds);
+        RawAnimationFrameMaterializationCounts materializationCounts =
+                new RawExportAnimationFrameMaterializationWriter().write(
+                        materializationSourceRows,
+                        new File(rawDir, RawExportFileCatalog.ANIMATION_FRAME_MATERIALIZATIONS_FILE));
+        counts.animationFrameMaterializations = materializationCounts.total;
+        counts.materializedAnimations = materializationCounts.materialized;
+        counts.staticAnimationFrames = materializationCounts.staticFrames;
+        counts.unavailableAnimationFrames = materializationCounts.unavailable;
+        counts.browserAtlasAssets = browserAtlas.copiedAssetCount;
         return counts;
     }
 
-    private long writeBrowserAtlasIndexAndAssets() throws IOException {
+    private BrowserAtlasMaterializationResult writeBrowserAtlasIndexAndAssets() throws IOException {
         JsonObject atlasIndex = readObject(new File(repositoryDirectory, "canonical/browser-atlas-index.json"));
         if (atlasIndex == null) {
-            return 0L;
+            return BrowserAtlasMaterializationResult.empty();
         }
 
         LinkedHashSet<String> copiedAssets = new LinkedHashSet<String>();
+        LinkedHashSet<String> animationPromotionAssetIds = new LinkedHashSet<String>();
         JsonArray items = atlasIndex.getAsJsonArray("items");
         if (items != null) {
             for (JsonElement element : items) {
@@ -101,15 +117,90 @@ final class RawExportRenderAssetCatalogWriter {
                     continue;
                 }
                 JsonObject item = element.getAsJsonObject();
-                rewriteBrowserAtlasPlacement( objectAt(item, "staticAtlas"), copiedAssets);
-                rewriteBrowserAtlasPlacement( objectAt(item, "animatedAtlas"), copiedAssets);
+                String assetId = stringValue(item, "assetId");
+                if (assetId != null
+                        && assetId.trim().length() > 0
+                        && !booleanValue(item, "hasAnimatedAtlas")) {
+                    animationPromotionAssetIds.add(assetId);
+                }
+                rewriteBrowserAtlasPlacement(objectAt(item, "staticAtlas"), copiedAssets);
+                rewriteBrowserAtlasPlacement(objectAt(item, "animatedAtlas"), copiedAssets);
             }
         }
         atlasIndex.addProperty("rawExportMaterializedAtlasAssets", copiedAssets.size());
         writeJson(new GsonBuilder().setPrettyPrinting().serializeNulls().create(),
                 new File(rawDir, "assets/textures/browser_atlas_index.json"),
                 atlasIndex);
-        return copiedAssets.size();
+        return new BrowserAtlasMaterializationResult(
+                copiedAssets.size(),
+                animationPromotionAssetIds);
+    }
+
+    private void materializePromotedAnimationAtlases(
+            JsonArray assetRows,
+            Set<String> animationPromotionAssetIds) throws IOException {
+        if (assetRows == null
+                || assetRows.size() == 0
+                || animationPromotionAssetIds == null
+                || animationPromotionAssetIds.isEmpty()) {
+            return;
+        }
+        LinkedHashSet<String> copiedAssets = new LinkedHashSet<String>();
+        for (JsonElement element : assetRows) {
+            if (element == null || !element.isJsonObject()) {
+                continue;
+            }
+            JsonObject asset = element.getAsJsonObject();
+            String assetId = stringValue(asset, "assetId");
+            if (!animationPromotionAssetIds.contains(assetId)
+                    || !ResourceAuthorityContract.ANIMATION_MATERIALIZED.equals(
+                            stringValue(asset, "materializationStatus"))) {
+                continue;
+            }
+            String atlasFile = stringValue(asset, "nativeSpriteAtlasFile");
+            if (atlasFile == null || atlasFile.trim().length() == 0) {
+                atlasFile = stringValue(asset, "atlasFile");
+            }
+            String rawAtlasPath = materializeAnimationAtlasAsset(atlasFile, copiedAssets);
+            asset.addProperty("nativeSpriteAtlasFile", rawAtlasPath);
+        }
+    }
+
+    private String materializeAnimationAtlasAsset(
+            String atlasFile,
+            Set<String> copiedAssets) throws IOException {
+        String normalized = normalizeRelativePath(atlasFile);
+        if (normalized == null) {
+            throw new IOException("Invalid animation materialization atlas path: " + atlasFile);
+        }
+        String imageRelative = stripImagePrefix(normalized);
+        String rawRelative = "assets/animations/materialization-atlases/" + imageRelative;
+        File source = resolveAnimationAtlasSource(normalized, imageRelative);
+        if (source == null || !source.isFile()) {
+            throw new IOException(
+                    "Missing animation materialization atlas for raw-export: " + normalized);
+        }
+        if (copiedAssets.add(rawRelative)) {
+            RawExportSidecarFileOps.copyRequired(
+                    source,
+                    new File(rawDir, rawRelative.replace('/', File.separatorChar)),
+                    "animation materialization atlas " + normalized);
+        }
+        return rawRelative;
+    }
+
+    private File resolveAnimationAtlasSource(String normalized, String imageRelative) {
+        File direct = new File(repositoryDirectory, normalized.replace('/', File.separatorChar));
+        if (direct.isFile()) {
+            return direct;
+        }
+        File image = new File(
+                new File(repositoryDirectory, "image"),
+                imageRelative.replace('/', File.separatorChar));
+        if (image.isFile()) {
+            return image;
+        }
+        return null;
     }
 
     private void rewriteBrowserAtlasPlacement(
@@ -171,6 +262,12 @@ final class RawExportRenderAssetCatalogWriter {
                 : relativePath;
     }
 
+    private static String stripImagePrefix(String relativePath) {
+        return relativePath != null && relativePath.startsWith("image/")
+                ? relativePath.substring("image/".length())
+                : relativePath;
+    }
+
     private static String normalizeRelativePath(String relativePath) {
         if (relativePath == null) {
             return null;
@@ -196,6 +293,7 @@ final class RawExportRenderAssetCatalogWriter {
         add(row, "variantKey", asset.variantKey);
         add(row, "family", asset.family);
         add(row, "sourceType", asset.sourceType);
+        add(row, "iconName", asset.iconName);
         add(row, "contentHash", asset.contentHash);
         add(row, "mode", asset.mode);
         add(row, "renderMode", asset.renderMode);
@@ -205,11 +303,18 @@ final class RawExportRenderAssetCatalogWriter {
         add(row, "staticFile", asset.staticFile);
         add(row, "framePattern", asset.framePattern);
         add(row, "frameCount", asset.frameCount);
+        add(row, "runtimeFrameCount", asset.runtimeFrameCount);
+        add(row, "declaredFrameCount", asset.declaredFrameCount);
+        add(row, "materializedFrameCount", asset.materializedFrameCount);
+        add(row, "distinctFrameCount", asset.distinctFrameCount);
+        add(row, "materializationStatus", asset.materializationStatus);
+        add(row, "materializationReason", asset.materializationReason);
         add(row, "configuredFrameCount", asset.configuredFrameCount);
         add(row, "capturedFrameCount", asset.capturedFrameCount);
         add(row, "frameDurationMs", asset.frameDurationMs);
         add(row, "frameDurationSource", asset.frameDurationSource);
         add(row, "frames", asset.frames);
+        add(row, "materializedFrames", asset.materializedFrames);
         add(row, "timeline", asset.timeline);
         add(row, "loopMode", asset.loopMode);
         add(row, "loop", asset.loop);
@@ -225,6 +330,10 @@ final class RawExportRenderAssetCatalogWriter {
     }
 
     private static boolean isAnimated(CanonicalRenderAsset asset) {
+        if (asset.materializationStatus != null) {
+            return ResourceAuthorityContract.isNativeSpriteAnimation(
+                    asset.materializationStatus);
+        }
         return (asset.frameCount != null && asset.frameCount > 1)
                 || (asset.capturedFrameCount != null && asset.capturedFrameCount > 1)
                 || (asset.configuredFrameCount != null && asset.configuredFrameCount > 1)
@@ -235,14 +344,17 @@ final class RawExportRenderAssetCatalogWriter {
 
 
     private static boolean isNativeSpriteAnimation(CanonicalRenderAsset asset) {
-        return "native_sprite_animation".equals(asset.mode)
+        return ResourceAuthorityContract.isNativeSpriteAnimation(asset.materializationStatus)
+                || "native_sprite_animation".equals(asset.mode)
                 || "native_sprite".equals(asset.animationMode)
                 || "native_sprite_aux".equals(asset.animationMode)
                 || asset.spriteMetadataFile != null;
     }
 
     private static boolean isNativeSpriteAnimation(JsonObject asset) {
-        return "native_sprite_animation".equals(stringValue(asset, "mode"))
+        return ResourceAuthorityContract.isNativeSpriteAnimation(
+                        stringValue(asset, "materializationStatus"))
+                || "native_sprite_animation".equals(stringValue(asset, "mode"))
                 || "native_sprite".equals(stringValue(asset, "animationMode"))
                 || "native_sprite_aux".equals(stringValue(asset, "animationMode"))
                 || stringValue(asset, "spriteMetadataFile") != null;
@@ -262,6 +374,10 @@ final class RawExportRenderAssetCatalogWriter {
                 || containsIgnoreCase(stringValue(asset, "staticFile"), ".gif");
     }
     private static boolean isAnimated(JsonObject asset) {
+        if (stringValue(asset, "materializationStatus") != null) {
+            return ResourceAuthorityContract.isNativeSpriteAnimation(
+                    stringValue(asset, "materializationStatus"));
+        }
         return intValue(asset, "frameCount") > 1
                 || intValue(asset, "capturedFrameCount") > 1
                 || intValue(asset, "configuredFrameCount") > 1
@@ -281,6 +397,33 @@ final class RawExportRenderAssetCatalogWriter {
             return element != null && element.isJsonObject() ? element.getAsJsonObject() : null;
         } catch (Exception ignored) {
             return null;
+        }
+    }
+
+    private static boolean booleanValue(JsonObject object, String key) {
+        try {
+            JsonElement element = object == null ? null : object.get(key);
+            return element != null && !element.isJsonNull() && element.getAsBoolean();
+        } catch (RuntimeException ignored) {
+            return false;
+        }
+    }
+
+    private static final class BrowserAtlasMaterializationResult {
+        final long copiedAssetCount;
+        final Set<String> animationPromotionAssetIds;
+
+        private BrowserAtlasMaterializationResult(
+                long copiedAssetCount,
+                Set<String> animationPromotionAssetIds) {
+            this.copiedAssetCount = copiedAssetCount;
+            this.animationPromotionAssetIds = animationPromotionAssetIds;
+        }
+
+        static BrowserAtlasMaterializationResult empty() {
+            return new BrowserAtlasMaterializationResult(
+                    0L,
+                    java.util.Collections.<String>emptySet());
         }
     }
 

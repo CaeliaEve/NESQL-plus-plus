@@ -37,14 +37,6 @@ final class ExportIntegrityManifestWriter {
                                     RawExportFileCatalog.validationPath(
                                             RawExportFileCatalog.EXPORT_HEALTH_REPORT_FILE_NAME)),
                             new FileArtifactDescriptor(
-                                    "manifest",
-                                    RawExportFileCatalog.validationPath(
-                                            RawExportFileCatalog.EXPORT_MANIFEST_FILE_NAME)),
-                            new FileArtifactDescriptor(
-                                    "checksums",
-                                    RawExportFileCatalog.validationPath(
-                                            RawExportFileCatalog.STAGE_CHECKSUMS_FILE_NAME)),
-                            new FileArtifactDescriptor(
                                     "timings",
                                     ExportDebugFile.STAGE_TIMING.validationAliasPath()),
                             new FileArtifactDescriptor(
@@ -85,12 +77,14 @@ final class ExportIntegrityManifestWriter {
 
     static void write(ExportContext exportContext) throws Exception {
         File repositoryDirectory = exportContext.paths.repositoryDirectory;
-        File rawDir = RawExportFileCatalog.rawExportDirectory(repositoryDirectory);
+        File rawDir = exportContext.rawExportDirectory();
         File validationDir = RawExportFileCatalog.validationDirectory(rawDir);
         ExportIntegrityOutputFileCatalog.ensureDirectory(validationDir);
 
-        File checksumFile = ExportIntegrityOutputFileCatalog.checksumFile(validationDir);
-        Map<String, ArtifactChecksum> previousArtifacts = readPreviousArtifacts(checksumFile);
+        File previousValidationDir = RawExportFileCatalog.validationDirectory(
+                exportContext.authoritativeRawExportDirectory());
+        File previousChecksumFile = ExportIntegrityOutputFileCatalog.checksumFile(previousValidationDir);
+        Map<String, ArtifactChecksum> previousArtifacts = readPreviousArtifacts(previousChecksumFile);
         List<ArtifactChecksum> artifacts = collectArtifacts(repositoryDirectory, rawDir);
         annotateChanges(artifacts, previousArtifacts);
         ExportManifest manifest = new ExportManifest();
@@ -130,7 +124,6 @@ final class ExportIntegrityManifestWriter {
         for (ExportControlFile file : ExportControlFile.values()) {
             addControlFile(
                     artifacts,
-                    repositoryDirectory,
                     rawDir,
                     file,
                     RawExportFileCatalog.controlArtifactStage(file));
@@ -138,7 +131,6 @@ final class ExportIntegrityManifestWriter {
         for (ExportDebugFile file : ExportDebugFile.values()) {
             addDebugFile(
                     artifacts,
-                    repositoryDirectory,
                     rawDir,
                     file,
                     RawExportFileCatalog.debugArtifactStage(file));
@@ -156,17 +148,21 @@ final class ExportIntegrityManifestWriter {
         for (FileArtifactDescriptor descriptor : descriptors) {
             addFile(
                     artifacts,
-                    repositoryDirectory,
                     RawExportFileCatalog.rawExportFile(rawDir, descriptor.relativePath),
+                    rawExportArtifactPath(descriptor.relativePath),
                     descriptor.stage);
         }
     }
 
-    private static void addFile(List<ArtifactChecksum> artifacts, File root, File file, String stage) throws Exception {
+    private static void addFile(
+            List<ArtifactChecksum> artifacts,
+            File file,
+            String logicalPath,
+            String stage) throws Exception {
         ArtifactChecksum artifact = new ArtifactChecksum();
         artifact.stage = stage;
         artifact.family = stage;
-        artifact.path = relative(root, file);
+        artifact.path = logicalPath;
         artifact.exists = file.exists() && file.isFile();
         if (artifact.exists) {
             artifact.bytes = file.length();
@@ -177,20 +173,26 @@ final class ExportIntegrityManifestWriter {
 
     private static void addControlFile(
             List<ArtifactChecksum> artifacts,
-            File root,
             File rawDir,
             ExportControlFile file,
             String stage) throws Exception {
-        addFile(artifacts, root, new File(rawDir, file.rawExportPath().replace('/', File.separatorChar)), stage);
+        addFile(
+                artifacts,
+                new File(rawDir, file.rawExportPath().replace('/', File.separatorChar)),
+                rawExportArtifactPath(file.rawExportPath()),
+                stage);
     }
 
     private static void addDebugFile(
             List<ArtifactChecksum> artifacts,
-            File root,
             File rawDir,
             ExportDebugFile file,
             String stage) throws Exception {
-        addFile(artifacts, root, new File(rawDir, file.rawExportDebugPath().replace('/', File.separatorChar)), stage);
+        addFile(
+                artifacts,
+                new File(rawDir, file.rawExportDebugPath().replace('/', File.separatorChar)),
+                rawExportArtifactPath(file.rawExportDebugPath()),
+                stage);
     }
 
     private static void addDirectoryArtifacts(
@@ -200,8 +202,10 @@ final class ExportIntegrityManifestWriter {
         for (DirectoryArtifactDescriptor descriptor : DIRECTORY_ARTIFACTS) {
             addDirectorySummary(
                     artifacts,
-                    repositoryDirectory,
                     artifactDirectory(repositoryDirectory, rawDir, descriptor),
+                    descriptor.root == ArtifactRoot.RAW_EXPORT
+                            ? rawExportArtifactPath(descriptor.relativePath)
+                            : descriptor.relativePath,
                     descriptor.stage);
         }
     }
@@ -216,8 +220,8 @@ final class ExportIntegrityManifestWriter {
 
     private static void addDirectorySummary(
             List<ArtifactChecksum> artifacts,
-            File root,
             File dir,
+            String logicalPath,
             String stage) throws Exception {
         if (dir.exists() && !dir.isDirectory()) {
             throw new IOException(
@@ -231,12 +235,16 @@ final class ExportIntegrityManifestWriter {
         ArtifactChecksum artifact = new ArtifactChecksum();
         artifact.stage = stage;
         artifact.family = stage;
-        artifact.path = relative(root, dir);
+        artifact.path = logicalPath;
         artifact.exists = dir.exists();
         artifact.fileCount = stats.fileCount;
         artifact.bytes = stats.bytes;
         artifact.sha256 = stats.digest();
         artifacts.add(artifact);
+    }
+
+    private static String rawExportArtifactPath(String relativePath) {
+        return RawExportFileCatalog.RAW_EXPORT_DIRECTORY + "/" + relativePath.replace(File.separatorChar, '/');
     }
 
     private static void collectDirectoryStats(File file, DirectoryStats stats) throws Exception {
@@ -257,6 +265,12 @@ final class ExportIntegrityManifestWriter {
         if (children == null) {
             throw new IOException("Failed to list export integrity artifact directory: " + file.getAbsolutePath());
         }
+        Arrays.sort(children, new java.util.Comparator<File>() {
+            @Override
+            public int compare(File left, File right) {
+                return left.getName().compareTo(right.getName());
+            }
+        });
         for (File child : children) {
             collectDirectoryStats(root, child, stats);
         }

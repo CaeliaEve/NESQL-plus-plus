@@ -28,7 +28,7 @@ public final class RawExportFileCatalog {
 
     public static final String RAW_EXPORT_STATUS = "raw-export-authoritative";
     public static final String SIZE_REPORT_SCHEMA_SUFFIX = "/size-report";
-    public static final String SIZE_REPORT_STRATEGY = "raw-export-only";
+    public static final String SIZE_REPORT_STRATEGY = "final-generation-excluding-size-report";
 
     public static final String MANIFEST_FILE = "manifest.json";
     public static final String EXPORT_REPORT_FILE = "export_report.json";
@@ -40,9 +40,13 @@ public final class RawExportFileCatalog {
     public static final String NEI_GUID_FILTERS_FILE = "facts/nei/guidfilters.jsonl.gz";
     public static final String NEI_HIDDEN_ITEMS_FILE = "facts/nei/hiddenitems.jsonl.gz";
     public static final String TEXTURE_INDEX_FILE = "assets/textures/index.jsonl.gz";
+    public static final String FACADE_RESOLUTIONS_FILE =
+            "assets/textures/facade-resolutions.jsonl.gz";
     public static final String BROWSER_ATLAS_INDEX_FILE = "assets/textures/browser_atlas_index.json";
     public static final String BROWSER_ATLAS_ASSETS_DIRECTORY = "assets/textures/atlas-assets";
     public static final String ANIMATION_INDEX_FILE = "assets/animations/index.jsonl.gz";
+    public static final String ANIMATION_FRAME_MATERIALIZATIONS_FILE =
+            "assets/animations/frame-materializations.jsonl.gz";
     public static final String NATIVE_SPRITES_FILE = "assets/animations/native-sprites.jsonl.gz";
     public static final String RENDERED_GIFS_FILE = "assets/animations/rendered-gifs.jsonl.gz";
     public static final String RENDER_BACKEND_FILE = "facts/render/backend.json";
@@ -138,7 +142,11 @@ public final class RawExportFileCatalog {
                     new ManifestFile("neiGuidFilters", NEI_GUID_FILTERS_FILE),
                     new ManifestFile("neiHiddenItems", NEI_HIDDEN_ITEMS_FILE),
                     new ManifestFile("textures", TEXTURE_INDEX_FILE),
+                    new ManifestFile("facadeResolutions", FACADE_RESOLUTIONS_FILE),
                     new ManifestFile("animations", ANIMATION_INDEX_FILE),
+                    new ManifestFile(
+                            "animationFrameMaterializations",
+                            ANIMATION_FRAME_MATERIALIZATIONS_FILE),
                     new ManifestFile("nativeSprites", NATIVE_SPRITES_FILE),
                     new ManifestFile("renderedGifs", RENDERED_GIFS_FILE),
                     new ManifestFile("renderBackend", RENDER_BACKEND_FILE),
@@ -231,7 +239,7 @@ public final class RawExportFileCatalog {
         return PROHIBITED_ROOT_OUTPUTS;
     }
 
-    public static File rawExportDirectory(File repositoryDirectory) {
+    public static File rawExportRootDirectory(File repositoryDirectory) {
         return new File(repositoryDirectory, RAW_EXPORT_DIRECTORY);
     }
 

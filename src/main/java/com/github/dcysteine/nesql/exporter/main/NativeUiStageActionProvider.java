@@ -37,6 +37,7 @@ final class NativeUiStageActionProvider implements ExportStageActionProvider {
                 ExportWriterSupport.writeRawExportSidecar(
                         context.stageState.runtime == null ? null : context.stageState.runtime.entityManager,
                         context.exportContext.paths.repositoryDirectory,
+                        context.exportContext.rawExportDirectory(),
                         context.exportContext,
                         context.stageState.renderAssets));
     }

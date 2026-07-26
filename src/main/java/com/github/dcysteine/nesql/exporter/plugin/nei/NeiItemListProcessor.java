@@ -2,6 +2,7 @@ package com.github.dcysteine.nesql.exporter.plugin.nei;
 
 import com.github.dcysteine.nesql.exporter.main.Logger;
 import com.github.dcysteine.nesql.exporter.plugin.PluginExporter;
+import com.github.dcysteine.nesql.exporter.plugin.PluginExportResult;
 import com.github.dcysteine.nesql.exporter.plugin.PluginHelper;
 import com.github.dcysteine.nesql.exporter.plugin.base.factory.ItemFactory;
 import com.github.dcysteine.nesql.exporter.util.IdUtil;
@@ -17,14 +18,26 @@ public class NeiItemListProcessor extends PluginHelper {
         super(exporter);
     }
 
-    public void process() {
-        List<ItemStack> exportItems = NeiItemUniverse.getItems();
+    public PluginExportResult process() {
+        NeiItemUniverse.Snapshot itemUniverse = NeiItemUniverse.load();
+        List<ItemStack> exportItems = itemUniverse.items();
         int total = exportItems.size();
+        int failed = 0;
+        PluginExportResult.Builder result = PluginExportResult.builder();
         logger.info("Processing {} NEI items...", total);
 
         if (total == 0) {
             Logger.chatMessage(
                     EnumChatFormatting.RED + "NEI item list is empty; did you forget to load it?");
+            if (itemUniverse.itemUniverseResult().status == PluginExportResult.Status.FAILED) {
+                return itemUniverse.itemUniverseResult();
+            }
+            return PluginExportResult.builder()
+                    .merge(itemUniverse.itemUniverseResult())
+                    .merge(PluginExportResult.failed(
+                            "nei-item-universe-empty",
+                            "NEI item list is empty; core item collection cannot continue"))
+                    .build();
         }
 
         ItemFactory itemFactory = new ItemFactory(exporter);
@@ -35,6 +48,11 @@ public class NeiItemListProcessor extends PluginHelper {
                 RenderDiagnosticsSupport.writeCurrentNeiItem(itemStack, count, total);
                 itemFactory.get(itemStack);
             } catch (Exception e) {
+                failed++;
+                result.error(
+                        "nei-item-export-failed",
+                        safeItemId(itemStack) + ": " + e.getClass().getName() + ": " + safeMessage(e),
+                        true);
                 // GTNH has some bad items, so we have to do this =(
                 // Avoid getDisplayName() here: some custom items do dangerous work in display-name paths.
                 logger.info("Found a bad item: {}", safeItemId(itemStack));
@@ -49,6 +67,20 @@ public class NeiItemListProcessor extends PluginHelper {
 
         exporterState.flushEntityManager();
         logger.info("Finished processing NEI items!");
+        PluginExportResult itemProcessingResult = result
+                .status(failed == 0 ? PluginExportResult.Status.SUCCESS : PluginExportResult.Status.PARTIAL)
+                .count("itemsTotal", total)
+                .count("itemsExported", total - failed)
+                .count("itemsFailed", failed)
+                .build();
+        return PluginExportResult.builder()
+                .merge(itemUniverse.itemUniverseResult())
+                .merge(itemProcessingResult)
+                .build();
+    }
+
+    private String safeMessage(Throwable error) {
+        return error.getMessage() == null ? "<no message>" : error.getMessage();
     }
 
     private String safeItemId(ItemStack itemStack) {

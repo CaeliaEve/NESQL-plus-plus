@@ -72,7 +72,8 @@ final class RawExportValidationAbiCatalog {
                     new GateFactory() {
                         @Override
                         public RawValidationGate build(RawExportCounts counts, List<String> issues) {
-                            return coreCountsGate(issues.isEmpty(), issues.size());
+                            int mismatchCount = countMismatchIssueCount(issues);
+                            return coreCountsGate(mismatchCount == 0, mismatchCount);
                         }
                     }),
             gateDescriptor(
@@ -260,6 +261,20 @@ final class RawExportValidationAbiCatalog {
         }
     }
 
+    static int countMismatchIssueCount(List<String> issues) {
+        if (issues == null || issues.isEmpty()) {
+            return 0;
+        }
+        int count = 0;
+        String prefix = ISSUE_COUNT_MISMATCH + ":";
+        for (String issue : issues) {
+            if (issue != null && issue.startsWith(prefix)) {
+                count++;
+            }
+        }
+        return count;
+    }
+
     static void addRenderSampleIssues(List<String> issues, String label, List<String> samples) {
         if (issues == null || samples == null || samples.isEmpty()) {
             return;
@@ -322,13 +337,13 @@ final class RawExportValidationAbiCatalog {
         return gates;
     }
 
-    private static RawValidationGate coreCountsGate(boolean noIssues, int issueCount) {
+    private static RawValidationGate coreCountsGate(boolean noMismatches, int mismatchCount) {
         return gate(
                 GATE_CORE_COUNTS,
-                noIssues,
-                noIssues
+                noMismatches,
+                noMismatches
                         ? "Raw fact counts match database/canonical source counts."
-                        : "Raw fact counts have " + issueCount + " mismatch(es).");
+                        : "Raw fact counts have " + mismatchCount + " mismatch(es).");
     }
 
     private static RawValidationGate browserOrderGate(RawExportCounts counts) {

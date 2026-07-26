@@ -56,6 +56,11 @@ final class ExportStageActionContext {
         if (!failIfExists) {
             Logger.MOD.info("Repository directory exists");
         }
+        try {
+            exportContext.beginRawExportGeneration();
+        } catch (java.io.IOException e) {
+            throw new IllegalStateException("Failed to begin raw-export generation", e);
+        }
         ExportWriterSupport.deleteCanonicalStagingDirectory(exportContext.paths.repositoryDirectory);
         return true;
     }

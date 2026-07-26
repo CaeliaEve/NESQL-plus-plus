@@ -32,7 +32,7 @@ public class CanonicalAtlasPackWriter {
     private static final String ATLAS_DIRECTORY = "atlases";
     private static final String OUTPUT_FILE = "atlas-manifest.json";
     private static final String GROUP_DIRECTORY = "atlas-manifests-by-group";
-    private static final String RAW_CACHE_DIRECTORY = "raw-export/cache/static-atlas";
+    private static final String ATLAS_CACHE_DIRECTORY = ".cache/static-atlas";
     private static final int WEBGL_SAFE_ATLAS_CHUNK_SIZE = 3000;
     private static final int WEBGL_SAFE_MAX_ATLAS_HEIGHT = 8192;
     private static final int MAX_SOURCE_IMAGES_IN_MEMORY = 768;
@@ -455,11 +455,11 @@ public class CanonicalAtlasPackWriter {
         if (!groupDir.exists()) {
             groupDir.mkdirs();
         }
-        File rawCacheDir = new File(exportDirectory, RAW_CACHE_DIRECTORY + File.separator + GROUP_DIRECTORY);
+        File rawCacheDir = new File(exportDirectory, ATLAS_CACHE_DIRECTORY + File.separator + GROUP_DIRECTORY);
         if (!rawCacheDir.exists()) {
             rawCacheDir.mkdirs();
         }
-        File rawCacheAtlasDir = new File(exportDirectory, RAW_CACHE_DIRECTORY + File.separator + ATLAS_DIRECTORY);
+        File rawCacheAtlasDir = new File(exportDirectory, ATLAS_CACHE_DIRECTORY + File.separator + ATLAS_DIRECTORY);
         if (!rawCacheAtlasDir.exists()) {
             rawCacheAtlasDir.mkdirs();
         }
@@ -488,11 +488,11 @@ public class CanonicalAtlasPackWriter {
         if (canonicalGroupDir.exists()) {
             return canonicalGroupDir;
         }
-        return new File(exportDirectory, RAW_CACHE_DIRECTORY + File.separator + GROUP_DIRECTORY);
+        return new File(exportDirectory, ATLAS_CACHE_DIRECTORY + File.separator + GROUP_DIRECTORY);
     }
 
     private boolean isRawAtlasCacheDirectory(File groupDir) {
-        return groupDir != null && groupDir.getAbsolutePath().contains((RAW_CACHE_DIRECTORY + File.separator + GROUP_DIRECTORY).replace('/', File.separatorChar));
+        return groupDir != null && groupDir.getAbsolutePath().contains((ATLAS_CACHE_DIRECTORY + File.separator + GROUP_DIRECTORY).replace('/', File.separatorChar));
     }
 
     private void restoreCachedAtlasPage(File groupDir, File shardFile, File atlasFile) throws IOException {

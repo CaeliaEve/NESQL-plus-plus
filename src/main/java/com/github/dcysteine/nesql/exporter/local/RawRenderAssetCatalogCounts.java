@@ -4,4 +4,8 @@ final class RawRenderAssetCatalogCounts {
     long textures;
     long animations;
     long browserAtlasAssets;
+    long animationFrameMaterializations;
+    long materializedAnimations;
+    long staticAnimationFrames;
+    long unavailableAnimationFrames;
 }

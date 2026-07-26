@@ -5,8 +5,8 @@ import com.github.dcysteine.nesql.elysium.kernel.ExportSchemaCatalog;
 /** Stable raw-export Native UI ABI constants for scalable NEI surface replay. */
 public final class NativeUiExportAbi {
     public static final String RAW_EXPORT_SCHEMA = ExportSchemaCatalog.RAW_EXPORT_ABI;
-    public static final String UI_FAMILY_CENSUS_SCHEMA = RAW_EXPORT_SCHEMA + "/ui-family-census";
-    public static final String UI_TEMPLATE_CATALOG_SCHEMA = RAW_EXPORT_SCHEMA + "/ui-template-catalog";
+    public static final String UI_FAMILY_CENSUS_SCHEMA = RAW_EXPORT_SCHEMA + "/ui-family-census/v2";
+    public static final String UI_TEMPLATE_CATALOG_SCHEMA = RAW_EXPORT_SCHEMA + "/ui-template-catalog/v2";
     public static final String NATIVE_UI_VALIDATION_SCHEMA = RAW_EXPORT_SCHEMA + "/native-ui-validation";
 
     public static final String UI_FAMILY_CENSUS_FILE = "validation/ui-family-census.json";

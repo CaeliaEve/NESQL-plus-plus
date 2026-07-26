@@ -2,6 +2,7 @@ package com.github.dcysteine.nesql.exporter.main;
 
 import com.github.dcysteine.nesql.exporter.plugin.ExporterState;
 import com.github.dcysteine.nesql.exporter.plugin.PluginExporter;
+import com.github.dcysteine.nesql.exporter.plugin.PluginExportResult;
 import com.github.dcysteine.nesql.exporter.registry.PluginRegistry;
 import com.github.dcysteine.nesql.sql.Plugin;
 import com.google.common.collect.ImmutableMap;
@@ -28,6 +29,7 @@ public final class ExportRuntime implements AutoCloseable {
     public final PluginRegistry registry;
     public final Map<Plugin, PluginExporter> activePlugins;
     public final List<PluginTiming> pluginTimings = new ArrayList<PluginTiming>();
+    public final List<PluginExecution> pluginExecutions = new ArrayList<PluginExecution>();
 
     private ExportRuntime(
             EntityManagerFactory entityManagerFactory,
@@ -70,6 +72,7 @@ public final class ExportRuntime implements AutoCloseable {
 
     public void runPluginPipeline() {
         pluginTimings.clear();
+        pluginExecutions.clear();
         for (ExportPluginLifecycleCatalog.PhaseDescriptor phase :
                 ExportPluginLifecycleCatalog.phases()) {
             runPluginPhase(phase);
@@ -79,17 +82,34 @@ public final class ExportRuntime implements AutoCloseable {
     private void runPluginPhase(ExportPluginLifecycleCatalog.PhaseDescriptor phase) {
         for (Map.Entry<Plugin, PluginExporter> entry : activePlugins.entrySet()) {
             long startedAt = System.currentTimeMillis();
+            PluginExportResult result;
             try {
-                phase.invoke(entry.getValue());
+                result = phase.invoke(entry.getValue());
+            } catch (RuntimeException e) {
+                result = PluginExportResult.failed(
+                        "plugin-phase-exception",
+                        e.getClass().getName() + ": " + safeMessage(e));
+                pluginExecutions.add(new PluginExecution(entry.getKey().name(), phase.id(), result));
+                throw e;
             } finally {
                 pluginTimings.add(
                         new PluginTiming(
                                 entry.getKey().name(),
                                 entry.getValue().getClass().getName(),
-                                phase.id(),
-                                System.currentTimeMillis() - startedAt));
+                            phase.id(),
+                            System.currentTimeMillis() - startedAt));
             }
+            pluginExecutions.add(new PluginExecution(entry.getKey().name(), phase.id(), result));
+            requirePluginResult(entry.getKey(), phase.id(), result);
         }
+    }
+
+    static void requirePluginResult(Plugin plugin, String phase, PluginExportResult result) {
+        PluginExportPolicy.requirePublishable(plugin, phase, result);
+    }
+
+    private static String safeMessage(Throwable error) {
+        return error.getMessage() == null ? "<no message>" : error.getMessage();
     }
 
     @Override
@@ -125,6 +145,18 @@ public final class ExportRuntime implements AutoCloseable {
                 return String.format("%dm %02ds", minutes, seconds);
             }
             return String.format("%ds", seconds);
+        }
+    }
+
+    public static final class PluginExecution {
+        public final String plugin;
+        public final String phase;
+        public final PluginExportResult result;
+
+        PluginExecution(String plugin, String phase, PluginExportResult result) {
+            this.plugin = plugin;
+            this.phase = phase;
+            this.result = result;
         }
     }
 }

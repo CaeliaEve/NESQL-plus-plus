@@ -27,8 +27,17 @@ final class RawExportFactStreamRegistry {
             providerDescriptor(
                     "raw.render-asset-facts",
                     RawRenderAssetFactStreamProvider::new,
-                    list("raw.render.textures", "raw.render.animations", "raw.render.browser-atlas-assets"),
-                    list("facts/render-assets", "assets/browser-atlas")),
+                    list(
+                            "raw.render.textures",
+                            "raw.render.facade-resolutions",
+                            "raw.render.animations",
+                            "raw.render.animation-frame-materializations",
+                            "raw.render.browser-atlas-assets"),
+                    list(
+                            "facts/render-assets",
+                            "assets/textures/facade-resolutions",
+                            "assets/animations/frame-materializations",
+                            "assets/browser-atlas")),
             providerDescriptor(
                     "raw.entity-render-backend-facts",
                     RawEntityAndRenderBackendFactStreamProvider::new,

@@ -29,6 +29,11 @@ const sizeReportBuilderUrl = new URL(
 );
 const rawFileCatalogUrl = new URL('./src/main/java/com/github/dcysteine/nesql/exporter/local/RawExportFileCatalog.java', import.meta.url);
 const repositoryFactStreamerUrl = new URL('./src/main/java/com/github/dcysteine/nesql/exporter/local/RawExportRepositoryFactStreamer.java', import.meta.url);
+const repositoryJsonlWriterUrl = new URL('./src/main/java/com/github/dcysteine/nesql/exporter/local/RawExportJsonlWriter.java', import.meta.url);
+const recipeShardWriterPoolUrl = new URL(
+  './src/main/java/com/github/dcysteine/nesql/exporter/local/RawExportRecipeShardWriterPool.java',
+  import.meta.url,
+);
 const repositoryFactResultUrl = new URL('./src/main/java/com/github/dcysteine/nesql/exporter/local/RawRepositoryFactStreamResult.java', import.meta.url);
 const neiFactWriterUrl = new URL('./src/main/java/com/github/dcysteine/nesql/exporter/local/RawExportNeiFactWriter.java', import.meta.url);
 const nativeUiAbiUrl = new URL('./src/main/java/com/github/dcysteine/nesql/exporter/nativeui/NativeUiExportAbi.java', import.meta.url);
@@ -50,6 +55,14 @@ const finalReportCatalogUrl = new URL(
   import.meta.url,
 );
 const exportWriterSupportUrl = new URL('./src/main/java/com/github/dcysteine/nesql/exporter/main/ExportWriterSupport.java', import.meta.url);
+const rawExportGenerationUrl = new URL('./src/main/java/com/github/dcysteine/nesql/exporter/local/RawExportGeneration.java', import.meta.url);
+const rawExportGenerationValidatorUrl = new URL('./src/main/java/com/github/dcysteine/nesql/exporter/local/RawExportGenerationValidator.java', import.meta.url);
+const exportContextUrl = new URL('./src/main/java/com/github/dcysteine/nesql/exporter/main/ExportContext.java', import.meta.url);
+const exportStageRunnerUrl = new URL('./src/main/java/com/github/dcysteine/nesql/exporter/main/ExportStageRunner.java', import.meta.url);
+const stageActionContextUrl = new URL('./src/main/java/com/github/dcysteine/nesql/exporter/main/ExportStageActionContext.java', import.meta.url);
+const uiTemplateCatalogWriterUrl = new URL('./src/main/java/com/github/dcysteine/nesql/exporter/local/RawExportUiTemplateCatalogWriter.java', import.meta.url);
+const atlasPackWriterUrl = new URL('./src/main/java/com/github/dcysteine/nesql/exporter/local/CanonicalAtlasPackWriter.java', import.meta.url);
+const semanticQuickCheckUrl = new URL('./src/main/java/com/github/dcysteine/nesql/exporter/main/SemanticIdentityQuickCheckRunner.java', import.meta.url);
 const dtoFiles = [
   'RawExportManifest.java',
   'RawExportReport.java',
@@ -79,6 +92,8 @@ const reportArtifactCatalog = readFileSync(reportArtifactCatalogUrl, 'utf8');
 const sizeReportBuilder = readFileSync(sizeReportBuilderUrl, 'utf8');
 const rawFileCatalog = readFileSync(rawFileCatalogUrl, 'utf8');
 const repositoryFactStreamer = readFileSync(repositoryFactStreamerUrl, 'utf8');
+const repositoryJsonlWriter = readFileSync(repositoryJsonlWriterUrl, 'utf8');
+const recipeShardWriterPool = readFileSync(recipeShardWriterPoolUrl, 'utf8');
 const neiFactWriter = readFileSync(neiFactWriterUrl, 'utf8');
 const nativeUiAbi = readFileSync(nativeUiAbiUrl, 'utf8');
 const nativeUiValidator = readFileSync(nativeUiValidatorUrl, 'utf8');
@@ -92,6 +107,14 @@ const reportFactory = readFileSync(reportFactoryUrl, 'utf8');
 const sidecarFileOps = readFileSync(sidecarFileOpsUrl, 'utf8');
 const finalReportCatalog = readFileSync(finalReportCatalogUrl, 'utf8');
 const exportWriterSupport = readFileSync(exportWriterSupportUrl, 'utf8');
+const rawExportGeneration = readFileSync(rawExportGenerationUrl, 'utf8');
+const rawExportGenerationValidator = readFileSync(rawExportGenerationValidatorUrl, 'utf8');
+const exportContext = readFileSync(exportContextUrl, 'utf8');
+const exportStageRunner = readFileSync(exportStageRunnerUrl, 'utf8');
+const stageActionContext = readFileSync(stageActionContextUrl, 'utf8');
+const uiTemplateCatalogWriter = readFileSync(uiTemplateCatalogWriterUrl, 'utf8');
+const atlasPackWriter = readFileSync(atlasPackWriterUrl, 'utf8');
+const semanticQuickCheck = readFileSync(semanticQuickCheckUrl, 'utf8');
 
 test('raw export validation logic lives outside RawExportSidecarWriter', () => {
   assert.match(reportPipeline, /RawExportValidationSupport\.apply\(report\)/);
@@ -214,6 +237,8 @@ test('raw repository fact streaming is split from sidecar orchestration', () => 
   assert.equal(existsSync(factStreamDescriptorWriterUrl), true, 'RawExportFactStreamDescriptorWriter must exist');
   assert.equal(existsSync(repositoryProviderUrl), true, 'RawRepositoryFactStreamProvider must exist');
   assert.equal(existsSync(repositoryFactStreamerUrl), true, 'RawExportRepositoryFactStreamer must exist');
+  assert.equal(existsSync(repositoryJsonlWriterUrl), true, 'RawExportJsonlWriter must exist');
+  assert.equal(existsSync(recipeShardWriterPoolUrl), true, 'RawExportRecipeShardWriterPool must exist');
   assert.equal(existsSync(repositoryFactResultUrl), true, 'RawRepositoryFactStreamResult must exist');
   assert.match(sidecar, /new RawExportFactStreamPipeline\(/);
   assert.match(sidecar, /\.write\(\)/);
@@ -254,9 +279,17 @@ test('raw repository fact streaming is split from sidecar orchestration', () => 
   assert.match(repositoryFactStreamer, /streamDatabaseItems/);
   assert.match(repositoryFactStreamer, /streamDatabaseFluids/);
   assert.match(repositoryFactStreamer, /streamDatabaseRecipes/);
-  assert.match(repositoryFactStreamer, /class RecipeShardState/);
   assert.match(repositoryFactStreamer, /class SpecialDomainStreamState/);
-  assert.match(repositoryFactStreamer, /class JsonlWriter/);
+  assert.match(repositoryFactStreamer, /new RawExportRecipeShardWriterPool\(rawDir, gson\)/);
+  assert.match(repositoryFactStreamer, /new RawExportJsonlWriter/);
+  assert.doesNotMatch(repositoryFactStreamer, /class RecipeShardState/);
+  assert.doesNotMatch(repositoryFactStreamer, /class JsonlWriter/);
+  assert.match(recipeShardWriterPool, /DEFAULT_MAX_OPEN_WRITERS = 16/);
+  assert.match(recipeShardWriterPool, /LinkedHashMap<Shard, Writer>/);
+  assert.match(recipeShardWriterPool, /void finish\(Collection<Shard> shards, IndexPublisher indexPublisher\)/);
+  assert.match(recipeShardWriterPool, /RawExportSidecarFileOps\.atomicMove\(stagingDir, finalDir\)/);
+  assert.match(recipeShardWriterPool, /rollbackPublication/);
+  assert.match(repositoryJsonlWriter, /void write\(Object value, Type type\)/);
 });
 
 
@@ -367,6 +400,7 @@ test('raw export artifact writers share the fail-closed sidecar file ops boundar
     'createUtf8JsonlWriter(File out)',
     'writeJson(Gson gson, File out, Object value)',
     'copyOptional(File source, File target)',
+    'gzipRequired(File source, File target, String label)',
     'new FileOutputStream(out, false)',
     'new RawExportFastGzipOutputStream(fos)',
     'failure.addSuppressed(closeFailure)',
@@ -388,7 +422,8 @@ test('raw export artifact writers share the fail-closed sidecar file ops boundar
   }
 
   assert.match(repositoryFactStreamer, /RawExportSidecarFileOps\.ensureDirectory\(domainDir\)/);
-  assert.match(repositoryFactStreamer, /RawExportSidecarFileOps\.createUtf8JsonlWriter\(out\)/);
+  assert.match(repositoryJsonlWriter, /RawExportSidecarFileOps\.createUtf8JsonlWriter\(out\)/);
+  assert.match(recipeShardWriterPool, /RawExportSidecarFileOps\.gzipRequired\(shard\.spoolFile, target, shard\.handlerId\)/);
   assert.match(repositoryFactStreamer, /RawExportSidecarFileOps\.writeJson\(gson, out, value\)/);
   assert.match(repositoryFactStreamer, /RawExportEmptyJsonlWriter\.write\(out\)/);
   assert.match(renderAssetCatalogWriter, /RawExportSidecarFileOps\.createUtf8JsonlWriter\(out\)/);
@@ -504,9 +539,10 @@ test('raw export semantic runtime report factory and file ops are split from sid
   assert.match(reportPipeline, /new RawExportReportFactory\(/);
   assert.doesNotMatch(sidecar, /new RawExportSemanticRuntimeBuilder/);
   assert.doesNotMatch(sidecar, /new RawExportReportFactory/);
-  assert.match(sidecar, /RawExportSidecarFileOps\.purgeLegacyRawExportOutputs\(rawDir\)/);
-  assert.match(sidecar, /RawExportFileCatalog\.rawExportDirectory\(repositoryDirectory\)/);
-  assert.match(sidecar, /RawExportFinalReportCatalog\.syncFinalReports\(repositoryDirectory\)/);
+  assert.doesNotMatch(sidecar, /purgeLegacyRawExportOutputs/);
+  assert.match(sidecar, /private final File rawDir/);
+  assert.doesNotMatch(sidecar, /RawExportFileCatalog\.rawExportDirectory\(repositoryDirectory\)/);
+  assert.match(sidecar, /RawExportFinalReportCatalog\.syncFinalReports\(rawDir\)/);
   assert.doesNotMatch(sidecar, /FINAL_REPORT_COPIES =/);
   assert.doesNotMatch(sidecar, /for \(FinalReportCopy report : FINAL_REPORT_COPIES\)/);
   assert.doesNotMatch(sidecar, /RawExportSidecarFileOps\.copyRequired\(/);
@@ -524,8 +560,9 @@ test('raw export semantic runtime report factory and file ops are split from sid
   assert.doesNotMatch(sidecar, /deleteIfExists/);
   assert.match(semanticRuntimeBuilder, /SemanticRulePack\.RuntimeMetadata/);
   assert.match(reportFactory, /RawExportReport build\(\)/);
-  assert.match(sidecarFileOps, /purgeLegacyRawExportOutputs/);
-  assert.match(sidecarFileOps, /RawExportFileCatalog\.prohibitedRootOutputs\(\)/);
+  assert.doesNotMatch(sidecarFileOps, /purgeLegacyRawExportOutputs/);
+  assert.doesNotMatch(sidecarFileOps, /RawExportFileCatalog\.prohibitedRootOutputs\(\)/);
+  assert.match(rawExportGenerationValidator, /RawExportFileCatalog\.prohibitedRootOutputs\(\)/);
   assert.doesNotMatch(sidecarFileOps, /RawExportRepositoryFactStreamer\.specialDomainIds\(\)/);
   assert.match(sidecarFileOps, /Raw-export path exists but is not a directory/);
   assert.match(sidecarFileOps, /Raw-export output path exists but is not a file/);
@@ -539,7 +576,53 @@ test('raw export semantic runtime report factory and file ops are split from sid
   assert.match(finalReportCatalog, /RawExportSidecarFileOps\.copyRequired\(/);
   assert.match(
     exportWriterSupport,
-    /public static void syncRawExportFinalReports\(File repositoryDirectory\) throws Exception \{\s*RawExportSidecarWriter\.syncFinalReports\(repositoryDirectory\);\s*\}/,
+    /public static void syncRawExportFinalReports\(File rawDir\) throws Exception \{\s*RawExportSidecarWriter\.syncFinalReports\(rawDir\);\s*\}/,
   );
   assert.doesNotMatch(exportWriterSupport, /Failed to sync raw-export final reports/);
+});
+
+test('raw export is built as one immutable generation before authority promotion', () => {
+  assert.equal(existsSync(rawExportGenerationUrl), true, 'RawExportGeneration must exist');
+  assert.equal(existsSync(rawExportGenerationValidatorUrl), true, 'RawExportGenerationValidator must exist');
+  assert.match(rawExportGeneration, /GENERATIONS_DIRECTORY = "generations"/);
+  assert.match(rawExportGeneration, /STAGING_PREFIX = "\.staging-"/);
+  assert.match(rawExportGeneration, /CURRENT_POINTER_FILE = "current\.json"/);
+  assert.match(rawExportGeneration, /validator\.validate\(stagingDirectory\)/);
+  assert.match(rawExportGeneration, /fileOperations\.atomicMoveDirectory\(stagingDirectory, sealedDirectory\)/);
+  assert.match(rawExportGeneration, /fileOperations\.atomicReplaceFile\(pointerTemp, currentPointerFile\)/);
+  assert.match(rawExportGeneration, /public static File requireCurrentDirectory\(File repositoryDirectory\) throws IOException/);
+  assert.match(rawExportGeneration, /public static File currentDirectoryOrMissing\(File repositoryDirectory\) throws IOException/);
+  assert.match(rawExportGeneration, /cleanupUnreferencedGenerations\(\)/);
+  assert.match(rawExportGenerationValidator, /Raw-export generation validation is not ready for publication/);
+  assert.match(rawExportGenerationValidator, /Raw-export generation compile readiness blocks publication/);
+  assert.match(rawExportGenerationValidator, /validateManifestFiles\(generationDirectory, manifest\)/);
+  assert.match(rawExportGenerationValidator, /validateRecipeIndex\(generationDirectory\)/);
+  assert.match(rawExportGenerationValidator, /validateJsonAndGzipFiles\(generationDirectory\)/);
+  assert.match(rawExportGenerationValidator, /validateIntegrityCatalog\(generationDirectory\)/);
+  assert.match(rawExportGenerationValidator, /validateSizeReport\(generationDirectory\)/);
+  assert.match(rawExportGenerationValidator, /rejectUnsafeOrTemporaryOutputs\(generationDirectory, generationDirectory\)/);
+
+  assert.match(stageActionContext, /exportContext\.beginRawExportGeneration\(\)/);
+  assert.match(exportContext, /return rawExportGeneration\.stagingDirectory\(\)/);
+  assert.match(exportContext, /RawExportGeneration\.requireCurrentDirectory\(paths\.repositoryDirectory\)/);
+  assert.match(exportContext, /RawExportGeneration\.currentDirectoryOrMissing\(paths\.repositoryDirectory\)/);
+  assert.match(exportStageRunner, /ExportDebugPlaneWriter\.writeKernelTrace[\s\S]*ExportIntegrityManifestWriter\.write[\s\S]*syncRawExportFinalReports[\s\S]*publishRawExportGeneration/);
+  assert.equal(
+    exportStageRunner.indexOf('ExportDebugPlaneWriter.writeKernelTrace')
+      < exportStageRunner.indexOf('exportContext.publishRawExportGeneration()'),
+    true,
+    'success-path kernel trace must be finalized before authority publication',
+  );
+  assert.match(exportStageRunner, /abortRawExportGeneration\(\)/);
+
+  assert.match(uiFamilyCensusWriter, /private final File rawDir/);
+  assert.doesNotMatch(uiFamilyCensusWriter, /new File\(repositoryDirectory, OUTPUT_DIRECTORY\)/);
+  assert.match(uiTemplateCatalogWriter, /private final File rawDir/);
+  assert.doesNotMatch(uiTemplateCatalogWriter, /new File\(repositoryDirectory, OUTPUT_DIRECTORY\)/);
+  assert.match(atlasPackWriter, /ATLAS_CACHE_DIRECTORY = "\.cache\/static-atlas"/);
+  assert.doesNotMatch(atlasPackWriter, /raw-export\/cache\/static-atlas/);
+  assert.match(semanticQuickCheck, /beginRawExportGeneration\(\)/);
+  assert.match(semanticQuickCheck, /copyDirectory\(authorityDirectory, rawExportDirectory\)/);
+  assert.match(semanticQuickCheck, /publishRawExportGeneration\(\)/);
+  assert.match(semanticQuickCheck, /abortRawExportGeneration\(\)/);
 });

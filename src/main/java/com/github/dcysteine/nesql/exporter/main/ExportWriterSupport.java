@@ -125,13 +125,18 @@ public final class ExportWriterSupport {
         }
     }
 
-    public static List<CanonicalRenderAsset> collectRenderAssets(File repositoryDirectory) throws Exception {
-        Logger.chatMessage(EnumChatFormatting.AQUA + "Collecting NESQL++ render assets from exported files...");
+    public static List<CanonicalRenderAsset> collectRenderAssets(
+            EntityManager entityManager,
+            File repositoryDirectory) throws Exception {
+        if (entityManager == null) {
+            throw new IllegalArgumentException("Render asset collection requires a live EntityManager");
+        }
+        Logger.chatMessage(EnumChatFormatting.AQUA + "Collecting NESQL++ render assets from the export database...");
         try {
             List<CanonicalRenderAsset> assets =
-                    new CanonicalRenderAssetCollector(null, repositoryDirectory).collectAll();
+                    new CanonicalRenderAssetCollector(entityManager, repositoryDirectory).collectAll();
             Logger.MOD.info(
-                    "Collected {} render assets from exported files for render-contract stages.",
+                    "Collected {} render assets from the export database for render-contract stages.",
                     assets.size());
             Logger.chatMessage(
                     EnumChatFormatting.GREEN
@@ -140,9 +145,24 @@ public final class ExportWriterSupport {
                             + " render assets for atlas/manifest stages.");
             return assets;
         } catch (Exception e) {
-            Logger.MOD.error("Failed to collect NESQL++ render assets from exported files", e);
+            Logger.MOD.error("Failed to collect NESQL++ render assets from the export database", e);
             Logger.chatMessage(
                     EnumChatFormatting.RED + "Failed to collect NESQL++ render assets: " + e.getMessage());
+            throw e;
+        }
+    }
+
+    public static List<CanonicalRenderAsset> collectRenderAssetsFromFiles(File repositoryDirectory) throws Exception {
+        Logger.chatMessage(EnumChatFormatting.AQUA + "Collecting NESQL++ render assets from exported files...");
+        try {
+            List<CanonicalRenderAsset> assets =
+                    CanonicalRenderAssetCollector.collectFromExportedFiles(repositoryDirectory);
+            Logger.MOD.info(
+                    "Collected {} render assets from exported files for offline render-contract rebuild.",
+                    assets.size());
+            return assets;
+        } catch (Exception e) {
+            Logger.MOD.error("Failed to collect NESQL++ render assets from exported files", e);
             throw e;
         }
     }
@@ -285,10 +305,10 @@ public final class ExportWriterSupport {
         }
     }
 
-    public static void writeUiFamilyCensus(File repositoryDirectory) throws Exception {
+    public static void writeUiFamilyCensus(File rawDir) throws Exception {
         Logger.chatMessage(EnumChatFormatting.AQUA + "Exporting NESQL++ NEI UI family census...");
         try {
-            new RawExportUiFamilyCensusWriter(repositoryDirectory).export();
+            new RawExportUiFamilyCensusWriter(rawDir).export();
         } catch (Exception e) {
             Logger.MOD.error("Failed to write NESQL++ NEI UI family census", e);
             Logger.chatMessage(
@@ -297,10 +317,10 @@ public final class ExportWriterSupport {
         }
     }
 
-    public static void writeUiTemplateCatalog(File repositoryDirectory) throws Exception {
+    public static void writeUiTemplateCatalog(File rawDir) throws Exception {
         Logger.chatMessage(EnumChatFormatting.AQUA + "Exporting NESQL++ NEI UI template catalog...");
         try {
-            new RawExportUiTemplateCatalogWriter(repositoryDirectory).export();
+            new RawExportUiTemplateCatalogWriter(rawDir).export();
         } catch (Exception e) {
             Logger.MOD.error("Failed to write NESQL++ NEI UI template catalog", e);
             Logger.chatMessage(
@@ -312,11 +332,17 @@ public final class ExportWriterSupport {
     public static void writeRawExportSidecar(
             EntityManager entityManager,
             File repositoryDirectory,
+            File rawDir,
             ExportContext exportContext,
             List<CanonicalRenderAsset> precollectedAssets) throws Exception {
         Logger.chatMessage(EnumChatFormatting.AQUA + "Writing NESQL++ raw-export sidecar...");
         try {
-            new RawExportSidecarWriter(entityManager, repositoryDirectory, exportContext, precollectedAssets).export();
+            new RawExportSidecarWriter(
+                    entityManager,
+                    repositoryDirectory,
+                    rawDir,
+                    exportContext,
+                    precollectedAssets).export();
         } catch (Exception e) {
             Logger.MOD.error("Failed to write NESQL++ raw-export sidecar", e);
             Logger.chatMessage(
@@ -325,8 +351,8 @@ public final class ExportWriterSupport {
         }
     }
 
-    public static void syncRawExportFinalReports(File repositoryDirectory) throws Exception {
-        RawExportSidecarWriter.syncFinalReports(repositoryDirectory);
+    public static void syncRawExportFinalReports(File rawDir) throws Exception {
+        RawExportSidecarWriter.syncFinalReports(rawDir);
     }
 
     public static void deleteCanonicalStagingDirectory(File repositoryDirectory) {

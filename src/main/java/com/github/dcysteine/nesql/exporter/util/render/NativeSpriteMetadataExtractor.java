@@ -24,7 +24,6 @@ import java.io.File;
 import java.io.FileOutputStream;
 import java.io.InputStreamReader;
 import java.io.OutputStreamWriter;
-import java.lang.reflect.Field;
 import java.lang.reflect.Method;
 import java.nio.charset.StandardCharsets;
 import java.util.ArrayList;
@@ -58,18 +57,45 @@ final class NativeSpriteMetadataExtractor {
             metadata.maxU = sprite.getMaxU();
             metadata.minV = sprite.getMinV();
             metadata.maxV = sprite.getMaxV();
-            metadata.frameCount = sprite.getFrameCount();
-            metadata.animated = sprite.hasAnimationMetadata()
-                    || (metadata.frameCount != null && metadata.frameCount > 1);
+            int spriteFrameCount = Math.max(0, sprite.getFrameCount());
+            int physicalFrameSlots = collectionSize(
+                    RuntimeFieldResolver.read(sprite, "framesTextureData", "field_110976_a"));
+            metadata.runtimeFrameCount = Math.max(spriteFrameCount, physicalFrameSlots);
+            metadata.frameCount = metadata.runtimeFrameCount;
 
-            AnimationTimeline resolvedTimeline = resolveAnimationTimeline(sprite, job, metadata.frameCount);
+            AnimationTimeline resolvedTimeline =
+                    resolveAnimationTimeline(sprite, job, metadata.runtimeFrameCount);
             if (resolvedTimeline != null) {
                 metadata.defaultFrameTime = resolvedTimeline.defaultFrameTimeTicks;
                 metadata.timeline = resolvedTimeline.timeline;
                 if (resolvedTimeline.frameCount != null && resolvedTimeline.frameCount > 0) {
                     metadata.frameCount = resolvedTimeline.frameCount;
                 }
+                metadata.declaredFrameCount = resolvedTimeline.declaredFrameCount;
             }
+            if (metadata.declaredFrameCount == null) {
+                metadata.declaredFrameCount = metadata.runtimeFrameCount;
+            }
+
+            int requestedFrameCount = Math.max(
+                    1,
+                    Math.max(
+                            metadata.runtimeFrameCount == null ? 0 : metadata.runtimeFrameCount,
+                            metadata.declaredFrameCount == null ? 0 : metadata.declaredFrameCount));
+            metadata.materialization = NativeSpriteFrameMaterializer.inspect(
+                    sprite,
+                    metadata.width,
+                    metadata.height,
+                    requestedFrameCount);
+            metadata.materializedFrameCount = metadata.materialization.materializedFrameCount();
+            metadata.distinctFrameCount = metadata.materialization.distinctFrameCount();
+            metadata.materializationStatus = metadata.materialization.status();
+            metadata.materializationReason = metadata.materialization.reason();
+            metadata.materializedFrames =
+                    metadata.materialization.descriptors(metadata.width, metadata.height);
+            metadata.animated =
+                    com.github.dcysteine.nesql.exporter.canonical.ResourceAuthorityContract
+                            .isNativeSpriteAnimation(metadata.materializationStatus);
 
             return metadata;
         } catch (Exception e) {
@@ -145,14 +171,8 @@ final class NativeSpriteMetadataExtractor {
     }
 
     private static AnimationMetadataSection readAnimationMetadata(TextureAtlasSprite sprite) {
-        try {
-            Field field = TextureAtlasSprite.class.getDeclaredField("animationMetadata");
-            field.setAccessible(true);
-            Object value = field.get(sprite);
-            return value instanceof AnimationMetadataSection ? (AnimationMetadataSection) value : null;
-        } catch (Exception ignored) {
-            return null;
-        }
+        Object value = RuntimeFieldResolver.read(sprite, "animationMetadata", "field_110982_k");
+        return value instanceof AnimationMetadataSection ? (AnimationMetadataSection) value : null;
     }
 
     private static AnimationTimeline resolveAnimationTimeline(
@@ -190,13 +210,19 @@ final class NativeSpriteMetadataExtractor {
         AnimationTimeline timeline = new AnimationTimeline();
         timeline.defaultFrameTimeTicks = animation.getFrameTime();
         timeline.frameCount = runtimeFrameCount != null && runtimeFrameCount > 0 ? runtimeFrameCount : count;
+        timeline.declaredFrameCount = 0;
         timeline.timeline = new ArrayList<Map<String, Object>>(count);
         for (int i = 0; i < count; i++) {
             Map<String, Object> frame = new LinkedHashMap<String, Object>();
             frame.put("timelineIndex", i);
-            frame.put("frameIndex", animation.getFrameIndex(i));
+            int frameIndex = animation.getFrameIndex(i);
+            frame.put("frameIndex", frameIndex);
             frame.put("durationMs", animation.getFrameTimeSingle(i) * 50);
             timeline.timeline.add(frame);
+            timeline.declaredFrameCount = Math.max(timeline.declaredFrameCount, frameIndex + 1);
+        }
+        if (timeline.declaredFrameCount == 0) {
+            timeline.declaredFrameCount = timeline.frameCount;
         }
         return timeline;
     }
@@ -209,6 +235,7 @@ final class NativeSpriteMetadataExtractor {
         AnimationTimeline timeline = new AnimationTimeline();
         timeline.defaultFrameTimeTicks = defaultFrameTimeTicks;
         timeline.frameCount = frameCount;
+        timeline.declaredFrameCount = frameCount;
         timeline.timeline = new ArrayList<Map<String, Object>>(frameCount);
         for (int i = 0; i < frameCount; i++) {
             Map<String, Object> frame = new LinkedHashMap<String, Object>();
@@ -337,6 +364,7 @@ final class NativeSpriteMetadataExtractor {
     private static final class AnimationTimeline {
         Integer defaultFrameTimeTicks;
         Integer frameCount;
+        Integer declaredFrameCount;
         List<Map<String, Object>> timeline;
     }
 
@@ -354,6 +382,7 @@ final class NativeSpriteMetadataExtractor {
             timeline.frameCount = runtimeFrameCount != null && runtimeFrameCount > 0
                     ? runtimeFrameCount
                     : inferFrameCount();
+            timeline.declaredFrameCount = inferFrameCount();
             timeline.timeline = new ArrayList<Map<String, Object>>(frames.size());
             for (int i = 0; i < frames.size(); i++) {
                 ResourceAnimationFrame sourceFrame = frames.get(i);
@@ -395,23 +424,26 @@ final class NativeSpriteMetadataExtractor {
                 return;
             }
             TextureAtlasSprite sprite = (TextureAtlasSprite) icon;
-            int frameCount = Math.max(sprite.getFrameCount(), 1);
-            if (frameCount <= 0) {
+            NativeSpriteFrameMaterializer.Result materialization = metadata.materialization;
+            if (materialization == null || materialization.materializedFrameCount() <= 0) {
                 return;
             }
 
             BufferedImage atlasImage =
                     new BufferedImage(
                             metadata.width,
-                            metadata.height * frameCount,
+                            metadata.height * materialization.materializedFrameCount(),
                             BufferedImage.TYPE_INT_ARGB);
             Graphics2D graphics = atlasImage.createGraphics();
             try {
-                for (int i = 0; i < frameCount; i++) {
-                    BufferedImage frameImage = buildFrameImage(sprite, i, metadata.width, metadata.height);
-                    if (frameImage != null) {
-                        graphics.drawImage(frameImage, 0, i * metadata.height, null);
-                    }
+                int materializationIndex = 0;
+                for (NativeSpriteFrameMaterializer.Frame frame : materialization.frames()) {
+                    graphics.drawImage(
+                            frame.image(),
+                            0,
+                            materializationIndex * metadata.height,
+                            null);
+                    materializationIndex++;
                 }
             } finally {
                 graphics.dispose();
@@ -429,23 +461,14 @@ final class NativeSpriteMetadataExtractor {
         }
     }
 
-    private static BufferedImage buildFrameImage(
-            TextureAtlasSprite sprite, int frameIndex, int width, int height) {
-        try {
-            int[][] levels = sprite.getFrameTextureData(frameIndex);
-            if (levels == null || levels.length == 0 || levels[0] == null) {
-                return null;
-            }
-            int[] pixels = levels[0];
-            if (pixels.length < width * height) {
-                return null;
-            }
-            BufferedImage image = new BufferedImage(width, height, BufferedImage.TYPE_INT_ARGB);
-            image.setRGB(0, 0, width, height, pixels, 0, width);
-            return image;
-        } catch (Exception ignored) {
-            return null;
+    private static int collectionSize(Object value) {
+        if (value instanceof java.util.Collection<?>) {
+            return ((java.util.Collection<?>) value).size();
         }
+        if (value != null && value.getClass().isArray()) {
+            return java.lang.reflect.Array.getLength(value);
+        }
+        return 0;
     }
 
     static final class NativeSpriteMetadata {
@@ -464,8 +487,16 @@ final class NativeSpriteMetadataExtractor {
         Float maxV;
         Boolean animated;
         Integer frameCount;
+        Integer runtimeFrameCount;
+        Integer declaredFrameCount;
+        Integer materializedFrameCount;
+        Integer distinctFrameCount;
+        String materializationStatus;
+        String materializationReason;
         Integer defaultFrameTime;
         String nativeSpriteAtlasFile;
         List<Map<String, Object>> timeline;
+        List<Map<String, Object>> materializedFrames;
+        transient NativeSpriteFrameMaterializer.Result materialization;
     }
 }

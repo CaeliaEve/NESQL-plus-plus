@@ -10,9 +10,9 @@ import java.io.File;
 final class ExportValidationSemanticProbe {
     private ExportValidationSemanticProbe() {}
 
-    static void inspectDiagnostics(File repositoryDirectory, ExportValidationReport report) {
+    static void inspectDiagnostics(File rawDir, ExportValidationReport report) {
         File semanticReportFile = RawExportFileCatalog.rawExportFile(
-                RawExportFileCatalog.rawExportDirectory(repositoryDirectory),
+                rawDir,
                 RawExportFileCatalog.SEMANTIC_IDENTITY_NORMALIZATION_REPORT_FILE);
         JsonObject root = ExportValidationJsonSupport.readJsonObject(semanticReportFile);
         if (root == null) {

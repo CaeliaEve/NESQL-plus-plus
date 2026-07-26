@@ -23,6 +23,7 @@ public class CanonicalRenderAsset {
     public String playbackHint;
     public String sourceFormat;
     public String sourcePath;
+    public String iconName;
     public String atlasTexture;
     public String atlasExportFile;
     public String spriteMetadataFile;
@@ -32,6 +33,12 @@ public class CanonicalRenderAsset {
     public String staticFile;
     public String framePattern;
     public Integer frameCount;
+    public Integer runtimeFrameCount;
+    public Integer declaredFrameCount;
+    public Integer materializedFrameCount;
+    public Integer distinctFrameCount;
+    public String materializationStatus;
+    public String materializationReason;
     public Integer configuredFrameCount;
     public Integer capturedFrameCount;
     public String loopMode;
@@ -41,6 +48,7 @@ public class CanonicalRenderAsset {
     public Boolean atlasCandidate;
     public String atlasFile;
     public List<Map<String, Object>> frames;
+    public List<Map<String, Object>> materializedFrames;
     public List<Map<String, Object>> timeline;
     public Integer frameDurationMs;
     public String frameDurationSource;

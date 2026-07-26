@@ -24,7 +24,9 @@ final class ExportPluginTimingReportWriter {
         }
 
         try {
-            File rawValidationDir = new File(exportContext.paths.repositoryDirectory, "raw-export/validation");
+            File rawValidationDir = new File(
+                    exportContext.rawExportDirectory(),
+                    com.github.dcysteine.nesql.exporter.local.RawExportFileCatalog.VALIDATION_DIRECTORY);
             if (!rawValidationDir.exists()) {
                 rawValidationDir.mkdirs();
             }
@@ -34,6 +36,7 @@ final class ExportPluginTimingReportWriter {
             report.profile = exportContext.profile.profileId;
             report.selection = exportContext.selection.describe();
             report.timings = new ArrayList<ExportRuntime.PluginTiming>(exportRuntime.pluginTimings);
+            report.executions = new ArrayList<ExportRuntime.PluginExecution>(exportRuntime.pluginExecutions);
             report.neiHandlerTimings = NeiExportTimingRegistry.snapshot();
             report.slowestNeiHandlers = NeiExportTimingRegistry.slowestSnapshot(50);
             report.slowest = new ArrayList<ExportRuntime.PluginTiming>(exportRuntime.pluginTimings);
@@ -252,6 +255,7 @@ final class ExportPluginTimingReportWriter {
         String profile;
         String selection;
         List<ExportRuntime.PluginTiming> timings;
+        List<ExportRuntime.PluginExecution> executions;
         List<ExportRuntime.PluginTiming> slowest;
         List<NeiExportTimingRegistry.HandlerTiming> neiHandlerTimings;
         List<NeiExportTimingRegistry.HandlerTiming> slowestNeiHandlers;

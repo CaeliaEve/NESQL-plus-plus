@@ -41,8 +41,7 @@ final class RawExportFinalReportCatalog {
         return FINAL_REPORT_COPIES;
     }
 
-    static void syncFinalReports(File repositoryDirectory) throws IOException {
-        File rawDir = RawExportFileCatalog.rawExportDirectory(repositoryDirectory);
+    static void syncFinalReports(File rawDir) throws IOException {
         RawExportSidecarFileOps.ensureDirectory(rawDir);
         RawExportSidecarFileOps.ensureDirectory(RawExportFileCatalog.validationDirectory(rawDir));
 

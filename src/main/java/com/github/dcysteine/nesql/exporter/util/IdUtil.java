@@ -19,15 +19,41 @@ public final class IdUtil {
     public static final String ID_SEPARATOR = "~";
 
     public static String itemId(ItemStack itemStack) {
-        String id = itemId(itemStack.getItem());
-        id += ID_SEPARATOR + itemStack.getItemDamage();
+        ItemStack identityStack = stableIdentityCopy(itemStack);
+        String id = itemId(identityStack.getItem());
+        id += ID_SEPARATOR + identityStack.getItemDamage();
 
-        NBTTagCompound nbt = itemStack.getTagCompound();
+        NBTTagCompound nbt = identityStack.getTagCompound();
         if (nbt != null) {
             id += ID_SEPARATOR + StringUtil.encodeNbt(nbt);
         }
 
         return id;
+    }
+
+    public static ItemStack stableIdentityCopy(ItemStack source) {
+        if (source == null || source.getItem() == null) {
+            throw new IllegalArgumentException("ItemStack identity source is empty");
+        }
+        ItemStack normalized = source.copy();
+        if (normalized == null) {
+            throw new IllegalStateException("ItemStack.copy() returned null");
+        }
+        normalized.stackSize = 1;
+        if (!normalized.isItemStackDamageable()) {
+            return normalized;
+        }
+        normalized.setItemDamage(0);
+        NBTTagCompound nbt = normalized.getTagCompound();
+        if (nbt == null) {
+            return normalized;
+        }
+        nbt.removeTag("ench");
+        nbt.removeTag("RepairCost");
+        if (nbt.hasNoTags()) {
+            normalized.setTagCompound(null);
+        }
+        return normalized;
     }
 
     public static String itemId(Item item) {

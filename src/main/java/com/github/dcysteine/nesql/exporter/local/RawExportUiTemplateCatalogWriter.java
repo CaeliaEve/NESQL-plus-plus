@@ -34,19 +34,17 @@ import java.util.zip.GZIPInputStream;
  * Writes the first deterministic NEI UI template catalog derived from the census report.
  */
 public final class RawExportUiTemplateCatalogWriter {
-    private static final String OUTPUT_DIRECTORY = "raw-export";
     private static final String OUTPUT_FILE = NativeUiExportAbi.UI_TEMPLATE_CATALOG_FILE;
     private static final String SCHEMA_VERSION = NativeUiExportAbi.UI_TEMPLATE_CATALOG_SCHEMA;
     private static final String CENSUS_FILE = NativeUiExportAbi.UI_FAMILY_CENSUS_FILE;
 
-    private final File repositoryDirectory;
+    private final File rawDir;
 
-    public RawExportUiTemplateCatalogWriter(File repositoryDirectory) {
-        this.repositoryDirectory = repositoryDirectory;
+    public RawExportUiTemplateCatalogWriter(File rawDir) {
+        this.rawDir = rawDir;
     }
 
     public void export() throws IOException {
-        File rawDir = new File(repositoryDirectory, OUTPUT_DIRECTORY);
         ensureDirectory(rawDir);
         File validationDir = new File(rawDir, "validation");
         ensureDirectory(validationDir);
@@ -87,6 +85,7 @@ public final class RawExportUiTemplateCatalogWriter {
         if (census == null) {
             throw new IOException("Empty UI family census file: " + censusFile.getAbsolutePath());
         }
+        validateCensusSchemaVersion(census.schemaVersion);
 
         List<UiTemplateBucket> templates = new ArrayList<UiTemplateBucket>();
         Set<String> layoutKinds = new LinkedHashSet<String>();
@@ -129,9 +128,13 @@ public final class RawExportUiTemplateCatalogWriter {
         return report;
     }
 
-    private UiTemplateBucket buildTemplateBucket(RawExportUiFamilyCensusWriter.UiFamilyBucket family) {
+    static UiTemplateBucket buildTemplateBucket(RawExportUiFamilyCensusWriter.UiFamilyBucket family)
+            throws IOException {
+        if (family == null) {
+            throw new IOException("UI family census contains a null family entry");
+        }
         UiTemplateBucket template = new UiTemplateBucket();
-        template.familyKey = family.familyKey;
+        template.captureKey = requireCaptureKey(family.captureKey);
         template.canonicalMachineFamily = family.canonicalMachineFamily;
         template.layoutKind = family.layoutKind;
         template.coordinateSpace = NativeUiExportAbi.COORDINATE_SPACE;
@@ -183,7 +186,7 @@ public final class RawExportUiTemplateCatalogWriter {
         try {
             MessageDigest digest = MessageDigest.getInstance("SHA-256");
             StringBuilder canonical = new StringBuilder();
-            canonical.append(nullToEmpty(template.familyKey)).append('\n');
+            canonical.append(template.captureKey).append('\n');
             canonical.append(nullToEmpty(template.canonicalMachineFamily)).append('\n');
             canonical.append(nullToEmpty(template.layoutKind)).append('\n');
             canonical.append(nullToEmpty(template.coordinateSpace)).append(':')
@@ -246,6 +249,24 @@ public final class RawExportUiTemplateCatalogWriter {
         return value == null ? "" : value;
     }
 
+    private static String requireCaptureKey(String value) throws IOException {
+        String captureKey = value == null ? "" : value.trim();
+        if (captureKey.isEmpty()) {
+            throw new IOException("UI family census entry missing required captureKey");
+        }
+        return captureKey;
+    }
+
+    static void validateCensusSchemaVersion(String schemaVersion) throws IOException {
+        if (!NativeUiExportAbi.UI_FAMILY_CENSUS_SCHEMA.equals(schemaVersion)) {
+            throw new IOException(
+                    "Unsupported UI family census schemaVersion: expected "
+                            + NativeUiExportAbi.UI_FAMILY_CENSUS_SCHEMA
+                            + ", actual "
+                            + nullToEmpty(schemaVersion));
+        }
+    }
+
     private static String readString(JsonObject object, String key) {
         try {
             JsonElement element = object == null ? null : object.get(key);
@@ -303,7 +324,7 @@ public final class RawExportUiTemplateCatalogWriter {
     static final class UiTemplateBucket {
         String templateKey;
         String templateSignature;
-        String familyKey;
+        String captureKey;
         String canonicalMachineFamily;
         String layoutKind;
         String coordinateSpace;

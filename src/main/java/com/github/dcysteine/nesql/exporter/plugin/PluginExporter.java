@@ -33,12 +33,27 @@ public abstract class PluginExporter {
      */
     public void initialize() {}
 
+    public PluginExportResult initializeResult() {
+        initialize();
+        return PluginExportResult.success();
+    }
+
     /** Processes the plugin's recipes, and anything else that should be exported. */
     public void process() {}
+
+    public PluginExportResult processResult() {
+        process();
+        return PluginExportResult.success();
+    }
 
     /**
      * Performs any processing that requires all items, fluids, and recipes to have already been
      * persisted.
      */
     public void postProcess() {}
+
+    public PluginExportResult postProcessResult() {
+        postProcess();
+        return PluginExportResult.success();
+    }
 }

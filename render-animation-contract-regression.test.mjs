@@ -6,16 +6,18 @@ import test from 'node:test';
 const repoRoot = process.cwd();
 const readSource = (relativePath) => fs.readFileSync(path.join(repoRoot, relativePath), 'utf8');
 
-test('native sprite animation treats runtime multi-frame sprites as animated', () => {
+test('native sprite animation requires at least two distinct materialized frames', () => {
   const source = readSource(
     'src/main/java/com/github/dcysteine/nesql/exporter/util/render/NativeSpriteMetadataExtractor.java',
   );
 
   assert.match(
     source,
-    /metadata\.animated = sprite\.hasAnimationMetadata\(\)\s*\|\|\s*\(metadata\.frameCount != null && metadata\.frameCount > 1\);/,
-    'sprites with runtime frameCount > 1 must not be exported as static snapshots',
+    /ResourceAuthorityContract\s*\.isNativeSpriteAnimation\(metadata\.materializationStatus\)/s,
+    'declared/runtime frame counts must not bypass physical-frame materialization',
   );
+  assert.match(source, /metadata\.materializedFrameCount = metadata\.materialization\.materializedFrameCount\(\);/);
+  assert.match(source, /metadata\.distinctFrameCount = metadata\.materialization\.distinctFrameCount\(\);/);
   assert.match(
     source,
     /if \(runtimeFrameCount != null && runtimeFrameCount > 1\) \{\s*return createSequentialTimeline\(runtimeFrameCount, 1\);/s,

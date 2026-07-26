@@ -22,6 +22,10 @@ const textureSpriteCountsUrl = new URL(
   './src/main/java/com/github/dcysteine/nesql/exporter/local/AngelicaTextureSpriteStreamCounts.java',
   import.meta.url,
 );
+const runtimeFieldResolverUrl = new URL(
+  './src/main/java/com/github/dcysteine/nesql/exporter/util/render/RuntimeFieldResolver.java',
+  import.meta.url,
+);
 const itemRendererFactsUrl = new URL(
   './src/main/java/com/github/dcysteine/nesql/exporter/local/AngelicaRenderItemRendererFactsWriter.java',
   import.meta.url,
@@ -47,6 +51,7 @@ const renderFacts = readFileSync(renderFactsUrl, 'utf8');
 const backendFacts = readFileSync(backendFactsUrl, 'utf8');
 const renderFactFileOps = readFileSync(renderFactFileOpsUrl, 'utf8');
 const textureSpriteFacts = readFileSync(textureSpriteFactsUrl, 'utf8');
+const runtimeFieldResolver = readFileSync(runtimeFieldResolverUrl, 'utf8');
 const itemRendererFacts = readFileSync(itemRendererFactsUrl, 'utf8');
 const framebufferCaptureFacts = readFileSync(framebufferCaptureFactsUrl, 'utf8');
 
@@ -97,6 +102,20 @@ test('Angelica texture sprite writer owns atlas discovery and timeline reconstru
   assert.match(textureSpriteFacts, /readAnimationMetadata\(/);
   assert.match(textureSpriteFacts, /Minecraft\.getMinecraft\(\)/);
   assert.match(textureSpriteFacts, /TextureAtlasSprite/);
+  assert.equal(existsSync(runtimeFieldResolverUrl), true, 'RuntimeFieldResolver must exist');
+  assert.match(textureSpriteFacts, /RuntimeFieldResolver\.read\(target, fieldNames\)/);
+  assert.match(runtimeFieldResolver, /ConcurrentMap<FieldKey, Field>/);
+  for (const alias of [
+    'field_110976_a',
+    'field_110982_k',
+    'field_110973_g',
+    'field_110983_h',
+    'field_94254_c',
+    'field_94252_e',
+    'field_110574_e',
+  ]) {
+    assert.match(textureSpriteFacts, new RegExp(alias));
+  }
 });
 
 test('Angelica item renderer and shader facts live outside the render fact coordinator', () => {

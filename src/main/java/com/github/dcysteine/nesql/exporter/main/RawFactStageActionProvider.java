@@ -37,9 +37,9 @@ final class RawFactStageActionProvider implements ExportStageActionProvider {
     @Override
     public void register(EnumMap<ExportStage, ExportStageAction> actions, ExportStageActionContext context) {
         actions.put(ExportStage.WRITE_UI_FAMILY_CENSUS, () ->
-                ExportWriterSupport.writeUiFamilyCensus(context.exportContext.paths.repositoryDirectory));
+                ExportWriterSupport.writeUiFamilyCensus(context.exportContext.rawExportDirectory()));
         actions.put(ExportStage.WRITE_UI_TEMPLATE_CATALOG, () ->
-                ExportWriterSupport.writeUiTemplateCatalog(context.exportContext.paths.repositoryDirectory));
+                ExportWriterSupport.writeUiTemplateCatalog(context.exportContext.rawExportDirectory()));
         actions.put(ExportStage.WRITE_MOD_BASED_ITEMS, () -> {
             context.announceWritePreamble();
             ExportWriterSupport.writeModBasedItems(

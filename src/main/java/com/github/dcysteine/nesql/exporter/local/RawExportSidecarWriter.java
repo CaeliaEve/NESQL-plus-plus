@@ -24,16 +24,22 @@ public final class RawExportSidecarWriter {
 
     private final EntityManager entityManager;
     private final File repositoryDirectory;
+    private final File rawDir;
     private final ExportContext exportContext;
     private final List<CanonicalRenderAsset> renderAssets;
 
     public RawExportSidecarWriter(
             EntityManager entityManager,
             File repositoryDirectory,
+            File rawDir,
             ExportContext exportContext,
             List<CanonicalRenderAsset> renderAssets) {
         this.entityManager = entityManager;
         this.repositoryDirectory = repositoryDirectory;
+        if (rawDir == null) {
+            throw new IllegalArgumentException("Raw-export sidecar generation directory must not be null");
+        }
+        this.rawDir = rawDir;
         this.exportContext = exportContext;
         if (renderAssets == null) {
             throw new IllegalArgumentException("Raw-export sidecar requires precollected render assets");
@@ -42,9 +48,7 @@ public final class RawExportSidecarWriter {
     }
 
     public void export() throws IOException {
-        File rawDir = RawExportFileCatalog.rawExportDirectory(repositoryDirectory);
         RawExportSidecarFileOps.ensureDirectory(rawDir);
-        RawExportSidecarFileOps.purgeLegacyRawExportOutputs(rawDir);
 
         RawFactCounts factCounts = new RawExportFactStreamPipeline(
                 entityManager,
@@ -73,7 +77,7 @@ public final class RawExportSidecarWriter {
         Logger.chatMessage(EnumChatFormatting.YELLOW + "  " + rawDir.getAbsolutePath());
     }
 
-    public static void syncFinalReports(File repositoryDirectory) throws IOException {
-        RawExportFinalReportCatalog.syncFinalReports(repositoryDirectory);
+    public static void syncFinalReports(File rawDir) throws IOException {
+        RawExportFinalReportCatalog.syncFinalReports(rawDir);
     }
 }

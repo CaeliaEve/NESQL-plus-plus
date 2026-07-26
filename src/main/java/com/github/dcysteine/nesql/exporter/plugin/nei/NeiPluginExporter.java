@@ -3,6 +3,7 @@ package com.github.dcysteine.nesql.exporter.plugin.nei;
 import com.github.dcysteine.nesql.exporter.main.Logger;
 import com.github.dcysteine.nesql.exporter.plugin.ExporterState;
 import com.github.dcysteine.nesql.exporter.plugin.PluginExporter;
+import com.github.dcysteine.nesql.exporter.plugin.PluginExportResult;
 import com.github.dcysteine.nesql.sql.Plugin;
 
 /**
@@ -21,29 +22,36 @@ public class NeiPluginExporter extends PluginExporter {
     }
 
     @Override
-    public void process() {
+    public PluginExportResult processResult() {
         // Export item list immediately (no dependency on handlers)
         Logger.MOD.info("Starting NEI item list export...");
-        new NeiItemListProcessor(this).process();
+        PluginExportResult itemResult = exportItems();
         Logger.MOD.info("Finished NEI item list export!");
+        if (itemResult.status == PluginExportResult.Status.PARTIAL
+                || itemResult.status == PluginExportResult.Status.FAILED) {
+            Logger.MOD.error("NEI item collection is {}; recipe collection will not run", itemResult.status.id);
+            return itemResult;
+        }
 
         // Export NEI recipes immediately
         Logger.MOD.info("Starting NEI recipe export...");
 
-        try {
-            Logger.chatMessage("=== Starting NEI Recipe Export ===");
-            Logger.chatMessage("NOTE: If NEI handlers haven't loaded recipes yet, some may be empty.");
-            Logger.chatMessage("Try opening NEI GUI once before exporting if recipes are missing.");
+        Logger.chatMessage("=== Starting NEI Recipe Export ===");
+        Logger.chatMessage("NOTE: If NEI handlers haven't loaded recipes yet, some may be empty.");
+        Logger.chatMessage("Try opening NEI GUI once before exporting if recipes are missing.");
 
-            // Direct execution
-            new NeiRecipeExportProcessor(this).process();
+        PluginExportResult recipeResult = exportRecipes();
 
-            Logger.MOD.info("NEI recipe export completed successfully!");
-            Logger.chatMessage("=== NEI Recipe Export Complete ===");
+        Logger.MOD.info("NEI recipe export completed with status {}", recipeResult.status.id);
+        Logger.chatMessage("=== NEI Recipe Export Complete ===");
+        return PluginExportResult.builder().merge(itemResult).merge(recipeResult).build();
+    }
 
-        } catch (Exception e) {
-            Logger.MOD.error("Error during NEI recipe export", e);
-            Logger.chatMessage("WARNING: Some NEI recipes may not have been exported");
-        }
+    protected PluginExportResult exportItems() {
+        return new NeiItemListProcessor(this).process();
+    }
+
+    protected PluginExportResult exportRecipes() {
+        return new NeiRecipeExportProcessor(this).process();
     }
 }

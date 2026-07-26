@@ -5,6 +5,8 @@ import com.github.dcysteine.nesql.elysium.kernel.ExportDebugFile;
 import com.github.dcysteine.nesql.exporter.main.ExportContext;
 import com.github.dcysteine.nesql.exporter.main.ExportStage;
 
+import java.util.Map;
+
 final class RawExportManifestBuilder {
     private RawExportManifestBuilder() {}
 
@@ -24,18 +26,38 @@ final class RawExportManifestBuilder {
         manifest.notes.addAll(RawExportFileCatalog.manifestNotes());
         manifest.capabilities.addAll(
                 RawExportFileCatalog.manifestCapabilities(includeUiFamilyCensus, includeUiTemplateCatalog));
+        putManifestFiles(manifest.files, includeUiFamilyCensus, includeUiTemplateCatalog);
+        manifest.counts = report.counts;
+        return manifest;
+    }
+
+    static void putManifestFiles(
+            Map<String, String> files,
+            boolean includeUiFamilyCensus,
+            boolean includeUiTemplateCatalog) {
+        if (files == null) {
+            throw new IllegalArgumentException("Raw-export manifest file map must be non-null");
+        }
         RawExportFileCatalog.putManifestFiles(
-                manifest.files,
+                files,
                 includeUiFamilyCensus,
                 includeUiTemplateCatalog);
         for (ExportControlFile file : ExportControlFile.values()) {
-            manifest.files.put(file.manifestKey(), file.rawExportPath());
+            putManifestFile(files, file.manifestKey(), file.rawExportPath());
         }
         for (ExportDebugFile file : ExportDebugFile.values()) {
-            manifest.files.put(file.manifestKey(), file.rawExportDebugPath());
+            putManifestFile(files, file.manifestKey(), file.rawExportDebugPath());
         }
-        manifest.counts = report.counts;
-        return manifest;
+    }
+
+    private static void putManifestFile(Map<String, String> files, String key, String path) {
+        if (files.containsKey(key)) {
+            throw new IllegalStateException("Duplicate raw-export manifest file key: " + key);
+        }
+        if (files.containsValue(path)) {
+            throw new IllegalStateException("Duplicate raw-export manifest file path: " + path);
+        }
+        files.put(key, path);
     }
 
 }

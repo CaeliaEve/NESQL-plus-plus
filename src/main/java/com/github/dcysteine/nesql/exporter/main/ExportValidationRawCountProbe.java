@@ -9,9 +9,9 @@ import java.io.File;
 final class ExportValidationRawCountProbe {
     private ExportValidationRawCountProbe() {}
 
-    static void inspect(File repositoryDirectory, ExportValidationReport report) {
+    static void inspect(File rawDir, ExportValidationReport report) {
         File reportFile = RawExportFileCatalog.rawExportFile(
-                RawExportFileCatalog.rawExportDirectory(repositoryDirectory),
+                rawDir,
                 RawExportFileCatalog.EXPORT_REPORT_FILE);
         JsonObject counts = ExportValidationJsonSupport.readCountsObject(reportFile);
         if (counts == null) {

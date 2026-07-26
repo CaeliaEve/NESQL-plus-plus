@@ -2,12 +2,11 @@ package com.github.dcysteine.nesql.exporter.plugin.nei;
 
 import codechicken.nei.NEIClientConfig;
 import codechicken.nei.recipe.GuiCraftingRecipe;
-import codechicken.nei.recipe.GuiUsageRecipe;
 import codechicken.nei.recipe.ICraftingHandler;
-import codechicken.nei.recipe.IUsageHandler;
 import codechicken.nei.recipe.TemplateRecipeHandler;
 
 import com.github.dcysteine.nesql.exporter.main.Logger;
+import com.github.dcysteine.nesql.exporter.plugin.PluginExportResult;
 import com.github.dcysteine.nesql.exporter.util.IdUtil;
 
 import net.minecraft.item.ItemStack;
@@ -33,11 +32,14 @@ public class NeiRecipeBatchLoader {
      * @param exporter The export processor to handle the actual export
      * @return The total number of recipes exported
      */
-    public static int streamExportAllCraftingRecipes(NeiRecipeExportProcessor exporter) {
+    public static PluginExportResult streamExportAllCraftingRecipes(NeiRecipeExportProcessor exporter) {
         Stopwatch stopwatch = Stopwatch.createStarted();
         AtomicInteger totalRecipes = new AtomicInteger(0);
         AtomicInteger processedHandlers = new AtomicInteger(0);
-        List<ItemStack> itemUniverse = NeiItemUniverse.getItems();
+        NeiRecipeBatchOutcome outcome = new NeiRecipeBatchOutcome();
+        NeiItemUniverse.Snapshot itemUniverseSnapshot = NeiItemUniverse.load();
+        List<ItemStack> itemUniverse = itemUniverseSnapshot.items();
+        outcome.recordItemUniverseResult(itemUniverseSnapshot.itemUniverseResult());
 
         Logger.MOD.info("=== Starting Stream Export of NEI Crafting Recipes ===");
         Logger.MOD.info("Total crafting handlers: {}", GuiCraftingRecipe.craftinghandlers.size());
@@ -123,6 +125,10 @@ public class NeiRecipeBatchLoader {
 
                 if (workingHandler == null) {
                     Logger.MOD.warn("Could not create handler instance for: {}", handlerName);
+                    outcome.recordFailure(
+                            handlerName,
+                            baseHandler.getClass().getName(),
+                            new IllegalStateException("handler instance is missing"));
                     continue;
                 }
 
@@ -191,6 +197,7 @@ public class NeiRecipeBatchLoader {
                 }
 
             } catch (Exception e) {
+                outcome.recordFailure(handlerName, baseHandler.getClass().getName(), e);
                 Logger.MOD.error("Error processing handler: " + handlerName, e);
                 Logger.chatMessage(String.format("[%d/%d] Skipped: %s (error)",
                         handlerIndex, GuiCraftingRecipe.craftinghandlers.size(), handlerName));
@@ -217,7 +224,10 @@ public class NeiRecipeBatchLoader {
         Logger.chatMessage(String.format("Exported %d recipes from %d handlers in {}",
                 totalRecipes.get(), processedHandlers.get(), stopwatch));
 
-        return totalRecipes.get();
+        return outcome.build(
+                GuiCraftingRecipe.craftinghandlers.size(),
+                processedHandlers.get(),
+                totalRecipes.get());
     }
 
     private static void recordHandlerTiming(
@@ -292,6 +302,9 @@ public class NeiRecipeBatchLoader {
                             derived.getRecipeName(),
                             derived);
                 } catch (Exception e) {
+                    throw new IllegalStateException(
+                            "Non-template NEI recipe resolution failed for " + handlerName,
+                            e);
                 }
             }
 
@@ -306,111 +319,10 @@ public class NeiRecipeBatchLoader {
             Logger.MOD.error("Error processing non-template crafting handler: " + handlerName, e);
             Logger.chatMessage(String.format("[%d/%d] Skipped: %s (error)",
                     handlerIndex, totalHandlers, handlerName));
-            return 0;
+            throw new IllegalStateException(
+                    "Non-template NEI crafting handler failed: " + handlerName,
+                    e);
         }
-    }
-
-    /**
-     * Streaming export of all usage recipes.
-     *
-     * @param exporter The export processor to handle the actual export
-     * @return The total number of recipes exported
-     */
-    public static int streamExportAllUsageRecipes(NeiRecipeExportProcessor exporter) {
-        Stopwatch stopwatch = Stopwatch.createStarted();
-        AtomicInteger totalRecipes = new AtomicInteger(0);
-        AtomicInteger processedHandlers = new AtomicInteger(0);
-        List<ItemStack> itemUniverse = NeiItemUniverse.getItems();
-
-        Logger.MOD.info("=== Starting Stream Export of NEI Usage Recipes ===");
-        Logger.MOD.info("Total usage handlers: {}", GuiUsageRecipe.usagehandlers.size());
-        Logger.MOD.info("Effective usage scan universe size: {}", itemUniverse.size());
-        Logger.chatMessage("=== Starting NEI Usage Recipe Export ===");
-        Logger.chatMessage(String.format("Total handlers to process: %d", GuiUsageRecipe.usagehandlers.size()));
-
-        int handlerIndex = 0;
-        for (IUsageHandler baseHandler : GuiUsageRecipe.usagehandlers) {
-            handlerIndex++;
-            String handlerId = baseHandler.getHandlerId();
-            String handlerName = baseHandler.getRecipeName();
-
-            try {
-                Logger.MOD.info("Processing usage handler {}/{}: {}",
-                        handlerIndex, GuiUsageRecipe.usagehandlers.size(), handlerName);
-
-                // Create a NEW instance for this handler when possible.
-                IUsageHandler workingHandler = null;
-                if (baseHandler instanceof TemplateRecipeHandler) {
-                    workingHandler = ((TemplateRecipeHandler) baseHandler).newInstance();
-                } else {
-                    // Non-template handlers may still return a non-template handler instance.
-                    ItemStack seedItem = itemUniverse.isEmpty() ? null : itemUniverse.get(0);
-                    workingHandler = seedItem == null ? null : baseHandler.getUsageHandler("item", seedItem);
-                }
-
-                if (workingHandler == null) {
-                    Logger.MOD.warn("Could not create usage handler instance for: {}", handlerName);
-                    continue;
-                }
-
-                // Load all usage recipes for this handler
-                Logger.chatMessage(String.format("[%d/%d] Loading usage recipes for: %s...",
-                        handlerIndex, GuiUsageRecipe.usagehandlers.size(), handlerName));
-
-                int recipeCount = loadUsageRecipesForHandler((TemplateRecipeHandler) workingHandler, itemUniverse);
-
-                if (recipeCount > 0) {
-                    Logger.chatMessage(String.format("[%d/%d] Exporting %d usage recipes from: %s",
-                            handlerIndex, GuiUsageRecipe.usagehandlers.size(), recipeCount, handlerName));
-
-                    // Export this handler immediately
-                    int exported = exporter.exportSingleUsageHandler(handlerId, handlerName, workingHandler);
-                    totalRecipes.addAndGet(exported);
-
-                    Logger.MOD.info("Exported {} usage recipes from handler: {}", exported, handlerName);
-                    Logger.chatMessage(String.format("[%d/%d] Completed: %s (%d recipes)",
-                            handlerIndex, GuiUsageRecipe.usagehandlers.size(), handlerName, exported));
-                } else {
-                    Logger.MOD.debug("No usage recipes found for handler: {}", handlerName);
-                }
-
-                // Clear and allow GC to reclaim memory
-                if (workingHandler instanceof TemplateRecipeHandler) {
-                    ((TemplateRecipeHandler) workingHandler).arecipes.clear();
-                }
-                processedHandlers.incrementAndGet();
-
-                // Progress every 10 handlers
-                if (processedHandlers.get() % 10 == 0) {
-                    Logger.chatMessage(String.format("Progress: %d/%d usage handlers processed, %d recipes exported so far",
-                            processedHandlers.get(), GuiUsageRecipe.usagehandlers.size(), totalRecipes.get()));
-                }
-
-                // Flush every 50 handlers to reduce object detachment risk
-                if (processedHandlers.get() % 50 == 0) {
-                    Logger.chatMessage("Flushing database to free memory (50 usage handlers processed)...");
-                    exporter.flushEntityManager();
-                    Logger.chatMessage("Memory flushed, continuing export...");
-                }
-
-            } catch (Exception e) {
-                Logger.MOD.error("Error processing usage handler: " + handlerName, e);
-                Logger.chatMessage(String.format("[%d/%d] Skipped: %s (error)",
-                        handlerIndex, GuiUsageRecipe.usagehandlers.size(), handlerName));
-            }
-        }
-
-        stopwatch.stop();
-
-        Logger.MOD.info("=== Stream Export Complete ===");
-        Logger.MOD.info("Processed handlers: {}/{}", processedHandlers.get(), GuiUsageRecipe.usagehandlers.size());
-        Logger.MOD.info("Total usage recipes exported: {}", totalRecipes.get());
-        Logger.MOD.info("Time taken: {}", stopwatch);
-        Logger.chatMessage("=== Usage Recipe Export Complete ===");
-        Logger.chatMessage(String.format("Exported %d usage recipes from %d handlers in {}",
-                totalRecipes.get(), processedHandlers.get(), stopwatch));
-
-        return totalRecipes.get();
     }
 
     /**
@@ -452,9 +364,10 @@ public class NeiRecipeBatchLoader {
 
         } catch (Exception e) {
             Logger.MOD.warn("Error loading recipes for handler: " + handler.getRecipeName(), e);
+            throw new IllegalStateException(
+                    "NEI crafting handler recipe load failed: " + handler.getRecipeName(),
+                    e);
         }
-
-        return loadedCount.get();
     }
 
     private static Integer tryLoadOverlayRecipes(TemplateRecipeHandler handler) {
@@ -475,7 +388,9 @@ public class NeiRecipeBatchLoader {
             return loaded;
         } catch (Exception e) {
             Logger.MOD.warn("Failed overlay recipe load for handler: " + handler.getRecipeName(), e);
-            return null;
+            throw new IllegalStateException(
+                    "NEI overlay recipe load failed: " + handler.getRecipeName(),
+                    e);
         }
     }
 
@@ -487,11 +402,8 @@ public class NeiRecipeBatchLoader {
         String handlerId = handler.getHandlerId() == null ? "" : handler.getHandlerId().toLowerCase();
         String handlerName = handler.getRecipeName() == null ? "" : handler.getRecipeName().toLowerCase();
         String handlerClass = handler.getClass().getName().toLowerCase();
-        String overlayId = "";
-        try {
-            overlayId = handler.getOverlayIdentifier() == null ? "" : handler.getOverlayIdentifier().toLowerCase();
-        } catch (Exception ignored) {
-        }
+        String rawOverlayId = handler.getOverlayIdentifier();
+        String overlayId = rawOverlayId == null ? "" : rawOverlayId.toLowerCase();
 
         String combined = handlerId + " " + handlerName + " " + handlerClass + " " + overlayId;
         if (combined.contains("mobsinfo.mobhandler")
@@ -521,7 +433,9 @@ public class NeiRecipeBatchLoader {
             return null;
         } catch (Exception e) {
             Logger.MOD.warn("Failed loadAllRecipes() recipe load for handler: " + handler.getRecipeName(), e);
-            return null;
+            throw new IllegalStateException(
+                    "NEI loadAllRecipes() failed: " + handler.getRecipeName(),
+                    e);
         }
     }
 
@@ -530,9 +444,11 @@ public class NeiRecipeBatchLoader {
      */
     private static int loadRecipesFullScan(
             TemplateRecipeHandler handler, List<ItemStack> itemUniverse, AtomicInteger loadedCount) {
+        int itemIndex = 0;
+        int rejectedCandidates = 0;
         for (ItemStack item : itemUniverse) {
+            int beforeSize = handler.arecipes.size();
             try {
-                int beforeSize = handler.arecipes.size();
                 handler.loadCraftingRecipes(item);
                 int afterSize = handler.arecipes.size();
 
@@ -540,76 +456,59 @@ public class NeiRecipeBatchLoader {
                     loadedCount.addAndGet(afterSize - beforeSize);
                 }
             } catch (Exception e) {
-                // Some items may fail, that's ok
-            }
-        }
-        return loadedCount.get();
-    }
-
-    /**
-     * Filtered item scan loader for specialized handlers.
-     */
-    private static int loadRecipesFiltered(TemplateRecipeHandler handler, AtomicInteger loadedCount,
-                                          java.util.function.Predicate<ItemStack> filter) {
-        int filtered = 0;
-        int matched = 0;
-        List<ItemStack> itemUniverse = NeiItemUniverse.getItems();
-
-        for (ItemStack item : itemUniverse) {
-            filtered++;
-            try {
-                if (filter.test(item)) {
-                    matched++;
-                    int beforeSize = handler.arecipes.size();
-                    handler.loadCraftingRecipes(item);
-                    int afterSize = handler.arecipes.size();
-
-                    if (afterSize > beforeSize) {
-                        loadedCount.addAndGet(afterSize - beforeSize);
-                    }
+                if (!isUnsupportedCandidateFailure(handler.getClass().getName(), e)
+                        || handler.arecipes.size() < beforeSize) {
+                    throw new IllegalStateException(
+                            "NEI full item scan failed for handler " + handler.getRecipeName()
+                                    + " at item-universe index " + itemIndex,
+                            e);
                 }
-            } catch (Exception e) {
-                // Some items may fail, that's ok
+                while (handler.arecipes.size() > beforeSize) {
+                    handler.arecipes.remove(handler.arecipes.size() - 1);
+                }
+                rejectedCandidates++;
+                if (rejectedCandidates <= 8) {
+                    Logger.MOD.warn(
+                            "Rejected unsupported NEI item candidate for handler {} at item-universe index {}: {}",
+                            handler.getRecipeName(), itemIndex, describeItemCandidate(item));
+                }
             }
+            itemIndex++;
         }
-
-        Logger.MOD.debug("Filtered scan: checked {} items, matched {} items, loaded {} recipes",
-            filtered, matched, loadedCount.get());
+        if (rejectedCandidates > 0) {
+            Logger.MOD.warn(
+                    "Handler {} rejected {} unsupported item-universe candidates while preserving {} loaded recipes",
+                    handler.getRecipeName(), rejectedCandidates, loadedCount.get());
+        }
         return loadedCount.get();
     }
 
-    /**
-     * Load all usage recipes for a single handler.
-     *
-     * @param handler The handler to load recipes into
-     * @return The number of recipes loaded
-     */
-    private static int loadUsageRecipesForHandler(TemplateRecipeHandler handler, List<ItemStack> itemUniverse) {
-        AtomicInteger loadedCount = new AtomicInteger(0);
+    static boolean isUnsupportedCandidateFailure(String handlerClassName, Throwable failure) {
+        if (!"ic2.neiIntegration.core.recipehandler.FluidCannerRecipeHandler"
+                .equals(handlerClassName)) {
+            return false;
+        }
+        Throwable cursor = failure;
+        while (cursor != null) {
+            if (cursor instanceof IllegalArgumentException
+                    && cursor.getMessage() != null
+                    && cursor.getMessage().contains("Cannot create a fluidstack from a null fluid")) {
+                return true;
+            }
+            cursor = cursor.getCause();
+        }
+        return false;
+    }
 
+    private static String describeItemCandidate(ItemStack item) {
+        if (item == null) {
+            return "<null-item-stack>";
+        }
         try {
-            // Clear any existing recipes
-            handler.arecipes.clear();
-
-            // Iterate through all items and load usage recipes
-            for (ItemStack item : itemUniverse) {
-                try {
-                    int beforeSize = handler.arecipes.size();
-                    handler.loadUsageRecipes(item);
-                    int afterSize = handler.arecipes.size();
-
-                    if (afterSize > beforeSize) {
-                        loadedCount.addAndGet(afterSize - beforeSize);
-                    }
-                } catch (Exception e) {
-                    // Some items may fail, that's ok
-                }
-            }
-        } catch (Exception e) {
-            Logger.MOD.warn("Error loading usage recipes for handler: " + handler.getRecipeName(), e);
+            return item.toString();
+        } catch (RuntimeException ignored) {
+            return item.getClass().getName();
         }
-
-        return loadedCount.get();
     }
 
     /**

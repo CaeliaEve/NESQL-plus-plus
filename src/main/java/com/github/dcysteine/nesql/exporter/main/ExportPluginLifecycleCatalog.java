@@ -1,6 +1,7 @@
 package com.github.dcysteine.nesql.exporter.main;
 
 import com.github.dcysteine.nesql.exporter.plugin.PluginExporter;
+import com.github.dcysteine.nesql.exporter.plugin.PluginExportResult;
 
 import java.util.ArrayList;
 import java.util.Arrays;
@@ -19,15 +20,15 @@ final class ExportPluginLifecycleCatalog {
             new PhaseDescriptor(
                     PHASE_INITIALIZE,
                     "Construct recipe types and register plugin-local export helpers.",
-                    PluginExporter::initialize),
+                    PluginExporter::initializeResult),
             new PhaseDescriptor(
                     PHASE_PROCESS,
                     "Persist plugin recipes, items, fluids, and plugin-owned export facts.",
-                    PluginExporter::process),
+                    PluginExporter::processResult),
             new PhaseDescriptor(
                     PHASE_POST_PROCESS,
                     "Run cross-plugin work that requires persisted items, fluids, and recipes.",
-                    PluginExporter::postProcess)));
+                    PluginExporter::postProcessResult)));
 
     private ExportPluginLifecycleCatalog() {}
 
@@ -67,7 +68,7 @@ final class ExportPluginLifecycleCatalog {
     }
 
     interface PhaseInvoker {
-        void invoke(PluginExporter exporter);
+        PluginExportResult invoke(PluginExporter exporter);
     }
 
     static final class PhaseDescriptor {
@@ -89,8 +90,8 @@ final class ExportPluginLifecycleCatalog {
             return contract;
         }
 
-        void invoke(PluginExporter exporter) {
-            invoker.invoke(exporter);
+        PluginExportResult invoke(PluginExporter exporter) {
+            return invoker.invoke(exporter);
         }
     }
 }

@@ -20,6 +20,8 @@ const renderFactSurface = [rawFileCatalog, manifestBuilder, validationSupport, v
 const renderJob = fs.readFileSync('src/main/java/com/github/dcysteine/nesql/exporter/util/render/RenderJob.java', 'utf8');
 const renderer = fs.readFileSync('src/main/java/com/github/dcysteine/nesql/exporter/util/render/Renderer.java', 'utf8');
 const glSnapshot = fs.readFileSync('src/main/java/com/github/dcysteine/nesql/exporter/util/render/AngelicaGlStateSnapshot.java', 'utf8');
+const runtimeFieldResolver = fs.readFileSync('src/main/java/com/github/dcysteine/nesql/exporter/util/render/RuntimeFieldResolver.java', 'utf8');
+const nativeSpriteMetadataExtractor = fs.readFileSync('src/main/java/com/github/dcysteine/nesql/exporter/util/render/NativeSpriteMetadataExtractor.java', 'utf8');
 
 for (const required of [
   'angelicaNativeRenderFacts',
@@ -137,6 +139,25 @@ for (const [rendererClass, family] of [
 assert(
   writerSurface.includes('mapRegisteredSprites') && writerSurface.includes('Map.class.isAssignableFrom(field.getType())'),
   'Texture sprite export must scan TextureMap map fields when MCP names differ at runtime'
+);
+
+for (const alias of [
+  'field_110976_a',
+  'field_110982_k',
+  'field_110973_g',
+  'field_110983_h',
+  'field_94254_c',
+  'field_94252_e',
+  'field_110574_e',
+]) {
+  assert(textureSpriteWriter.includes(alias), `Texture sprite runtime probe missing SRG alias ${alias}`);
+}
+assert(
+  runtimeFieldResolver.includes('ConcurrentMap<FieldKey, Field>')
+    && runtimeFieldResolver.includes('field.setAccessible(true)')
+    && textureSpriteWriter.includes('RuntimeFieldResolver.read(target, fieldNames)')
+    && nativeSpriteMetadataExtractor.includes('RuntimeFieldResolver.read(sprite, "animationMetadata", "field_110982_k")'),
+  'Sprite metadata probes must share one cached MCP/SRG runtime field resolver'
 );
 
 assert(

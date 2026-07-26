@@ -54,6 +54,15 @@ final class RawExportReportAssembler {
         report.counts.nativeUiInteractionContractViolationSamples = factCounts.nativeUiInteractionContractViolationSamples;
         report.counts.rawTextures = factCounts.textures;
         report.counts.rawAnimations = factCounts.animations;
+        report.counts.animationFrameMaterializations =
+                factCounts.animationFrameMaterializations;
+        report.counts.materializedAnimations = factCounts.materializedAnimations;
+        report.counts.staticAnimationFrames = factCounts.staticAnimationFrames;
+        report.counts.unavailableAnimationFrames = factCounts.unavailableAnimationFrames;
+        report.counts.facadeResolutions = factCounts.facadeResolutions;
+        report.counts.resolvedFacades = factCounts.resolvedFacades;
+        report.counts.partialFacades = factCounts.partialFacades;
+        report.counts.unresolvedFacades = factCounts.unresolvedFacades;
         report.counts.rawEntities = factCounts.entities;
         report.counts.rawBrowserAtlasAssets = factCounts.browserAtlasAssets;
         report.counts.renderBackendFacts = factCounts.renderBackendFacts;

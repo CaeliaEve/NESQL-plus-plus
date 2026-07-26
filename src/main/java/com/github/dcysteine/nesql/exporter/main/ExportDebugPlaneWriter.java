@@ -12,6 +12,7 @@ import net.minecraft.util.EnumChatFormatting;
 
 import java.io.File;
 import java.io.FileOutputStream;
+import java.io.IOException;
 import java.io.OutputStreamWriter;
 import java.nio.charset.StandardCharsets;
 import java.util.ArrayList;
@@ -184,17 +185,16 @@ final class ExportDebugPlaneWriter {
         throw new IllegalStateException("Missing DebugFS report descriptor: " + file.name());
     }
 
-    private static File validationAliasFile(ExportContext exportContext, ExportDebugFile file) {
+    private static File validationAliasFile(ExportContext exportContext, ExportDebugFile file) throws IOException {
         return new File(
-                exportContext.paths.repositoryDirectory,
-                (RawExportFileCatalog.RAW_EXPORT_DIRECTORY + "/" + file.validationAliasPath())
-                        .replace('/', File.separatorChar));
+                exportContext.rawExportDirectory(),
+                file.validationAliasPath().replace('/', File.separatorChar));
     }
 
-    private static File debugFile(ExportContext exportContext, ExportDebugFile file) {
+    private static File debugFile(ExportContext exportContext, ExportDebugFile file) throws IOException {
         return new File(
                 new File(
-                        RawExportFileCatalog.rawExportDirectory(exportContext.paths.repositoryDirectory),
+                        exportContext.rawExportDirectory(),
                         RawExportFileCatalog.DEBUG_DIRECTORY),
                 file.debugPath().replace('/', File.separatorChar));
     }

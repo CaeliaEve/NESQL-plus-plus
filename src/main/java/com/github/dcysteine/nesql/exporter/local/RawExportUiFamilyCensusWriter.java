@@ -26,18 +26,16 @@ import java.util.Set;
  * Writes the first NEI UI family census for the raw-export sidecar.
  */
 public final class RawExportUiFamilyCensusWriter {
-    private static final String OUTPUT_DIRECTORY = "raw-export";
     private static final String OUTPUT_FILE = NativeUiExportAbi.UI_FAMILY_CENSUS_FILE;
     private static final String SCHEMA_VERSION = NativeUiExportAbi.UI_FAMILY_CENSUS_SCHEMA;
 
-    private final File repositoryDirectory;
+    private final File rawDir;
 
-    public RawExportUiFamilyCensusWriter(File repositoryDirectory) {
-        this.repositoryDirectory = repositoryDirectory;
+    public RawExportUiFamilyCensusWriter(File rawDir) {
+        this.rawDir = rawDir;
     }
 
     public void export() throws IOException {
-        File rawDir = new File(repositoryDirectory, OUTPUT_DIRECTORY);
         RawExportSidecarFileOps.ensureDirectory(rawDir);
         File validationDir = new File(rawDir, "validation");
         RawExportSidecarFileOps.ensureDirectory(validationDir);
@@ -59,7 +57,7 @@ public final class RawExportUiFamilyCensusWriter {
 
     private UiFamilyCensusReport buildReport() {
         List<NeiHandlerMetadataEntry> entries = NeiHandlerMetadataRepository.getInstance().getEntries();
-        Map<String, UiFamilyBucket> families = new LinkedHashMap<String, UiFamilyBucket>();
+        Map<String, UiFamilyBucket> captures = new LinkedHashMap<String, UiFamilyBucket>();
         Set<String> modIds = new LinkedHashSet<String>();
         Set<String> layoutKinds = new LinkedHashSet<String>();
 
@@ -84,11 +82,18 @@ public final class RawExportUiFamilyCensusWriter {
             String imageResource = trimToEmpty(entry.getImageResource());
             UiNativeBackground nativeBackground = buildNativeBackground(entry, family, layoutKind, width, height, yShift);
 
-            String familyKey = buildFamilyKey(family, layoutKind, width, height, yShift, maxRecipesPerPage, imageResource);
-            UiFamilyBucket bucket = families.get(familyKey);
+            String captureKey = buildCaptureKey(
+                    family,
+                    layoutKind,
+                    width,
+                    height,
+                    yShift,
+                    maxRecipesPerPage,
+                    imageResource);
+            UiFamilyBucket bucket = captures.get(captureKey);
             if (bucket == null) {
                 bucket = new UiFamilyBucket();
-                bucket.familyKey = familyKey;
+                bucket.captureKey = captureKey;
                 bucket.canonicalMachineFamily = family;
                 bucket.layoutKind = layoutKind;
                 bucket.width = width;
@@ -97,7 +102,7 @@ public final class RawExportUiFamilyCensusWriter {
                 bucket.maxRecipesPerPage = maxRecipesPerPage;
                 bucket.imageResource = imageResource;
                 bucket.nativeBackground = nativeBackground;
-                families.put(familyKey, bucket);
+                captures.put(captureKey, bucket);
             }
 
             UiFamilyMember member = new UiFamilyMember();
@@ -122,7 +127,7 @@ public final class RawExportUiFamilyCensusWriter {
             layoutKinds.add(layoutKind);
         }
 
-        List<UiFamilyBucket> sortedFamilies = new ArrayList<UiFamilyBucket>(families.values());
+        List<UiFamilyBucket> sortedFamilies = new ArrayList<UiFamilyBucket>(captures.values());
         Collections.sort(sortedFamilies, new Comparator<UiFamilyBucket>() {
             @Override
             public int compare(UiFamilyBucket left, UiFamilyBucket right) {
@@ -130,7 +135,7 @@ public final class RawExportUiFamilyCensusWriter {
                 if (bySize != 0) {
                     return bySize;
                 }
-                return left.familyKey.compareTo(right.familyKey);
+                return left.captureKey.compareTo(right.captureKey);
             }
         });
 
@@ -164,7 +169,7 @@ public final class RawExportUiFamilyCensusWriter {
         return count;
     }
 
-    private static String buildFamilyKey(
+    static String buildCaptureKey(
             String family,
             String layoutKind,
             int width,
@@ -284,7 +289,7 @@ public final class RawExportUiFamilyCensusWriter {
     }
 
     static final class UiFamilyBucket {
-        String familyKey;
+        String captureKey;
         String canonicalMachineFamily;
         String layoutKind;
         int width;

@@ -161,9 +161,9 @@ final class ExportControlPlaneWriter {
         return report;
     }
 
-    private static File controlDirectory(ExportContext exportContext) {
+    private static File controlDirectory(ExportContext exportContext) throws Exception {
         return new File(
-                RawExportFileCatalog.rawExportDirectory(exportContext.paths.repositoryDirectory),
+                exportContext.rawExportDirectory(),
                 RawExportFileCatalog.CONTROL_DIRECTORY);
     }
 

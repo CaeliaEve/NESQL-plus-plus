@@ -1,8 +1,5 @@
 import com.github.jengelman.gradle.plugins.shadow.tasks.ShadowJar
 import net.minecraftforge.gradle.user.UserExtension
-import java.io.IOException
-import java.net.HttpURLConnection
-import java.net.URL
 
 buildscript {
     repositories {
@@ -22,7 +19,6 @@ buildscript {
         }
         maven("https://jitpack.io") { name = "JitPack" }
         maven("https://maven.msrandom.net/repository/cloche") { name = "GTNH Cloche" }
-        maven("http://files.minecraftforge.net/maven") { name = "Forge Legacy Files" }
         maven {
             url = uri("https://repo1.maven.org/maven2")
             name = "Maven Central First"
@@ -112,6 +108,16 @@ val shadowRuntime: Configuration by configurations.creating {
     configurations["runtime"].extendsFrom(this)
 }
 
+// The JPA behavior fixture only needs the exporter's persistence stack. Keep the
+// test classpath isolated from the optional Minecraft/GTNH dependency graph.
+configurations["testImplementation"].setExtendsFrom(listOf(shadowImplementation))
+configurations["testRuntimeOnly"].setExtendsFrom(listOf(shadowRuntime))
+// Writer tests exercise package-private production types whose signatures use Gson. Reuse only
+// that existing compile artifact instead of declaring another dependency or loading GTNH runtime.
+sourceSets.test.get().compileClasspath += sourceSets.main.get().compileClasspath.filter {
+    it.name.startsWith("gson-")
+}
+
 // Fix for Scala library resolution - force correct groupId
 configurations.all {
     resolutionStrategy {
@@ -168,9 +174,8 @@ repositories {
         name = "Curse Maven"
     }
 
-    maven("http://maven.ic2.player.to") {
+    maven("https://maven.ic2.player.to") {
         name = "IC2 Maven"
-        url = uri(getURL("http://maven.ic2.player.to", "http://maven2.ic2.player.to"))
         metadataSources {
             artifact()
         }
@@ -178,7 +183,7 @@ repositories {
             includeGroup("net.industrial-craft")
         }
     }
-    maven("http://gregtech.overminddl1.com") {
+    maven("https://gregtech.overminddl1.com") {
         content {
             includeGroup("thaumcraft")
         }
@@ -188,9 +193,6 @@ repositories {
         name = "Modrinth"
     }
 
-    maven("https://jcenter.bintray.com") {
-        name = "JCenter"
-    }
 }
 
 dependencies {
@@ -294,6 +296,147 @@ dependencies {
     implementation("org.scala-lang.modules:scala-xml_2.11:1.0.2")
 }
 
+val keysetPaginationJpaTest by tasks.creating(JavaExec::class) {
+    group = "verification"
+    description = "Runs the real HSQLDB/JPA keyset pagination regression test."
+    dependsOn("testClasses")
+    classpath = sourceSets.test.get().runtimeClasspath
+    main = "com.github.dcysteine.nesql.exporter.local.RawExportRepositoryFactStreamerKeysetJpaTest"
+    val isolatedWorkingDirectory = file("$buildDir/tmp/keyset-pagination-jpa-test")
+    doFirst {
+        isolatedWorkingDirectory.mkdirs()
+    }
+    workingDir = isolatedWorkingDirectory
+}
+
+val repositoryFactWriterTest by tasks.creating(JavaExec::class) {
+    group = "verification"
+    description = "Runs typed JSONL and bounded recipe shard writer regression tests."
+    dependsOn("testClasses")
+    classpath = sourceSets.test.get().runtimeClasspath + sourceSets.main.get().compileClasspath
+    main = "com.github.dcysteine.nesql.exporter.local.RawExportRepositoryFactWriterTest"
+    val isolatedWorkingDirectory = file("$buildDir/tmp/repository-fact-writer-test")
+    doFirst {
+        isolatedWorkingDirectory.mkdirs()
+    }
+    workingDir = isolatedWorkingDirectory
+}
+
+val rawExportGenerationTest by tasks.creating(JavaExec::class) {
+    group = "verification"
+    description = "Runs immutable raw-export generation publication and rollback tests."
+    dependsOn("testClasses")
+    classpath = sourceSets.test.get().runtimeClasspath + sourceSets.main.get().compileClasspath.filter {
+        it.name.startsWith("gson-")
+    }
+    main = "com.github.dcysteine.nesql.exporter.local.RawExportGenerationTest"
+    val isolatedWorkingDirectory = file("$buildDir/tmp/raw-export-generation-test")
+    doFirst {
+        isolatedWorkingDirectory.mkdirs()
+    }
+    workingDir = isolatedWorkingDirectory
+}
+
+val runtimeFieldResolverTest by tasks.creating(JavaExec::class) {
+    group = "verification"
+    description = "Runs cached MCP/SRG runtime field resolution tests."
+    dependsOn("testClasses")
+    classpath = sourceSets.test.get().runtimeClasspath + sourceSets.main.get().compileClasspath
+    main = "com.github.dcysteine.nesql.exporter.util.render.RuntimeFieldResolverTest"
+}
+
+val exportValidationJsonSupportTest by tasks.creating(JavaExec::class) {
+    group = "verification"
+    description = "Runs single-traversal export validation file count tests."
+    dependsOn("testClasses")
+    classpath = sourceSets.test.get().runtimeClasspath + sourceSets.main.get().compileClasspath
+    main = "com.github.dcysteine.nesql.exporter.main.ExportValidationJsonSupportTest"
+}
+
+val neiUiFamilyClassifierTest by tasks.creating(JavaExec::class) {
+    group = "verification"
+    description = "Runs token-boundary NEI UI family classification regression tests."
+    dependsOn("testClasses")
+    classpath = sourceSets.test.get().runtimeClasspath + sourceSets.main.get().compileClasspath
+    main = "com.github.dcysteine.nesql.exporter.plugin.nei.metadata.NeiUiFamilyClassifierTest"
+}
+
+val pluginExportResultTest by tasks.creating(JavaExec::class) {
+    group = "verification"
+    description = "Runs plugin success/partial/skipped/failed publication policy tests."
+    dependsOn("testClasses")
+    classpath = sourceSets.test.get().runtimeClasspath
+    main = "com.github.dcysteine.nesql.exporter.main.PluginExportResultTest"
+}
+
+val neiRecipeBatchOutcomeTest by tasks.creating(JavaExec::class) {
+    group = "verification"
+    description = "Runs injectable NEI row-to-handler-to-batch failure propagation tests."
+    dependsOn("testClasses")
+    classpath = sourceSets.test.get().runtimeClasspath + sourceSets.main.get().compileClasspath
+    main = "com.github.dcysteine.nesql.exporter.plugin.nei.NeiRecipeBatchOutcomeTest"
+}
+
+val neiItemUniverseCollectorTest by tasks.creating(JavaExec::class) {
+    group = "verification"
+    description = "Runs fail-closed NEI item-universe normalization behavior tests."
+    dependsOn("testClasses")
+    classpath = sourceSets.test.get().runtimeClasspath + sourceSets.main.get().compileClasspath
+    main = "com.github.dcysteine.nesql.exporter.plugin.nei.NeiItemUniverseCollectorTest"
+}
+
+val neiRecipeBatchLoaderCandidatePolicyTest by tasks.creating(JavaExec::class) {
+    group = "verification"
+    description = "Runs candidate-scoped Fluid Canner null-fluid rejection policy tests."
+    dependsOn("testClasses")
+    classpath = sourceSets.test.get().runtimeClasspath + sourceSets.main.get().compileClasspath
+    main = "com.github.dcysteine.nesql.exporter.plugin.nei.NeiRecipeBatchLoaderCandidatePolicyTest"
+}
+
+val neiPluginFailurePipelineTest by tasks.creating(JavaExec::class) {
+    group = "verification"
+    description = "Runs the production NEI plugin/runtime/stage failure cleanup regression test."
+    dependsOn("testClasses")
+    classpath = sourceSets.test.get().runtimeClasspath + sourceSets.main.get().compileClasspath
+    main = "com.github.dcysteine.nesql.exporter.main.NeiPluginFailurePipelineTest"
+}
+
+val resourceAuthorityContractTest by tasks.creating(JavaExec::class) {
+    group = "verification"
+    description = "Runs authoritative facade and animation frame materialization ABI tests."
+    dependsOn("testClasses")
+    classpath = sourceSets.test.get().runtimeClasspath + sourceSets.main.get().compileClasspath.filter {
+        it.name.startsWith("gson-")
+    }
+    main = "com.github.dcysteine.nesql.exporter.local.ResourceAuthorityContractTest"
+}
+
+val rawExportValidationCountContractTest by tasks.creating(JavaExec::class) {
+    group = "verification"
+    description = "Runs typed raw-export core count gate regression tests."
+    dependsOn("testClasses")
+    classpath = sourceSets.test.get().runtimeClasspath + sourceSets.main.get().compileClasspath.filter {
+        it.name.startsWith("gson-")
+    }
+    main = "com.github.dcysteine.nesql.exporter.local.RawExportValidationCountContractTest"
+}
+
+tasks.named("check") {
+    dependsOn(keysetPaginationJpaTest)
+    dependsOn(repositoryFactWriterTest)
+    dependsOn(rawExportGenerationTest)
+    dependsOn(runtimeFieldResolverTest)
+    dependsOn(exportValidationJsonSupportTest)
+    dependsOn(neiUiFamilyClassifierTest)
+    dependsOn(pluginExportResultTest)
+    dependsOn(neiRecipeBatchOutcomeTest)
+    dependsOn(neiItemUniverseCollectorTest)
+    dependsOn(neiRecipeBatchLoaderCandidatePolicyTest)
+    dependsOn(neiPluginFailurePipelineTest)
+    dependsOn(resourceAuthorityContractTest)
+    dependsOn(rawExportValidationCountContractTest)
+}
+
 tasks.withType<Jar> {
     // Replace version in mcmod.info
     filesMatching("mcmod.info") {
@@ -305,23 +448,6 @@ tasks.withType<Jar> {
         )
     }
     archiveBaseName.set("NESQL++")
-}
-
-fun getURL(main: String, fallback: String): String {
-    return if (pingURL(main, 10000)) main else fallback
-}
-
-fun pingURL(url: String, timeout: Int): Boolean {
-    return try {
-        val connection = URL(url.replaceFirst("^https".toRegex(), "http")).openConnection() as HttpURLConnection
-        connection.connectTimeout = timeout
-        connection.readTimeout = timeout
-        connection.requestMethod = "HEAD"
-        val responseCode = connection.responseCode
-        responseCode in 200..399
-    } catch (e: IOException) {
-        false
-    }
 }
 
 // Unfortunately, we can neither minimize the shadow jar nor relocate it,

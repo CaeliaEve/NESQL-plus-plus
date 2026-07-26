@@ -1,5 +1,7 @@
 package com.github.dcysteine.nesql.exporter.local;
 
+import com.github.dcysteine.nesql.exporter.util.render.RuntimeFieldResolver;
+import com.github.dcysteine.nesql.exporter.util.render.NativeSpriteFrameMaterializer;
 import com.google.gson.Gson;
 import com.google.gson.GsonBuilder;
 import com.google.gson.JsonArray;
@@ -62,20 +64,38 @@ final class AngelicaRenderTextureSpriteFactsWriter {
                     row.addProperty("originY", safeInt(new IntSupplier() { public int get() { return sprite.getOriginY(); } }, -1));
                     row.addProperty("width", safeInt(new IntSupplier() { public int get() { return sprite.getIconWidth(); } }, -1));
                     row.addProperty("height", safeInt(new IntSupplier() { public int get() { return sprite.getIconHeight(); } }, -1));
-                    boolean animated = safeBoolean(new BooleanSupplier() { public boolean get() { return sprite.hasAnimationMetadata(); } }, false);
                     int frameCount = safeInt(new IntSupplier() { public int get() { return sprite.getFrameCount(); } }, 0);
-                    Object frames = readField(sprite, "framesTextureData");
-                    boolean nativeAnimated = animated || frameCount > 1;
-                    row.addProperty("animated", nativeAnimated);
-                    row.addProperty("frameCount", nativeAnimated ? Math.max(frameCount, collectionSize(frames)) : Math.max(1, frameCount));
-                    row.addProperty("runtimeFrameCounter", intField(sprite, "frameCounter", -1));
-                    row.addProperty("runtimeTickCounter", intField(sprite, "tickCounter", -1));
+                    Object frames = readField(sprite, "framesTextureData", "field_110976_a");
+                    int runtimeFrameCount = Math.max(frameCount, collectionSize(frames));
+                    int width = safeInt(new IntSupplier() { public int get() { return sprite.getIconWidth(); } }, -1);
+                    int height = safeInt(new IntSupplier() { public int get() { return sprite.getIconHeight(); } }, -1);
                     AnimationMetadataSection metadata = readAnimationMetadata(sprite);
+                    int declaredFrameCount = declaredFrameCount(metadata, runtimeFrameCount);
+                    NativeSpriteFrameMaterializer.Result materialization =
+                            NativeSpriteFrameMaterializer.inspect(
+                                    sprite,
+                                    width,
+                                    height,
+                                    Math.max(1, Math.max(runtimeFrameCount, declaredFrameCount)));
+                    boolean nativeAnimated =
+                            com.github.dcysteine.nesql.exporter.canonical.ResourceAuthorityContract
+                                    .isNativeSpriteAnimation(materialization.status());
+                    row.addProperty("animated", nativeAnimated);
+                    row.addProperty("frameCount", runtimeFrameCount);
+                    row.addProperty("runtimeFrameCount", runtimeFrameCount);
+                    row.addProperty("declaredFrameCount", declaredFrameCount);
+                    row.addProperty("materializedFrameCount", materialization.materializedFrameCount());
+                    row.addProperty("distinctFrameCount", materialization.distinctFrameCount());
+                    row.addProperty("materializationStatus", materialization.status());
+                    row.addProperty("materializationReason", materialization.reason());
+                    row.add("materializedFrames", GSON.toJsonTree(materialization.descriptors(width, height)));
+                    row.addProperty("runtimeFrameCounter", intField(sprite, -1, "frameCounter", "field_110973_g"));
+                    row.addProperty("runtimeTickCounter", intField(sprite, -1, "tickCounter", "field_110983_h"));
                     boolean missingNativeTiming = false;
                     if (metadata != null) {
                         row.addProperty("defaultFrameTimeTicks", metadata.getFrameTime());
                         row.addProperty("metadataFrameCount", metadata.getFrameCount());
-                        row.add("timeline", animationTimeline(metadata, Math.max(frameCount, collectionSize(frames))));
+                        row.add("timeline", animationTimeline(metadata, runtimeFrameCount));
                         row.addProperty("timelineStatus", "native-metadata");
                         row.addProperty("interpolate", booleanMethod(metadata, "isInterpolate", false));
                     } else {
@@ -135,11 +155,11 @@ final class AngelicaRenderTextureSpriteFactsWriter {
     }
 
     private Map<?, ?> readUploadedSprites(TextureMap textureMap) {
-        Object value = readField(textureMap, "mapUploadedSprites");
+        Object value = readField(textureMap, "mapUploadedSprites", "field_94252_e");
         if (value instanceof Map<?, ?>) {
             return (Map<?, ?>) value;
         }
-        value = readField(textureMap, "mapRegisteredSprites");
+        value = readField(textureMap, "mapRegisteredSprites", "field_110574_e");
         if (value instanceof Map<?, ?>) {
             return (Map<?, ?>) value;
         }
@@ -178,7 +198,7 @@ final class AngelicaRenderTextureSpriteFactsWriter {
     }
 
     private static String atlasName(TextureMap textureMap) {
-        Object location = readField(textureMap, "basePath");
+        Object location = readField(textureMap, "basePath", "field_94254_c");
         if (location != null) {
             return String.valueOf(location);
         }
@@ -186,7 +206,7 @@ final class AngelicaRenderTextureSpriteFactsWriter {
     }
 
     private static AnimationMetadataSection readAnimationMetadata(TextureAtlasSprite sprite) {
-        Object value = readField(sprite, "animationMetadata");
+        Object value = readField(sprite, "animationMetadata", "field_110982_k");
         return value instanceof AnimationMetadataSection ? (AnimationMetadataSection) value : null;
     }
 
@@ -252,26 +272,33 @@ final class AngelicaRenderTextureSpriteFactsWriter {
         }
     }
 
-    private static int intField(Object target, String fieldName, int fallback) {
-        Object value = readField(target, fieldName);
+    private static int intField(Object target, int fallback, String... fieldNames) {
+        Object value = readField(target, fieldNames);
         return value instanceof Number ? ((Number) value).intValue() : fallback;
     }
 
-    private static Object readField(Object target, String fieldName) {
-        if (target == null) {
-            return null;
+    private static int declaredFrameCount(
+            AnimationMetadataSection metadata,
+            int runtimeFrameCount) {
+        if (metadata == null) {
+            return Math.max(0, runtimeFrameCount);
         }
-        Class<?> type = target.getClass();
-        while (type != null && type != Object.class) {
-            try {
-                Field field = type.getDeclaredField(fieldName);
-                field.setAccessible(true);
-                return field.get(target);
-            } catch (Throwable ignored) {
-            }
-            type = type.getSuperclass();
+        int timelineLength = safeInt(
+                new IntSupplier() { public int get() { return metadata.getFrameCount(); } },
+                0);
+        int declared = 0;
+        for (int timelineIndex = 0; timelineIndex < timelineLength; timelineIndex++) {
+            final int index = timelineIndex;
+            int frameIndex = safeInt(
+                    new IntSupplier() { public int get() { return metadata.getFrameIndex(index); } },
+                    index);
+            declared = Math.max(declared, frameIndex + 1);
         }
-        return null;
+        return declared > 0 ? declared : Math.max(0, runtimeFrameCount);
+    }
+
+    private static Object readField(Object target, String... fieldNames) {
+        return RuntimeFieldResolver.read(target, fieldNames);
     }
 
     private static int collectionSize(Object value) {

@@ -22,9 +22,8 @@ import java.util.Locale;
 final class ExportValidationPathHygieneProbe {
     private ExportValidationPathHygieneProbe() {}
 
-    static void inspect(File repositoryDirectory, ExportValidationReport report) {
+    static void inspect(File repositoryDirectory, File rawDir, ExportValidationReport report) {
         List<File> files = new ArrayList<File>();
-        File rawDir = RawExportFileCatalog.rawExportDirectory(repositoryDirectory);
         collectRuntimeJsonFiles(new File(repositoryDirectory, RawExportFileCatalog.MANIFEST_FILE), files);
         collectRuntimeJsonFiles(rawDir, files);
         collectRuntimeJsonFiles(new File(repositoryDirectory, "facts"), files);
@@ -40,7 +39,7 @@ final class ExportValidationPathHygieneProbe {
                 ? ExportValidationAbiCatalog.STATUS_OK
                 : ExportValidationAbiCatalog.STATUS_FAILED;
         if (report.exportPathHygieneViolations > 0) {
-            writeErrors(repositoryDirectory, report);
+            writeErrors(rawDir, report);
         }
     }
 
@@ -124,8 +123,7 @@ final class ExportValidationPathHygieneProbe {
         report.exportPathHygieneSamples.add(sample);
     }
 
-    private static void writeErrors(File repositoryDirectory, ExportValidationReport report) {
-        File rawDir = RawExportFileCatalog.rawExportDirectory(repositoryDirectory);
+    private static void writeErrors(File rawDir, ExportValidationReport report) {
         File validationDirectory = RawExportFileCatalog.validationDirectory(rawDir);
         if (!validationDirectory.exists() && !validationDirectory.mkdirs()) {
             Logger.MOD.warn("Failed to create NESQL validation directory: {}", validationDirectory.getAbsolutePath());
