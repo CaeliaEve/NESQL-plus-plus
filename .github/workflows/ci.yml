@@ -5,6 +5,7 @@ on:
     branches:
       - main
       - elysium
+      - optimize
   pull_request:
     branches:
       - main
@@ -70,8 +71,11 @@ jobs:
       - name: Prepare ForgeGradle CI workspace
         run: ./gradlew setupCIWorkspace --no-daemon --stacktrace
 
-      - name: Build and run Gradle behavior checks
+      - name: Build
         run: ./gradlew build -x test --no-daemon --stacktrace
+
+      - name: Run JavaExec behavior fixtures
+        run: ./gradlew check -x test --no-daemon --stacktrace
 
       - name: Run regression checks against built jars
         run: node scripts/run-regression-tests.mjs
