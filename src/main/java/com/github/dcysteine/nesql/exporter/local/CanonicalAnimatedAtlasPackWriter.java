@@ -40,6 +40,13 @@ public class CanonicalAnimatedAtlasPackWriter {
     private static final String ATLAS_DIRECTORY = "animated-atlases";
     private static final String OUTPUT_FILE = "animated-atlas-manifest.json";
     private static final String GROUP_DIRECTORY = "animated-atlas-manifests-by-group";
+    /**
+     * Browsers refuse to decode PNGs above roughly 16k px per side, and WebGL texture limits are
+     * commonly 8192 px. Animated atlas pages must stay within this height; groups that would
+     * exceed it are split into multiple pages at asset boundaries (all frames of one asset stay
+     * on the same page because runtime timelines reference a single atlas file per asset).
+     */
+    private static final int WEBGL_SAFE_MAX_ATLAS_HEIGHT = 8192;
 
     private final EntityManager entityManager;
     private final File exportDirectory;
@@ -105,10 +112,7 @@ public class CanonicalAnimatedAtlasPackWriter {
         if (workers == 1) {
             List<AnimatedAtlasGroupManifest> groups = new ArrayList<>();
             for (Map.Entry<String, List<CanonicalRenderAsset>> entry : entries) {
-                AnimatedAtlasGroupManifest groupManifest = packGroup(atlasDir, entry.getKey(), entry.getValue());
-                if (groupManifest != null) {
-                    groups.add(groupManifest);
-                }
+                groups.addAll(packGroup(atlasDir, entry.getKey(), entry.getValue()));
             }
             return groups;
         }
@@ -120,25 +124,22 @@ public class CanonicalAnimatedAtlasPackWriter {
                         + " IO workers...");
         ExecutorService executor = Executors.newFixedThreadPool(workers);
         try {
-            List<Future<AnimatedAtlasGroupManifest>> futures = new ArrayList<>();
+            List<Future<List<AnimatedAtlasGroupManifest>>> futures = new ArrayList<>();
             for (Map.Entry<String, List<CanonicalRenderAsset>> entry : entries) {
                 final String atlasGroup = entry.getKey();
                 final List<CanonicalRenderAsset> assets = new ArrayList<>(entry.getValue());
-                futures.add(executor.submit(new Callable<AnimatedAtlasGroupManifest>() {
+                futures.add(executor.submit(new Callable<List<AnimatedAtlasGroupManifest>>() {
                     @Override
-                    public AnimatedAtlasGroupManifest call() throws Exception {
+                    public List<AnimatedAtlasGroupManifest> call() throws Exception {
                         return packGroup(atlasDir, atlasGroup, assets);
                     }
                 }));
             }
 
             List<AnimatedAtlasGroupManifest> groups = new ArrayList<>();
-            for (Future<AnimatedAtlasGroupManifest> future : futures) {
+            for (Future<List<AnimatedAtlasGroupManifest>> future : futures) {
                 try {
-                    AnimatedAtlasGroupManifest groupManifest = future.get();
-                    if (groupManifest != null) {
-                        groups.add(groupManifest);
-                    }
+                    groups.addAll(future.get());
                 } catch (Exception e) {
                     throw new IOException("Failed to pack animated atlas group", e);
                 }
@@ -181,37 +182,126 @@ public class CanonicalAnimatedAtlasPackWriter {
         return byGroup;
     }
 
-    private AnimatedAtlasGroupManifest packGroup(File atlasDir, String atlasGroup, List<CanonicalRenderAsset> assets) throws IOException {
+    private List<AnimatedAtlasGroupManifest> packGroup(File atlasDir, String atlasGroup, List<CanonicalRenderAsset> assets) throws IOException {
         if (assets.isEmpty()) {
-            return null;
+            return new ArrayList<>();
         }
 
         assets.sort(Comparator.comparing(asset -> asset.assetId));
         String safeName = atlasGroup.replaceAll("[^a-zA-Z0-9_-]", "_");
-        File atlasFile = new File(atlasDir, safeName + ".png");
-        AnimatedAtlasGroupManifest reusable = readFreshGroupManifest(atlasDir, atlasGroup, assets, atlasFile, safeName);
-        if (reusable != null) {
+        List<AnimatedAtlasGroupManifest> reusable = readFreshGroupManifests(atlasDir, atlasGroup, assets, safeName);
+        if (!reusable.isEmpty()) {
             return reusable;
         }
+        deleteStaleAnimatedAtlasFiles(atlasDir, safeName);
 
-        List<AtlasPackingSupport.AtlasSourceImage> sources = new ArrayList<>();
+        List<List<AtlasPackingSupport.AtlasSourceImage>> perAssetSources = new ArrayList<>();
         for (CanonicalRenderAsset asset : assets) {
+            List<AtlasPackingSupport.AtlasSourceImage> assetSources = new ArrayList<>();
             if ("native_sprite_animation".equals(asset.mode)) {
-                addNativeSpriteSources(sources, asset);
+                addNativeSpriteSources(assetSources, asset);
             } else {
-                addRenderedFrameSources(sources, asset);
+                addRenderedFrameSources(assetSources, asset);
+            }
+            if (!assetSources.isEmpty()) {
+                perAssetSources.add(assetSources);
             }
         }
 
-        if (sources.isEmpty()) {
-            return null;
+        if (perAssetSources.isEmpty()) {
+            return new ArrayList<>();
         }
 
+        List<List<List<AtlasPackingSupport.AtlasSourceImage>>> pages = new ArrayList<>();
+        addHeightSafePage(pages, perAssetSources);
+
+        List<AnimatedAtlasGroupManifest> manifests = new ArrayList<>();
+        int pageIndex = 0;
+        for (List<List<AtlasPackingSupport.AtlasSourceImage>> page : pages) {
+            manifests.add(writeAtlasPage(
+                    atlasDir,
+                    atlasPageName(safeName, pageIndex),
+                    atlasPageName(atlasGroup, pageIndex),
+                    flattenSources(page)));
+            pageIndex++;
+        }
+        return manifests;
+    }
+
+    /**
+     * Splits per-asset source lists into pages whose packed height stays browser-decodable.
+     * Splitting happens at asset boundaries only: every frame of an asset must land on the
+     * same atlas page because runtime timelines reference exactly one atlas file per asset.
+     */
+    private void addHeightSafePage(
+            List<List<List<AtlasPackingSupport.AtlasSourceImage>>> pages,
+            List<List<AtlasPackingSupport.AtlasSourceImage>> perAssetSources) {
+        if (perAssetSources.isEmpty()) {
+            return;
+        }
+        AtlasPackingSupport.PackLayout layout = AtlasPackingSupport.computeLayout(flattenSources(perAssetSources));
+        if (layout.height <= WEBGL_SAFE_MAX_ATLAS_HEIGHT || perAssetSources.size() == 1) {
+            if (layout.height > WEBGL_SAFE_MAX_ATLAS_HEIGHT) {
+                Logger.MOD.warn(
+                        "Animated atlas page for asset {} exceeds safe height {}x{}; single asset cannot be split",
+                        perAssetSources.get(0).get(0).asset.assetId,
+                        layout.width,
+                        layout.height);
+            }
+            pages.add(perAssetSources);
+            return;
+        }
+        int middle = perAssetSources.size() / 2;
+        addHeightSafePage(pages, new ArrayList<>(perAssetSources.subList(0, middle)));
+        addHeightSafePage(pages, new ArrayList<>(perAssetSources.subList(middle, perAssetSources.size())));
+    }
+
+    private List<AtlasPackingSupport.AtlasSourceImage> flattenSources(
+            List<List<AtlasPackingSupport.AtlasSourceImage>> perAssetSources) {
+        List<AtlasPackingSupport.AtlasSourceImage> flat = new ArrayList<>();
+        for (List<AtlasPackingSupport.AtlasSourceImage> assetSources : perAssetSources) {
+            flat.addAll(assetSources);
+        }
+        return flat;
+    }
+
+    private String atlasPageName(String baseName, int pageIndex) {
+        return pageIndex == 0 ? baseName : String.format("%s-%03d", baseName, pageIndex);
+    }
+
+    private void deleteStaleAnimatedAtlasFiles(File atlasDir, String safeName) {
+        File[] atlasFiles = atlasDir.listFiles((dir, name) ->
+                name.equals(safeName + ".png") || name.matches(java.util.regex.Pattern.quote(safeName) + "-\\d{3}\\.png"));
+        if (atlasFiles != null) {
+            for (File atlasFile : atlasFiles) {
+                if (!atlasFile.delete()) {
+                    Logger.MOD.debug("Failed to delete stale animated atlas page {}", atlasFile.getAbsolutePath());
+                }
+            }
+        }
+        File groupDir = new File(atlasDir.getParentFile(), GROUP_DIRECTORY);
+        File[] shardFiles = groupDir.listFiles((dir, name) ->
+                name.equals(safeName + ".json") || name.matches(java.util.regex.Pattern.quote(safeName) + "-\\d{3}\\.json"));
+        if (shardFiles != null) {
+            for (File shardFile : shardFiles) {
+                if (!shardFile.delete()) {
+                    Logger.MOD.debug("Failed to delete stale animated atlas shard {}", shardFile.getAbsolutePath());
+                }
+            }
+        }
+    }
+
+    private AnimatedAtlasGroupManifest writeAtlasPage(
+            File atlasDir,
+            String pageSafeName,
+            String pageAtlasGroup,
+            List<AtlasPackingSupport.AtlasSourceImage> sources) throws IOException {
+        File atlasFile = new File(atlasDir, pageSafeName + ".png");
         AtlasPackingSupport.PackLayout layout = AtlasPackingSupport.computeLayout(sources);
         AtlasPackingSupport.writeAtlasImage(atlasFile, layout);
 
         AnimatedAtlasGroupManifest groupManifest = new AnimatedAtlasGroupManifest();
-        groupManifest.atlasGroup = atlasGroup;
+        groupManifest.atlasGroup = pageAtlasGroup;
         groupManifest.atlasFile = relativizeFromExportDirectory(atlasFile);
         groupManifest.width = layout.width;
         groupManifest.height = layout.height;
@@ -254,36 +344,57 @@ public class CanonicalAnimatedAtlasPackWriter {
         return groupManifest;
     }
 
-    private AnimatedAtlasGroupManifest readFreshGroupManifest(
+    private List<AnimatedAtlasGroupManifest> readFreshGroupManifests(
             File atlasDir,
             String atlasGroup,
             List<CanonicalRenderAsset> assets,
-            File atlasFile,
             String safeName) {
         File canonicalDir = atlasDir.getParentFile();
-        File shardFile = new File(new File(canonicalDir, GROUP_DIRECTORY), safeName + ".json");
-        if (!atlasFile.exists() || !shardFile.exists()) {
-            return null;
+        File groupDir = new File(canonicalDir, GROUP_DIRECTORY);
+        File[] shardFiles = groupDir.listFiles((dir, name) ->
+                name.equals(safeName + ".json")
+                        || name.matches(java.util.regex.Pattern.quote(safeName) + "-\\d{3}\\.json"));
+        if (shardFiles == null || shardFiles.length == 0) {
+            return new ArrayList<>();
         }
+        java.util.Arrays.sort(shardFiles, Comparator.comparing(File::getName));
 
         long newestSourceModified = newestSourceModified(assets);
-        long oldestOutputModified = Math.min(atlasFile.lastModified(), shardFile.lastModified());
-        if (newestSourceModified <= 0L || oldestOutputModified < newestSourceModified) {
-            return null;
+        if (newestSourceModified <= 0L) {
+            return new ArrayList<>();
         }
 
-        try (FileInputStream fis = new FileInputStream(shardFile);
-             InputStreamReader reader = new InputStreamReader(fis, StandardCharsets.UTF_8)) {
-            AnimatedAtlasGroupManifest manifest = GSON.fromJson(reader, AnimatedAtlasGroupManifest.class);
-            if (manifest == null || manifest.assets == null || manifest.assets.isEmpty()) {
-                return null;
+        List<AnimatedAtlasGroupManifest> manifests = new ArrayList<>();
+        for (File shardFile : shardFiles) {
+            try (FileInputStream fis = new FileInputStream(shardFile);
+                 InputStreamReader reader = new InputStreamReader(fis, StandardCharsets.UTF_8)) {
+                AnimatedAtlasGroupManifest manifest = GSON.fromJson(reader, AnimatedAtlasGroupManifest.class);
+                if (manifest == null || manifest.assets == null || manifest.assets.isEmpty()) {
+                    return new ArrayList<>();
+                }
+                if (manifest.height > WEBGL_SAFE_MAX_ATLAS_HEIGHT) {
+                    // Pages written before height-safe sharding existed must be regenerated.
+                    return new ArrayList<>();
+                }
+                File atlasFile = resolveExportFile(manifest.atlasFile);
+                if (!atlasFile.exists()) {
+                    return new ArrayList<>();
+                }
+                long oldestOutputModified = Math.min(atlasFile.lastModified(), shardFile.lastModified());
+                if (oldestOutputModified < newestSourceModified) {
+                    return new ArrayList<>();
+                }
+                manifests.add(manifest);
+            } catch (Exception e) {
+                Logger.MOD.warn("Failed to reuse animated atlas group {}", atlasGroup, e);
+                return new ArrayList<>();
             }
-            Logger.MOD.info("Reusing fresh animated atlas group {} from {}", atlasGroup, atlasFile.getName());
-            return manifest;
-        } catch (Exception e) {
-            Logger.MOD.warn("Failed to reuse animated atlas group {}", atlasGroup, e);
-            return null;
         }
+        if (!manifests.isEmpty()) {
+            Logger.MOD.info(
+                    "Reusing {} fresh animated atlas page(s) for group {}", manifests.size(), atlasGroup);
+        }
+        return manifests;
     }
 
     private long newestSourceModified(List<CanonicalRenderAsset> assets) {
