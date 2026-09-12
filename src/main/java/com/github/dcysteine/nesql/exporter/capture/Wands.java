@@ -174,7 +174,7 @@ final class Wands {
         addResearch(research, part.core ? ((WandRod) part.value).getResearch() : ((WandCap) part.value).getResearch());
         JsonObject payment = null;
         if (single && !state.staff) {
-            JsonObject charges = new JsonObject(); for (Aspect aspect : primal) charges.addProperty(Magic.aspectId(aspect), aspect.getTag());
+            JsonObject charges = new JsonObject(); for (Aspect aspect : primal) charges.addProperty(Aspects.id(aspect), aspect.getTag());
             payment = object("input", 0, "charges", charges, "capacity", capacity, "preserve", preserve);
         }
         return new Result(inputs, aspects.copy(), research, product, payment, part.core ? "rod" : "cap", state.meta != null);

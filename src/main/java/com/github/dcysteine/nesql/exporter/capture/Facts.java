@@ -4,6 +4,7 @@ import com.github.dcysteine.nesql.exporter.source.Identity;
 import com.github.dcysteine.nesql.exporter.source.TypedNbt;
 import com.github.dcysteine.nesql.exporter.task.Jobs;
 import com.google.gson.JsonArray;
+import com.google.gson.JsonElement;
 import com.google.gson.JsonObject;
 import cpw.mods.fml.common.registry.GameRegistry;
 import net.minecraft.client.Minecraft;
@@ -69,11 +70,17 @@ final class Facts {
         for (int ore : OreDictionary.getOreIDs(stack)) tags.add(OreDictionary.getOreName(ore));
         JsonArray memberships = new JsonArray();
         for (String tag : tags) memberships.add(value(tag));
+        JsonElement aspects;
+        try { aspects = Aspects.item(stack); }
+        catch (Jobs.Fault error) {
+            throw new Jobs.Fault(error.code, error.getMessage() + "; item=" + registry + "; meta=" + meta + "; id=" + id
+                    + (order == null ? "" : "; NEI index=" + order));
+        }
         JsonObject record = object("id", id, "registry", registry, "meta", meta, "nbt", nbt,
                 "name", text(stack.getDisplayName()), "tooltip", tooltip,
                 "stackLimit", stack.getMaxStackSize(), "durability", stack.getMaxDamage(), "tools", tools,
                 "armor", stack.getItem() instanceof net.minecraft.item.ItemArmor,
-                "tags", memberships, "icon", null, "order", order, "aspects", Magic.itemAspects(stack));
+                "tags", memberships, "icon", null, "order", order, "aspects", aspects);
         batch.icons.add(new Icon("items", record, stack, null, registry));
         return id;
     }

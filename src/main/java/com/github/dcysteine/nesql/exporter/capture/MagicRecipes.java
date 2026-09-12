@@ -174,7 +174,7 @@ final class MagicRecipes {
         }
         JsonArray links = new JsonArray();
         for (String key : research) links.add(Magic.study(key));
-        JsonArray amounts = Magic.amounts(costs(aspects));
+        JsonArray amounts = Aspects.amounts(costs(aspects));
         if (kind.equals("arcane") && amounts.size() == 0 && !creative) return false;
         row.record.add("magic", object("kind", kind, "aspects", amounts, "research", links, "central", central, "instability", instability,
                 "payment", payment, "creative", kind.equals("arcane") && creative));
@@ -192,7 +192,7 @@ final class MagicRecipes {
             if (position.item != null && position.item.getItem().getClass().getName().equals(PLUGIN + "items.ItemAspect")) {
                 AspectList value = (AspectList) invoke(type(PLUGIN + "items.ItemAspect"), null, "getAspects", new Class<?>[] {ItemStack.class}, position.item);
                 if (value == null || value.size() != 1) throw fault("Native cost icon has no unique aspect");
-                String aspect = Magic.aspectId(value.getAspects()[0]);
+                String aspect = Aspects.id(value.getAspects()[0]);
                 int cost = -1;
                 for (int at = 0; at < amounts.size(); at++) if (amounts.get(at).getAsJsonObject().get("aspect").getAsString().equals(aspect)) cost = at;
                 if (cost < 0) throw fault("Native view refers to an undeclared aspect cost");

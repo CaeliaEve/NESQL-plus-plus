@@ -6,7 +6,7 @@
 
 目标为 GT New Horizons 2.8.4 Java 8。模组只服务本机单人世界，不支持专用服务器。MCP 客户端启动独立的 Node 进程，桥接通过受限的 loopback HTTP 接口调用游戏任务服务；Java 8 模组不嵌入 MCP SDK。
 
-模组 0.10.5 写出 source 修订 10。MCP 连接协议保持不变；数据修订与传输协议是不同的元数据。编译器拒绝旧数据修订，不提供旧格式兜底读取。
+模组 0.10.6 写出 source 修订 10。MCP 连接协议保持不变；数据修订与传输协议是不同的元数据。编译器拒绝旧数据修订，不提供旧格式兜底读取。
 
 ```json
 {
@@ -63,6 +63,8 @@ Forestry 固定使用 4.10.17 API。读取已注册的蜜蜂、树木默认模�
 ## 结构定义
 
 所有 profile 还采集 Thaumcraft 要素和研究定义。物品要素来自目标 API 的 getObjectTags/getBonusTags，使用物品和基础标签副本。图标经原生绘制函数捕获。研究的普通引用必须存在；未注册的 `@` 标记按目标 ResearchManager 语义保留。读取 researchCompleted/aspectsDiscovered 的现有缓存，不调用会初始化知识的 getter，也不修改研究或扫描状态。缓存缺失时保存未知，并将缓存存在性纳入环境指纹。
+
+Thaumcraft 4 的空 AspectList 会返回 `[null]`；原生 copy/add/merge 还可能把它写成 `null → 0` 条目。物品、研究、配方和知识指纹统一忽略这个无数量的哨兵，空物品要素保存为 `[]`；API 未返回物品要素时仍保存 null。已注册要素的零数量保留，非零 null、负配方数量或未登记的实际要素仍明确失败，不改写原生列表。要素错误包含 tag/类型/数量等适用信息；物品采集额外报告 registry、meta、内容 ID 和从0开始的 NEI index。进度按批次更新，不能把最后的 completed 值当作失败物品索引。
 
 研究身份沿用原始全局 key，定义、分类和研究/配方引用以已安装游戏的 ResearchCategories.getResearch 结果为准。Gadomancy 1.4.8 在其他分类中注册的同名空虚拟项只作为引用，归并到原生选中的定义并保留预检登记记录；单独存在的虚拟研究仍导出。只有普通 ResearchItem、无内容/触发/解锁行为的空虚拟引用可归并；其他不同对象重名、原生解析落到已注销对象或会遮蔽实质定义时明确报出键与登记位置。登记 map 的键或位置不同于对象字段时记录诊断，保留原生对象的 key/category，不创建新研究别名或改写游戏注册表。source/catalog 修订及研究 ID 不变。
 

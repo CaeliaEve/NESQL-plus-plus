@@ -3,8 +3,6 @@ package com.github.dcysteine.nesql.exporter.capture;
 import com.github.dcysteine.nesql.exporter.source.Identity;
 import com.github.dcysteine.nesql.exporter.task.Jobs;
 import com.google.gson.JsonArray;
-import com.google.gson.JsonElement;
-import com.google.gson.JsonNull;
 import com.google.gson.JsonObject;
 import cpw.mods.fml.common.Loader;
 import net.minecraft.client.Minecraft;
@@ -16,12 +14,10 @@ import thaumcraft.api.research.ResearchCategories;
 import thaumcraft.api.research.ResearchItem;
 import thaumcraft.client.lib.UtilsFX;
 import thaumcraft.common.Thaumcraft;
-import thaumcraft.common.lib.crafting.ThaumcraftCraftingManager;
 import thaumcraft.common.lib.research.PlayerKnowledge;
 
 import java.util.ArrayList;
 import java.util.List;
-import java.util.Map;
 import java.util.TreeMap;
 
 import static com.github.dcysteine.nesql.exporter.source.Json.*;
@@ -51,10 +47,10 @@ final class Magic {
         if (!aspect.isPrimal()) {
             Aspect[] parts = aspect.getComponents();
             if (parts == null || parts.length != 2) throw new Jobs.Fault("aspect_components", "Compound aspect has no component pair");
-            for (Aspect part : parts) components.add(value(aspectId(part)));
+            for (Aspect part : parts) components.add(value(Aspects.id(part)));
         }
         AspectList known = knowledge.aspectsDiscovered.get(player);
-        JsonObject record = object("id", aspectId(aspect), "source", origin("aspect", aspect.getTag()),
+        JsonObject record = object("id", Aspects.id(aspect), "source", Aspects.source(aspect),
                 "name", facts.text(aspect.getName()), "description", facts.text(aspect.getLocalizedDescription()),
                 "color", uint(Integer.toUnsignedLong(aspect.getColor() | 0xff000000)), "components", components,
                 "discovered", known == null ? null : known.aspects.containsKey(aspect), "icon", null);
@@ -77,12 +73,12 @@ final class Magic {
         JsonArray items = new JsonArray(), entities = new JsonArray(), aspectTriggers = new JsonArray();
         if (study.getItemTriggers() != null) for (ItemStack item : study.getItemTriggers()) items.add(value(facts.item(item)));
         if (study.getEntityTriggers() != null) for (String entity : study.getEntityTriggers()) entities.add(value(entity));
-        if (study.getAspectTriggers() != null) for (Aspect aspect : study.getAspectTriggers()) aspectTriggers.add(value(aspectId(aspect)));
-        JsonObject record = object("id", researchId(study.key), "source", origin("research", study.key), "name", facts.text(study.getName()),
+        if (study.getAspectTriggers() != null) for (Aspect aspect : study.getAspectTriggers()) aspectTriggers.add(value(Aspects.id(aspect)));
+        JsonObject record = object("id", researchId(study.key), "source", origin(study.key), "name", facts.text(study.getName()),
                 "text", facts.text(study.getText()), "category", study.category, "categoryName", facts.text(ResearchCategories.getCategoryName(study.category)),
                 "position", array(study.displayColumn, study.displayRow), "complexity", study.getComplexity(), "warp", ThaumcraftApi.getWarp(study.key),
                 "flags", flags, "completed", completed(study.key), "parents", links(study.parents), "hiddenParents", links(study.parentsHidden), "siblings", links(study.siblings),
-                "aspects", amounts(study.tags), "itemTriggers", items, "entityTriggers", entities, "aspectTriggers", aspectTriggers,
+                "aspects", Aspects.amounts(study.tags), "itemTriggers", items, "entityTriggers", entities, "aspectTriggers", aspectTriggers,
                 "icon", study.icon_item == null ? null : facts.item(study.icon_item), "texture", null);
         if (study.icon_item != null && study.icon_resource != null) throw new Jobs.Fault("research_icon", "Research has two icon sources");
         facts.row("research", record);
@@ -107,37 +103,12 @@ final class Magic {
         return completed == null ? null : completed.contains(key);
     }
 
-    static JsonElement itemAspects(ItemStack item) {
-        ItemStack copy = item.copy();
-        AspectList base = ThaumcraftCraftingManager.getObjectTags(copy);
-        AspectList result = ThaumcraftCraftingManager.getBonusTags(copy, base == null ? null : base.copy());
-        return result == null ? JsonNull.INSTANCE : amounts(result);
-    }
-
-    static JsonArray amounts(AspectList list) {
-        JsonArray rows = new JsonArray();
-        if (list == null) return rows;
-        TreeMap<String, Integer> values = new TreeMap<>();
-        for (Aspect aspect : list.getAspects()) {
-            int amount = list.getAmount(aspect);
-            if (amount < 0) throw new Jobs.Fault("aspect_amount", "Negative aspect quantity");
-            if (values.putIfAbsent(aspectId(aspect), amount) != null) throw new Jobs.Fault("aspect_duplicate", "Duplicate aspect identity");
-        }
-        for (Map.Entry<String, Integer> entry : values.entrySet()) rows.add(object("aspect", entry.getKey(), "amount", Integer.toString(entry.getValue())));
-        return rows;
-    }
-
-    static String aspectId(Aspect aspect) {
-        if (aspect == null || Aspect.getAspect(aspect.getTag()) != aspect) throw new Jobs.Fault("aspect_reference", "Aspect is not registered under its tag");
-        return Identity.origin("aspect", origin("aspect", aspect.getTag()));
-    }
-
-    private static String researchId(String key) { return Identity.origin("research", origin("research", key)); }
+    private static String researchId(String key) { return Identity.origin("research", origin(key)); }
     static JsonObject study(String key) {
         ResearchItem study = Studies.find(key);
         String player = Minecraft.getMinecraft().thePlayer.getCommandSenderName();
         List<String> completed = Thaumcraft.proxy.getPlayerKnowledge().researchCompleted.get(player);
         return object("key", key, "id", study == null ? null : researchId(key), "completed", completed == null ? null : completed.contains(key));
     }
-    private static JsonObject origin(String kind, String key) { return object("owner", "Thaumcraft", "handler", kind.equals("aspect") ? Aspect.class.getName() : ResearchItem.class.getName(), "key", key); }
+    private static JsonObject origin(String key) { return object("owner", "Thaumcraft", "handler", ResearchItem.class.getName(), "key", key); }
 }

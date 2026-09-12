@@ -10,8 +10,6 @@ import cpw.mods.fml.common.Loader;
 import net.minecraft.client.Minecraft;
 import net.minecraft.client.resources.ResourcePackRepository;
 import net.minecraftforge.common.ForgeVersion;
-import thaumcraft.api.aspects.Aspect;
-import thaumcraft.api.aspects.AspectList;
 import thaumcraft.common.Thaumcraft;
 import thaumcraft.common.lib.research.PlayerKnowledge;
 
@@ -80,11 +78,8 @@ final class Environment {
         state.add("objects", sorted(knowledge.objectsScanned.get(player)));
         state.add("entities", sorted(knowledge.entitiesScanned.get(player)));
         state.add("phenomena", sorted(knowledge.phenomenaScanned.get(player)));
-        JsonObject aspects = new JsonObject();
         // Read the map directly: getAspectsDiscovered can initialize player state.
-        AspectList discovered = knowledge.aspectsDiscovered.get(player);
-        if (discovered != null) for (Aspect aspect : discovered.getAspects()) aspects.addProperty(aspect.getTag(), discovered.getAmount(aspect));
-        state.add("aspects", aspects);
+        state.add("aspects", Aspects.knowledge(knowledge.aspectsDiscovered.get(player)));
         return CanonicalJson.digest(state);
     }
 
