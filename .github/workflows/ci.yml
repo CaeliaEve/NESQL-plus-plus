@@ -2,89 +2,50 @@
 
 on:
   push:
-    branches:
-      - main
-      - elysium
-      - optimize
+    branches: [main, refactor/core]
   pull_request:
-    branches:
-      - main
   workflow_dispatch:
 
 permissions:
   contents: read
 
 jobs:
-  source-gate:
-    name: NESQL++ source gate
+  bridge:
     runs-on: ubuntu-latest
-    timeout-minutes: 10
-
+    defaults:
+      run:
+        working-directory: bridge
     steps:
-      - name: Checkout
-        uses: actions/checkout@v4
-
-      - name: Set up Node.js
-        uses: actions/setup-node@v4
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
         with:
-          node-version: '20'
+          node-version: '22'
+          cache: npm
+          cache-dependency-path: bridge/package-lock.json
+      - run: npm ci
+      - run: npm run check
+      - run: npm test
 
-      - name: Run stable JavaScript regression checks
-        run: node scripts/run-regression-tests.mjs
-
-      - name: Verify Gradle wrapper is present
-        run: |
-          test -f gradlew
-          test -f build.gradle.kts
-          test -f gradle.properties
-
-  gradle-build:
-    name: NESQL++ Gradle build
+  mod:
     runs-on: ubuntu-latest
     timeout-minutes: 45
     steps:
-      - name: Checkout
-        uses: actions/checkout@v4
-
-      - name: Set up Java 8
-        uses: actions/setup-java@v4
+      - uses: actions/checkout@v4
+      - uses: actions/setup-java@v4
         with:
           distribution: temurin
           java-version: '8'
           cache: gradle
-
-      - name: Set up Node.js
-        uses: actions/setup-node@v4
+      - uses: actions/setup-node@v4
         with:
-          node-version: '20'
-
-      - name: Install protoc
-        run: |
-          sudo apt-get update
-          sudo apt-get install -y protobuf-compiler
-          echo "NESQL_PROTOC_PATH=$(command -v protoc)" >> "$GITHUB_ENV"
-          protoc --version
-
-      - name: Make Gradle wrapper executable
-        run: chmod +x ./gradlew
-
-      - name: Prepare ForgeGradle CI workspace
-        run: ./gradlew setupCIWorkspace --no-daemon --stacktrace
-
-      - name: Build
-        run: ./gradlew build -x test --no-daemon --stacktrace
-
-      - name: Run JavaExec behavior fixtures
-        run: ./gradlew check -x test --no-daemon --stacktrace
-
-      - name: Run regression checks against built jars
-        run: node scripts/run-regression-tests.mjs
-
-      - name: Upload jars when produced
-        uses: actions/upload-artifact@v4
-        if: always()
+          node-version: '22'
+      - run: chmod +x ./gradlew
+      - run: ./gradlew setupCIWorkspace --no-daemon
+      - run: ./gradlew build --no-daemon
+      - run: node scripts/check-jar.mjs
+      - uses: actions/upload-artifact@v4
         with:
-          name: nesql-jars
-          path: build/libs/*.jar
-          if-no-files-found: warn
+          name: nesql
+          path: build/libs/NESQL++-*.jar
+          if-no-files-found: error
 

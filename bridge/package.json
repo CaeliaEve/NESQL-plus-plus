@@ -1,0 +1,18 @@
+{
+  "name": "@nesql/bridge",
+  "version": "0.1.0",
+  "private": true,
+  "type": "module",
+  "description": "Local MCP access to the NESQL single-player exporter",
+  "engines": { "node": ">=22" },
+  "bin": { "nesql-mcp": "src/index.mjs" },
+  "scripts": {
+    "start": "node src/index.mjs",
+    "check": "node --check src/index.mjs && node --check src/server.mjs && node --check src/client.mjs",
+    "test": "node --test test/*.test.mjs"
+  },
+  "dependencies": {
+    "@modelcontextprotocol/sdk": "1.30.0",
+    "zod": "4.5.4"
+  }
+}

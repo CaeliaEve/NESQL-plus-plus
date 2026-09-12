@@ -2,7 +2,7 @@
 {
     "modid": "nesql-exporter",
     "name": "NESQL++",
-    "description": "Exports GTNH raw-export data, native UI facts, and browser atlas artifacts for the Elysium/NeoNEI compiler pipeline.",
+    "description": "Local single-player MCP exports of GTNH game facts, textures and recipe views into the Elysium source format.",
     "version": "${version}",
     "mcversion": "${mcversion}",
     "url": "https://github.com/CaeliaEve/NESQL-plus-plus",

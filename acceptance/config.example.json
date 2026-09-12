@@ -1,0 +1,11 @@
+{
+  "instance": "E:/games/GTNH/.minecraft/versions/GT New Horizons 2.8.4-java8",
+  "world": "replace-with-test-save-folder",
+  "version": "0.10.5",
+  "revision": 10,
+  "mod": "E:/releases/nesql",
+  "compiler": "E:/releases/elysium-compiler",
+  "web": "E:/releases/neonei-web",
+  "browser": "E:/projects/NeoNEI/frontend/package.json",
+  "reports": "E:/projects/NESQL-plus-plus/acceptance/.refactor-state"
+}
