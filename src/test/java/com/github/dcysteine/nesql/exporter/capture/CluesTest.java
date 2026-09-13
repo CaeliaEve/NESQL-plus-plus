@@ -7,6 +7,7 @@ import com.google.gson.JsonArray;
 import com.google.gson.JsonElement;
 import cpw.mods.fml.common.Loader;
 import net.minecraft.init.Bootstrap;
+import net.minecraft.init.Blocks;
 import net.minecraft.init.Items;
 import net.minecraft.item.Item;
 import net.minecraft.item.ItemStack;
@@ -101,15 +102,37 @@ public final class CluesTest {
                         && resolve(oreCatalog, oreTagged).contains(id(other)),
                 "The native ore branch stopped accepting its NBT-independent alternative");
 
-        rejected(() -> resolve(Collections.emptyList(), wildcard), "No concrete catalog item", "32767");
+        ItemStack portal = new ItemStack(Blocks.portal, 1, OreDictionary.WILDCARD_VALUE);
+        JsonArray absent = capture(Collections.emptyList(), portal, tagged);
+        require(absent.size() == 2 && absent.get(0).getAsJsonObject().get("registry").getAsString().equals("minecraft:portal")
+                && absent.get(0).getAsJsonObject().get("meta").getAsInt() == 32767
+                && absent.get(0).getAsJsonObject().getAsJsonArray("matches").size() == 0,
+                "MIRROR's portal pattern was dropped, rewritten or given an invented item");
+        require(absent.get(1).getAsJsonObject().get("nbt").equals(TypedNbt.encode(tagged.getTagCompound()))
+                && absent.get(1).getAsJsonObject().getAsJsonArray("matches").size() == 0,
+                "A pattern outside the catalog lost its exact metadata or NBT");
+        JsonArray orePattern = capture(oreCatalog, seed);
+        require(orePattern.get(0).getAsJsonObject().get("ore").getAsString().equals("nesqlCluePrimary"), "Native primary ore was lost");
         rejected(() -> resolve(catalog, (ItemStack) null), "Empty research item trigger", "trigger 0");
         Clues.Cursor empty = new Clues(Collections.emptyList()).open(null);
         require(empty.capture(stack -> { throw new AssertionError("Empty triggers captured an item"); }) && empty.records().size() == 0,
                 "Absent triggers are not empty");
-        System.out.println("Research clues: wildcard display failure, native matching, NBT, durability, first ore, copies and diagnostics passed");
+        System.out.println("Research clues: portal without examples, raw patterns, native matching, NBT, durability, first ore and copies passed");
     }
 
     private static Set<String> resolve(List<ItemStack> catalog, ItemStack... patterns) {
+        Set<String> result = new LinkedHashSet<>();
+        for (JsonElement record : capture(catalog, patterns)) {
+            Set<String> unique = new LinkedHashSet<>();
+            for (JsonElement match : record.getAsJsonObject().getAsJsonArray("matches")) {
+                require(unique.add(match.getAsString()), "Duplicate match within one pattern");
+                result.add(match.getAsString());
+            }
+        }
+        return result;
+    }
+
+    private static JsonArray capture(List<ItemStack> catalog, ItemStack... patterns) {
         Clues.Cursor cursor = new Clues(catalog).open(patterns);
         int ticks = 0;
         boolean done;
@@ -127,10 +150,8 @@ public final class CluesTest {
             require(captures[0] <= 16, "Clue capture exceeded its per-call item budget");
             require(++ticks < 10000, "Clue cursor did not terminate");
         } while (!done);
-        JsonArray records = cursor.records();
-        Set<String> result = new LinkedHashSet<>();
-        for (JsonElement record : records) require(result.add(record.getAsString()), "Duplicate clue id");
-        return result;
+        require(cursor.records().size() == patterns.length, "Declared pattern count changed");
+        return cursor.records();
     }
 
     private static String id(ItemStack stack) {

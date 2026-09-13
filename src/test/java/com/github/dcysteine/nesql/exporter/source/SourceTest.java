@@ -237,7 +237,13 @@ public final class SourceTest {
                     "parents", index == 0 ? new JsonArray() : array(object("key", "BASICS", "id", baseId, "completed", null)),
                     "hiddenParents", index == 0 ? new JsonArray() : array(object("key", "@fixture_scanned", "id", null, "completed", false)),
                     "siblings", new JsonArray(), "aspects", array(object("aspect", ids[index], "amount", "2")),
-                    "itemTriggers", index == 0 ? new JsonArray() : array(item), "entityTriggers", index == 0 ? new JsonArray() : array("Cow"),
+                    "itemTriggers", index == 0 ? new JsonArray() : array(
+                            object("registry", "minecraft:stone", "meta", 0, "nbt", null, "ore", null, "matches", array(item)),
+                            object("registry", "minecraft:portal", "meta", 32767, "nbt", null, "ore", null, "matches", new JsonArray()),
+                            object("registry", "fixture:tagged", "meta", 7, "nbt", object("type", "compound", "value",
+                                    object("energy", object("type", "long", "value", Long.toString(Long.MAX_VALUE)))),
+                                    "ore", "fixtureClue", "matches", new JsonArray())),
+                    "entityTriggers", index == 0 ? new JsonArray() : array("Cow"),
                     "aspectTriggers", index == 0 ? new JsonArray() : array(ids[2]), "icon", index == 0 ? null : item, "texture", index == 0 ? image : null));
         }
         Dataset.Records researchRows = dataset.records("research");

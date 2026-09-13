@@ -6,7 +6,7 @@
 
 目标为 GT New Horizons 2.8.4 Java 8。模组只服务本机单人世界，不支持专用服务器。MCP 客户端启动独立的 Node 进程，桥接通过受限的 loopback HTTP 接口调用游戏任务服务；Java 8 模组不嵌入 MCP SDK。
 
-模组 0.10.9 写出 source 修订 10。MCP 连接协议保持不变；数据修订与传输协议是不同的元数据。编译器拒绝旧数据修订，不提供旧格式兜底读取。
+模组 0.11.0 写出 source 修订 11。MCP 连接协议保持不变；数据修订与传输协议是不同的元数据。编译器拒绝旧数据修订，不提供旧格式兜底读取。
 
 ```json
 {
@@ -74,9 +74,9 @@ Thaumcraft 4 的空 AspectList 会返回 `[null]`；原生 copy/add/merge 还可
 
 研究身份沿用原始全局 key，定义、分类和研究/配方引用以已安装游戏的 ResearchCategories.getResearch 结果为准。Gadomancy 1.4.8 在其他分类中注册的同名空虚拟项只作为引用，归并到原生选中的定义并保留预检登记记录；单独存在的虚拟研究仍导出。只有普通 ResearchItem、无内容/触发/解锁行为的空虚拟引用可归并；其他不同对象重名、原生解析落到已注销对象或会遮蔽实质定义时明确报出键与登记位置。登记 map 的键或位置不同于对象字段时记录诊断，保留原生对象的 key/category，不创建新研究别名或改写游戏注册表。source/catalog 修订及研究 ID 不变。
 
-研究的 `itemTriggers` 是当前资料库中可作为线索的具体物品 ID。原生触发项可含 metadata=32767 的通配条件，不能作为普通物品调用名称、提示或绘制 API。Clues 从 NEI 的具体物品、具体触发项及其首个矿辞组的具体登记项中产生候选，并调用与 ResearchManager.createClue 相同的 InventoryUtils.areItemStacksEqual(trigger, candidate, true, true, false) 筛选，保留原生矿辞替代、耐久、metadata 和 NBT 判断。只按首个矿辞组扩展，不能合并全部矿辞组扩大匹配范围；重复物品 ID 去重。匹配和物品读取使用副本，不修改研究、矿辞或 NEI 堆栈，不调用实际扫描或解锁方法。
+研究的 `itemTriggers` 在修订11中保存Clue对象：`{registry, meta, nbt, ore, matches}`。registry/meta/类型化nbt是原始触发模板，meta=32767仍表示通配；ore是原生检查的首个矿辞组，没有时为null。模板不要求存在于items表，不调用名称、提示或绘制API。matches保存NEI已知具体物品中通过原生匹配的ID，有序且无重复。空示例列表仍完整保留条件，例如MIRROR的minecraft:portal；它不表示该条件无效或研究不能解锁。
 
-这份列表表示已知候选的实际匹配结果，不枚举任意 NBT 或玩家可能构造的全部物品状态。每个声明的触发项都必须找到具体候选；找不到、空触发项或超出预算会报 `research_trigger`，不会静默丢弃条件或把32767改成0。研究按最多16次匹配成功或2ms分批处理，单次模组API调用不可抢占。错误附研究key/分类/零基index、触发项位置、registry/meta及物品读取调用位置；进度仍按批次汇报，不能用completed推断精确失败研究。
+Clues按触发项自身与首个矿辞组的Item类型选择NEI候选，调用与ResearchManager.createClue相同的InventoryUtils.areItemStacksEqual(trigger,candidate,true,true,false)筛选，保留实际矿辞替代、耐久、metadata和NBT判断；不从原始模板或矿辞模式构造物品示例。原生矿辞分支可能忽略NBT，直接物品分支按原生规则比较。匹配和读取使用副本，不修改游戏堆栈或扫描/研究状态。示例不是任意NBT状态的全枚举。空触发对象、未注册物品及超出预算仍报research_trigger。研究按最多16次匹配成功或2ms分批处理，单次API调用不可抢占。错误保留研究key/分类/零基index、trigger位置和registry/meta。模组、编译器和Web契约须一同更新到0.11.0/source/catalog修订11，不提供旧字符串数组的兼容路径。
 
 已迁移要素与研究关系，魔法配方按下述明确适配范围采集；完整研究正文页面仍待继续。
 

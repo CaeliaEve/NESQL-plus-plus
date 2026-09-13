@@ -1,7 +1,10 @@
 package com.github.dcysteine.nesql.exporter.capture;
 
 import com.github.dcysteine.nesql.exporter.task.Jobs;
+import com.github.dcysteine.nesql.exporter.source.Identity;
+import com.github.dcysteine.nesql.exporter.source.TypedNbt;
 import com.google.gson.JsonArray;
+import com.google.gson.JsonObject;
 import net.minecraft.init.Items;
 import net.minecraft.item.Item;
 import net.minecraft.item.ItemStack;
@@ -15,11 +18,13 @@ import java.util.LinkedHashSet;
 import java.util.List;
 import java.util.Map;
 import java.util.Set;
+import java.util.TreeSet;
 import java.util.function.Function;
 
 import static com.github.dcysteine.nesql.exporter.source.Json.value;
+import static com.github.dcysteine.nesql.exporter.source.Json.object;
 
-/** Concrete catalog clues accepted by TC's native research matcher, never wildcard item facts. */
+/** Declared research patterns and their observed matches are distinct facts. */
 final class Clues {
     private final Map<Item, List<ItemStack>> items = new IdentityHashMap<>();
 
@@ -35,11 +40,11 @@ final class Clues {
 
     final class Cursor {
         private final ItemStack[] triggers;
-        private final Set<String> seen = new LinkedHashSet<>();
+        private final Set<String> matches = new TreeSet<>();
         private final JsonArray records = new JsonArray();
-        private List<ItemStack> candidates = Collections.emptyList();
-        private int trigger, next;
-        private boolean matched;
+        private List<ItemStack> candidates;
+        private JsonObject record;
+        private int trigger, next, total;
 
         Cursor(ItemStack[] triggers) {
             if (triggers != null && triggers.length > 4096) throw new Jobs.Fault("research_trigger", "Research has too many item triggers");
@@ -55,7 +60,20 @@ final class Clues {
                 if (checked > 0 && (captured >= 16 || System.nanoTime() >= deadline)) return false;
                 ItemStack pattern = triggers[trigger];
                 try {
-                    if (candidates.isEmpty()) candidates = candidates(pattern);
+                    if (candidates == null) {
+                        if (pattern == null || pattern.getItem() == null) throw new Jobs.Fault("research_trigger", "Empty research item trigger");
+                        String registry = Item.itemRegistry.getNameForObject(pattern.getItem());
+                        if (registry == null || Item.itemRegistry.getObject(registry) != pattern.getItem()) {
+                            throw new Jobs.Fault("research_trigger", "Research trigger uses an unregistered item");
+                        }
+                        int meta = Items.feather.getDamage(pattern);
+                        com.google.gson.JsonElement nbt = TypedNbt.encode(pattern.getTagCompound());
+                        Identity.item(registry, meta, nbt); // Validate identity text without creating a concrete item fact.
+                        int ore = OreDictionary.getOreID(pattern.copy());
+                        record = object("registry", registry, "meta", meta, "nbt", nbt,
+                                "ore", ore == -1 ? null : OreDictionary.getOreName(ore), "matches", new JsonArray());
+                        candidates = candidates(pattern, ore);
+                    }
                     while (next < candidates.size()) {
                         Jobs.checkpoint();
                         if (checked > 0 && (captured >= 16 || System.nanoTime() >= deadline)) return false;
@@ -64,17 +82,15 @@ final class Clues {
                         // This is the same call made by ResearchManager.createClue. Copies keep
                         // item hooks away from research-owned, ore-dictionary and NEI stacks.
                         if (!InventoryUtils.areItemStacksEqual(pattern.copy(), candidate.copy(), true, true, false)) continue;
-                        matched = true;
                         String id = capture.apply(candidate.copy());
-                        if (seen.add(id)) {
-                            if (seen.size() > 4096) throw new Jobs.Fault("research_trigger", "Resolved research clues exceed their budget");
-                            records.add(value(id));
-                        }
+                        if (matches.add(id) && ++total > 4096) throw new Jobs.Fault("research_trigger", "Resolved research clues exceed their budget");
                         captured++;
                     }
-                    if (!matched) throw new Jobs.Fault("research_trigger", "No concrete catalog item matches this trigger");
+                    for (String id : matches) record.getAsJsonArray("matches").add(value(id));
+                    records.add(record);
                     trigger++;
-                    candidates = Collections.emptyList(); next = 0; matched = false;
+                    candidates = null; next = 0; matches.clear();
+                    checked++; // Empty patterns also consume a scheduling step.
                 } catch (java.util.concurrent.CancellationException error) { throw error; }
                 catch (RuntimeException error) {
                     Jobs.Fault fault = new Jobs.Fault(error instanceof Jobs.Fault ? ((Jobs.Fault) error).code : "research_trigger",
@@ -92,20 +108,16 @@ final class Clues {
         }
     }
 
-    private List<ItemStack> candidates(ItemStack trigger) {
-        if (trigger == null || trigger.getItem() == null) throw new Jobs.Fault("research_trigger", "Empty research item trigger");
+    private List<ItemStack> candidates(ItemStack trigger, int ore) {
         List<ItemStack> candidates = new ArrayList<>();
         Set<Item> types = new LinkedHashSet<>();
         types.add(trigger.getItem());
-        if (concrete(trigger)) candidates.add(trigger);
         // Native matching uses the FIRST ore id of the trigger, then falls back
         // to item/meta/NBT comparison. Taking every ore id would widen the rule.
-        int ore = OreDictionary.getOreID(trigger.copy());
         if (ore != -1) for (ItemStack entry : OreDictionary.getOres(ore)) {
             Jobs.checkpoint();
             if (entry == null || entry.getItem() == null) throw new Jobs.Fault("research_trigger", "The trigger's ore entry is empty");
             types.add(entry.getItem());
-            if (concrete(entry)) candidates.add(entry);
         }
         for (Item type : types) {
             Jobs.checkpoint();
