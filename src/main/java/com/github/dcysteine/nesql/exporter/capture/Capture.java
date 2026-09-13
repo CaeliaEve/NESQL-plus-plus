@@ -58,7 +58,7 @@ public final class Capture implements Jobs.Task {
                     for (Recipes.Handler handler : Recipes.handlers()) handlers.add(handler.describe());
                     return object("handlers", handlers, "itemsReady", ItemList.loadFinished && !ItemList.items.isEmpty(),
                             "world", object("folder", server.getFolderName(), "name", server.getWorldName()), "items", ItemList.items.size(),
-                            "research", Studies.capture().describe());
+                            "research", Studies.capture().describe(), "materials", GtMaterials.inspect());
                 });
                 state.entrySet().forEach(entry -> result.add(entry.getKey(), entry.getValue()));
                 JsonObject sources = client.call(Sources::capture).inspect();
@@ -88,8 +88,9 @@ public final class Capture implements Jobs.Task {
             if (!remaining.isEmpty()) throw new Jobs.Fault("handler_missing", "Requested handler is not registered: " + remaining.iterator().next());
             return selected;
         });
-        context.progress("registry", 0, 1, "Resolving Thaumcraft research registrations and virtual references");
+        context.progress("registry", 0, 1, "Checking research and material registries");
         Magic magic = session.call(Magic::new);
+        List<gregtech.api.enums.Materials> materials = session.call(GtMaterials::all);
         context.progress("environment", 0, 1, "Fingerprinting loaded mods, configuration, scripts and resource packs");
         JsonObject environment = Environment.capture(session, instance, request);
         Facts facts = new Facts(environment.get("locale").getAsString());
@@ -122,7 +123,6 @@ public final class Capture implements Jobs.Task {
                     fluidCount++;
                     if (fluidCount % 64 == 0 || fluidCount == fluids.size()) context.progress("fluids", fluidCount, fluids.size(), "Captured registered fluids");
                 }
-                List<gregtech.api.enums.Materials> materials = session.call(GtMaterials::all);
                 for (int index = 0; index < materials.size(); index++) {
                     final gregtech.api.enums.Materials material = materials.get(index);
                     GtMaterials.Cursor cursor = session.call(() -> new GtMaterials.Cursor(material, facts));

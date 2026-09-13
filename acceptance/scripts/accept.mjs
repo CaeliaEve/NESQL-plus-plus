@@ -82,6 +82,7 @@ async function inspect(call, required = false) {
     assert.equal(state.sources?.valid, true, failed.length ? 'Invalid mod sources: ' + failed.join(', ') + '; see game.json' : 'Mod source preflight is unavailable');
     const conflicts = (state.research?.rows ?? []).filter(row => !row.valid).map(row => row.error?.message ?? row.key);
     assert.equal(state.research?.valid, true, conflicts.length ? 'Invalid research registry: ' + conflicts.join('; ') + '; see game.json' : 'Research registry preflight is unavailable');
+    assert.equal(state.materials?.valid, true, state.materials?.error?.message ?? 'Material metadata preflight is unavailable');
   }
   if (required) {
     assert.ok(state.ready && state.itemsReady, state.reason ?? 'Wait for NEI to load its item list');
@@ -201,6 +202,7 @@ try {
           sources: { valid: state.sources?.valid, count: state.sources?.count },
           research: { valid: state.research?.valid, count: state.research?.count, entries: state.research?.entries,
             references: state.research?.references, aliases: state.research?.aliases, conflicts: state.research?.conflicts },
+          materials: { valid: state.materials?.valid, count: state.materials?.count, adjusted: state.materials?.adjusted },
           registered: state.handlers?.length ?? 0, supported: state.handlers?.filter(handler => handler.supported).length ?? 0 };
       }
       if (command === 'start') {

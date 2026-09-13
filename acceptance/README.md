@@ -28,7 +28,7 @@ node acceptance/scripts/accept.mjs start data --key research-check
 node acceptance/scripts/accept.mjs status <job-id>
 ```
 
-预检要求客户端、全部 Mod 来源和研究注册表有效。`data` 阶段选择熔炉与 GT 主粉碎机，同时采集共同领域资料，结果明确标记为 `selection`。它不表示全量处理器覆盖已验收。
+预检要求客户端、全部 Mod 来源、研究注册表和材料元数据有效。材料颜色的原始值与钳位结果保存在预检诊断中。`data` 阶段选择熔炉与 GT 主粉碎机，同时采集共同领域资料，结果明确标记为 `selection`。它不表示全量处理器覆盖已验收。
 
 同一操作响应不确定时，使用原 key 和原参数重试；代码修复后重跑已失败任务必须使用新 key。检查失败时读取报告，不连续提交新任务。需要取消时执行 `cancel <job-id>`，并等待终态。
 

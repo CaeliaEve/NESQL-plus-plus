@@ -6,7 +6,7 @@
 
 目标为 GT New Horizons 2.8.4 Java 8。模组只服务本机单人世界，不支持专用服务器。MCP 客户端启动独立的 Node 进程，桥接通过受限的 loopback HTTP 接口调用游戏任务服务；Java 8 模组不嵌入 MCP SDK。
 
-模组 0.10.7 写出 source 修订 10。MCP 连接协议保持不变；数据修订与传输协议是不同的元数据。编译器拒绝旧数据修订，不提供旧格式兜底读取。
+模组 0.10.8 写出 source 修订 10。MCP 连接协议保持不变；数据修订与传输协议是不同的元数据。编译器拒绝旧数据修订，不提供旧格式兜底读取。
 
 ```json
 {
@@ -45,6 +45,10 @@
 `inspect_game.sources` 包含整体 valid、count 和每个已加载 mod 的 rows；逐项给出 id/name、容器类、匹配的核心插件、实际 path、via 与检查结果。核心插件通过目标 Forge CoreModManager 的 loadPlugins 记录，按 getModContainerClass 关联实际容器与 wrapper.location；内置插件没有 location 时取插件实现类所在归档。其他注入容器根据自身实现类归属定位，验证声明的 class 确实位于归档中；普通 mod 保留其声明文件。仅 Minecraft/MCP 使用客户端 jar，CoFH 等核心模组保留自身宿主文件的独立摘要。冲突、无归属和缺失来源仍拒绝。
 
 `inspect_game.research` 包含 valid、解析成功的全局研究数 count、原始登记数 entries、附加空虚拟引用数 references、同对象重复登记数 aliases 和 conflicts。rows 列出重复或不一致的登记：研究 key、原生 getResearch 选中的对象分类/类型、各登记位置与是否选中；错误优先展示，最多 32 组、每组 8 个位置，omitted 明示省略数量。验收脚本要求 research.valid=true 后才提交任务；直接导出也会在环境哈希之前执行 registry 检查。
+
+`inspect_game.materials` 在物品采集之前检查材料身份、成分引用、正数量、公式字段和四通道颜色结构。成功时返回 valid/count，以及需要颜色钳位的 adjusted 数量和最多32条 rows，包含材料 key、原始 rgba 和编码后的 color；omitted 明示省略数量。失败时返回带材料名的 error，验收脚本不提交任务。直接游戏导出也会在 registry 阶段检查这些元数据。
+
+GT材料的原始颜色是short数组，并不保证每个通道都落在0–255。导出按目标BWColorUtil.correctCorlorArray的通道修正规则编码ARGB：低于0取0，高于255取255；这也与GT普通材质的浮点RGB调制范围相符。原数组保持不变，合法通道及原有alpha值保持，错误长度或null仍拒绝。该字段是规范化材料颜色，不代替特殊渲染器的实际贴图或动画。数据修订与Material.color的u32布局不变。
 
 来源解析集中在 Sources，Environment 只组合配置、资源和知识指纹。插件 metadata 在游戏线程读取，文件/归档验证和 SHA 在后台执行；不会调用插件 injectData、setup 或 transformer 安装入口。预检汇总每项文件问题，正式导出再次校验，失败不输出部分 mods 指纹。物理文件的哈希按路径共享计算，但每个真实 mod ID 独立保留。来源路径仅用于本机诊断，公开 source 不记录这些绝对路径；来源校验不会被更改为对客户端 jar 的通用豁免。
 

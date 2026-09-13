@@ -38,9 +38,36 @@ final class GtMaterials {
                 if (previous != material) throw new Jobs.Fault("material_conflict", "Different materials share the key " + material.mName);
                 continue;
             }
-            for (MaterialStack component : material.mMaterialList) pending.add(component.mMaterial);
+            Colors.material(material.mName, material.mRGBa);
+            if (material.mChemicalFormula == null) throw new Jobs.Fault("material_formula", "Material '" + material.mName + "' has no formula field");
+            if (material.mMaterialList == null) throw new Jobs.Fault("material_amount", "Material '" + material.mName + "' has no component list");
+            for (MaterialStack component : material.mMaterialList) {
+                if (component == null || component.mMaterial == null || component.mAmount <= 0) {
+                    throw new Jobs.Fault("material_amount", "Invalid component in material '" + material.mName + "'");
+                }
+                pending.add(component.mMaterial);
+            }
         }
         return new ArrayList<>(materials.values());
+    }
+
+    static JsonObject inspect() {
+        try {
+            List<Materials> materials = all();
+            JsonArray rows = new JsonArray();
+            int adjusted = 0;
+            for (Materials material : materials) {
+                if (!Colors.adjusted(material.mRGBa)) continue;
+                adjusted++;
+                if (rows.size() >= 32) continue;
+                JsonArray rgba = new JsonArray();
+                for (short channel : material.mRGBa) rgba.add(value(channel));
+                rows.add(object("key", material.mName, "rgba", rgba, "color", uint(Colors.material(material.mName, material.mRGBa))));
+            }
+            return object("valid", true, "count", materials.size(), "adjusted", adjusted, "rows", rows, "omitted", adjusted - rows.size());
+        } catch (Jobs.Fault error) {
+            return object("valid", false, "error", object("code", error.code, "message", error.getMessage()));
+        }
     }
 
     private static JsonObject origin(Materials material) {
@@ -67,11 +94,8 @@ final class GtMaterials {
             for (Map.Entry<String, Long> component : amounts.entrySet()) {
                 components.add(object("material", component.getKey(), "amount", Long.toString(component.getValue())));
             }
-            short[] rgba = material.mRGBa;
-            if (rgba.length != 4) throw new Jobs.Fault("material_color", "Invalid material color");
-            for (short channel : rgba) if (channel < 0 || channel > 255) throw new Jobs.Fault("material_color", "Invalid material color channel");
-            long color = ((long) rgba[3] << 24) | ((long) rgba[0] << 16) | ((long) rgba[1] << 8) | rgba[2];
-            if (material.mChemicalFormula == null) throw new Jobs.Fault("material_formula", "Material has no formula field");
+            long color = Colors.material(material.mName, material.mRGBa);
+            if (material.mChemicalFormula == null) throw new Jobs.Fault("material_formula", "Material '" + material.mName + "' has no formula field");
             record = object("id", Identity.origin("material", source), "source", source, "name", facts.text(material.mLocalizedName),
                     "formula", material.mChemicalFormula, "color", uint(color), "components", components, "parts", parts);
         }
