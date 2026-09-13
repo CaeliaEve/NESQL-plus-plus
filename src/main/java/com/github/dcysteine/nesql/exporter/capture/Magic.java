@@ -6,7 +6,6 @@ import com.google.gson.JsonArray;
 import com.google.gson.JsonObject;
 import cpw.mods.fml.common.Loader;
 import net.minecraft.client.Minecraft;
-import net.minecraft.item.ItemStack;
 import thaumcraft.api.ThaumcraftApi;
 import thaumcraft.api.aspects.Aspect;
 import thaumcraft.api.aspects.AspectList;
@@ -27,6 +26,7 @@ final class Magic {
     private final List<Aspect> aspects;
     private final List<ResearchItem> research;
     private final Studies studies;
+    private Clues clues;
     private final String player = Minecraft.getMinecraft().thePlayer.getCommandSenderName();
     private final PlayerKnowledge knowledge = Thaumcraft.proxy.getPlayerKnowledge();
 
@@ -58,8 +58,13 @@ final class Magic {
         facts.picture(new Facts.Picture(record, "icon", "thaumcraft:aspect/" + aspect.getTag(), () -> UtilsFX.drawTag(0, 0, aspect)));
     }
 
-    void research(int index, Facts facts) {
+    Cursor research(int index) {
+        if (clues == null) clues = new Clues(codechicken.nei.ItemList.items);
         ResearchItem study = studies.get(research.get(index).key);
+        return new Cursor(study, index);
+    }
+
+    private void research(ResearchItem study, JsonArray items, Facts facts) {
         JsonArray flags = new JsonArray();
         if (study.isAutoUnlock()) flags.add(value("auto"));
         if (study.isConcealed()) flags.add(value("concealed"));
@@ -70,8 +75,7 @@ final class Magic {
         if (study.isSpecial()) flags.add(value("special"));
         if (study.isStub()) flags.add(value("stub"));
         if (study.isVirtual()) flags.add(value("virtual"));
-        JsonArray items = new JsonArray(), entities = new JsonArray(), aspectTriggers = new JsonArray();
-        if (study.getItemTriggers() != null) for (ItemStack item : study.getItemTriggers()) items.add(value(facts.item(item)));
+        JsonArray entities = new JsonArray(), aspectTriggers = new JsonArray();
         if (study.getEntityTriggers() != null) for (String entity : study.getEntityTriggers()) entities.add(value(entity));
         if (study.getAspectTriggers() != null) for (Aspect aspect : study.getAspectTriggers()) aspectTriggers.add(value(Aspects.id(aspect)));
         JsonObject record = object("id", researchId(study.key), "source", origin(study.key), "name", facts.text(study.getName()),
@@ -86,6 +90,33 @@ final class Magic {
             Minecraft.getMinecraft().getTextureManager().bindTexture(study.icon_resource);
             UtilsFX.drawTexturedQuadFull(0, 0, 0);
         }));
+    }
+
+    final class Cursor {
+        private final ResearchItem study;
+        private final int index;
+        private Clues.Cursor triggers;
+        private boolean finished;
+
+        Cursor(ResearchItem study, int index) { this.study = study; this.index = index; }
+
+        boolean capture(Facts facts) {
+            if (finished) throw new IllegalStateException("Research already captured");
+            try {
+                if (studies.get(study.key) != study) throw new Jobs.Fault("registry_changed", "Research changed during capture");
+                if (triggers == null) triggers = clues.open(study.getItemTriggers());
+                if (!triggers.capture(facts::item)) return false;
+                research(study, triggers.records(), facts);
+                finished = true;
+                return true;
+            } catch (java.util.concurrent.CancellationException error) { throw error; }
+            catch (RuntimeException error) {
+                Jobs.Fault fault = new Jobs.Fault(error instanceof Jobs.Fault ? ((Jobs.Fault) error).code : "research_capture",
+                        "Research '" + study.key + "' in " + study.category + " (index " + index + "): " + error);
+                fault.initCause(error);
+                throw fault;
+            }
+        }
     }
 
     private JsonArray links(String[] keys) {

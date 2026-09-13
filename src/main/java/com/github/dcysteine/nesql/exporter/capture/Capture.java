@@ -161,8 +161,12 @@ public final class Capture implements Jobs.Task {
                 List<Structures.Machine> machines = session.call(Structures::all);
                 for (int index = 0; index < magic.researchCount(); index++) {
                     final int study = index;
-                    session.call(() -> { magic.research(study, facts); return null; });
-                    sink.write(facts.drain());
+                    Magic.Cursor cursor = session.call(() -> magic.research(study));
+                    boolean done;
+                    do {
+                        done = session.call(() -> cursor.capture(facts));
+                        sink.write(facts.drain());
+                    } while (!done);
                     if ((index + 1) % 32 == 0 || index + 1 == magic.researchCount()) context.progress("research", index + 1, magic.researchCount(), "Captured research prerequisites and observed knowledge");
                 }
                 for (int index = 0; index < machines.size(); index++) {

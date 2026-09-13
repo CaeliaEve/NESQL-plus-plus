@@ -35,7 +35,7 @@ npm --prefix bridge test
 node scripts/release.mjs
 ```
 
-普通增量构建无需重复 setup 或 clean。`build` 执行两组 Java 行为检查并生成经过 reobf 的 `build/libs/NESQL++-0.10.8.jar`。`check-jar` 检查实际产物的命令和预览世界 SRG 方法、版本替换和打包边界。`release` 要求目标目录不存在，按明确清单打包，不操作游戏目录。
+普通增量构建无需重复 setup 或 clean。`build` 执行两组 Java 行为检查并生成经过 reobf 的 `build/libs/NESQL++-0.10.9.jar`。`check-jar` 检查实际产物的命令和预览世界 SRG 方法、版本替换和打包边界。`release` 要求目标目录不存在，按明确清单打包，不操作游戏目录。
 
 可用 `NESQL_LOCAL_MAVEN_REPO` 指定本地 Maven 仓库。Forge 1.7.10 的工具链固定为 ForgeGradle 1.2.11 / Gradle 6.9.1；这里的旧版本是目标游戏的构建约束。
 
