@@ -6,9 +6,9 @@ import com.github.dcysteine.nesql.exporter.task.Jobs;
 import com.google.gson.JsonArray;
 import com.google.gson.JsonElement;
 import com.google.gson.JsonObject;
-import cpw.mods.fml.common.registry.GameRegistry;
 import net.minecraft.client.Minecraft;
 import net.minecraft.init.Items;
+import net.minecraft.item.Item;
 import net.minecraft.item.ItemStack;
 import net.minecraftforge.fluids.FluidRegistry;
 import net.minecraftforge.fluids.FluidStack;
@@ -55,9 +55,10 @@ final class Facts {
         if (original == null || original.getItem() == null) throw new IllegalArgumentException("Empty item fact");
         ItemStack stack = original.copy();
         stack.stackSize = 1;
-        GameRegistry.UniqueIdentifier key = GameRegistry.findUniqueIdentifierFor(stack.getItem());
-        if (key == null) throw new Jobs.Fault("unregistered_item", "The source uses an unregistered item: " + stack.getItem().getClass().getName());
-        String registry = key.modId + ":" + key.name;
+        String registry = Item.itemRegistry.getNameForObject(stack.getItem());
+        if (registry == null || Item.itemRegistry.getObject(registry) != stack.getItem()) {
+            throw new Jobs.Fault("unregistered_item", "The source uses an unregistered item: " + stack.getItem().getClass().getName());
+        }
         int meta = Items.feather.getDamage(stack);
         com.google.gson.JsonElement nbt = TypedNbt.encode(stack.getTagCompound());
         String id = Identity.item(registry, meta, nbt);

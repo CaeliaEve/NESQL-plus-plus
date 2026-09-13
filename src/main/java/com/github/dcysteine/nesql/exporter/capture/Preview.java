@@ -17,7 +17,6 @@ import com.gtnewhorizon.structurelib.alignment.constructable.ISurvivalConstructa
 import com.gtnewhorizon.structurelib.structure.IItemSource;
 import com.gtnewhorizon.structurelib.structure.ISurvivalBuildEnvironment;
 import com.mojang.authlib.GameProfile;
-import cpw.mods.fml.common.registry.GameRegistry;
 import gregtech.api.GregTechAPI;
 import gregtech.api.interfaces.INEIPreviewModifier;
 import gregtech.api.interfaces.metatileentity.IMetaTileEntity;
@@ -165,13 +164,13 @@ final class Preview implements AutoCloseable {
             if (work > 0 && System.nanoTime() >= deadline) return null;
             Position at = positions.next();
             Block block = world.getBlock(at.x, at.y, at.z);
-            GameRegistry.UniqueIdentifier registry = GameRegistry.findUniqueIdentifierFor(block);
-            if (registry == null) throw fault("Construction contains an unregistered block");
+            String registry = Block.blockRegistry.getNameForObject(block);
+            if (registry == null || Block.blockRegistry.getObject(registry) != block) throw fault("Construction contains an unregistered block");
             TileEntity tile = world.getTileEntity(at.x, at.y, at.z);
             NBTTagCompound nbt = null;
             if (tile != null) { nbt = new NBTTagCompound(); tile.writeToNBT(nbt); }
             ItemStack item = block.getPickBlock(new MovingObjectPosition(at.x, at.y, at.z, 1, net.minecraft.util.Vec3.createVectorHelper(at.x, at.y, at.z)), world, at.x, at.y, at.z);
-            JsonObject state = object("registry", registry.modId + ":" + registry.name, "meta", world.getBlockMetadata(at.x, at.y, at.z),
+            JsonObject state = object("registry", registry, "meta", world.getBlockMetadata(at.x, at.y, at.z),
                     "nbt", TypedNbt.encode(nbt), "item", item == null || item.getItem() == null ? null : facts.item(item));
             String id = Identity.content("block", state);
             if (blocks.add(id)) { state.addProperty("id", id); facts.row("blocks", state); }

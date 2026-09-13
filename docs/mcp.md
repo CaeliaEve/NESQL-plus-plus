@@ -6,7 +6,7 @@
 
 目标为 GT New Horizons 2.8.4 Java 8。模组只服务本机单人世界，不支持专用服务器。MCP 客户端启动独立的 Node 进程，桥接通过受限的 loopback HTTP 接口调用游戏任务服务；Java 8 模组不嵌入 MCP SDK。
 
-模组 0.10.6 写出 source 修订 10。MCP 连接协议保持不变；数据修订与传输协议是不同的元数据。编译器拒绝旧数据修订，不提供旧格式兜底读取。
+模组 0.10.7 写出 source 修订 10。MCP 连接协议保持不变；数据修订与传输协议是不同的元数据。编译器拒绝旧数据修订，不提供旧格式兜底读取。
 
 ```json
 {
@@ -37,6 +37,8 @@
 `key` 和 `name` 为 1–80 个字母、数字、下划线或连字符。`handlers` 最多 512 个不重复的 category ID，来源于 `inspect_game`。选定的 handler 不存在或不支持时明确失败。`list_exports` 的 `next` 用作下一页 `after`；新导出的内容 ID 可能排在已有游标之前，需要重新从第一页查询。
 
 `inspect_game` 同时报告 exporter 版本、source revision 和当前 world.folder/name。`start_export` 可传 `world` 指定预期单人存档文件夹；实际采集开始前在游戏线程核对，切到其他存档会报 world_changed。该条件参与任务幂等比较和日志恢复。验收工具使用它将任务绑定到独立测试存档；它不修改存档。
+
+物品和方块的 registry 直接读取 Forge 保存的完整注册键，并核对该键仍指向原对象。注册键属于身份数据：保留大小写、空格、Unicode、`|` 和额外冒号，不经过会截断多重冒号的 UniqueIdentifier。物品/方块要求第一个冒号两侧非空；流体使用非空的全局注册键，不要求命名空间。完整原文进入身份哈希，不能通过改名或替换空格合并物品。数据记录的大小限制仍有效；资源文件路径和导出器属性键分别校验，不使用注册键作磁盘路径。
 
 `inspect_game.client` 报告客户端 jar 的 `path`、定位方式 `via`、识别到的客户端类 `entry` 和 `valid`；失败时返回 `valid:false` 与具体 error。定位优先读取启动器 JVM 属性 `minecraft.client.jar`，它必须是绝对本地路径；未设置时使用本地 CodeSource（含 jar URL）或客户端类资源。显式属性无效会报错。客户端归档需包含目标 1.7.10 的命名或混淆主类及 class 文件标识。
 

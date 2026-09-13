@@ -295,7 +295,7 @@ final class Wands {
         fixed.putIfAbsent(state.key(), state); return fixed.get(state.key());
     }
     private static String identity(ItemStack item) {
-        return Identity.item(Item.itemRegistry.getNameForObject(item), Items.feather.getDamage(item), TypedNbt.encode(item.getTagCompound()));
+        return Identity.item(Item.itemRegistry.getNameForObject(item.getItem()), Items.feather.getDamage(item), TypedNbt.encode(item.getTagCompound()));
     }
     private static void put(Map<String, ItemStack> values, ItemStack item) { values.putIfAbsent(identity(item), item.copy()); }
     private static MagicRecipes.Candidate candidate(ItemStack item, boolean meta) {

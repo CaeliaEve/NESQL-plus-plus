@@ -15,7 +15,7 @@ public final class Identity {
     }
 
     public static String fluid(String registry, JsonElement nbt) {
-        if (registry == null || !registry.matches("[A-Za-z0-9_./:-]{1,256}")) {
+        if (registry == null || registry.isEmpty()) {
             throw new IllegalArgumentException("A Forge fluid registry key is required: " + registry);
         }
         JsonObject key = new JsonObject();
@@ -76,8 +76,11 @@ public final class Identity {
     }
 
     private static JsonObject key(String kind, String registry, JsonElement nbt) {
-        if (registry == null || !registry.matches("[A-Za-z0-9_.-]+:[A-Za-z0-9_./-]+")) {
-            throw new IllegalArgumentException("A registered resource name is required: " + registry);
+        // Forge 1.7 registry keys are opaque text, not ResourceLocation paths.
+        // Keep spaces, case, Unicode and additional separators exactly as registered.
+        int separator = registry == null ? -1 : registry.indexOf(':');
+        if (separator <= 0 || separator == registry.length() - 1) {
+            throw new IllegalArgumentException("A namespaced Forge registry key is required: " + registry);
         }
         JsonObject key = new JsonObject();
         key.addProperty("kind", kind);

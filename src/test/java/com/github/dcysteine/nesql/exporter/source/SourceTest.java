@@ -81,6 +81,7 @@ public final class SourceTest {
             String stone = Identity.item("minecraft:stone", 0, JsonNull.INSTANCE);
             String paper = Identity.item("minecraft:paper", 0, JsonNull.INSTANCE);
             String water = Identity.fluid("water", JsonNull.INSTANCE);
+            String crystal = Identity.fluid("Liquid Crystal", JsonNull.INSTANCE);
             String light = Identity.origin("aspect", object("owner", "fixture", "handler", "aspects", "key", "light"));
             java.util.TreeMap<String, JsonObject> strings = new java.util.TreeMap<>();
             java.util.function.Function<String, String> text = value -> {
@@ -97,9 +98,17 @@ public final class SourceTest {
                     object("id", paper, "registry", "minecraft:paper", "meta", 0, "nbt", null, "name", text.apply("Paper 纸"),
                             "tooltip", new JsonArray(), "stackLimit", 64, "durability", 0, "tools", new JsonObject(), "tags", array("paper"),
                             "icon", asset, "order", 1, "aspects", new JsonArray())));
-            dataset.records("fluids").write(object("id", water, "registry", "water", "nbt", JsonNull.INSTANCE,
+            for (String[] sample : new String[][] {
+                    {"BiblioCraft:Armor Stand", "Armor Stand 盔甲架"},
+                    {"ProjRed|Core:projectred.core.part", "ProjectRed part 注册样本"}
+            }) items.add(object("id", Identity.item(sample[0], 0, null), "registry", sample[0], "meta", 0, "nbt", null,
+                    "name", text.apply(sample[1]), "tooltip", new JsonArray(), "stackLimit", 64, "durability", 0,
+                    "tools", new JsonObject(), "tags", new JsonArray(), "icon", asset, "order", null, "aspects", new JsonArray()));
+            records(dataset, "fluids", new java.util.ArrayList<>(Arrays.asList(object("id", water, "registry", "water", "nbt", JsonNull.INSTANCE,
                     "name", text.apply("Water"), "temperature", 300, "density", 1000, "viscosity", 1000,
-                    "luminosity", 0, "gaseous", false, "icon", asset));
+                    "luminosity", 0, "gaseous", false, "icon", asset),
+                    object("id", crystal, "registry", "Liquid Crystal", "nbt", null, "name", text.apply("Liquid Crystal 流体样本"),
+                            "temperature", 300, "density", 1000, "viscosity", 1000, "luminosity", 0, "gaseous", false, "icon", asset))));
             JsonObject origin = object("owner", "fixture", "handler", "fixture:machine", "key", "machine");
             recipes(dataset, stone, paper, water, asset, text, items);
             for (JsonObject item : items) if (!item.has("armor")) item.addProperty("armor", false);
@@ -465,6 +474,26 @@ public final class SourceTest {
     }
 
     private static void identities() {
+        String[][] registryIds = {
+                {"BiblioCraft:Armor Stand", "item_49eeed3f0c9fd63f329598282a1406c58accbe6729a6195ebef95e6c4dcd84c1"},
+                {"ProjRed|Core:projectred.core.part", "item_cc00b969a3e38a4bd9e7c34a9a4ce0d01befa1703559b3ed4b06a95031801347"},
+                {"兼容|测试:方块 \"A\" /β", "item_ef3cfffdb74e2147983247b80182807f3ed49de488c2837dcc8d9e22e5f40d12"},
+                {"owner:part:variant", "item_03e51f074fd995a201649bab53fc67bc0e92857f6598cc2692bb981dd02b37b0"}
+        };
+        for (String[] sample : registryIds) require(Identity.item(sample[0], 0, null).equals(sample[1]), "Registry text changed identity: " + sample[0]);
+        java.util.Set<String> variants = new java.util.HashSet<>();
+        for (String name : new String[] {"BiblioCraft:Armor Stand", "BiblioCraft:Armor_Stand", "bibliocraft:Armor Stand", "BiblioCraft:Armor Stand "}) {
+            require(variants.add(Identity.item(name, 0, null)), "Registry names were normalized into the same identity");
+        }
+        require(Identity.fluid("Liquid Crystal", null).equals("fluid_3e9abc09ea399c31f244541b5db47c173b8f1f1eaaef1da2ac06eab0ab773ca6"), "Global fluid key was altered");
+        for (String invalid : new String[] {null, "", "stone", ":stone", "minecraft:"}) {
+            try { Identity.item(invalid, 0, null); throw new AssertionError("Accepted missing registry namespace or name"); }
+            catch (IllegalArgumentException expected) { /* The format still requires both parts. */ }
+        }
+        for (String invalid : new String[] {null, ""}) {
+            try { Identity.fluid(invalid, null); throw new AssertionError("Accepted empty fluid key"); }
+            catch (IllegalArgumentException expected) { /* Fluids require a nonempty global key. */ }
+        }
         NBTTagCompound first = new NBTTagCompound();
         first.setLong("long", Long.MAX_VALUE);
         first.setTag("float", new NBTTagFloat(Float.intBitsToFloat(0x80000000)));
