@@ -6,6 +6,9 @@ import com.google.gson.JsonArray;
 import com.google.gson.JsonObject;
 import cpw.mods.fml.common.Loader;
 import net.minecraft.client.Minecraft;
+import net.minecraft.init.Items;
+import net.minecraft.item.ItemStack;
+import net.minecraftforge.oredict.OreDictionary;
 import thaumcraft.api.ThaumcraftApi;
 import thaumcraft.api.aspects.Aspect;
 import thaumcraft.api.aspects.AspectList;
@@ -14,6 +17,7 @@ import thaumcraft.api.research.ResearchItem;
 import thaumcraft.client.lib.UtilsFX;
 import thaumcraft.common.Thaumcraft;
 import thaumcraft.common.lib.research.PlayerKnowledge;
+import thaumcraft.common.lib.utils.InventoryUtils;
 
 import java.util.ArrayList;
 import java.util.List;
@@ -65,6 +69,7 @@ final class Magic {
     }
 
     private void research(ResearchItem study, JsonArray items, Facts facts) {
+        ItemStack icon = icon(study);
         JsonArray flags = new JsonArray();
         if (study.isAutoUnlock()) flags.add(value("auto"));
         if (study.isConcealed()) flags.add(value("concealed"));
@@ -83,13 +88,29 @@ final class Magic {
                 "position", array(study.displayColumn, study.displayRow), "complexity", study.getComplexity(), "warp", ThaumcraftApi.getWarp(study.key),
                 "flags", flags, "completed", completed(study.key), "parents", links(study.parents), "hiddenParents", links(study.parentsHidden), "siblings", links(study.siblings),
                 "aspects", Aspects.amounts(study.tags), "itemTriggers", items, "entityTriggers", entities, "aspectTriggers", aspectTriggers,
-                "icon", study.icon_item == null ? null : facts.item(study.icon_item), "texture", null);
-        if (study.icon_item != null && study.icon_resource != null) throw new Jobs.Fault("research_icon", "Research has two icon sources");
+                "icon", icon == null ? null : facts.item(icon), "texture", null);
         facts.row("research", record);
-        if (study.icon_resource != null) facts.picture(new Facts.Picture(record, "texture", study.icon_resource.toString(), () -> {
+        if (icon == null && study.icon_resource != null) facts.picture(new Facts.Picture(record, "texture", study.icon_resource.toString(), () -> {
             Minecraft.getMinecraft().getTextureManager().bindTexture(study.icon_resource);
             UtilsFX.drawTexturedQuadFull(0, 0, 0);
         }));
+    }
+
+    /** One observed frame of the native research icon, not an inventory or clue template. */
+    static ItemStack icon(ResearchItem study) {
+        if (study.icon_item == null) return null;
+        ItemStack template = study.icon_item.copy();
+        if (template.getItem() == null) throw new Jobs.Fault("research_icon", "Research '" + study.key + "' has an empty item icon");
+        // GuiResearchBrowser gives item icons precedence over resource icons and
+        // resolves subtype/durability cycles before rendering. Native cycle code
+        // may reuse the input's NBT; copies on both sides isolate the registry.
+        ItemStack shown = InventoryUtils.cycleItemStack(template);
+        if (shown == null || shown.getItem() == null || Items.feather.getDamage(shown) == OreDictionary.WILDCARD_VALUE) {
+            throw new Jobs.Fault("research_icon", "Research '" + study.key + "' has no concrete native icon frame: "
+                    + net.minecraft.item.Item.itemRegistry.getNameForObject(template.getItem())
+                    + "; meta=" + Items.feather.getDamage(template));
+        }
+        return shown.copy();
     }
 
     final class Cursor {

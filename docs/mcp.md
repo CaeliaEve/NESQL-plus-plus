@@ -6,7 +6,7 @@
 
 目标为 GT New Horizons 2.8.4 Java 8。模组只服务本机单人世界，不支持专用服务器。MCP 客户端启动独立的 Node 进程，桥接通过受限的 loopback HTTP 接口调用游戏任务服务；Java 8 模组不嵌入 MCP SDK。
 
-模组 0.11.0 写出 source 修订 11。MCP 连接协议保持不变；数据修订与传输协议是不同的元数据。编译器拒绝旧数据修订，不提供旧格式兜底读取。
+模组 0.11.1 写出 source 修订 11。MCP 连接协议保持不变；数据修订与传输协议是不同的元数据。编译器拒绝旧数据修订，不提供旧格式兜底读取。
 
 ```json
 {
@@ -76,9 +76,11 @@ Thaumcraft 4 的空 AspectList 会返回 `[null]`；原生 copy/add/merge 还可
 
 研究的 `itemTriggers` 在修订11中保存Clue对象：`{registry, meta, nbt, ore, matches}`。registry/meta/类型化nbt是原始触发模板，meta=32767仍表示通配；ore是原生检查的首个矿辞组，没有时为null。模板不要求存在于items表，不调用名称、提示或绘制API。matches保存NEI已知具体物品中通过原生匹配的ID，有序且无重复。空示例列表仍完整保留条件，例如MIRROR的minecraft:portal；它不表示该条件无效或研究不能解锁。
 
-Clues按触发项自身与首个矿辞组的Item类型选择NEI候选，调用与ResearchManager.createClue相同的InventoryUtils.areItemStacksEqual(trigger,candidate,true,true,false)筛选，保留实际矿辞替代、耐久、metadata和NBT判断；不从原始模板或矿辞模式构造物品示例。原生矿辞分支可能忽略NBT，直接物品分支按原生规则比较。匹配和读取使用副本，不修改游戏堆栈或扫描/研究状态。示例不是任意NBT状态的全枚举。空触发对象、未注册物品及超出预算仍报research_trigger。研究按最多16次匹配成功或2ms分批处理，单次API调用不可抢占。错误保留研究key/分类/零基index、trigger位置和registry/meta。模组、编译器和Web契约须一同更新到0.11.0/source/catalog修订11，不提供旧字符串数组的兼容路径。
+Clues按触发项自身与首个矿辞组的Item类型选择NEI候选，调用与ResearchManager.createClue相同的InventoryUtils.areItemStacksEqual(trigger,candidate,true,true,false)筛选，保留实际矿辞替代、耐久、metadata和NBT判断；不从原始模板或矿辞模式构造物品示例。原生矿辞分支可能忽略NBT，直接物品分支按原生规则比较。匹配和读取使用副本，不修改游戏堆栈或扫描/研究状态。示例不是任意NBT状态的全枚举。空触发对象、未注册物品及超出预算仍报research_trigger。研究按最多16次匹配成功或2ms分批处理，单次API调用不可抢占。错误保留研究key/分类/零基index、trigger位置和registry/meta。模组使用0.11.1，编译器和Web契约使用0.11.0，source/catalog均为修订11，不提供旧字符串数组的兼容路径。
 
 已迁移要素与研究关系，魔法配方按下述明确适配范围采集；完整研究正文页面仍待继续。
+
+研究图标按GuiResearchBrowser的实际读取路径处理：item图标优先于resource图标，先对模板副本调用InventoryUtils.cycleItemStack，再复制返回的具体堆栈作为Research.icon。它解析原生子类型和耐久轮播，保留NBT；不会把metadata32767直接交给物品名称、提示或图像采集。原生未能解析出具体图标时报告research_icon及研究key、registry/meta，不静默替换为metadata0。Research.icon表示采集时原生轮播的一帧，时钟跨阶段可能选中不同变体；不是完整图标动画，也不改写原始研究模板。source/catalog修订11和Clue原始条件保持不变。
 
 所有 profile 采集 GT 注册控制器提供的 StructureLib 定义。适配器固定 StructureLib 1.4.23、BlockRenderer6343 1.3.17，按真实导航指令还原 A/B/C 坐标；控制器标记来自该版本保留的 occupiedSpaces。每次客户端调用最多处理 256 步，并使用 2 ms 调度预算。单个模组 API 调用仍不可抢占。
 

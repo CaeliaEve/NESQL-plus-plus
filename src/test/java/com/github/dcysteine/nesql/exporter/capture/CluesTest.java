@@ -117,7 +117,62 @@ public final class CluesTest {
         Clues.Cursor empty = new Clues(Collections.emptyList()).open(null);
         require(empty.capture(stack -> { throw new AssertionError("Empty triggers captured an item"); }) && empty.records().size() == 0,
                 "Absent triggers are not empty");
+        icons();
         System.out.println("Research clues: portal without examples, raw patterns, native matching, NBT, durability, first ore and copies passed");
+    }
+
+    private static void icons() {
+        // Thaumic Based's Knose fragment declares eight contiguous subtypes and
+        // indexes its name array directly, while TB.Knose uses metadata 32767.
+        Item fragments = new Item() {
+            private final String[] names = {"air", "fire", "aqua", "terra", "order", "entropy", "mixed", "tainted"};
+            @Override public String getUnlocalizedName(ItemStack stack) { return "fixture." + names[getDamage(stack)]; }
+            @Override public void getSubItems(Item item, net.minecraft.creativetab.CreativeTabs tab, List values) {
+                for (int meta = 0; meta < names.length; meta++) values.add(new ItemStack(item, 1, meta));
+            }
+        }.setHasSubtypes(true);
+        Item.itemRegistry.addObject(31003, "nesql:icon_fragments", fragments);
+        thaumcraft.api.research.ResearchItem study = study(new ItemStack(fragments, 3, 32767));
+        NBTTagCompound data = new NBTTagCompound(); data.setLong("energy", Long.MAX_VALUE);
+        study.icon_item.setTagCompound(data);
+        try { study.icon_item.getDisplayName(); throw new AssertionError("Expected Knose-shaped wildcard display failure"); }
+        catch (ArrayIndexOutOfBoundsException expected) { require(expected.getMessage().contains("32767"), "Wrong icon failure"); }
+        long before = System.currentTimeMillis();
+        ItemStack frame = Magic.icon(study);
+        phase(frame.getItemDamage(), before, System.currentTimeMillis(), 1000, 8);
+        require(frame.getItem() == fragments && frame.stackSize == 1 && frame.getTagCompound().getLong("energy") == Long.MAX_VALUE,
+                "The native icon lost its item, quantity or NBT");
+        frame.getDisplayName();
+        frame.getTagCompound().setLong("energy", 1);
+        require(study.icon_item.getItemDamage() == 32767 && study.icon_item.stackSize == 3 && data.getLong("energy") == Long.MAX_VALUE,
+                "Icon sampling mutated the research template");
+        study = study(new ItemStack(fragments, 2, 7));
+        require(Magic.icon(study).getItemDamage() == 7 && Magic.icon(study) != study.icon_item,
+                "Fixed icons changed or reused their template");
+        study = study(new ItemStack(Items.bow, 1, 32767));
+        before = System.currentTimeMillis();
+        frame = Magic.icon(study);
+        phase(frame.getItemDamage(), before, System.currentTimeMillis(), 10, Items.bow.getMaxDamage());
+        require(study.icon_item.getItemDamage() == 32767, "Durability icon sampling changed the template");
+        study = new thaumcraft.api.research.ResearchItem("RESOURCE", "fixture", new thaumcraft.api.aspects.AspectList(),
+                0, 0, 0, new net.minecraft.util.ResourceLocation("fixture", "icon"));
+        require(Magic.icon(study) == null, "Resource-only research acquired an item icon");
+        study = study(new ItemStack(new Item(), 1, 32767));
+        try { Magic.icon(study); throw new AssertionError("An unresolved icon was replaced with metadata zero"); }
+        catch (Jobs.Fault error) {
+            require(error.code.equals("research_icon") && error.getMessage().contains("TB.Knose") && error.getMessage().contains("32767"),
+                    "Unresolved native icon lacks diagnostics");
+        }
+        System.out.println("Research icons: native subtype/durability frames, fixed/resource icons, NBT isolation and unresolved diagnostics passed");
+    }
+
+    private static thaumcraft.api.research.ResearchItem study(ItemStack icon) {
+        return new thaumcraft.api.research.ResearchItem("TB.Knose", "THAUMICBASES", new thaumcraft.api.aspects.AspectList(), 0, 0, 0, icon);
+    }
+
+    private static void phase(int meta, long before, long after, int interval, int count) {
+        require(meta >= 0 && meta < count && (meta - before / interval % count + count) % count <= after / interval - before / interval,
+                "The icon frame did not follow the native clock phase");
     }
 
     private static Set<String> resolve(List<ItemStack> catalog, ItemStack... patterns) {
