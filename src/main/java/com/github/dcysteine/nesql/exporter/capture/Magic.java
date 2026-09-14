@@ -10,7 +10,6 @@ import net.minecraft.client.renderer.RenderHelper;
 import net.minecraft.client.renderer.entity.RenderItem;
 import net.minecraft.init.Items;
 import net.minecraft.item.ItemStack;
-import net.minecraftforge.oredict.OreDictionary;
 import thaumcraft.api.ThaumcraftApi;
 import thaumcraft.api.aspects.Aspect;
 import thaumcraft.api.aspects.AspectList;
@@ -120,7 +119,7 @@ final class Magic {
         }));
     }
 
-    /** One observed frame of the native research icon, not an inventory or clue template. */
+    /** The stack passed to the native research renderer, not necessarily an inventory variant. */
     static ItemStack icon(ResearchItem study) {
         if (study.icon_item == null) return null;
         ItemStack template = study.icon_item.copy();
@@ -129,8 +128,11 @@ final class Magic {
         // resolves subtype/durability cycles before rendering. Native cycle code
         // may reuse the input's NBT; copies on both sides isolate the registry.
         ItemStack shown = InventoryUtils.cycleItemStack(template);
-        if (shown == null || shown.getItem() == null || Items.feather.getDamage(shown) == OreDictionary.WILDCARD_VALUE) {
-            throw new Jobs.Fault("research_icon", "Research '" + study.key + "' has no concrete native icon frame: "
+        // For items without subtypes or durability (such as CHESTSCAN's chest),
+        // the native cycle leaves 32767 intact. Renderers may ignore metadata;
+        // that value alone cannot establish whether a display stack is valid.
+        if (shown == null || shown.getItem() == null) {
+            throw new Jobs.Fault("research_icon", "Research '" + study.key + "' has no native item icon: "
                     + net.minecraft.item.Item.itemRegistry.getNameForObject(template.getItem())
                     + "; meta=" + Items.feather.getDamage(template));
         }

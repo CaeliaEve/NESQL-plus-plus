@@ -158,13 +158,9 @@ public final class CluesTest {
         study = new thaumcraft.api.research.ResearchItem("RESOURCE", "fixture", new thaumcraft.api.aspects.AspectList(),
                 0, 0, 0, new net.minecraft.util.ResourceLocation("fixture", "icon"));
         require(Magic.icon(study) == null, "Resource-only research acquired an item icon");
-        study = study(new ItemStack(new Item(), 1, 32767));
-        try { Magic.icon(study); throw new AssertionError("An unresolved icon was replaced with metadata zero"); }
-        catch (Jobs.Fault error) {
-            require(error.code.equals("research_icon") && error.getMessage().contains("TB.Knose") && error.getMessage().contains("32767"),
-                    "Unresolved native icon lacks diagnostics");
-        }
-        System.out.println("Research icons: native subtype/durability frames, fixed/resource icons, NBT isolation and unresolved diagnostics passed");
+        study = study(new ItemStack(Items.stick, 1, 32767));
+        require(Magic.icon(study).getItemDamage() == 32767, "A native non-cycling display was rejected or rewritten");
+        System.out.println("Research icons: native subtype/durability cycles, unchanged display metadata, fixed/resource icons and NBT isolation passed");
     }
 
     private static thaumcraft.api.research.ResearchItem study(ItemStack icon) {
@@ -208,7 +204,37 @@ public final class CluesTest {
                 "A known research icon lost its item link or queued a duplicate image");
         NBTTagCompound tag = new NBTTagCompound(); tag.setLong("variant", Long.MAX_VALUE); ordinary.setTagCompound(tag);
         require(facts.known(ordinary) == null, "Display lookup merged distinct NBT identities");
+        chest();
         System.out.println("Research art: decorative metadata 4099 queues a picture without item text; known item links and NBT identities passed");
+    }
+
+    private static void chest() {
+        // Salis CustomResearch.maybeRegister uses quantity zero and wildcard
+        // metadata even for a chest with neither subtypes nor durability.
+        ItemStack template = new ItemStack(Blocks.chest, 0, 32767);
+        require(!template.getItem().getHasSubtypes() && !template.isItemStackDamageable(), "Native chest flags changed");
+        NBTTagCompound tag = new NBTTagCompound(); tag.setLong("marker", Long.MAX_VALUE); template.setTagCompound(tag);
+        ItemStack nativeFrame = InventoryUtils.cycleItemStack(template.copy());
+        require(nativeFrame.getItemDamage() == 32767, "Native chest display unexpectedly rewrote wildcard metadata");
+        thaumcraft.api.research.ResearchItem research = new thaumcraft.api.research.ResearchItem("salisarcana:CHESTSCAN", "BASICS",
+                new thaumcraft.api.aspects.AspectList(), 0, 0, 0, template);
+        ItemStack frame = Magic.icon(research);
+        require(ItemStack.areItemStacksEqual(nativeFrame, frame), "CHESTSCAN's display differs from the native result");
+        frame.getTagCompound().setLong("marker", 1);
+        require(template.getTagCompound().getLong("marker") == Long.MAX_VALUE && template.stackSize == 0 && template.getItemDamage() == 32767,
+                "CHESTSCAN sampling mutated its registered icon");
+        frame = Magic.icon(research);
+        Facts facts = new Facts("en_US");
+        Set<String> captured = cpw.mods.fml.relauncher.ReflectionHelper.getPrivateValue(Facts.class, facts, "items");
+        captured.add(id(new ItemStack(Blocks.chest, 1, 0)));
+        com.google.gson.JsonObject record = com.github.dcysteine.nesql.exporter.source.Json.object("icon", null, "texture", null);
+        Magic.picture(frame, record, facts);
+        Facts.Batch batch = facts.drain();
+        require(record.get("icon").isJsonNull() && batch.icons.isEmpty() && batch.records.isEmpty() && batch.pictures.size() == 1,
+                "The wildcard chest was replaced with an inventory item or failed to queue its image");
+        require(batch.pictures.get(0).record == record && batch.pictures.get(0).location.equals("minecraft:chest#32767"),
+                "CHESTSCAN lost its image binding or original metadata");
+        System.out.println("CHESTSCAN: native zero-count wildcard chest, immutable NBT and picture-only capture passed");
     }
 
     private static void phase(int meta, long before, long after, int interval, int count) {

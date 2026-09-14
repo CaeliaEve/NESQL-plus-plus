@@ -6,7 +6,7 @@
 
 目标为 GT New Horizons 2.8.4 Java 8。模组只服务本机单人世界，不支持专用服务器。MCP 客户端启动独立的 Node 进程，桥接通过受限的 loopback HTTP 接口调用游戏任务服务；Java 8 模组不嵌入 MCP SDK。
 
-模组 0.11.2 写出 source 修订 11。MCP 连接协议保持不变；数据修订与传输协议是不同的元数据。编译器拒绝旧数据修订，不提供旧格式兜底读取。
+模组 0.11.3 写出 source 修订 11。MCP 连接协议保持不变；数据修订与传输协议是不同的元数据。编译器拒绝旧数据修订，不提供旧格式兜底读取。
 
 ```json
 {
@@ -76,13 +76,13 @@ Thaumcraft 4 的空 AspectList 会返回 `[null]`；原生 copy/add/merge 还可
 
 研究的 `itemTriggers` 在修订11中保存Clue对象：`{registry, meta, nbt, ore, matches}`。registry/meta/类型化nbt是原始触发模板，meta=32767仍表示通配；ore是原生检查的首个矿辞组，没有时为null。模板不要求存在于items表，不调用名称、提示或绘制API。matches保存NEI已知具体物品中通过原生匹配的ID，有序且无重复。空示例列表仍完整保留条件，例如MIRROR的minecraft:portal；它不表示该条件无效或研究不能解锁。
 
-Clues按触发项自身与首个矿辞组的Item类型选择NEI候选，调用与ResearchManager.createClue相同的InventoryUtils.areItemStacksEqual(trigger,candidate,true,true,false)筛选，保留实际矿辞替代、耐久、metadata和NBT判断；不从原始模板或矿辞模式构造物品示例。原生矿辞分支可能忽略NBT，直接物品分支按原生规则比较。匹配和读取使用副本，不修改游戏堆栈或扫描/研究状态。示例不是任意NBT状态的全枚举。空触发对象、未注册物品及超出预算仍报research_trigger。研究按最多16次匹配成功或2ms分批处理，单次API调用不可抢占。错误保留研究key/分类/零基index、trigger位置和registry/meta。模组使用0.11.2，编译器和Web契约使用0.11.0，source/catalog均为修订11，不提供旧字符串数组的兼容路径。
+Clues按触发项自身与首个矿辞组的Item类型选择NEI候选，调用与ResearchManager.createClue相同的InventoryUtils.areItemStacksEqual(trigger,candidate,true,true,false)筛选，保留实际矿辞替代、耐久、metadata和NBT判断；不从原始模板或矿辞模式构造物品示例。原生矿辞分支可能忽略NBT，直接物品分支按原生规则比较。匹配和读取使用副本，不修改游戏堆栈或扫描/研究状态。示例不是任意NBT状态的全枚举。空触发对象、未注册物品及超出预算仍报research_trigger。研究按最多16次匹配成功或2ms分批处理，单次API调用不可抢占。错误保留研究key/分类/零基index、trigger位置和registry/meta。模组使用0.11.3，编译器和Web契约使用0.11.0，source/catalog均为修订11，不提供旧字符串数组的兼容路径。
 
 已迁移要素与研究关系，魔法配方按下述明确适配范围采集；完整研究正文页面仍待继续。
 
 研究图标按GuiResearchBrowser的实际路径处理：item图标优先于resource图标，先对模板副本调用InventoryUtils.cycleItemStack，保留原生子类型/耐久轮播和NBT。具体帧若已有完整物品记录，Research.icon引用该记录；否则仅作为装饰图像，由原生RenderItem.renderItemAndEffectIntoGUI绘制到Research.texture，不调用其名称、提示或物品要素接口，不生成伪造items行。此判断依据已采集身份，不依赖异常兜底或模组名称白名单。
 
-例如TConstruct:titleIcon的4099可通过渲染接口取得achievementIcons/enemySlayer图案，但名称接口只支持两种怪物图标；保留4099绘图，不能改成0或1。data profile不执行装饰图像绘制，未绑定已知物品的icon/texture保持null；full/images执行既有Picture采集。原生轮播未解析出具体帧仍报research_icon。图标是一帧观察，不是完整轮播动画；source/catalog修订11与Clue原始条件不变。
+例如TConstruct:titleIcon的4099可通过渲染接口取得achievementIcons/enemySlayer图案，但名称接口只支持两种怪物图标；保留4099绘图，不能改成0或1。data profile不执行装饰图像绘制，未绑定已知物品的icon/texture保持null；full/images执行既有Picture采集。原生轮播返回空堆栈仍报research_icon；metadata本身不作为图标有效性断言。图标是一帧观察，不是完整轮播动画；source/catalog修订11与Clue原始条件不变。
 
 所有 profile 采集 GT 注册控制器提供的 StructureLib 定义。适配器固定 StructureLib 1.4.23、BlockRenderer6343 1.3.17，按真实导航指令还原 A/B/C 坐标；控制器标记来自该版本保留的 occupiedSpaces。每次客户端调用最多处理 256 步，并使用 2 ms 调度预算。单个模组 API 调用仍不可抢占。
 
@@ -141,3 +141,5 @@ GT 捕获使用独立窗口和注入的 200 tick 进度源，不改动全局 dra
 已验证：两组 Java 行为入口、真实 loopback HTTP、SDK stdio 握手与工具调用、幂等和分页、重连会话隔离、超时和响应上限、生产 jar 的 SRG 方法与打包边界。旧 SQL/JPA、Protobuf、stubs 和双 jar 构建已退休。
 
 待验证：实际游戏安装与 MCP 客户端握手，资源重载/离开世界/取消期间的 GL 恢复，所有目标 handler 的领域语义，全量耗时、帧占用、内存与磁盘用量。当前明确适配原版工作台/熔炉、GT 默认 handler、BartWorks BioLab/BioVat、TCNEI 四种魔法配方与 Salis 换芯/换端；未知 handler 不会被跳过。完整领域迁移与全量验收完成前，此分支仍是开发状态。
+
+Salis的CHESTSCAN使用数量0、metadata32767的箱子作为研究图标。箱子既无子类型也无耐久，原生cycleItemStack会保留该值；原版箱子绘制助手按方块选择模型而不使用传入metadata。因此图标采集保留原生输出，并走现有已知物品引用/独立图像路径，不强制将所有32767转换成库存变体，不改为metadata0。数量0的装饰图标也不生成可取得物品记录。data仍不调用GL，full/images的实际绘制另行验收。
