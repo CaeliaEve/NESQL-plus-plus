@@ -5,14 +5,11 @@ import com.github.dcysteine.nesql.exporter.source.TypedNbt;
 import com.github.dcysteine.nesql.exporter.task.Jobs;
 import com.google.gson.JsonArray;
 import com.google.gson.JsonElement;
-import cpw.mods.fml.common.Loader;
-import net.minecraft.init.Bootstrap;
 import net.minecraft.init.Blocks;
 import net.minecraft.init.Items;
 import net.minecraft.item.Item;
 import net.minecraft.item.ItemStack;
 import net.minecraft.nbt.NBTTagCompound;
-import net.minecraft.launchwrapper.LaunchClassLoader;
 import net.minecraftforge.oredict.OreDictionary;
 import thaumcraft.common.lib.utils.InventoryUtils;
 
@@ -27,33 +24,7 @@ import java.util.Set;
 public final class CluesTest {
     private CluesTest() {}
 
-    public static void run() throws Exception {
-        if (!(CluesTest.class.getClassLoader() instanceof LaunchClassLoader)) {
-            // Vanilla registration requires FML's real loader type. Keep its
-            // static registries isolated from the rest of the source fixture.
-            java.net.URL[] urls = Arrays.stream(System.getProperty("java.class.path").split(java.io.File.pathSeparator))
-                    .map(java.io.File::new).map(java.io.File::toURI).map(uri -> {
-                        try { return uri.toURL(); } catch (java.net.MalformedURLException error) { throw new IllegalStateException(error); }
-                    }).toArray(java.net.URL[]::new);
-            ClassLoader previous = Thread.currentThread().getContextClassLoader();
-            java.io.PrintStream out = System.out, err = System.err;
-            try (LaunchClassLoader loader = new LaunchClassLoader(urls)) {
-                Thread.currentThread().setContextClassLoader(loader);
-                try { loader.loadClass(CluesTest.class.getName()).getMethod("run").invoke(null); }
-                catch (java.lang.reflect.InvocationTargetException error) {
-                    if (error.getCause() instanceof Error) throw (Error) error.getCause();
-                    throw (Exception) error.getCause();
-                }
-            } finally {
-                Thread.currentThread().setContextClassLoader(previous);
-                System.setOut(out); System.setErr(err);
-            }
-            return;
-        }
-        Loader.injectData("7", "99", "40", "1614", "1.7.10", "9.05", new java.io.File("."), Collections.emptyList());
-        cpw.mods.fml.relauncher.ReflectionHelper.setPrivateValue(cpw.mods.fml.relauncher.FMLRelaunchLog.class, null,
-                cpw.mods.fml.relauncher.Side.CLIENT, "side");
-        Bootstrap.func_151354_b();
+    public static void run() {
         // A palette-backed item reproduces the reported failure without guessing
         // which runtime mod supplied the unidentified research trigger.
         Item palette = new Item() {

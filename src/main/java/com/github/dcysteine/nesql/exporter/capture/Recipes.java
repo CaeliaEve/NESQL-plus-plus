@@ -123,6 +123,17 @@ final class Recipes {
         int size() { return magic == null ? handler.numRecipes() : magic.size(); }
 
         void capture(int index) {
+            try { captureRow(index); }
+            catch (java.util.concurrent.CancellationException error) { throw error; }
+            catch (RuntimeException error) {
+                Jobs.Fault failure = new Jobs.Fault(error instanceof Jobs.Fault ? ((Jobs.Fault) error).code : "recipe_capture",
+                        "Recipe handler '" + source.name + "'; category=" + source.id + "; index=" + index + ": " + error);
+                failure.initCause(error);
+                throw failure;
+            }
+        }
+
+        private void captureRow(int index) {
             Jobs.checkpoint();
             RecipeRow row = new RecipeRow(facts, source.origin, source.id, index);
             if (gt != null) gt.capture((GTNEIDefaultHandler.CachedDefaultRecipe) handler.arecipes.get(index), row);

@@ -169,19 +169,28 @@ public final class Capture implements Jobs.Task {
                     } while (!done);
                     if ((index + 1) % 32 == 0 || index + 1 == magic.researchCount()) context.progress("research", index + 1, magic.researchCount(), "Captured research prerequisites and observed knowledge");
                 }
+                context.progress("structures", 0, machines.size(), "Starting structure capture: 0/" + machines.size());
                 for (int index = 0; index < machines.size(); index++) {
                     final Structures.Machine machine = machines.get(index);
-                    Structures.Cursor cursor = session.call(() -> new Structures.Cursor(machine, facts, models, request.probes, request.profile.equals("full") && request.handlers.isEmpty()));
                     try {
-                        boolean done;
-                        do {
-                            done = session.call(cursor::capture);
-                            sink.write(facts.drain());
-                        } while (!done);
-                    } finally { client.cleanup(cursor::close); }
-                    if ((index + 1) % 16 == 0 || index + 1 == machines.size()) context.progress("structures", index + 1, machines.size(), "Captured registered structure definitions");
+                        Structures.Cursor cursor = session.call(() -> new Structures.Cursor(machine, facts, models, request.probes, request.profile.equals("full") && request.handlers.isEmpty()));
+                        try {
+                            boolean done;
+                            do {
+                                done = session.call(cursor::capture);
+                                sink.write(facts.drain());
+                            } while (!done);
+                        } finally { client.cleanup(cursor::close); }
+                    } catch (java.util.concurrent.CancellationException error) { throw error; }
+                    catch (RuntimeException error) {
+                        throw Structures.failure("Structure index=" + index + "; controller=" + machine.id
+                                + "; type=" + machine.machine.getClass().getName(), error);
+                    }
+                    if ((index + 1) % 16 == 0 || index + 1 == machines.size()) context.progress("structures", index + 1, machines.size(),
+                            "Captured structure definitions: " + (index + 1) + "/" + machines.size());
                 }
                 for (Recipes.Handler handler : handlers) {
+                    context.progress("recipes", 0, 0, "Opening recipe handler: " + handler.name);
                     Recipes.Cursor cursor = session.call(() -> handler.open(facts, !request.profile.equals("data")));
                     try {
                         sink.write(facts.drain());

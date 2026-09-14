@@ -6,7 +6,7 @@
 
 目标为 GT New Horizons 2.8.4 Java 8。模组只服务本机单人世界，不支持专用服务器。MCP 客户端启动独立的 Node 进程，桥接通过受限的 loopback HTTP 接口调用游戏任务服务；Java 8 模组不嵌入 MCP SDK。
 
-模组 0.11.3 写出 source 修订 11。MCP 连接协议保持不变；数据修订与传输协议是不同的元数据。编译器拒绝旧数据修订，不提供旧格式兜底读取。
+模组 0.11.4 写出 source 修订 11。MCP 连接协议保持不变；数据修订与传输协议是不同的元数据。编译器拒绝旧数据修订，不提供旧格式兜底读取。
 
 ```json
 {
@@ -76,7 +76,7 @@ Thaumcraft 4 的空 AspectList 会返回 `[null]`；原生 copy/add/merge 还可
 
 研究的 `itemTriggers` 在修订11中保存Clue对象：`{registry, meta, nbt, ore, matches}`。registry/meta/类型化nbt是原始触发模板，meta=32767仍表示通配；ore是原生检查的首个矿辞组，没有时为null。模板不要求存在于items表，不调用名称、提示或绘制API。matches保存NEI已知具体物品中通过原生匹配的ID，有序且无重复。空示例列表仍完整保留条件，例如MIRROR的minecraft:portal；它不表示该条件无效或研究不能解锁。
 
-Clues按触发项自身与首个矿辞组的Item类型选择NEI候选，调用与ResearchManager.createClue相同的InventoryUtils.areItemStacksEqual(trigger,candidate,true,true,false)筛选，保留实际矿辞替代、耐久、metadata和NBT判断；不从原始模板或矿辞模式构造物品示例。原生矿辞分支可能忽略NBT，直接物品分支按原生规则比较。匹配和读取使用副本，不修改游戏堆栈或扫描/研究状态。示例不是任意NBT状态的全枚举。空触发对象、未注册物品及超出预算仍报research_trigger。研究按最多16次匹配成功或2ms分批处理，单次API调用不可抢占。错误保留研究key/分类/零基index、trigger位置和registry/meta。模组使用0.11.3，编译器和Web契约使用0.11.0，source/catalog均为修订11，不提供旧字符串数组的兼容路径。
+Clues按触发项自身与首个矿辞组的Item类型选择NEI候选，调用与ResearchManager.createClue相同的InventoryUtils.areItemStacksEqual(trigger,candidate,true,true,false)筛选，保留实际矿辞替代、耐久、metadata和NBT判断；不从原始模板或矿辞模式构造物品示例。原生矿辞分支可能忽略NBT，直接物品分支按原生规则比较。匹配和读取使用副本，不修改游戏堆栈或扫描/研究状态。示例不是任意NBT状态的全枚举。空触发对象、未注册物品及超出预算仍报research_trigger。研究按最多16次匹配成功或2ms分批处理，单次API调用不可抢占。错误保留研究key/分类/零基index、trigger位置和registry/meta。模组使用0.11.4，编译器和Web契约使用0.11.0，source/catalog均为修订11，不提供旧字符串数组的兼容路径。
 
 已迁移要素与研究关系，魔法配方按下述明确适配范围采集；完整研究正文页面仍待继续。
 
@@ -87,6 +87,10 @@ Clues按触发项自身与首个矿辞组的Item类型选择NEI候选，调用�
 所有 profile 采集 GT 注册控制器提供的 StructureLib 定义。适配器固定 StructureLib 1.4.23、BlockRenderer6343 1.3.17，按真实导航指令还原 A/B/C 坐标；控制器标记来自该版本保留的 occupiedSpaces。每次客户端调用最多处理 256 步，并使用 2 ms 调度预算。单个模组 API 调用仍不可抢占。
 
 `structures` 保存控制器、说明、首组探测参数、命名片段与 `variants`；每个变体对应一个请求参数，恰有 `build` 或 `problem`。`shapes` 保存每块最多 2048 格的几何，Cell.index 指向父级片段规则或构建调色板。片段与建议部件使用首组规范化参数读取，建议部件来自 `getBlocksToPlace`，未枚举的谓词保持未知。
+
+Rule.placements只保存建议中的有效物品引用，不能把它当作完整成型判定或材料清单。StructureLib的BlocksToPlace.create(Block,meta)在方块没有对应Item时仍会创建一个Item为空的堆栈；这些条目和null建议不交给完整物品采集，原规则、几何和实际构建方块保留。混合列表中的有效建议继续去重排序，用副本读取；所有扫描项均计入1024项预算。没有提供方、纯谓词或errored哨兵返回null；提供了列表但无物品建议则为[]。非空物品的真实读取错误继续中止导出，不以过滤空建议为理由吞掉。
+
+结构失败会附加零基结构index、控制器编号与实现类；放置建议错误还包含片段、规则符号、实现类和建议index。结构进度从0/总数开始，批次消息直接包含已完成/总数；进入配方前单独报告Opening recipe handler，配方错误含处理器与配方index。必须按事件stage解释completed/total，不能把结构批次消息当成结构已全部完成。完成研究并不表示结构或配方已经验收。
 
 `builds` 保存独立预览世界中的整体构建参数、坐标框架、控制器、调色板、几何和原生返回值，`blocks` 保存实际方块注册名、metadata、完整 typed NBT 和可选 pick-block 物品。预览使用全新控制器、独立玩家和物品副本，按原生 construct/survivalConstruct 放置；不会把命名片段拼猜为整机，也不会写入玩家世界。整体构建不等于运行时成型判定。
 

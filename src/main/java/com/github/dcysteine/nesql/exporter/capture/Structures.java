@@ -29,6 +29,7 @@ import java.util.Map;
 import java.util.Set;
 import java.util.TreeMap;
 import java.util.TreeSet;
+import java.util.function.Function;
 
 import static com.github.dcysteine.nesql.exporter.source.Json.*;
 
@@ -56,6 +57,36 @@ final class Structures {
         final int id;
         final IMetaTileEntity machine;
         Machine(int id, IMetaTileEntity machine) { this.id = id; this.machine = machine; }
+    }
+
+    /** Item suggestions are optional; a block without an Item is not an empty item fact. */
+    static JsonArray placements(IStructureElement.BlocksToPlace blocks, Function<ItemStack, String> capture) {
+        if (blocks == null || blocks == IStructureElement.BlocksToPlace.errored) return null;
+        Iterable<ItemStack> stacks = blocks.getStacks();
+        if (stacks == null) return null;
+        TreeSet<String> ids = new TreeSet<>();
+        int scanned = 0;
+        for (ItemStack stack : stacks) {
+            Jobs.checkpoint();
+            if (++scanned > 1024) throw new Jobs.Fault("structure_limit", "Too many advisory placement stacks");
+            // BlocksToPlace.create(Block, meta) constructs a stack even when
+            // Item.getItemFromBlock is null. Keep the rule and its
+            // actual preview blocks; only nonempty Item references can be hints.
+            if (stack == null || stack.getItem() == null) continue;
+            try { ids.add(capture.apply(stack.copy())); }
+            catch (java.util.concurrent.CancellationException error) { throw error; }
+            catch (RuntimeException error) { throw failure("Placement suggestion index=" + (scanned - 1), error); }
+        }
+        JsonArray result = new JsonArray();
+        for (String id : ids) result.add(value(id));
+        return result;
+    }
+
+    static Jobs.Fault failure(String location, RuntimeException error) {
+        Jobs.Fault failure = new Jobs.Fault(error instanceof Jobs.Fault ? ((Jobs.Fault) error).code : "structure_capture",
+                location + ": " + error);
+        failure.initCause(error);
+        return failure;
     }
 
     static final class Cursor implements AutoCloseable {
@@ -93,6 +124,7 @@ final class Structures {
             this.complete = complete;
             trigger = Preview.trigger(this.probes.get(0));
             ItemStack controller = source.machine.getStackForm(1);
+            if (controller == null || controller.getItem() == null) throw new Jobs.Fault("structure_controller", "Controller has no item stack");
             JsonObject origin = object("owner", "gregtech", "handler", source.machine.getClass().getName(), "key", Integer.toString(source.id));
             JsonArray description = new JsonArray();
             record = object("id", Identity.origin("structure", origin), "source", origin, "name", facts.text(controller.getDisplayName()),
@@ -205,23 +237,20 @@ final class Structures {
         }
 
         private JsonObject rule(char symbol, IStructureElement<Object> element) {
-            String kind = element.getClass() == StructureUtility.isAir().getClass() ? "air"
-                    : element.getClass() == StructureUtility.notAir().getClass() ? "solid" : "element";
-            JsonArray placements = null;
-            if (kind.equals("element")) {
-                IStructureElement.BlocksToPlace blocks = element.getBlocksToPlace(context, world, 0, 64, 0, trigger.copy(), environment);
-                if (blocks != null && blocks.getStacks() != null) {
-                    TreeSet<String> ids = new TreeSet<>();
-                    int scanned = 0;
-                    for (ItemStack stack : blocks.getStacks()) {
-                        if (++scanned > 1024) throw new Jobs.Fault("structure_limit", "Too many advisory placement stacks");
-                        ids.add(facts.item(stack));
-                    }
-                    placements = new JsonArray();
-                    for (String id : ids) placements.add(value(id));
+            try {
+                String kind = element.getClass() == StructureUtility.isAir().getClass() ? "air"
+                        : element.getClass() == StructureUtility.notAir().getClass() ? "solid" : "element";
+                JsonArray placements = null;
+                if (kind.equals("element")) {
+                    IStructureElement.BlocksToPlace blocks = element.getBlocksToPlace(context, world, 0, 64, 0, trigger.copy(), environment);
+                    placements = placements(blocks, facts::item);
                 }
+                return object("symbol", String.valueOf(symbol), "kind", kind, "implementation", element.getClass().getName(), "placements", placements);
+            } catch (java.util.concurrent.CancellationException error) { throw error; }
+            catch (RuntimeException error) {
+                throw failure("Piece '" + entry.getKey() + "'; symbol='" + symbol + "'; element="
+                        + (element == null ? "null" : element.getClass().getName()), error);
             }
-            return object("symbol", String.valueOf(symbol), "kind", kind, "implementation", element.getClass().getName(), "placements", placements);
         }
 
         private void bounds(Vec3Impl at) {
