@@ -43,6 +43,18 @@ final class Facts {
 
     String item(ItemStack stack) { return item(stack, null); }
 
+    /** A display-only stack may have no safe name or tooltip; only reuse an existing fact. */
+    String known(ItemStack stack) {
+        Jobs.checkpoint();
+        if (stack == null || stack.getItem() == null) throw new Jobs.Fault("research_icon", "Empty display item");
+        String registry = Item.itemRegistry.getNameForObject(stack.getItem());
+        if (registry == null || Item.itemRegistry.getObject(registry) != stack.getItem()) {
+            throw new Jobs.Fault("unregistered_item", "Display uses an unregistered item: " + stack.getItem().getClass().getName());
+        }
+        String id = Identity.item(registry, Items.feather.getDamage(stack), TypedNbt.encode(stack.getTagCompound()));
+        return items.contains(id) ? id : null;
+    }
+
     String track(JsonArray frames) {
         JsonObject record = object("frames", frames);
         String id = Identity.content("track", record);

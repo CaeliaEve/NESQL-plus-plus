@@ -118,6 +118,7 @@ public final class CluesTest {
         require(empty.capture(stack -> { throw new AssertionError("Empty triggers captured an item"); }) && empty.records().size() == 0,
                 "Absent triggers are not empty");
         icons();
+        pictures();
         System.out.println("Research clues: portal without examples, raw patterns, native matching, NBT, durability, first ore and copies passed");
     }
 
@@ -168,6 +169,46 @@ public final class CluesTest {
 
     private static thaumcraft.api.research.ResearchItem study(ItemStack icon) {
         return new thaumcraft.api.research.ResearchItem("TB.Knose", "THAUMICBASES", new thaumcraft.api.aspects.AspectList(), 0, 0, 0, icon);
+    }
+
+    private static void pictures() {
+        int[] names = {0};
+        Item title = new Item() {
+            @Override public String getItemStackDisplayName(ItemStack stack) {
+                names[0]++;
+                return new String[] {"slime", "kingSlime"}[getDamage(stack)];
+            }
+        }.setHasSubtypes(true);
+        Item.itemRegistry.addObject(31004, "nesql:titleIcon", title);
+        ItemStack decorative = new ItemStack(title, 1, 4099);
+        try { decorative.getDisplayName(); throw new AssertionError("Expected title icon name failure"); }
+        catch (ArrayIndexOutOfBoundsException error) { require(error.getMessage().contains("4099"), "Wrong title icon failure"); }
+        names[0] = 0;
+        Facts facts = new Facts("en_US");
+        com.google.gson.JsonObject record = com.github.dcysteine.nesql.exporter.source.Json.object("icon", null, "texture", null);
+        Magic.picture(Magic.icon(study(decorative)), record, facts);
+        Facts.Batch batch = facts.drain();
+        require(names[0] == 0 && batch.icons.isEmpty() && batch.records.isEmpty() && batch.pictures.size() == 1,
+                "Decorative research art invoked item metadata or created a fabricated item fact");
+        require(record.get("icon").isJsonNull() && record.get("texture").isJsonNull()
+                && batch.pictures.get(0).record == record && batch.pictures.get(0).field.equals("texture")
+                && batch.pictures.get(0).location.endsWith("#4099"), "Decorative icon lost its picture binding or metadata");
+        require(decorative.getItemDamage() == 4099, "The decorative icon was rewritten to a named item variant");
+
+        // Declare a previously captured catalog entry without booting a game client.
+        // The ordinary-item path must reuse it without another tooltip or picture.
+        ItemStack ordinary = new ItemStack(Items.stone_axe, 1, 0);
+        String existing = id(ordinary);
+        Set<String> captured = cpw.mods.fml.relauncher.ReflectionHelper.getPrivateValue(Facts.class, facts, "items");
+        captured.add(existing);
+        record = com.github.dcysteine.nesql.exporter.source.Json.object("icon", null, "texture", null);
+        Magic.picture(ordinary, record, facts);
+        batch = facts.drain();
+        require(record.get("icon").getAsString().equals(existing) && batch.pictures.isEmpty() && batch.icons.isEmpty(),
+                "A known research icon lost its item link or queued a duplicate image");
+        NBTTagCompound tag = new NBTTagCompound(); tag.setLong("variant", Long.MAX_VALUE); ordinary.setTagCompound(tag);
+        require(facts.known(ordinary) == null, "Display lookup merged distinct NBT identities");
+        System.out.println("Research art: decorative metadata 4099 queues a picture without item text; known item links and NBT identities passed");
     }
 
     private static void phase(int meta, long before, long after, int interval, int count) {

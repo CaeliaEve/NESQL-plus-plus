@@ -6,6 +6,8 @@ import com.google.gson.JsonArray;
 import com.google.gson.JsonObject;
 import cpw.mods.fml.common.Loader;
 import net.minecraft.client.Minecraft;
+import net.minecraft.client.renderer.RenderHelper;
+import net.minecraft.client.renderer.entity.RenderItem;
 import net.minecraft.init.Items;
 import net.minecraft.item.ItemStack;
 import net.minecraftforge.oredict.OreDictionary;
@@ -88,11 +90,33 @@ final class Magic {
                 "position", array(study.displayColumn, study.displayRow), "complexity", study.getComplexity(), "warp", ThaumcraftApi.getWarp(study.key),
                 "flags", flags, "completed", completed(study.key), "parents", links(study.parents), "hiddenParents", links(study.parentsHidden), "siblings", links(study.siblings),
                 "aspects", Aspects.amounts(study.tags), "itemTriggers", items, "entityTriggers", entities, "aspectTriggers", aspectTriggers,
-                "icon", icon == null ? null : facts.item(icon), "texture", null);
+                "icon", null, "texture", null);
         facts.row("research", record);
-        if (icon == null && study.icon_resource != null) facts.picture(new Facts.Picture(record, "texture", study.icon_resource.toString(), () -> {
+        if (icon != null) picture(icon, record, facts);
+        else if (study.icon_resource != null) facts.picture(new Facts.Picture(record, "texture", study.icon_resource.toString(), () -> {
             Minecraft.getMinecraft().getTextureManager().bindTexture(study.icon_resource);
             UtilsFX.drawTexturedQuadFull(0, 0, 0);
+        }));
+    }
+
+    /** Research art only becomes an item link when that exact item is already in the catalog. */
+    static void picture(ItemStack icon, JsonObject record, Facts facts) {
+        String known = facts.known(icon);
+        if (known != null) {
+            record.addProperty("icon", known);
+            return;
+        }
+        ItemStack shown = icon.copy();
+        String location = net.minecraft.item.Item.itemRegistry.getNameForObject(shown.getItem()) + "#" + Items.feather.getDamage(shown);
+        facts.picture(new Facts.Picture(record, "texture", location, () -> {
+            Minecraft game = Minecraft.getMinecraft();
+            org.lwjgl.opengl.GL11.glEnable(org.lwjgl.opengl.GL12.GL_RESCALE_NORMAL);
+            org.lwjgl.opengl.GL11.glEnable(org.lwjgl.opengl.GL11.GL_BLEND);
+            org.lwjgl.opengl.GL11.glBlendFunc(org.lwjgl.opengl.GL11.GL_SRC_ALPHA, org.lwjgl.opengl.GL11.GL_ONE_MINUS_SRC_ALPHA);
+            RenderHelper.enableGUIStandardItemLighting();
+            // GuiResearchBrowser renders the stack without querying its item text.
+            // This also honors Forge's custom GUI item renderer.
+            new RenderItem().renderItemAndEffectIntoGUI(game.fontRenderer, game.getTextureManager(), shown.copy(), 0, 0);
         }));
     }
 
