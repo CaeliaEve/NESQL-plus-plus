@@ -7,7 +7,7 @@ import net.minecraft.launchwrapper.LaunchClassLoader;
 import java.util.Arrays;
 import java.util.Collections;
 
-/** One isolated native registry for capture regressions; no game client or world is started. */
+/** One isolated native registry for capture regressions; no live game client or world is used. */
 public final class GameTest {
     private GameTest() {}
 
@@ -38,5 +38,6 @@ public final class GameTest {
         Bootstrap.func_151354_b();
         CluesTest.run();
         StructuresTest.run();
+        PreviewTest.run();
     }
 }

@@ -62,6 +62,8 @@ dependencies {
     compileOnly("com.github.GTNewHorizons:BlockRenderer6343:1.3.17:dev") { isTransitive = false }
     compileOnly("com.github.GTNewHorizons:ForestryMC:${property("forestryVersion")}:api") { isTransitive = false }
     compileOnly("thaumcraft:Thaumcraft:${property("minecraftVersion")}-${property("thaumcraftVersion")}:dev") { isTransitive = false }
+    // GT's public tile interfaces expose Waila types; needed only for lifecycle test doubles.
+    testRuntimeOnly("com.github.GTNewHorizons:waila:1.8.15:dev") { isTransitive = false }
 }
 
 // Two behavior suites cover source identity/publication and the job/API lifecycle.

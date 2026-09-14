@@ -215,6 +215,20 @@ final class Preview implements AutoCloseable {
         try { RunnableMachineUpdate.setCurrentThreadEnabled(false); world.close(); }
         finally { RunnableMachineUpdate.setCurrentThreadEnabled(enabled); }
     }
+
+    /** Preview machines were never ticked or registered with the live world's services. */
+    static void detach(IGregTechTileEntity base) {
+        IMetaTileEntity machine = base.getMetaTileEntity();
+        if (machine == null) return;
+        if (machine.getBaseMetaTileEntity() != base) throw fault("Preview machine belongs to a different tile");
+        // GT's setter runs inValidate and clears both links. Detaching before
+        // TileEntity.invalidate prevents BaseMetaTileEntity from invoking the
+        // gameplay onRemoval hook (HydroEnergy would remove live dams[-1]).
+        machine.setBaseMetaTileEntity(null);
+        if (base.getMetaTileEntity() != null || machine.getBaseMetaTileEntity() != null) {
+            throw fault("Preview machine did not release its tile links");
+        }
+    }
     private static Jobs.Fault fault(String message) { return new Jobs.Fault("preview_failed", message); }
     private static long key(int x, int y, int z) { return ((long) (x & 65535) << 24) | ((long) (z & 65535) << 8) | y; }
     private static int x(long key) { return (short) (key >>> 24); }
@@ -293,13 +307,25 @@ final class Preview implements AutoCloseable {
         @Override public void setTileEntity(int x, int y, int z, TileEntity tile) {
             writable(x, y, z);
             if (tile == null || !blocks.containsKey(key(x, y, z))) throw fault("Preview tile has no block");
-            TileEntity previous = tiles.put(key(x, y, z), tile);
-            if (previous != null && previous != tile) previous.invalidate();
+            if (tile.getWorldObj() != null && tile.getWorldObj() != this) throw fault("Preview cannot adopt a tile from another world");
+            TileEntity previous = tiles.get(key(x, y, z));
+            if (previous != null && previous != tile) release(previous);
+            tiles.put(key(x, y, z), tile);
             tile.setWorldObj(this); tile.xCoord = x; tile.yCoord = y; tile.zCoord = z; tile.validate(); changes++;
         }
         @Override public void removeTileEntity(int x, int y, int z) {
             if (!inside(x, y, z)) return;
-            TileEntity tile = tiles.remove(key(x, y, z)); if (tile != null) { tile.invalidate(); changes++; }
+            TileEntity tile = tiles.remove(key(x, y, z)); if (tile != null) { release(tile); changes++; }
+        }
+        private void release(TileEntity tile) {
+            if (tile.getWorldObj() != this) throw fault("Preview cannot release a tile from another world");
+            try {
+                if (tile instanceof IGregTechTileEntity) detach((IGregTechTileEntity) tile);
+                tile.invalidate();
+            } catch (RuntimeException error) {
+                throw Structures.failure("Preview tile release: type=" + tile.getClass().getName()
+                        + "; at=" + tile.xCoord + "," + tile.yCoord + "," + tile.zCoord, error);
+            }
         }
         @Override public boolean spawnEntityInWorld(Entity entity) { return false; }
         @Override public void close() {
@@ -308,7 +334,7 @@ final class Preview implements AutoCloseable {
             RuntimeException failure = null;
             try {
                 for (TileEntity tile : new ArrayList<>(tiles.values())) {
-                    try { tile.invalidate(); }
+                    try { release(tile); }
                     catch (RuntimeException error) { if (failure == null) failure = error; else failure.addSuppressed(error); }
                 }
             }

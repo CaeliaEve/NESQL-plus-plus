@@ -174,13 +174,13 @@ public final class Capture implements Jobs.Task {
                     final Structures.Machine machine = machines.get(index);
                     try {
                         Structures.Cursor cursor = session.call(() -> new Structures.Cursor(machine, facts, models, request.probes, request.profile.equals("full") && request.handlers.isEmpty()));
-                        try {
+                        try (AutoCloseable owned = () -> client.cleanup(cursor::close)) {
                             boolean done;
                             do {
                                 done = session.call(cursor::capture);
                                 sink.write(facts.drain());
                             } while (!done);
-                        } finally { client.cleanup(cursor::close); }
+                        }
                     } catch (java.util.concurrent.CancellationException error) { throw error; }
                     catch (RuntimeException error) {
                         throw Structures.failure("Structure index=" + index + "; controller=" + machine.id

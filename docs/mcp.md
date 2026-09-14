@@ -6,7 +6,7 @@
 
 目标为 GT New Horizons 2.8.4 Java 8。模组只服务本机单人世界，不支持专用服务器。MCP 客户端启动独立的 Node 进程，桥接通过受限的 loopback HTTP 接口调用游戏任务服务；Java 8 模组不嵌入 MCP SDK。
 
-模组 0.11.4 写出 source 修订 11。MCP 连接协议保持不变；数据修订与传输协议是不同的元数据。编译器拒绝旧数据修订，不提供旧格式兜底读取。
+模组 0.11.5 写出 source 修订 11。MCP 连接协议保持不变；数据修订与传输协议是不同的元数据。编译器拒绝旧数据修订，不提供旧格式兜底读取。
 
 ```json
 {
@@ -76,7 +76,7 @@ Thaumcraft 4 的空 AspectList 会返回 `[null]`；原生 copy/add/merge 还可
 
 研究的 `itemTriggers` 在修订11中保存Clue对象：`{registry, meta, nbt, ore, matches}`。registry/meta/类型化nbt是原始触发模板，meta=32767仍表示通配；ore是原生检查的首个矿辞组，没有时为null。模板不要求存在于items表，不调用名称、提示或绘制API。matches保存NEI已知具体物品中通过原生匹配的ID，有序且无重复。空示例列表仍完整保留条件，例如MIRROR的minecraft:portal；它不表示该条件无效或研究不能解锁。
 
-Clues按触发项自身与首个矿辞组的Item类型选择NEI候选，调用与ResearchManager.createClue相同的InventoryUtils.areItemStacksEqual(trigger,candidate,true,true,false)筛选，保留实际矿辞替代、耐久、metadata和NBT判断；不从原始模板或矿辞模式构造物品示例。原生矿辞分支可能忽略NBT，直接物品分支按原生规则比较。匹配和读取使用副本，不修改游戏堆栈或扫描/研究状态。示例不是任意NBT状态的全枚举。空触发对象、未注册物品及超出预算仍报research_trigger。研究按最多16次匹配成功或2ms分批处理，单次API调用不可抢占。错误保留研究key/分类/零基index、trigger位置和registry/meta。模组使用0.11.4，编译器和Web契约使用0.11.0，source/catalog均为修订11，不提供旧字符串数组的兼容路径。
+Clues按触发项自身与首个矿辞组的Item类型选择NEI候选，调用与ResearchManager.createClue相同的InventoryUtils.areItemStacksEqual(trigger,candidate,true,true,false)筛选，保留实际矿辞替代、耐久、metadata和NBT判断；不从原始模板或矿辞模式构造物品示例。原生矿辞分支可能忽略NBT，直接物品分支按原生规则比较。匹配和读取使用副本，不修改游戏堆栈或扫描/研究状态。示例不是任意NBT状态的全枚举。空触发对象、未注册物品及超出预算仍报research_trigger。研究按最多16次匹配成功或2ms分批处理，单次API调用不可抢占。错误保留研究key/分类/零基index、trigger位置和registry/meta。模组使用0.11.5，编译器和Web契约使用0.11.0，source/catalog均为修订11，不提供旧字符串数组的兼容路径。
 
 已迁移要素与研究关系，魔法配方按下述明确适配范围采集；完整研究正文页面仍待继续。
 
@@ -95,6 +95,8 @@ Rule.placements只保存建议中的有效物品引用，不能把它当作完�
 `builds` 保存独立预览世界中的整体构建参数、坐标框架、控制器、调色板、几何和原生返回值，`blocks` 保存实际方块注册名、metadata、完整 typed NBT 和可选 pick-block 物品。预览使用全新控制器、独立玩家和物品副本，按原生 construct/survivalConstruct 放置；不会把命名片段拼猜为整机，也不会写入玩家世界。整体构建不等于运行时成型判定。
 
 每组参数均创建全新的控制器、预览世界和供应物品，通过目标 ChannelDataAccessor 设置通道；上一组清理完成后才开始下一组。完整请求遇到不可枚举定义或任何构建变体失败会失败。selection 可保留定义的 `problem` 和逐变体的失败原因；初始化失败也不会静默遗漏参数。开始序列化后出现错误仍使整个任务失败，避免留下未引用的方块记录。参数化代码与共享样本已接通；实际游戏与全部成型条件仍待验收或迁移。
+
+预览释放不等同于在游戏中拆除机器：预览控制器没有经历服务器首tick，因此不应执行MetaTileEntity.onRemoval。所有预览TileEntity替换、移除与关闭统一检查世界归属；GT对象先通过setBaseMetaTileEntity(null)调用原生inValidate并清除双方关联，再执行普通TileEntity.invalidate。关联未清除就明确失败，不继续调用拆除逻辑；其他TileEntity仍正常失效。不会为预览注册真实HydroEnergy水坝，也不把waterId=-1改成伪造ID。关闭仍尝试释放所有对象并清空本地映射；结构操作的原异常保留，释放异常作为suppressed附加。诊断增加释放对象类型/坐标和原异常的首个栈位置。
 
 Build.palette 的每项为 `block/model/problem`，Build.rendered 表明是否请求外观。data 为 false，模型与问题均为空；full/images 为 true，每项至少提供模型或明确失败原因。Model 保存最多1024个四边形，每面有纹理、solid/blend通道和四个顶点；三角形重复末顶点。坐标与UV使用有限float32的十进制字符串，顶点颜色为RRGGBBAA无符号整数。模型使用局部东/下/北坐标，UV以贴图顶行为v=0，纹理复用现有asset与动画时间线。
 

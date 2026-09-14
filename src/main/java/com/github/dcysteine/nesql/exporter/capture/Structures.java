@@ -84,7 +84,8 @@ final class Structures {
 
     static Jobs.Fault failure(String location, RuntimeException error) {
         Jobs.Fault failure = new Jobs.Fault(error instanceof Jobs.Fault ? ((Jobs.Fault) error).code : "structure_capture",
-                location + ": " + error);
+                location + ": " + error + (error instanceof Jobs.Fault || error.getStackTrace().length == 0
+                        ? "" : "; at " + error.getStackTrace()[0]));
         failure.initCause(error);
         return failure;
     }
