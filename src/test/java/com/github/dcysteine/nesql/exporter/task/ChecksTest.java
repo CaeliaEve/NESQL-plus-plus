@@ -29,14 +29,29 @@ final class ChecksTest {
             catch (Jobs.Fault expected) { require(expected.code.equals("invalid_request"), "Wrong request error"); }
         }
         AtomicInteger attempted = new AtomicInteger(), guarded = new AtomicInteger(), publications = new AtomicInteger();
+        java.util.Map<Integer, java.util.List<JsonObject>> measured = new java.util.TreeMap<>();
+        java.util.List<JsonObject> inventory = new java.util.ArrayList<>();
         String jobId;
         try (Jobs jobs = new Jobs(root.resolve("jobs"), context -> {
             JsonArray rows = array();
             for (int id : context.request().check.controllers) rows.add(object("controller", id, "status", "pending"));
             Checks.Report report = new Checks.Report(root.resolve("checks"), context, object("fixture", true), rows);
+            // Unlike an empty synthetic sweep, native calls always populate the
+            // timing accumulator before planning and before every row is saved.
+            observed("structure inventory", "call", () -> {}, inventory);
+            JsonObject planning = context.timings();
+            timing(planning, inventory);
+            report.planning(planning); report.save();
+            JsonObject cleared = context.timings();
+            require(cleared.getAsJsonArray("operations").size() == 0 && cleared.getAsJsonObject("phases").entrySet().isEmpty()
+                    && cleared.getAsJsonArray("slow").size() == 0, "Planning timings were not drained");
             Checks.sweep(context, report, guarded::incrementAndGet, (index, row) -> {
                 attempted.incrementAndGet();
-                if (index == 0 || index == 2) throw new Jobs.Fault("fixture_failure", "independent failure " + index);
+                java.util.List<JsonObject> samples = new java.util.ArrayList<>(); measured.put(index, samples);
+                observed("structure capture", "construct", () -> {}, samples);
+                observed("structure capture", "serialize", () -> {
+                    if (index == 0 || index == 2) throw new Jobs.Fault("fixture_failure", "independent failure " + index);
+                }, samples);
                 row.addProperty("status", index == 3 ? "unsupported" : "passed");
             });
             try { context.publish(() -> { publications.incrementAndGet(); return null; }); throw new AssertionError("Check could publish"); }
@@ -49,13 +64,15 @@ final class ChecksTest {
             Jobs.Job done = await(jobs, jobId);
             require(done.state.equals("checked") && done.result == null && done.report.failed == 2 && done.report.passed == 1
                     && done.report.unsupported == 1 && done.report.pending == 0 && attempted.get() == 4 && guarded.get() == 8,
-                    "Sweep stopped at the first error or mislabeled coverage");
+                    "Sweep stopped at the first error or mislabeled coverage: " + done.error);
             require(publications.get() == 0 && jobs.results(null, 100).rows.isEmpty(), "Diagnostic leaked into export listings");
             require(JobsTest.http(connection, "GET", "/jobs/" + jobId, null, null).getAsJsonObject("job").get("state").getAsString().equals("checked"), "HTTP omitted the checked state");
             JobsTest.http(connection, "POST", "/jobs", new com.google.gson.Gson().toJsonTree(request).getAsJsonObject(), "invalid_request");
             JobsTest.http(connection, "POST", "/checks", object("key", "wrong", "world", "test-copy", "domain", "structures", "handlers", array("category_" + String.join("", java.util.Collections.nCopies(64, "a")))), "invalid_request");
             JsonObject report = new com.google.gson.JsonParser().parse(new String(Files.readAllBytes(root.resolve("checks").resolve(jobId + ".json")), StandardCharsets.UTF_8)).getAsJsonObject();
+            timing(report.getAsJsonObject("planning"), inventory);
             require(report.getAsJsonArray("rows").get(2).getAsJsonObject().getAsJsonObject("error").get("message").getAsString().contains("2"), "Report lost the later failure");
+            for (int index = 0; index < 4; index++) timing(report.getAsJsonArray("rows").get(index).getAsJsonObject().getAsJsonObject("timings"), measured.get(index));
         }
         try (Jobs jobs = new Jobs(root.resolve("jobs"), context -> { throw new AssertionError("A historical check reran"); })) {
             require(jobs.read(jobId).state.equals("checked") && jobs.start(request).id.equals(jobId) && jobs.results(null, 100).rows.isEmpty(),
@@ -69,7 +86,9 @@ final class ChecksTest {
             try {
                 Checks.sweep(context, report, () -> {}, (index, row) -> {
                     attempted.incrementAndGet();
-                    if (index == 1) throw new Jobs.Fault("check_cleanup", "Owned preview did not close");
+                    observed("structure release", "release", () -> {
+                        if (index == 1) throw new Jobs.Fault("check_cleanup", "Owned preview did not close");
+                    }, new java.util.ArrayList<>());
                     row.addProperty("status", "passed");
                 });
             } catch (Exception failure) { report.finish("stopped", failure); throw failure; }
@@ -84,7 +103,10 @@ final class ChecksTest {
             Checks.Report report = new Checks.Report(root.resolve("checks"), context, object(), array(
                     object("controller", 1, "status", "pending"), object("controller", 2, "status", "pending")));
             try {
-                Checks.sweep(context, report, () -> {}, (index, row) -> { running.countDown(); new java.util.concurrent.CountDownLatch(1).await(); });
+                Checks.sweep(context, report, () -> {}, (index, row) -> {
+                    observed("structure open", "initialize", () -> {}, new java.util.ArrayList<>());
+                    running.countDown(); new java.util.concurrent.CountDownLatch(1).await();
+                });
             } catch (Exception failure) { report.finish("cancelled", failure); throw failure; }
         })) {
             String id = jobs.start(cancelled).id;
@@ -97,7 +119,41 @@ final class ChecksTest {
         require(Checks.fatal(new Jobs.Fault("environment_changed", "fixture")), "Environment changes must stop checks");
         Jobs.Fault wrapped = new Jobs.Fault("structure_capture", "wrapper"); wrapped.initCause(new Jobs.Fault("preview_cleanup", "fixture"));
         require(Checks.fatal(wrapped), "Wrapped preview cleanup failures were treated as independent failures");
-        System.out.println("Diagnostic tasks: request limits, multiple failures, unexecuted targets, cleanup stop, journal restart and publication separation passed");
+        System.out.println("Diagnostic tasks: observed work through timing reports, decimal quantities, failure/cancel reports, retry identity and publication separation passed");
+    }
+
+    private static void observed(String name, String phase, Runnable action, java.util.List<JsonObject> samples) throws Exception {
+        Jobs.Observer observer = Jobs.observer();
+        Work<Void> work = new Work<>(name, Jobs.bind(() -> { Work.phase(phase); action.run(); return null; }));
+        observer.update(work.snapshot());
+        Thread runner = new Thread(work::run, "diagnostic fixture client");
+        runner.start();
+        try { work.await(new java.util.concurrent.ConcurrentLinkedQueue<>(), TimeUnit.SECONDS.toNanos(5), observer); }
+        finally {
+            runner.join(5000);
+            observer.update(work.snapshot()); // Repeated delivery must not double count the same call.
+            samples.add(work.snapshot());
+        }
+    }
+
+    private static void timing(JsonObject result, java.util.List<JsonObject> samples) {
+        require(result.getAsJsonArray("operations").size() == 1, "Timing group was lost or split");
+        JsonObject timing = result.getAsJsonArray("operations").get(0).getAsJsonObject();
+        for (String field : new String[] {"calls", "queueMicros", "runMicros", "maxMicros"}) {
+            require(timing.get(field).getAsJsonPrimitive().isString(), "Exact timing field is not a decimal string: " + field);
+        }
+        require(timing.get("calls").getAsString().equals(Integer.toString(samples.size())), "Calls were dropped or double counted");
+        long queue = 0, run = 0, maximum = 0;
+        java.util.Map<String, Long> phases = new java.util.TreeMap<>();
+        for (JsonObject sample : samples) {
+            queue += sample.get("queueMicros").getAsLong(); run += sample.get("runMicros").getAsLong();
+            maximum = Math.max(maximum, sample.get("runMicros").getAsLong());
+            sample.getAsJsonObject("phases").entrySet().forEach(entry -> phases.merge(entry.getKey(), entry.getValue().getAsLong(), Long::sum));
+        }
+        require(timing.get("queueMicros").getAsString().equals(Long.toString(queue))
+                && timing.get("runMicros").getAsString().equals(Long.toString(run))
+                && timing.get("maxMicros").getAsString().equals(Long.toString(maximum)), "Report lost observed timing values");
+        phases.forEach((name, micros) -> require(result.getAsJsonObject("phases").get(name).getAsString().equals(Long.toString(micros)), "Phase timing changed"));
     }
 
     private static Jobs.Job await(Jobs jobs, String id) throws Exception {

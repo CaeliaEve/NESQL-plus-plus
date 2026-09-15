@@ -267,7 +267,7 @@ public final class Jobs implements AutoCloseable {
                 JsonObject result = new JsonObject();
                 com.google.gson.JsonArray entries = new com.google.gson.JsonArray(), slowCalls = new com.google.gson.JsonArray();
                 timings.forEach((name, values) -> entries.add(com.github.dcysteine.nesql.exporter.source.Json.object("name", name,
-                        "calls", values[0], "queueMicros", Long.toString(values[1]), "runMicros", Long.toString(values[2]), "maxMicros", Long.toString(values[3]))));
+                        "calls", Long.toString(values[0]), "queueMicros", Long.toString(values[1]), "runMicros", Long.toString(values[2]), "maxMicros", Long.toString(values[3]))));
                 slow.forEach(slowCalls::add);
                 result.add("operations", entries); result.add("slow", slowCalls); result.addProperty("slowOmitted", slowOmitted);
                 JsonObject phaseTimes = new JsonObject(); phases.forEach((name, micros) -> phaseTimes.addProperty(name, Long.toString(micros)));

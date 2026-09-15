@@ -100,6 +100,7 @@ public final class Checks {
         public JsonObject row(int index) { return rows.get(index).getAsJsonObject(); }
         public int size() { return rows.size(); }
         public void inventory(JsonArray handlers) { record.add("handlers", handlers); }
+        public void planning(JsonObject timings) { record.add("planning", timings); }
 
         public Summary save() throws IOException {
             boolean interrupted = Thread.interrupted();
@@ -116,7 +117,7 @@ public final class Checks {
                     case "passed": summary.passed++; break;
                     case "failed": summary.failed++; break;
                     case "unsupported": summary.unsupported++; break;
-                case "partial": summary.partial++; break;
+                    case "partial": summary.partial++; break;
                     default: summary.pending++;
                 }
             }

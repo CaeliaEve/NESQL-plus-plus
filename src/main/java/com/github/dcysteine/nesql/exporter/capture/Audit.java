@@ -65,10 +65,11 @@ final class Audit {
         Path scratch = directory.resolve("check-work"); Dataset.directory(scratch);
         Path work = scratch.resolve(context.id()); Dataset.directory(work);
         Checks.Report report = new Checks.Report(directory.resolve("checks"), context, environment, targets);
-        if (!handlers.isEmpty()) { report.inventory(inventory); report.save(); }
         Checks.Guard guard = () -> health(session, request, items, environment);
-        context.timings();
         try {
+            if (!handlers.isEmpty()) report.inventory(inventory);
+            report.planning(context.timings());
+            report.save();
             Checks.sweep(context, report, guard, (index, row) -> {
                     if (row.has("controller")) {
                         Structures.Machine machine = structures.get(row.get("controller").getAsInt());

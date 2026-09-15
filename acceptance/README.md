@@ -33,6 +33,8 @@ recipe范围应用于每个处理器；省略handlers检查全部适配器并列
 
 status包含operation与report摘要；checked是报告结束，必须看failed/unsupported/partial/pending。report在终态读取本机nesql/checks文件并校验大小/SHA，保存<job-id>-check.json。诊断不可collect/verify为数据集。cancel须等待终态，慢调用期间不得并发启动其他游戏任务。诊断复用生产读取/排序，完整Compiler语义与GL仍在正式验收阶段执行。
 
+报告planning是准备阶段客户端调用统计，目标timings是各项统计；calls及微秒数均为十进制字符串。0.12.1修复了非空计时汇总的long序列化错误。若旧任务在准备阶段失败，以新的key重试即可，无需重跑公共领域导出；pending目标仍表示尚未执行。
+
 以下命令从仓库根目录运行。先正常退出 Minecraft，再安装新模组；安装脚本会校验摘要，备份并停用之前的 jar。
 
 ```powershell

@@ -6,7 +6,7 @@
 
 目标为 GT New Horizons 2.8.4 Java 8。模组只服务本机单人世界，不支持专用服务器。MCP 客户端启动独立的 Node 进程，桥接通过受限的 loopback HTTP 接口调用游戏任务服务；Java 8 模组不嵌入 MCP SDK。
 
-模组 0.12.0 写出 source 修订 11。MCP 连接协议保持不变；数据修订与传输协议是不同的元数据。编译器拒绝旧数据修订，不提供旧格式兜底读取。
+模组 0.12.1 写出 source 修订 11。MCP 连接协议保持不变；数据修订与传输协议是不同的元数据。编译器拒绝旧数据修订，不提供旧格式兜底读取。
 
 ```json
 {
@@ -53,6 +53,8 @@
 
 read_job.operation从后台直接读取，提交前保存queued操作，运行中约250ms更新name/phase/state/queueMicros/runMicros；超过1秒标slow并约每秒采样最多24帧。每个目标汇总最多64种调用名、32种phase（其余计other）、8条慢调用详情及省略数。15秒只限制未开始的排队请求，已开始调用保留真实返回值/原异常；取消保持cancelling直至调用和释放结束。慢标记用于定位，不能当作原生构建性能已修复。
 
+0.12.1起，timings.operations中的calls与queueMicros/runMicros/maxMicros均为十进制字符串；不能将long调用计数直接当JSON数字传入领域构造器。检查报告planning保存准备阶段的客户端调用统计，各目标timings继续独立汇总，读取后清空累计器，重复交付同一完成调用不重复计数。planning不包含后台文件哈希的全部墙钟时间。报告创建后的清单保存和计时准备也位于失败收尾范围内，准备异常将报告标为stopped并保留pending目标。
+
 物品和方块的 registry 直接读取 Forge 保存的完整注册键，并核对该键仍指向原对象。注册键属于身份数据：保留大小写、空格、Unicode、`|` 和额外冒号，不经过会截断多重冒号的 UniqueIdentifier。物品/方块要求第一个冒号两侧非空；流体使用非空的全局注册键，不要求命名空间。完整原文进入身份哈希，不能通过改名或替换空格合并物品。数据记录的大小限制仍有效；资源文件路径和导出器属性键分别校验，不使用注册键作磁盘路径。
 
 `inspect_game.client` 报告客户端 jar 的 `path`、定位方式 `via`、识别到的客户端类 `entry` 和 `valid`；失败时返回 `valid:false` 与具体 error。定位优先读取启动器 JVM 属性 `minecraft.client.jar`，它必须是绝对本地路径；未设置时使用本地 CodeSource（含 jar URL）或客户端类资源。显式属性无效会报错。客户端归档需包含目标 1.7.10 的命名或混淆主类及 class 文件标识。
@@ -91,7 +93,7 @@ Thaumcraft 4 的空 AspectList 会返回 `[null]`；原生 copy/add/merge 还可
 
 研究的 `itemTriggers` 在修订11中保存Clue对象：`{registry, meta, nbt, ore, matches}`。registry/meta/类型化nbt是原始触发模板，meta=32767仍表示通配；ore是原生检查的首个矿辞组，没有时为null。模板不要求存在于items表，不调用名称、提示或绘制API。matches保存NEI已知具体物品中通过原生匹配的ID，有序且无重复。空示例列表仍完整保留条件，例如MIRROR的minecraft:portal；它不表示该条件无效或研究不能解锁。
 
-Clues按触发项自身与首个矿辞组的Item类型选择NEI候选，调用与ResearchManager.createClue相同的InventoryUtils.areItemStacksEqual(trigger,candidate,true,true,false)筛选，保留实际矿辞替代、耐久、metadata和NBT判断；不从原始模板或矿辞模式构造物品示例。原生矿辞分支可能忽略NBT，直接物品分支按原生规则比较。匹配和读取使用副本，不修改游戏堆栈或扫描/研究状态。示例不是任意NBT状态的全枚举。空触发对象、未注册物品及超出预算仍报research_trigger。研究按最多16次匹配成功或2ms分批处理，单次API调用不可抢占。错误保留研究key/分类/零基index、trigger位置和registry/meta。模组使用0.12.0，编译器和Web契约使用0.11.0，source/catalog均为修订11，不提供旧字符串数组的兼容路径。
+Clues按触发项自身与首个矿辞组的Item类型选择NEI候选，调用与ResearchManager.createClue相同的InventoryUtils.areItemStacksEqual(trigger,candidate,true,true,false)筛选，保留实际矿辞替代、耐久、metadata和NBT判断；不从原始模板或矿辞模式构造物品示例。原生矿辞分支可能忽略NBT，直接物品分支按原生规则比较。匹配和读取使用副本，不修改游戏堆栈或扫描/研究状态。示例不是任意NBT状态的全枚举。空触发对象、未注册物品及超出预算仍报research_trigger。研究按最多16次匹配成功或2ms分批处理，单次API调用不可抢占。错误保留研究key/分类/零基index、trigger位置和registry/meta。模组使用0.12.1，编译器和Web契约使用0.11.0，source/catalog均为修订11，不提供旧字符串数组的兼容路径。
 
 已迁移要素与研究关系，魔法配方按下述明确适配范围采集；完整研究正文页面仍待继续。
 
