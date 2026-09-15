@@ -14,6 +14,8 @@ import static com.github.dcysteine.nesql.exporter.source.Json.array;
 public final class JobsTest {
     public static void main(String[] args) throws Exception {
         Path root = Files.createTempDirectory("nesql-jobs-");
+        WorkTest.run();
+        Path checks = root.resolve("diagnostics"); Files.createDirectories(checks); ChecksTest.run(checks);
         CountDownLatch began = new CountDownLatch(1);
         CountDownLatch cleanup = new CountDownLatch(1);
         CountDownLatch cleaned = new CountDownLatch(1);
@@ -150,7 +152,7 @@ public final class JobsTest {
         }
     }
 
-    private static com.google.gson.JsonObject http(com.google.gson.JsonObject connection, String method, String endpoint,
+    static com.google.gson.JsonObject http(com.google.gson.JsonObject connection, String method, String endpoint,
                                                    com.google.gson.JsonObject body, String expectedError) throws Exception {
         java.net.HttpURLConnection request = (java.net.HttpURLConnection) new java.net.URL(
                 "http://127.0.0.1:" + connection.get("port").getAsInt() + endpoint).openConnection();

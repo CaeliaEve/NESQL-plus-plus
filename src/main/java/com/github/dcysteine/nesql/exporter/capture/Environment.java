@@ -69,7 +69,7 @@ final class Environment {
         return snapshot;
     }
 
-    private static String knowledge(String player) {
+    static String knowledge(String player) {
         PlayerKnowledge knowledge = Thaumcraft.proxy.getPlayerKnowledge();
         JsonObject state = new JsonObject();
         state.addProperty("researchLoaded", knowledge.researchCompleted.containsKey(player));

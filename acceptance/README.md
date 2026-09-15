@@ -12,6 +12,27 @@
 
 ## 安装与导出
 
+定位问题时先用诊断。仍需正常退出游戏、安装当前包，进入独立存档并等待NEI加载。
+
+```powershell
+node acceptance/scripts/accept.mjs scan structures --controllers 17000 --key check-dam
+node acceptance/scripts/accept.mjs status <job-id>
+node acceptance/scripts/accept.mjs report <job-id>
+node acceptance/scripts/accept.mjs scan structures --key check-structures
+node acceptance/scripts/accept.mjs retry <job-id> --key check-retry
+```
+
+controllers省略即检查全部结构，多个ID以逗号分隔。retry按原报告failed/pending/running目标创建新任务，保留原probes；失败任务的key不可用于新的重试。
+
+```powershell
+node acceptance/scripts/accept.mjs scan recipes --handlers <category-id> --offset 0 --limit 128 --key check-recipes
+node acceptance/scripts/accept.mjs scan recipes --offset 0 --limit 128 --key check-handlers
+```
+
+recipe范围应用于每个处理器；省略handlers检查全部适配器并列出未支持项。报告的partial不是全覆盖，后续按offset分段；单条配方使用对应offset和limit1。retry重查失败处理器的同一范围，精确单条使用scan。完整处理器清单保存在game.json和配方报告。
+
+status包含operation与report摘要；checked是报告结束，必须看failed/unsupported/partial/pending。report在终态读取本机nesql/checks文件并校验大小/SHA，保存<job-id>-check.json。诊断不可collect/verify为数据集。cancel须等待终态，慢调用期间不得并发启动其他游戏任务。诊断复用生产读取/排序，完整Compiler语义与GL仍在正式验收阶段执行。
+
 以下命令从仓库根目录运行。先正常退出 Minecraft，再安装新模组；安装脚本会校验摘要，备份并停用之前的 jar。
 
 ```powershell

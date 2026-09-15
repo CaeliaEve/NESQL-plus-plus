@@ -6,10 +6,7 @@ import net.minecraft.client.Minecraft;
 
 import java.util.concurrent.ArrayBlockingQueue;
 import java.util.concurrent.Callable;
-import java.util.concurrent.CompletableFuture;
-import java.util.concurrent.ExecutionException;
 import java.util.concurrent.TimeUnit;
-import java.util.concurrent.TimeoutException;
 
 /** Bounded handoff of game API work to the client tick. File and HTTP work stay off-thread. */
 public final class ClientThread implements net.minecraft.client.resources.IResourceManagerReloadListener {
@@ -35,12 +32,15 @@ public final class ClientThread implements net.minecraft.client.resources.IResou
         private final long generation;
         private Session(Minecraft game) { world = game.theWorld; player = game.thePlayer; generation = resources; }
         public <T> T call(Callable<T> action) throws Exception {
-            return ClientThread.this.call(() -> {
+            return call("client", action);
+        }
+        public <T> T call(String name, Callable<T> action) throws Exception {
+            return ClientThread.this.call(name, () -> {
                 Minecraft game = Minecraft.getMinecraft();
                 if (game.theWorld != world || game.thePlayer != player) throw new Jobs.Fault("world_changed", "The export's world or player changed");
                 if (generation != resources) throw new Jobs.Fault("resources_changed", "Game resources were reloaded during export");
                 return action.call();
-            });
+            }, true, Jobs.observer());
         }
     }
 
@@ -51,43 +51,43 @@ public final class ClientThread implements net.minecraft.client.resources.IResou
     }
 
     public <T> T call(Callable<T> action) throws Exception {
-        return call(action, true);
+        return call("client", action, true, Jobs.observer());
     }
 
     public void cleanup(Runnable action) throws Exception {
-        Jobs.cleanup(() -> call(() -> { action.run(); return null; }, false));
+        cleanup("release", action);
     }
 
-    private <T> T call(Callable<T> action, boolean worldRequired) throws Exception {
+    public void cleanup(String name, Runnable action) throws Exception {
+        Jobs.Observer observer = Jobs.observer();
+        Jobs.cleanup(() -> call(name, () -> { action.run(); return null; }, false, observer));
+    }
+
+    public static void phase(String name) { Work.phase(name); }
+
+    private <T> T call(String name, Callable<T> action, boolean worldRequired, Jobs.Observer observer) throws Exception {
         Jobs.checkpoint();
         if (Thread.currentThread() == thread) { if (worldRequired) requireWorld(); return action.call(); }
-        Work<T> work = new Work<>(Jobs.bind(() -> {
+        Work<T> work = new Work<>(name, Jobs.bind(() -> {
             if (worldRequired) requireWorld();
             return action.call();
-        }));
+        }, false));
+        observer.update(work.snapshot());
         if (!queue.offer(work)) throw new Jobs.Fault("client_busy", "The client work queue is full");
-        try {
-            return work.result.get(15, TimeUnit.SECONDS);
-        } catch (InterruptedException | TimeoutException error) {
-            // A started game operation must finish before its owning job can report cancellation.
-            synchronized (work) {
-                if (!work.started) { work.abandoned = true; queue.remove(work); }
+        try { return work.await(queue, TimeUnit.SECONDS.toNanos(15), observer); }
+        catch (Exception | Error failure) {
+            // Factories can finish after the waiting job was cancelled. Their
+            // returned cursor/window must be retired on the game thread too.
+            AutoCloseable resource = work.resource();
+            if (resource != null) {
+                try {
+                    cleanup("discard " + name, () -> {
+                        try { resource.close(); }
+                        catch (Exception error) { throw new IllegalStateException("Cannot release completed client resource", error); }
+                    });
+                } catch (Exception | Error closing) { failure.addSuppressed(closing); }
             }
-            if (work.started) {
-                boolean interrupted = false;
-                while (true) {
-                    try { work.result.get(); break; }
-                    catch (InterruptedException ignored) { interrupted = true; }
-                    catch (ExecutionException ignored) { break; }
-                }
-                if (interrupted) Thread.currentThread().interrupt();
-            }
-            throw error;
-        } catch (ExecutionException error) {
-            Throwable cause = error.getCause();
-            if (cause instanceof Exception) throw (Exception) cause;
-            if (cause instanceof Error) throw (Error) cause;
-            throw new IllegalStateException(cause);
+            throw failure;
         }
     }
 
@@ -109,21 +109,4 @@ public final class ClientThread implements net.minecraft.client.resources.IResou
         }
     }
 
-    private static final class Work<T> {
-        final Callable<T> action;
-        final CompletableFuture<T> result = new CompletableFuture<>();
-        volatile boolean started;
-        boolean abandoned;
-
-        Work(Callable<T> action) { this.action = action; }
-
-        void run() {
-            synchronized (this) {
-                if (abandoned) return;
-                started = true;
-            }
-            try { result.complete(action.call()); }
-            catch (Throwable error) { result.completeExceptionally(error); }
-        }
-    }
 }

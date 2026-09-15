@@ -56,9 +56,11 @@ public final class Capture implements Jobs.Task {
                     net.minecraft.server.integrated.IntegratedServer server = net.minecraft.client.Minecraft.getMinecraft().getIntegratedServer();
                     JsonArray handlers = new JsonArray();
                     for (Recipes.Handler handler : Recipes.handlers()) handlers.add(handler.describe());
+                    JsonArray structures = new JsonArray();
+                    for (Structures.Machine machine : Structures.all()) structures.add(object("controller", machine.id, "type", machine.machine.getClass().getName()));
                     return object("handlers", handlers, "itemsReady", ItemList.loadFinished && !ItemList.items.isEmpty(),
                             "world", object("folder", server.getFolderName(), "name", server.getWorldName()), "items", ItemList.items.size(),
-                            "research", Studies.capture().describe(), "materials", GtMaterials.inspect());
+                            "research", Studies.capture().describe(), "materials", GtMaterials.inspect(), "structures", structures);
                 });
                 state.entrySet().forEach(entry -> result.add(entry.getKey(), entry.getValue()));
                 JsonObject sources = client.call(Sources::capture).inspect();
@@ -70,6 +72,7 @@ public final class Capture implements Jobs.Task {
     }
 
     @Override public void run(Jobs.Context context) throws Exception {
+        if (context.request().check != null) { new Audit(instance, client).run(context); return; }
         ClientThread.Session session = client.session();
         Jobs.Request request = context.request();
         session.call(() -> { request.checkWorld(net.minecraft.client.Minecraft.getMinecraft().getIntegratedServer().getFolderName()); return null; });
@@ -173,11 +176,11 @@ public final class Capture implements Jobs.Task {
                 for (int index = 0; index < machines.size(); index++) {
                     final Structures.Machine machine = machines.get(index);
                     try {
-                        Structures.Cursor cursor = session.call(() -> new Structures.Cursor(machine, facts, models, request.probes, request.profile.equals("full") && request.handlers.isEmpty()));
-                        try (AutoCloseable owned = () -> client.cleanup(cursor::close)) {
+                        Structures.Cursor cursor = session.call("structure " + machine.id + " open", () -> new Structures.Cursor(machine, facts, models, request.probes, request.profile.equals("full") && request.handlers.isEmpty()));
+                        try (AutoCloseable owned = () -> client.cleanup("structure " + machine.id + " release", cursor::close)) {
                             boolean done;
                             do {
-                                done = session.call(cursor::capture);
+                                done = session.call("structure " + machine.id + " capture", cursor::capture);
                                 sink.write(facts.drain());
                             } while (!done);
                         }
@@ -191,14 +194,14 @@ public final class Capture implements Jobs.Task {
                 }
                 for (Recipes.Handler handler : handlers) {
                     context.progress("recipes", 0, 0, "Opening recipe handler: " + handler.name);
-                    Recipes.Cursor cursor = session.call(() -> handler.open(facts, !request.profile.equals("data")));
+                    Recipes.Cursor cursor = session.call("handler " + handler.id + " open", () -> handler.open(facts, !request.profile.equals("data")));
                     try {
                         sink.write(facts.drain());
                         int size = session.call(cursor::size);
                         context.progress("recipes", 0, size, handler.name);
                         for (int index = 0; index < size; index++) {
                             final int recipe = index;
-                            session.call(() -> { cursor.capture(recipe); return null; });
+                            session.call("recipe " + handler.id + " index=" + index, () -> { cursor.capture(recipe); return null; });
                             sink.write(facts.drain());
                             if ((index + 1) % 64 == 0 || index + 1 == size) context.progress("recipes", index + 1, size, handler.name);
                         }

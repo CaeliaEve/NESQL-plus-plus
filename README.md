@@ -12,6 +12,7 @@
 - 候选输入、精确数量、非消耗输入、工具损耗/容器归还、GT 概率和类型化配方元数据。
 - 图标、平面 sprite 动画、NEI 配方图层，以及原版熔炉和已核实 GT 布局的进度动画。静态图层复用，裁剪轨迹单独按内容保存；渲染在游戏线程执行，编码、排序和写盘在后台执行。
 - 单任务执行、持久幂等键、取消、重开界面恢复观察、分页查询已完成的导出。
+- 异步诊断：按控制器ID单查或遍历结构，按处理器和配方范围检查。独立失败可汇总，运行中保留步骤、排队/执行耗时和慢调用栈；检查报告与source发布分开。
 - GT 注册材料的成分、可用部件、准确含量及流体形态；直接读取目标 NEICustomDiagram 1.7.5 定义的电路系列、电路板、配件与电压等级。
 - Forestry 4.10.17 的蜜蜂/树木默认基因、实际物品形态、产物与突变登记。蜜蜂基础产率和突变百分比统一为精确分数；树木可能产物保留未知概率。
 
@@ -35,7 +36,7 @@ npm --prefix bridge test
 node scripts/release.mjs
 ```
 
-普通增量构建无需重复 setup 或 clean。`build` 执行两组 Java 行为检查并生成经过 reobf 的 `build/libs/NESQL++-0.11.5.jar`。`check-jar` 检查实际产物的命令和预览世界 SRG 方法、版本替换和打包边界。`release` 要求目标目录不存在，按明确清单打包，不操作游戏目录。
+普通增量构建无需重复 setup 或 clean。`build` 执行两组 Java 行为检查并生成经过 reobf 的 `build/libs/NESQL++-0.12.0.jar`。`check-jar` 检查实际产物的命令和预览世界 SRG 方法、版本替换和打包边界。`release` 要求目标目录不存在，按明确清单打包，不操作游戏目录。
 
 可用 `NESQL_LOCAL_MAVEN_REPO` 指定本地 Maven 仓库。Forge 1.7.10 的工具链固定为 ForgeGradle 1.2.11 / Gradle 6.9.1；这里的旧版本是目标游戏的构建约束。
 
@@ -57,6 +58,8 @@ node scripts/release.mjs
 ```
 
 `--instance` 必须是明确的绝对目录。加载单人世界后，先用 `inspect_game` 确认 NEI 就绪、处理器覆盖、来源和研究注册表检查通过，再用 `start_export` 提交任务。没有 Agent 时也可执行 `/nesql`。
+
+定位运行时问题时先用 `start_check`（见[验收命令](acceptance/README.md)），无需先导出完整物品库。`checked`仅表示诊断报告生成完毕，仍需查看失败/未支持/部分检查。诊断不生成可编译数据集，正式导出检查点恢复及图像专项诊断待后续实现。
 
 跨项目的安装、导出交接和真实数据验证入口见 [真实游戏验收](acceptance/README.md)。脚本支持分别指定 NESQL、Compiler 和 NeoNEI 发布包，保留每次导出的原始记录与验收结果。
 

@@ -11,9 +11,10 @@ const root = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..');
 const { values, positionals } = parseArgs({ options: {
   config: { type: 'string', default: path.join(root, 'acceptance.json') },
   key: { type: 'string' }, browser: { type: 'boolean', default: false },
+  controllers: { type: 'string' }, handlers: { type: 'string' }, offset: { type: 'string' }, limit: { type: 'string' },
 }, allowPositionals: true, strict: true });
 const [command = 'prepare', argument] = positionals;
-assert.ok(['prepare', 'inspect', 'start', 'status', 'cancel', 'collect', 'verify', 'serve', 'check'].includes(command), 'Unknown acceptance command');
+assert.ok(['prepare', 'inspect', 'start', 'status', 'cancel', 'collect', 'verify', 'serve', 'check', 'scan', 'retry', 'report'].includes(command), 'Unknown acceptance command');
 assert.ok(positionals.length <= 2, 'Too many arguments');
 const config = JSON.parse(await readFile(values.config, 'utf8'));
 for (const name of ['instance', 'mod', 'compiler', 'web', 'reports', 'browser']) assert.ok(path.isAbsolute(config[name]), `${name} must be absolute`);
@@ -71,12 +72,12 @@ async function game(action) {
   finally { await client.close(); }
 }
 
-async function inspect(call, required = false) {
+async function inspect(call, required = false, diagnostic = false) {
   const state = await call('inspect_game');
   await record('game.json', state);
   assert.equal(state.exporter, config.version, 'The running game loaded a different mod version');
   assert.equal(state.revision, config.revision, 'The running game uses a different source format');
-  if (state.ready) {
+  if (state.ready && !diagnostic) {
     assert.equal(state.client?.valid, true, state.client?.error?.message ?? 'Client jar preflight is unavailable');
     const failed = (state.sources?.rows ?? []).filter(row => !row.valid).map(row => row.id);
     assert.equal(state.sources?.valid, true, failed.length ? 'Invalid mod sources: ' + failed.join(', ') + '; see game.json' : 'Mod source preflight is unavailable');
@@ -89,6 +90,41 @@ async function inspect(call, required = false) {
     assert.equal(state.world?.folder, config.world, 'Enter the independent test save');
   }
   return state;
+}
+
+async function checkReport(job) {
+  assert.ok(job.request.check && job.report, 'This job has no diagnostic report');
+  assert.equal(job.request.world, config.world, 'This diagnostic belongs to a different save');
+  assert.ok(['checked', 'failed', 'cancelled'].includes(job.state), 'Wait for the check to stop before collecting its report');
+  const expected = path.join(config.instance, 'nesql', 'checks', id(job.id) + '.json');
+  assert.equal(path.resolve(job.report.path), path.resolve(expected), 'Check report escapes the job directory');
+  assert.ok(job.report.bytes > 0 && job.report.bytes <= 16 * 1024 * 1024, 'Check report exceeds its size budget');
+  const info = await stat(expected);
+  assert.equal(info.size, job.report.bytes);
+  const bytes = await readFile(expected);
+  assert.equal(createHash('sha256').update(bytes).digest('hex'), job.report.sha256);
+  const report = JSON.parse(bytes);
+  assert.equal(report.format, 'nesql.check'); assert.equal(report.job, job.id);
+  await record(id(job.id) + '-check.json', report);
+  return report;
+}
+
+function natural(value, label, minimum, maximum) {
+  assert.match(value, /^(0|[1-9][0-9]*)$/, `Invalid ${label}`);
+  const number = Number(value); assert.ok(Number.isSafeInteger(number) && number >= minimum && number <= maximum, `Invalid ${label}`);
+  return number;
+}
+
+async function startCheck(call, request) {
+  assert.ok(values.key, 'Choose a new --key for this check, or reuse the exact previous key for an uncertain submission');
+  request.key = id(values.key); request.world = config.world;
+  const previousFile = path.join(reports, request.key + '-request.json');
+  let previous;
+  try { previous = await json(previousFile); } catch (error) { if (error.code !== 'ENOENT') throw error; }
+  if (previous) assert.deepEqual(request, previous, 'This key already belongs to different check parameters');
+  await record(request.key + '-request.json', request);
+  const job = await call('start_check', request); await record(id(job.id) + '-job.json', job);
+  return { job: job.id, state: job.state, domain: request.domain, diagnostic: true, request };
 }
 
 function selection(state, phase) {
@@ -194,6 +230,7 @@ try {
       if (command === 'prepare') {
         const tools = (await client.listTools()).tools;
         assert.ok(tools.find(tool => tool.name === 'start_export')?.inputSchema.properties.world, 'The bridge does not expose the world guard');
+        assert.ok(tools.find(tool => tool.name === 'start_check'), 'The bridge does not expose diagnostic tasks');
         return await record('ready.json', { ...toolchain, tools: tools.map(tool => tool.name), gameVerified: false });
       }
       if (command === 'inspect') {
@@ -218,10 +255,41 @@ try {
         const job = await call('start_export', request); await record(id(job.id) + '-job.json', job);
         return { job: job.id, state: job.state, scope: 'selection', selected: plan.selected.map(handler => handler.name), registered: plan.registered };
       }
+      if (command === 'scan') {
+        assert.ok(['structures', 'recipes'].includes(argument), 'scan requires structures or recipes');
+        await inspect(call, true, true);
+        const request = { domain: argument, probes: [{ count: 1, channels: {} }] };
+        if (argument === 'structures') {
+          assert.ok(values.handlers === undefined && values.offset === undefined && values.limit === undefined, 'Recipe options cannot select structures');
+          if (values.controllers !== undefined) request.controllers = values.controllers.split(',').map(value => natural(value, 'controller', 0, 32767)).sort((a, b) => a - b);
+        } else {
+          assert.ok(values.controllers === undefined, 'Controller ids do not select recipe handlers');
+          if (values.handlers !== undefined) request.handlers = values.handlers.split(',').sort().map(value => { assert.match(value, /^category_[a-f0-9]{64}$/); return value; });
+          request.offset = natural(values.offset ?? '0', 'offset', 0, 1_000_000);
+          request.limit = natural(values.limit ?? '128', 'limit', 1, 4096);
+        }
+        return await startCheck(call, request);
+      }
       if (command === 'cancel') { const job = await call('cancel_export', { id: id(argument) }); return await record(id(job.id) + '-job.json', job); }
       const { job } = await call('read_job', argument ? { id: id(argument) } : {});
       assert.ok(job, 'No export job exists'); await record(id(job.id) + '-job.json', job);
-      if (command === 'status') return { id: job.id, state: job.state, stage: job.stage, completed: job.completed, total: job.total, error: job.error, result: job.result };
+      if (command === 'status') return { id: job.id, state: job.state, stage: job.stage, completed: job.completed, total: job.total, operation: job.operation, report: job.report, error: job.error, result: job.result };
+      if (command === 'report') {
+        const report = await checkReport(job);
+        return { job: job.id, state: job.state, ...job.report, localReport: path.join(reports, job.id + '-check.json'), status: report.status };
+      }
+      if (command === 'retry') {
+        const report = await checkReport(job);
+        await inspect(call, true, true);
+        const targets = report.rows.filter(row => ['failed', 'pending', 'running'].includes(row.status));
+        assert.ok(targets.length, 'No failed or unexecuted targets to retry; partial recipe ranges need the next --offset');
+        const request = { domain: job.request.check.domain, probes: job.request.probes };
+        if (request.domain === 'structures') request.controllers = targets.map(row => row.controller).sort((a, b) => a - b);
+        else { request.handlers = targets.map(row => row.handler).sort(); request.offset = job.request.check.offset; request.limit = job.request.check.limit; }
+        assert.notEqual(values.key, job.request.key, 'A completed or failed check needs a new retry key');
+        return await startCheck(call, request);
+      }
+      assert.ok(!job.request.check, 'Diagnostic reports cannot be collected or compiled as exports');
       assert.equal(job.state, 'succeeded', 'Export must succeed before verification');
       assert.equal(job.request.world, config.world, 'This job was not bound to the test save');
       const source = await call('read_export', { id: job.result.id });

@@ -28,6 +28,7 @@ test('stdio MCP exposes the job lifecycle and reconnects after the game restarts
     response.setHeader('X-NESQL-Session', session);
     if (request.url === '/game') response.end(JSON.stringify({ ready: true, singleplayer: true }));
     else if (request.url === '/jobs' && request.method === 'POST') response.end(JSON.stringify({ id: 'job-one', state: 'queued' }));
+    else if (request.url === '/checks' && request.method === 'POST') response.end(JSON.stringify({ id: 'check-one', state: 'queued' }));
     else if (request.url === '/jobs') response.end(JSON.stringify({ job: { id: 'job-one', state: 'running' } }));
     else if (request.url === '/jobs/job-one/cancel') response.end(JSON.stringify({ id: 'job-one', state: 'cancelling' }));
     else if (request.url === '/jobs/job-one') response.end(JSON.stringify({ job: { id: 'job-one', state: 'cancelled' } }));
@@ -52,13 +53,17 @@ test('stdio MCP exposes the job lifecycle and reconnects after the game restarts
   await client.connect(transport);
   const tools = await client.listTools();
   assert.deepEqual(tools.tools.map(tool => tool.name).sort(), [
-    'cancel_export', 'inspect_game', 'list_exports', 'read_export', 'read_job', 'start_export',
+    'cancel_export', 'inspect_game', 'list_exports', 'read_export', 'read_job', 'start_check', 'start_export',
   ]);
   const call = async (name, args = {}) => client.callTool({ name, arguments: args });
   assert.equal((await call('inspect_game')).structuredContent.ready, true);
   const args = { key: 'retry-one', name: 'gtnh', profile: 'full', probes: [{ count: 4, channels: { coil: 2 } }, { count: 1 }] };
   assert.equal((await call('start_export', args)).structuredContent.state, 'queued');
   assert.deepEqual(requests.at(-1).body, args);
+  const check = { key: 'check-once', world: 'test-copy', domain: 'structures', controllers: [17000] };
+  assert.equal((await call('start_check', check)).structuredContent.id, 'check-one');
+  assert.equal(requests.at(-1).path, '/checks');
+  assert.deepEqual(requests.at(-1).body, check);
   assert.equal((await call('cancel_export', { id: 'job-one' })).structuredContent.state, 'cancelling');
   assert.equal(requests.at(-1).method, 'POST');
   assert.equal((await call('read_job', { id: 'job-one' })).structuredContent.job.state, 'cancelled');
@@ -72,6 +77,10 @@ test('stdio MCP exposes the job lifecycle and reconnects after the game restarts
   assert.equal(invalid.isError, true);
   assert.equal((await call('start_export', { ...args, profile: 'ui' })).isError, true);
   assert.equal((await call('list_exports', { limit: 101 })).isError, true);
+  for (const body of [{ ...check, controllers: [-1] }, { ...check, controllers: [17000, 17000] },
+    { ...check, world: '../test' }, { ...check, domain: 'code' }, { ...check, limit: 0 }]) {
+    assert.equal((await call('start_check', body)).isError, true);
+  }
   for (const probes of [[], [{ count: 0 }], [{ count: 65 }], [{ count: 1.5 }], [{ count: '1' }],
     [{ count: 1, channels: { Coil: 2 } }], [{ count: 1, channels: { coil: 0 } }], [{ count: 1, channels: { coil: 65536 } }],
     [{ count: 1, channels: { coil: '2' } }], [{ count: 1, extra: true }], [{ count: 1 }, { count: 1, channels: {} }]]) {

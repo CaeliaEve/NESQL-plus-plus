@@ -4,6 +4,7 @@ import blockrenderer6343.client.world.DummyWorld;
 import com.github.dcysteine.nesql.exporter.source.Identity;
 import com.github.dcysteine.nesql.exporter.source.Probe;
 import com.github.dcysteine.nesql.exporter.task.Jobs;
+import com.github.dcysteine.nesql.exporter.task.ClientThread;
 import com.google.gson.JsonArray;
 import com.google.gson.JsonObject;
 import com.gtnewhorizon.structurelib.alignment.constructable.IConstructable;
@@ -118,6 +119,7 @@ final class Structures {
         private boolean finished;
 
         Cursor(Machine source, Facts facts, Models models, List<Probe> probes, boolean complete) {
+            ClientThread.phase("controller");
             this.facts = facts;
             this.source = source;
             this.models = models;
@@ -142,6 +144,7 @@ final class Structures {
 
         @SuppressWarnings("unchecked")
         private void describe(JsonArray description) {
+            ClientThread.phase("definition");
             context = preview.machine;
             IConstructable constructable = (IConstructable) context;
             String[] lines = constructable.getStructureDescription(trigger.copy());
@@ -163,6 +166,7 @@ final class Structures {
 
         /** Navigation, metadata probes and occupied-space scans share one bounded client-thread cursor. */
         boolean capture() {
+            ClientThread.phase("definition");
             if (finished) throw new IllegalStateException("Structure already captured");
             long deadline = System.nanoTime() + 2_000_000;
             for (int work = 0; work < 256; work++) {
@@ -238,6 +242,7 @@ final class Structures {
         }
 
         private JsonObject rule(char symbol, IStructureElement<Object> element) {
+            ClientThread.phase("placements");
             try {
                 String kind = element.getClass() == StructureUtility.isAir().getClass() ? "air"
                         : element.getClass() == StructureUtility.notAir().getClass() ? "solid" : "element";
@@ -277,7 +282,7 @@ final class Structures {
                 if (preview == null && !open()) return false;
                 try { if (!preview.build()) return false; }
                 catch (Jobs.Fault failure) {
-                    if (complete || !failure.code.startsWith("preview_")) throw failure;
+                    if (complete || !failure.code.equals("preview_failed")) throw failure;
                     close();
                     outcome(null, facts.text(failure.getMessage()));
                     return false;
@@ -293,9 +298,10 @@ final class Structures {
         }
 
         private boolean open() {
+            ClientThread.phase("initialize");
             try { preview = new Preview(source, probes.get(variant), models, complete); return true; }
             catch (Jobs.Fault failure) {
-                if (complete || !failure.code.startsWith("preview_")) throw failure;
+                if (complete || !failure.code.equals("preview_failed")) throw failure;
                 outcome(null, facts.text(failure.getMessage()));
                 return false;
             }
@@ -306,6 +312,7 @@ final class Structures {
         }
 
         @Override public void close() {
+            ClientThread.phase("release");
             if (preview != null) {
                 Preview owned = preview; preview = null;
                 owned.close();

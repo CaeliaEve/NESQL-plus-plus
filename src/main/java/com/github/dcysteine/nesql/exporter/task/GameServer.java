@@ -114,7 +114,11 @@ public final class GameServer implements AutoCloseable {
             if (method.equals("GET") && path.equals("/game")) response = inspect.get();
             else if (method.equals("POST") && path.equals("/jobs")) {
                 Jobs.Request request = Jobs.Request.parse(body(exchange));
+                if (request.check != null) throw new Jobs.Fault("invalid_request", "Use /checks for diagnostic tasks");
                 response = jobs.start(request, requireWorld);
+                status = 202;
+            } else if (method.equals("POST") && path.equals("/checks")) {
+                response = jobs.start(Checks.request(body(exchange)), requireWorld);
                 status = 202;
             } else if (method.equals("GET") && path.equals("/jobs")) {
                 response = java.util.Collections.singletonMap("job", jobs.current());

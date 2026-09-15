@@ -50,28 +50,29 @@ final class GtRecipes implements AutoCloseable {
     GtRecipes(GTNEIDefaultHandler handler, boolean views, String location) {
         this.handler = handler;
         window = field("modularWindow");
-        Object itemInputs = field("itemInputsInventory"), itemOutputs = field("itemOutputsInventory");
-        Object fluidInputs = field("fluidInputsInventory"), fluidOutputs = field("fluidOutputsInventory");
-        Object special = field("specialSlotInventory");
-        List<Node> nodes = new ArrayList<>();
-        for (Widget child : window.getChildren()) nodes.add(new Node(child, 0, 0));
-        Set<Widget> visited = java.util.Collections.newSetFromMap(new java.util.IdentityHashMap<>());
-        for (int index = 0; index < nodes.size(); index++) {
-            Node node = nodes.get(index);
-            Widget widget = node.widget;
-            if (!visited.add(widget) || visited.size() > 4096) throw new Jobs.Fault("view_limit", "GT widget tree is cyclic or exceeds 4096 nodes");
-            int x = node.x + widget.getPos().x, y = node.y + widget.getPos().y;
-            if (widget instanceof IWidgetParent) for (Widget child : ((IWidgetParent) widget).getChildren()) nodes.add(new Node(child, x, y));
-            if (!(widget instanceof SlotWidget)) continue;
-            SlotWidget slot = (SlotWidget) widget;
-            Object inventory = slot.getMcSlot().getItemHandler();
-            boolean input = inventory == itemInputs || inventory == fluidInputs || inventory == special;
-            boolean fluid = inventory == fluidInputs || inventory == fluidOutputs;
-            if (!input && inventory != itemOutputs && inventory != fluidOutputs) continue;
-            bind(bindings, x + 1, y + 1, input, new Binding(slot.getMcSlot().getSlotIndex(), fluid, inventory == special, false));
-        }
-        try { ui = views ? new Ui(handler, location) : null; }
-        catch (RuntimeException | Error failure) {
+        try {
+            Object itemInputs = field("itemInputsInventory"), itemOutputs = field("itemOutputsInventory");
+            Object fluidInputs = field("fluidInputsInventory"), fluidOutputs = field("fluidOutputsInventory");
+            Object special = field("specialSlotInventory");
+            List<Node> nodes = new ArrayList<>();
+            for (Widget child : window.getChildren()) nodes.add(new Node(child, 0, 0));
+            Set<Widget> visited = java.util.Collections.newSetFromMap(new java.util.IdentityHashMap<>());
+            for (int index = 0; index < nodes.size(); index++) {
+                Node node = nodes.get(index);
+                Widget widget = node.widget;
+                if (!visited.add(widget) || visited.size() > 4096) throw new Jobs.Fault("view_limit", "GT widget tree is cyclic or exceeds 4096 nodes");
+                int x = node.x + widget.getPos().x, y = node.y + widget.getPos().y;
+                if (widget instanceof IWidgetParent) for (Widget child : ((IWidgetParent) widget).getChildren()) nodes.add(new Node(child, x, y));
+                if (!(widget instanceof SlotWidget)) continue;
+                SlotWidget slot = (SlotWidget) widget;
+                Object inventory = slot.getMcSlot().getItemHandler();
+                boolean input = inventory == itemInputs || inventory == fluidInputs || inventory == special;
+                boolean fluid = inventory == fluidInputs || inventory == fluidOutputs;
+                if (!input && inventory != itemOutputs && inventory != fluidOutputs) continue;
+                bind(bindings, x + 1, y + 1, input, new Binding(slot.getMcSlot().getSlotIndex(), fluid, inventory == special, false));
+            }
+            ui = views ? new Ui(handler, location) : null;
+        } catch (RuntimeException | Error failure) {
             try { Ui.destroy(window); } catch (RuntimeException | Error cleanup) { failure.addSuppressed(cleanup); }
             throw failure;
         }

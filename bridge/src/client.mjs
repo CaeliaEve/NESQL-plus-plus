@@ -50,7 +50,7 @@ export class GameClient {
     }
     // The discovery file cannot redirect requests or the bearer token off this machine.
     const [pathname, query] = endpoint.split('?');
-    if (!/^\/(game|jobs|exports)(\/[a-zA-Z0-9_-]+){0,2}$/.test(pathname)
+    if (!/^\/(game|jobs|exports|checks)(\/[a-zA-Z0-9_-]+){0,2}$/.test(pathname)
         || endpoint.split('?').length > 2 || (query !== undefined && (pathname !== '/exports'
           || !/^(?:limit=[1-9][0-9]{0,2}|after=[a-f0-9]{64})(?:&(?:limit=[1-9][0-9]{0,2}|after=[a-f0-9]{64}))?$/.test(query)
           || new Set(new URLSearchParams(query).keys()).size !== [...new URLSearchParams(query)].length))) {

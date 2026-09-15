@@ -59,6 +59,13 @@ public final class Jobs implements AutoCloseable {
         void run(Context context) throws Exception;
     }
 
+    public interface Observer { void update(JsonObject operation) throws IOException; }
+
+    static Observer observer() {
+        Context context = CURRENT.get();
+        return context == null ? operation -> {} : context::observe;
+    }
+
     public static final class Request {
         public final String key;
         public final String name;
@@ -66,6 +73,7 @@ public final class Jobs implements AutoCloseable {
         public final List<String> handlers;
         public final List<Probe> probes;
         public final String world;
+        public final Checks.Selection check;
 
         public Request(String key, String name, String profile) {
             this(key, name, profile, java.util.Collections.emptyList());
@@ -80,6 +88,10 @@ public final class Jobs implements AutoCloseable {
         }
 
         public Request(String key, String name, String profile, List<String> handlers, List<Probe> probes, String world) {
+            this(key, name, profile, handlers, probes, world, null);
+        }
+
+        private Request(String key, String name, String profile, List<String> handlers, List<Probe> probes, String world, Checks.Selection check) {
             identifier(key, "key");
             identifier(name, "name");
             if (!Arrays.asList("full", "data", "images").contains(profile)) {
@@ -93,6 +105,8 @@ public final class Jobs implements AutoCloseable {
                 throw new Fault("invalid_request", "world must be a save folder name");
             }
             this.world = world;
+            this.check = check;
+            if (check != null && (!profile.equals("data") || !name.equals("check") || world == null)) throw new Fault("invalid_request", "Checks require a bound world and data-only capture");
             if (handlers == null || handlers.size() > 512) throw new Fault("invalid_request", "Invalid handler selection");
             java.util.TreeSet<String> selected = new java.util.TreeSet<>();
             for (String handler : handlers) {
@@ -102,12 +116,13 @@ public final class Jobs implements AutoCloseable {
             }
             if (profile.equals("images") && !selected.isEmpty()) throw new Fault("invalid_request", "The images profile has no recipe handlers");
             this.handlers = java.util.Collections.unmodifiableList(new ArrayList<>(selected));
+            if (check != null && check.domain.equals("structures") && !selected.isEmpty()) throw new Fault("invalid_request", "Structure checks do not accept recipe handlers");
             try { this.probes = Probe.order(probes); }
             catch (IllegalArgumentException failure) { throw new Fault("invalid_request", failure.getMessage()); }
         }
 
         public static Request parse(JsonObject body) {
-            if (body == null || !body.entrySet().stream().allMatch(entry -> Arrays.asList("key", "name", "profile", "handlers", "probes", "world").contains(entry.getKey()))) {
+            if (body == null || !body.entrySet().stream().allMatch(entry -> Arrays.asList("key", "name", "profile", "handlers", "probes", "world", "check").contains(entry.getKey()))) {
                 throw new Fault("invalid_request", "Unknown export request field");
             }
             List<String> handlers = new ArrayList<>();
@@ -120,8 +135,13 @@ public final class Jobs implements AutoCloseable {
                 if (!body.get("probes").isJsonArray()) throw new Fault("invalid_request", "probes must be an array");
                 for (JsonElement value : body.getAsJsonArray("probes")) probes.add(Probe.parse(value));
             } else probes.add(Probe.defaults());
+            Checks.Selection check = null;
+            if (body.has("check") && !body.get("check").isJsonNull()) {
+                if (!body.get("check").isJsonObject()) throw new Fault("invalid_request", "check must be an object");
+                check = Checks.Selection.parse(body.getAsJsonObject("check"));
+            }
             return new Request(string(body.get("key"), "key"), string(body.get("name"), "name"), string(body.get("profile"), "profile"), handlers, probes,
-                    !body.has("world") || body.get("world").isJsonNull() ? null : string(body.get("world"), "world"));
+                    !body.has("world") || body.get("world").isJsonNull() ? null : string(body.get("world"), "world"), check);
         }
 
         private static String string(JsonElement value, String name) {
@@ -131,7 +151,7 @@ public final class Jobs implements AutoCloseable {
 
         private boolean matches(Request other) {
             return key.equals(other.key) && name.equals(other.name) && profile.equals(other.profile) && handlers.equals(other.handlers)
-                    && probes.equals(other.probes) && java.util.Objects.equals(world, other.world);
+                    && probes.equals(other.probes) && java.util.Objects.equals(world, other.world) && java.util.Objects.equals(check, other.check);
         }
 
         public void checkWorld(String folder) {
@@ -195,17 +215,24 @@ public final class Jobs implements AutoCloseable {
         public long sequence;
         public List<Event> events = new ArrayList<>();
         public Result result;
+        public Checks.Summary report;
+        public JsonObject operation;
         public Map<String, String> error;
         private transient Thread thread;
         private transient boolean cancelled;
 
         private boolean terminal() {
-            return "succeeded".equals(state) || "failed".equals(state) || "cancelled".equals(state);
+            return "succeeded".equals(state) || "checked".equals(state) || "failed".equals(state) || "cancelled".equals(state);
         }
     }
 
     public final class Context {
         private final Job job;
+        private final Map<String, long[]> timings = new TreeMap<>();
+        private final Map<String, Long> phases = new TreeMap<>();
+        private final List<JsonObject> slow = new ArrayList<>();
+        private String observed;
+        private int slowOmitted;
 
         private Context(Job job) {
             this.job = job;
@@ -213,6 +240,42 @@ public final class Jobs implements AutoCloseable {
 
         public Request request() { return job.request; }
         public String id() { return job.id; }
+
+        private void observe(JsonObject operation) throws IOException {
+            synchronized (Jobs.this) {
+                job.operation = operation;
+                String state = operation.get("state").getAsString(), id = operation.get("id").getAsString();
+                if ((state.equals("done") || state.equals("failed")) && !id.equals(observed)) {
+                    observed = id;
+                    long waiting = operation.get("queueMicros").getAsLong(), running = operation.get("runMicros").getAsLong();
+                    String name = operation.get("name").getAsString();
+                    if (timings.size() >= 64 && !timings.containsKey(name)) name = "other";
+                    long[] total = timings.computeIfAbsent(name, key -> new long[4]);
+                    total[0]++; total[1] += waiting; total[2] += running; total[3] = Math.max(total[3], running);
+                    operation.getAsJsonObject("phases").entrySet().forEach(entry -> {
+                        String phase = phases.size() >= 32 && !phases.containsKey(entry.getKey()) ? "other" : entry.getKey();
+                        phases.merge(phase, entry.getValue().getAsLong(), Long::sum);
+                    });
+                    if (operation.get("slow").getAsBoolean()) { if (slow.size() < 8) slow.add(operation); else slowOmitted++; }
+                }
+                save(job, false);
+            }
+        }
+
+        public JsonObject timings() {
+            synchronized (Jobs.this) {
+                JsonObject result = new JsonObject();
+                com.google.gson.JsonArray entries = new com.google.gson.JsonArray(), slowCalls = new com.google.gson.JsonArray();
+                timings.forEach((name, values) -> entries.add(com.github.dcysteine.nesql.exporter.source.Json.object("name", name,
+                        "calls", values[0], "queueMicros", Long.toString(values[1]), "runMicros", Long.toString(values[2]), "maxMicros", Long.toString(values[3]))));
+                slow.forEach(slowCalls::add);
+                result.add("operations", entries); result.add("slow", slowCalls); result.addProperty("slowOmitted", slowOmitted);
+                JsonObject phaseTimes = new JsonObject(); phases.forEach((name, micros) -> phaseTimes.addProperty(name, Long.toString(micros)));
+                result.add("phases", phaseTimes);
+                timings.clear(); phases.clear(); slow.clear(); slowOmitted = 0;
+                return result;
+            }
+        }
 
         public void check() {
             synchronized (Jobs.this) {
@@ -239,6 +302,7 @@ public final class Jobs implements AutoCloseable {
         public void publish(Callable<Result> publication) throws Exception {
             synchronized (Jobs.this) {
                 check();
+                if (job.request.check != null) throw new Fault("check_only", "A diagnostic task cannot publish a dataset");
                 if (job.terminal()) throw new IllegalStateException("Job already completed");
                 event(job, "publish", "Publishing validated source dataset");
                 job.result = publication.call();
@@ -246,6 +310,26 @@ public final class Jobs implements AutoCloseable {
                 job.state = "succeeded";
                 job.finished = Instant.now().toString();
                 event(job, "complete", "Source dataset published");
+                save(job);
+            }
+        }
+
+        public void report(Checks.Summary summary) throws IOException {
+            synchronized (Jobs.this) {
+                if (job.request.check == null) throw new Fault("check_only", "Only diagnostic tasks have check reports");
+                String expected = directory.getParent().resolve("checks").resolve(job.id + ".json").toString();
+                if (!expected.equals(summary.path)) throw new IOException("Check report is outside its job directory");
+                job.report = summary;
+                save(job, false);
+            }
+        }
+
+        public void checked(Checks.Summary summary) throws IOException {
+            synchronized (Jobs.this) {
+                check(); report(summary);
+                if (job.terminal() || !"complete".equals(summary.status) || summary.pending != 0) throw new IOException("Diagnostic report is incomplete");
+                job.state = "checked"; job.finished = Instant.now().toString();
+                event(job, "checked", "Diagnostic report completed; inspect its findings before export");
                 save(job);
             }
         }
@@ -349,6 +433,10 @@ public final class Jobs implements AutoCloseable {
 
     /** Keeps cancellation attached to the job when game work crosses a thread boundary. */
     public static <T> Callable<T> bind(Callable<T> action) {
+        return bind(action, true);
+    }
+
+    static <T> Callable<T> bind(Callable<T> action, boolean after) {
         Context owner = CURRENT.get();
         return () -> {
             Context previous = CURRENT.get();
@@ -357,7 +445,7 @@ public final class Jobs implements AutoCloseable {
             try {
                 checkpoint();
                 T value = action.call();
-                checkpoint();
+                if (after) checkpoint();
                 return value;
             } finally {
                 if (previous == null) CURRENT.remove();
@@ -390,7 +478,7 @@ public final class Jobs implements AutoCloseable {
             }
             task.run(context);
             synchronized (this) {
-                if (!job.terminal()) throw new IllegalStateException("Export returned without publishing a dataset");
+                if (!job.terminal()) throw new IllegalStateException("Task returned without publishing a dataset or completing its check report");
             }
         } catch (Exception error) {
             synchronized (this) {
@@ -440,18 +528,24 @@ public final class Jobs implements AutoCloseable {
             }
             identifier(job.id, "job id");
             Instant.parse(job.created);
-            if (!Arrays.asList("queued", "running", "cancelling", "succeeded", "failed", "cancelled").contains(job.state)
+            if (!Arrays.asList("queued", "running", "cancelling", "succeeded", "checked", "failed", "cancelled").contains(job.state)
                     || job.events == null || job.events.size() > EVENT_LIMIT || job.completed < 0 || job.completed > job.total) {
                 throw new IllegalArgumentException("Invalid report state");
             }
             if (job.terminal()) Instant.parse(job.finished);
             if ("succeeded".equals(job.state)) {
+                if (job.request.check != null) throw new IllegalArgumentException("Check job cannot publish a dataset");
                 if (job.result == null) throw new IllegalArgumentException("Missing published result");
                 Result result = new Result(job.result.id, java.nio.file.Paths.get(job.result.path));
                 if (!result.path.equals(directory.getParent().resolve("datasets").resolve(result.id).toString())) {
                     throw new IllegalArgumentException("Result is outside the dataset directory");
                 }
             } else if (job.result != null) throw new IllegalArgumentException("Unpublished job has a result");
+            if (job.report != null && (job.request.check == null || !directory.getParent().resolve("checks").resolve(job.id + ".json").toString().equals(job.report.path)
+                    || job.report.sha256 == null || !job.report.sha256.matches("[a-f0-9]{64}") || job.report.bytes <= 0 || job.report.bytes > Checks.REPORT_LIMIT)) {
+                throw new IllegalArgumentException("Invalid check report location or digest");
+            }
+            if ("checked".equals(job.state) && (job.report == null || !"complete".equals(job.report.status) || job.report.pending != 0)) throw new IllegalArgumentException("Missing completed check report");
             return job;
         } catch (RuntimeException error) { throw new IOException("Invalid job report: " + path, error); }
     }

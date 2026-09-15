@@ -67,25 +67,47 @@ public final class Rows implements AutoCloseable {
         for (Map.Entry<String, Buffer> entry : buffers.entrySet()) {
             Jobs.checkpoint();
             Buffer buffer = entry.getValue();
-            if (!buffer.rows.isEmpty()) spill(buffer);
-            while (buffer.runs.size() > FAN_IN) {
-                List<Path> compacted = new ArrayList<>();
-                for (int start = 0; start < buffer.runs.size(); start += FAN_IN) {
-                    List<Path> batch = buffer.runs.subList(start, Math.min(start + FAN_IN, buffer.runs.size()));
-                    Path target = run();
-                    try (OutputStream output = new BufferedOutputStream(Files.newOutputStream(target, StandardOpenOption.CREATE_NEW))) {
-                        merge(batch, row -> { output.write(row); output.write('\n'); });
-                    }
-                    compacted.add(target);
-                    for (Path path : batch) Files.delete(path);
-                }
-                buffer.runs = compacted;
-            }
+            sort(buffer);
             try (Dataset.Records records = dataset.records(entry.getKey())) {
                 merge(buffer.runs, row -> records.write(parse(row)));
             }
             for (Path path : buffer.runs) Files.delete(path);
             buffer.runs.clear();
+        }
+    }
+
+    /** Exercise the same bounded merge and identity checks without publishing a source. */
+    public Map<String, Long> check() throws IOException {
+        if (finished) throw new IllegalStateException("Records already checked");
+        finished = true;
+        Map<String, Long> counts = new TreeMap<>();
+        for (Map.Entry<String, Buffer> entry : buffers.entrySet()) {
+            Jobs.checkpoint();
+            Buffer buffer = entry.getValue();
+            sort(buffer);
+            long[] count = {0};
+            merge(buffer.runs, row -> count[0]++);
+            if (count[0] != 0) counts.put(entry.getKey(), count[0]);
+            for (Path path : buffer.runs) Files.delete(path);
+            buffer.runs.clear();
+        }
+        return counts;
+    }
+
+    private void sort(Buffer buffer) throws IOException {
+        if (!buffer.rows.isEmpty()) spill(buffer);
+        while (buffer.runs.size() > FAN_IN) {
+            List<Path> compacted = new ArrayList<>();
+            for (int start = 0; start < buffer.runs.size(); start += FAN_IN) {
+                List<Path> batch = buffer.runs.subList(start, Math.min(start + FAN_IN, buffer.runs.size()));
+                Path target = run();
+                try (OutputStream output = new BufferedOutputStream(Files.newOutputStream(target, StandardOpenOption.CREATE_NEW))) {
+                    merge(batch, row -> { output.write(row); output.write('\n'); });
+                }
+                compacted.add(target);
+                for (Path path : batch) Files.delete(path);
+            }
+            buffer.runs = compacted;
         }
     }
 

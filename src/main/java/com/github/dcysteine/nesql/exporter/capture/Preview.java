@@ -8,6 +8,7 @@ import com.github.dcysteine.nesql.exporter.source.CanonicalJson;
 import com.github.dcysteine.nesql.exporter.source.Probe;
 import com.github.dcysteine.nesql.exporter.source.TypedNbt;
 import com.github.dcysteine.nesql.exporter.task.Jobs;
+import com.github.dcysteine.nesql.exporter.task.ClientThread;
 import com.google.gson.JsonArray;
 import com.google.gson.JsonObject;
 import com.gtnewhorizon.structurelib.StructureLibAPI;
@@ -113,6 +114,7 @@ final class Preview implements AutoCloseable {
 
     /** Survival calls honor their own placement budget; a single third-party callback is not preemptible. */
     boolean build() {
+        ClientThread.phase("construct");
         if (finished) return true;
         Jobs.checkpoint();
         boolean enabled = RunnableMachineUpdate.isCurrentThreadEnabled();
@@ -145,6 +147,7 @@ final class Preview implements AutoCloseable {
 
     /** Serializing blocks and tile NBT is also split into bounded client-thread work. */
     String capture(Facts facts, String structure) {
+        ClientThread.phase("serialize");
         if (!finished || written) throw new IllegalStateException("Construction is not ready to capture");
         // Texture encoding completes on the worker between cursor calls, before palette identities are assigned.
         for (Placed placed : pending) {
@@ -211,6 +214,7 @@ final class Preview implements AutoCloseable {
         shape.addProperty("id", id); facts.row("shapes", shape); chunks.add(value(id)); cells = new JsonArray();
     }
     @Override public void close() {
+        ClientThread.phase("release");
         boolean enabled = RunnableMachineUpdate.isCurrentThreadEnabled();
         try { RunnableMachineUpdate.setCurrentThreadEnabled(false); world.close(); }
         finally { RunnableMachineUpdate.setCurrentThreadEnabled(enabled); }
@@ -323,8 +327,9 @@ final class Preview implements AutoCloseable {
                 if (tile instanceof IGregTechTileEntity) detach((IGregTechTileEntity) tile);
                 tile.invalidate();
             } catch (RuntimeException error) {
-                throw Structures.failure("Preview tile release: type=" + tile.getClass().getName()
-                        + "; at=" + tile.xCoord + "," + tile.yCoord + "," + tile.zCoord, error);
+                Jobs.Fault failure = new Jobs.Fault("preview_cleanup", "Preview tile release: type=" + tile.getClass().getName()
+                        + "; at=" + tile.xCoord + "," + tile.yCoord + "," + tile.zCoord + ": " + error);
+                failure.initCause(error); throw failure;
             }
         }
         @Override public boolean spawnEntityInWorld(Entity entity) { return false; }

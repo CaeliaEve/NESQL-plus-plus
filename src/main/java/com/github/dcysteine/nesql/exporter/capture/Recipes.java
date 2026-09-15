@@ -85,23 +85,30 @@ final class Recipes {
             }
             GtRecipes gt = null;
             MagicRecipes magic = null;
-            if (handler instanceof GTNEIDefaultHandler) {
-                GTNEIDefaultHandler machine = (GTNEIDefaultHandler) handler;
-                handler.arecipes.addAll(machine.getCache());
-                gt = new GtRecipes(machine, views, id);
-            } else if (MagicRecipes.supports(handler)) magic = new MagicRecipes(handler);
-            else handler.loadCraftingRecipes(handler instanceof FurnaceRecipeHandler ? "smelting" : "crafting");
-            HandlerInfo info = GuiRecipeTab.getHandlerInfo(handler);
-            JsonObject icon = info.getItemStack() == null ? null : object("kind", "item", "id", facts.item(info.getItemStack()));
-            JsonArray machines = new JsonArray();
-            Set<String> machineIds = new HashSet<>();
-            for (PositionedStack catalyst : RecipeCatalysts.getRecipeCatalysts(handler)) for (ItemStack item : catalyst.items) {
-                String id = facts.item(item);
-                if (machineIds.add(id)) machines.add(object("kind", "item", "id", id));
+            try {
+                if (handler instanceof GTNEIDefaultHandler) {
+                    GTNEIDefaultHandler machine = (GTNEIDefaultHandler) handler;
+                    handler.arecipes.addAll(machine.getCache());
+                    gt = new GtRecipes(machine, views, id);
+                } else if (MagicRecipes.supports(handler)) magic = new MagicRecipes(handler);
+                else handler.loadCraftingRecipes(handler instanceof FurnaceRecipeHandler ? "smelting" : "crafting");
+                HandlerInfo info = GuiRecipeTab.getHandlerInfo(handler);
+                JsonObject icon = info.getItemStack() == null ? null : object("kind", "item", "id", facts.item(info.getItemStack()));
+                JsonArray machines = new JsonArray();
+                Set<String> machineIds = new HashSet<>();
+                for (PositionedStack catalyst : RecipeCatalysts.getRecipeCatalysts(handler)) for (ItemStack item : catalyst.items) {
+                    String id = facts.item(item);
+                    if (machineIds.add(id)) machines.add(object("kind", "item", "id", id));
+                }
+                facts.row("categories", object("id", id, "source", origin, "name", facts.text(name),
+                        "icon", icon, "machines", machines, "view", null, "order", order));
+                return new Cursor(this, handler, facts, views, gt, magic);
+            } catch (RuntimeException | Error failure) {
+                try { if (gt != null) gt.close(); }
+                catch (RuntimeException | Error cleanup) { failure.addSuppressed(cleanup); }
+                finally { handler.arecipes.clear(); }
+                throw failure;
             }
-            facts.row("categories", object("id", id, "source", origin, "name", facts.text(name),
-                    "icon", icon, "machines", machines, "view", null, "order", order));
-            return new Cursor(this, handler, facts, views, gt, magic);
         }
     }
 
@@ -123,7 +130,11 @@ final class Recipes {
         int size() { return magic == null ? handler.numRecipes() : magic.size(); }
 
         void capture(int index) {
-            try { captureRow(index); }
+            capture(index, facts);
+        }
+
+        void capture(int index, Facts facts) {
+            try { captureRow(index, facts); }
             catch (java.util.concurrent.CancellationException error) { throw error; }
             catch (RuntimeException error) {
                 Jobs.Fault failure = new Jobs.Fault(error instanceof Jobs.Fault ? ((Jobs.Fault) error).code : "recipe_capture",
@@ -133,7 +144,7 @@ final class Recipes {
             }
         }
 
-        private void captureRow(int index) {
+        private void captureRow(int index, Facts facts) {
             Jobs.checkpoint();
             RecipeRow row = new RecipeRow(facts, source.origin, source.id, index);
             if (gt != null) gt.capture((GTNEIDefaultHandler.CachedDefaultRecipe) handler.arecipes.get(index), row);

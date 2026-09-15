@@ -6,7 +6,7 @@
 
 目标为 GT New Horizons 2.8.4 Java 8。模组只服务本机单人世界，不支持专用服务器。MCP 客户端启动独立的 Node 进程，桥接通过受限的 loopback HTTP 接口调用游戏任务服务；Java 8 模组不嵌入 MCP SDK。
 
-模组 0.11.5 写出 source 修订 11。MCP 连接协议保持不变；数据修订与传输协议是不同的元数据。编译器拒绝旧数据修订，不提供旧格式兜底读取。
+模组 0.12.0 写出 source 修订 11。MCP 连接协议保持不变；数据修订与传输协议是不同的元数据。编译器拒绝旧数据修订，不提供旧格式兜底读取。
 
 ```json
 {
@@ -29,6 +29,7 @@
 | --- | --- | --- |
 | `inspect_game` | 无 | 单人世界状态、NEI 是否就绪、profile、handler 清单及支持状态、模组来源、研究注册表诊断、客户端队列与最长调用耗时 |
 | `start_export` | `key`、`name`、`profile`，可选 `handlers`、`probes` | 立即返回 Job；文件留在磁盘 |
+| `start_check` | `key`、`world`、`domain`，可选 `controllers`、`handlers`、`offset`、`limit`、`probes` | 异步诊断Job；无source发布；本机nesql/checks报告 |
 | `read_job` | 可选 `id` | `{job}`；省略 ID 时返回活动或最近任务，没有任务时为 `null` |
 | `cancel_export` | `id` | 请求协作取消，返回 Job；轮询至终态 |
 | `list_exports` | 可选 `after`、`limit` | `{rows,next}`；按内容 ID 排序，limit 默认 20、范围 1–100 |
@@ -37,6 +38,20 @@
 `key` 和 `name` 为 1–80 个字母、数字、下划线或连字符。`handlers` 最多 512 个不重复的 category ID，来源于 `inspect_game`。选定的 handler 不存在或不支持时明确失败。`list_exports` 的 `next` 用作下一页 `after`；新导出的内容 ID 可能排在已有游标之前，需要重新从第一页查询。
 
 `inspect_game` 同时报告 exporter 版本、source revision 和当前 world.folder/name。`start_export` 可传 `world` 指定预期单人存档文件夹；实际采集开始前在游戏线程核对，切到其他存档会报 world_changed。该条件参与任务幂等比较和日志恢复。验收工具使用它将任务绑定到独立测试存档；它不修改存档。
+
+## 独立诊断
+
+0.12.0新增start_check，HTTP入口为POST /checks，复用同一单任务队列和cancel_export/read_job。domain为structures或recipes，world必填。structures的controllers为最多512个不重复的0–32767编号，省略或[]表示全部IConstructable；不能传配方筛选。recipes的handlers来自inspect_game，省略或[]表示全部处理器，未适配项标unsupported。offset默认0、最大1000000，limit默认128、范围1–4096，限定每个处理器本轮范围。请求不接受任意代码或输出路径。
+
+结构诊断复用Structures.Cursor/Preview，独立Facts和Rows，不先采集公共物品库。配方诊断复用生产处理器/适配器，每条配方独立Facts和排序缓冲；同一处理器实例依次读取范围。检查捕获读取、序列化、大小和重复身份问题，不替代Compiler完整领域/引用校验。诊断只使用data模式，不执行模型/图像/背景绘制；source/catalog修订仍为11。
+
+初期捕获完整模组/配置/资源/知识指纹，末尾再次比较；每个目标前后检查固定世界、玩家、资源代数、NEI列表、语言及知识。目标失败且释放成功时继续。文件故障、环境变化、无法安全释放或底层Error停止本轮，未执行目标保留pending。preview_cleanup不会被selection的preview_failed降级处理吞掉。单个原生调用未结束时，不开始下一项目，也不使用Thread.stop。
+
+报告位于nesql/checks/<job-id>.json，格式nesql.check，最大16MiB，原子替换；包含request、环境、目标、计数、耗时和有界异常cause/suppressed/栈。read_job.report返回路径、字节数、SHA256及汇总，大内容留在本地。终态checked表示报告完整，行状态可为passed、failed、unsupported、partial；pending表示未执行。recipe行含totalRecipes/offset/end/checkedRecipes/unexamined、failedRecipes和最多32条错误详情及省略计数；excludedRecipes为适配器过滤或重复折叠项，不虚构成独立产物。
+
+有失败的诊断也可到checked，但result为空，不进入list_exports/read_export，不能collect/compile。取消或停止后也可收集报告；重启可能保留最后一份running报告，不能将其计为完成。重试是新任务，不复用旧临时产物。结构按稳定controller ID定位，配方index只在相同处理器与环境中有意义。正式导出缓存/检查点和公共领域/图像专项诊断仍待后续。
+
+read_job.operation从后台直接读取，提交前保存queued操作，运行中约250ms更新name/phase/state/queueMicros/runMicros；超过1秒标slow并约每秒采样最多24帧。每个目标汇总最多64种调用名、32种phase（其余计other）、8条慢调用详情及省略数。15秒只限制未开始的排队请求，已开始调用保留真实返回值/原异常；取消保持cancelling直至调用和释放结束。慢标记用于定位，不能当作原生构建性能已修复。
 
 物品和方块的 registry 直接读取 Forge 保存的完整注册键，并核对该键仍指向原对象。注册键属于身份数据：保留大小写、空格、Unicode、`|` 和额外冒号，不经过会截断多重冒号的 UniqueIdentifier。物品/方块要求第一个冒号两侧非空；流体使用非空的全局注册键，不要求命名空间。完整原文进入身份哈希，不能通过改名或替换空格合并物品。数据记录的大小限制仍有效；资源文件路径和导出器属性键分别校验，不使用注册键作磁盘路径。
 
@@ -76,7 +91,7 @@ Thaumcraft 4 的空 AspectList 会返回 `[null]`；原生 copy/add/merge 还可
 
 研究的 `itemTriggers` 在修订11中保存Clue对象：`{registry, meta, nbt, ore, matches}`。registry/meta/类型化nbt是原始触发模板，meta=32767仍表示通配；ore是原生检查的首个矿辞组，没有时为null。模板不要求存在于items表，不调用名称、提示或绘制API。matches保存NEI已知具体物品中通过原生匹配的ID，有序且无重复。空示例列表仍完整保留条件，例如MIRROR的minecraft:portal；它不表示该条件无效或研究不能解锁。
 
-Clues按触发项自身与首个矿辞组的Item类型选择NEI候选，调用与ResearchManager.createClue相同的InventoryUtils.areItemStacksEqual(trigger,candidate,true,true,false)筛选，保留实际矿辞替代、耐久、metadata和NBT判断；不从原始模板或矿辞模式构造物品示例。原生矿辞分支可能忽略NBT，直接物品分支按原生规则比较。匹配和读取使用副本，不修改游戏堆栈或扫描/研究状态。示例不是任意NBT状态的全枚举。空触发对象、未注册物品及超出预算仍报research_trigger。研究按最多16次匹配成功或2ms分批处理，单次API调用不可抢占。错误保留研究key/分类/零基index、trigger位置和registry/meta。模组使用0.11.5，编译器和Web契约使用0.11.0，source/catalog均为修订11，不提供旧字符串数组的兼容路径。
+Clues按触发项自身与首个矿辞组的Item类型选择NEI候选，调用与ResearchManager.createClue相同的InventoryUtils.areItemStacksEqual(trigger,candidate,true,true,false)筛选，保留实际矿辞替代、耐久、metadata和NBT判断；不从原始模板或矿辞模式构造物品示例。原生矿辞分支可能忽略NBT，直接物品分支按原生规则比较。匹配和读取使用副本，不修改游戏堆栈或扫描/研究状态。示例不是任意NBT状态的全枚举。空触发对象、未注册物品及超出预算仍报research_trigger。研究按最多16次匹配成功或2ms分批处理，单次API调用不可抢占。错误保留研究key/分类/零基index、trigger位置和registry/meta。模组使用0.12.0，编译器和Web契约使用0.11.0，source/catalog均为修订11，不提供旧字符串数组的兼容路径。
 
 已迁移要素与研究关系，魔法配方按下述明确适配范围采集；完整研究正文页面仍待继续。
 
@@ -110,7 +125,7 @@ Build.palette 的每项为 `block/model/problem`，Build.rendered 表明是否�
 
 独立实体纹理通过当前游戏资源管理器读取，先限制文件字节，再检查PNG尺寸后在worker解码；复用原asset和catalog图集。Model.hidden与空faces必须一致，未适配不能使用hidden冒充成功。其余TESR与跨模组专用渲染仍待继续。
 
-任务状态为 `queued → running → succeeded`，取消经过 `cancelling → cancelled`，执行错误进入 `failed`。具体采集阶段在 `stage` 中表达。只有文件封存和原子发布成功后才返回结果。
+导出状态为queued→running→succeeded，诊断以checked结束；取消经过cancelling→cancelled，不可继续的错误进入failed。具体阶段在stage中表达。只有正式数据封存和原子发布后才有result，诊断只有report。
 
 - 游戏内 `/nesql` 和 MCP 共用 `Exports`、`Jobs`、`Capture`。界面关闭不终止已接受的导出，重开后恢复观察当前任务。
 - 同一目录有文件锁，同一服务最多一个活动任务。重复 key 和相同参数返回原任务，参数冲突则拒绝。key 在游戏重启后仍有效。

@@ -48,6 +48,23 @@ export function createServer(client) {
     inputSchema: { id: identifier.optional() }, annotations: readOnly,
   }, call('GET', args => args.id === undefined ? '/jobs' : `/jobs/${args.id}`));
 
+  server.registerTool('start_check', {
+    description: 'Start an isolated diagnostic sweep without exporting a dataset. Select structures by controller id, or recipe handlers with an explicit recipe range. Poll read_job: checked means the report is complete, not that all targets passed. Reports remain on local disk. Uses the same single active-job queue as exports.',
+    inputSchema: {
+      key: identifier,
+      world: z.string().min(1).max(128).regex(/^[^/\\\x00-\x1f\x7f]+$/).refine(value => value !== '.' && value !== '..'),
+      domain: z.enum(['structures', 'recipes']),
+      controllers: z.array(z.number().int().min(0).max(32767)).max(512).refine(values => new Set(values).size === values.length).optional()
+        .describe('Structure controller ids. Omit to check every registered constructable controller. Only for structures.'),
+      handlers: z.array(z.string().regex(/^category_[a-f0-9]{64}$/)).max(512).refine(values => new Set(values).size === values.length).optional()
+        .describe('Recipe handler ids. Omit to inventory all handlers and check supported adapters. Only for recipes.'),
+      offset: z.number().int().min(0).max(1_000_000).optional().describe('First recipe index in each handler, default 0.'),
+      limit: z.number().int().min(1).max(4096).optional().describe('Maximum recipes checked per handler, default 128. Unexamined recipes remain explicit in the report.'),
+      probes: z.array(probe).min(1).max(16).optional(),
+    },
+    annotations: { readOnlyHint: false, destructiveHint: false, idempotentHint: true, openWorldHint: false },
+  }, call('POST', () => '/checks', args => args));
+
   server.registerTool('cancel_export', {
     description: 'Request cooperative cancellation. The job reaches cancelled only after game work and file cleanup have stopped. Poll read_job while it is cancelling.',
     inputSchema: { id: identifier },

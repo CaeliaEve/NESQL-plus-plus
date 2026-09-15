@@ -479,6 +479,20 @@ public final class SourceTest {
             expectFailure(() -> rows.write(dataset));
         }
         require(!Files.exists(aborted) && !Files.exists(conflictWork), "Conflicting source left open files");
+        Path audit = root.resolve("diagnostic-sort");
+        try (Rows rows = new Rows(audit, 256)) {
+            for (int index = 40; index >= 0; index--) {
+                rows.add("strings", object("id", "text_" + index, "text", padding));
+                rows.add("strings", object("id", "text_" + index, "text", padding));
+            }
+            require(rows.check().equals(java.util.Collections.singletonMap("strings", 41L)), "Diagnostic merge changed row counts");
+            require(!Files.exists(audit.resolve("manifest.json")), "Diagnostic sorting published a source manifest");
+        }
+        try (Rows rows = new Rows(root.resolve("diagnostic-conflict"), 256)) {
+            rows.add("strings", object("id", "text_same", "text", padding));
+            rows.add("strings", object("id", "text_same", "text", padding + "changed"));
+            expectFailure(rows::check);
+        }
     }
 
     private static void identities() {

@@ -125,6 +125,8 @@ public final class ExportScreen extends GuiScreen {
             if (!job.events.isEmpty()) fontRendererObj.drawSplitString(job.events.get(job.events.size() - 1).message, x, y + 14, 290, 0xb8b8b8);
             if (job.error != null) fontRendererObj.drawSplitString(job.error.get("message"), x, y + 40, 290, 0xff7777);
             if (job.result != null) fontRendererObj.drawSplitString(job.result.path, x, y + 40, 290, 0x88dd99);
+            if (job.report != null) fontRendererObj.drawSplitString("Check findings: " + job.report.failed + " failed, " + job.report.unsupported
+                    + " unsupported, " + job.report.partial + " partial; " + job.report.path, x, y + 40, 290, 0xffcc66);
         }
         if (error != null) fontRendererObj.drawSplitString(error, x, Math.max(y + 66, height - 76), 290, 0xff7777);
         super.drawScreen(mouseX, mouseY, partialTicks);
@@ -138,5 +140,5 @@ public final class ExportScreen extends GuiScreen {
         // Closing the observer must not cancel an export or discard an accepted start request.
     }
     private String scopeLabel() { return selection ? "Handlers: supported" : "Handlers: all"; }
-    private boolean terminal() { return job.state.equals("succeeded") || job.state.equals("failed") || job.state.equals("cancelled"); }
+    private boolean terminal() { return job.state.equals("succeeded") || job.state.equals("checked") || job.state.equals("failed") || job.state.equals("cancelled"); }
 }
