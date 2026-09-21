@@ -67,7 +67,8 @@ final class Preview implements AutoCloseable {
     private final List<Placed> pending = new ArrayList<>();
     private final JsonArray chunks = new JsonArray();
     private JsonArray cells = new JsonArray();
-    private int rounds, count;
+    private int count;
+    private final Progress progress = new Progress();
     private Integer result;
     private boolean finished, written;
 
@@ -121,13 +122,9 @@ final class Preview implements AutoCloseable {
         try {
             RunnableMachineUpdate.setCurrentThreadEnabled(false);
             long before = world.changes;
-            if (machine instanceof ISurvivalConstructable) {
+            if (survival()) {
                 result = ((ISurvivalConstructable) machine).survivalConstruct(trigger.copy(), 256, environment);
-                if (result < -1) throw fault("Controller does not support survival construction in the preview environment");
-                if (result != -1 && (result > 0 || world.changes != before)) {
-                    if (++rounds >= 8192) throw fault("Construction exceeded its round budget");
-                    return false;
-                }
+                if (progress.pending(result, before, world.changes)) return false;
             } else ((IConstructable) machine).construct(trigger.copy(), false);
             if (machine instanceof INEIPreviewModifier) ((INEIPreviewModifier) machine).onPreviewStructureComplete(trigger.copy());
             if (world.blocks.size() <= 1) throw fault("Construction placed no structure blocks");
@@ -200,7 +197,7 @@ final class Preview implements AutoCloseable {
         JsonArray messages = new JsonArray();
         for (String note : notes) messages.add(value(facts.text(note)));
         JsonObject record = object("structure", structure, "probe", probe.json(),
-                "method", machine instanceof ISurvivalConstructable ? "survival" : "creative", "result", result,
+                "method", survival() ? "survival" : "creative", "result", result,
                 "size", array(maximum[0] - minimum[0] + 1, maximum[1] - minimum[1] + 1, maximum[2] - minimum[2] + 1),
                 "origin", array(minimum[0], maximum[1], maximum[2]), "controller", array(-minimum[0], maximum[1] - 64, maximum[2]),
                 "palette", appearances, "rendered", models != null, "chunks", chunks, "cells", count, "notes", messages);
@@ -234,6 +231,27 @@ final class Preview implements AutoCloseable {
         }
     }
     private static Jobs.Fault fault(String message) { return new Jobs.Fault("preview_failed", message); }
+
+    private boolean survival() {
+        // GT 5.09.51.482's BBF chains air/lava. StructureLib 1.4.23 continues after
+        // SKIP, so survival alternates accepted air and lava forever. Its bounded
+        // 3x4x3 native creative constructor supplies a valid preview in one call.
+        return machine instanceof ISurvivalConstructable
+                && !machine.getClass().getName().equals("gregtech.common.tileentities.machines.multi.MTEBrickedBlastFurnace");
+    }
+
+    /** A claimed placement without a world change must not enqueue thousands of identical calls. */
+    static final class Progress {
+        private int rounds, unchanged;
+        boolean pending(int result, long before, long after) {
+            if (result < -1) throw fault("Controller does not support survival construction in the preview environment");
+            if (result == -1 || result == 0 && before == after) return false;
+            unchanged = before == after ? unchanged + 1 : 0;
+            if (unchanged >= 8) throw fault("Construction reported placements without changing the preview for eight consecutive calls");
+            if (++rounds >= 8192) throw fault("Construction exceeded its round budget");
+            return true;
+        }
+    }
     private static long key(int x, int y, int z) { return ((long) (x & 65535) << 24) | ((long) (z & 65535) << 8) | y; }
     private static int x(long key) { return (short) (key >>> 24); }
     private static int y(long key) { return (int) (key & 255); }
@@ -287,7 +305,9 @@ final class Preview implements AutoCloseable {
         @Override public TileEntity getTileEntity(int x, int y, int z) { return inside(x, y, z) ? tiles.get(key(x, y, z)) : null; }
         @Override public boolean setBlock(int x, int y, int z, Block block, int meta, int flags) {
             writable(x, y, z);
-            if (block == null || meta < 0 || meta > 15) throw fault("Invalid preview block state");
+            // GTNH's NotEnoughIDs stores unsigned 16-bit metadata, including frame material IDs.
+            if (block == null || meta < 0 || meta > 65535) throw fault("Invalid preview block state: block="
+                    + (block == null ? "null" : Block.blockRegistry.getNameForObject(block)) + "; meta=" + meta + "; at=" + x + "," + y + "," + z);
             long key = key(x, y, z);
             if (getBlock(x, y, z) == block && getBlockMetadata(x, y, z) == meta) return false;
             removeTileEntity(x, y, z);
@@ -302,7 +322,7 @@ final class Preview implements AutoCloseable {
         }
         @Override public boolean setBlockMetadataWithNotify(int x, int y, int z, int meta, int flags) {
             writable(x, y, z); long key = key(x, y, z);
-            if (meta < 0 || meta > 15) throw fault("Invalid preview block metadata");
+            if (meta < 0 || meta > 65535) throw fault("Invalid preview block metadata: " + meta + "; at=" + x + "," + y + "," + z);
             if (!blocks.containsKey(key) || getBlockMetadata(x, y, z) == meta) return false;
             metadata.put(key, meta); TileEntity tile = tiles.get(key);
             if (tile != null) { tile.updateContainingBlockInfo(); tile.blockMetadata = meta; }

@@ -39,5 +39,6 @@ public final class GameTest {
         CluesTest.run();
         StructuresTest.run();
         PreviewTest.run();
+        ValuesTest.run();
     }
 }

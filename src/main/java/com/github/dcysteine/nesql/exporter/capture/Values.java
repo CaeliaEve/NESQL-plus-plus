@@ -5,6 +5,12 @@ import com.github.dcysteine.nesql.exporter.source.CanonicalJson;
 import com.google.gson.JsonArray;
 import com.google.gson.JsonObject;
 import gregtech.api.util.recipe.SolarFactoryRecipeData;
+import gregtech.api.util.recipe.Sievert;
+import gregtech.api.util.recipe.QuantumComputerRecipeData;
+import gregtech.api.enums.Materials;
+import gtnhintergalactic.recipe.SpaceMiningData;
+import gtnhlanth.common.tileentity.recipe.beamline.SourceChamberMetadata;
+import gtnhlanth.common.tileentity.recipe.beamline.TargetChamberMetadata;
 import net.minecraft.item.ItemStack;
 import net.minecraftforge.fluids.FluidStack;
 
@@ -54,12 +60,41 @@ final class Values {
             Enum<?> symbol = (Enum<?>) value;
             return object("kind", "symbol", "namespace", symbol.getDeclaringClass().getName(), "value", symbol.name());
         }
+        if (value instanceof Materials) {
+            Materials material = (Materials) value;
+            if (material.mName == null || material.mName.isEmpty()) throw new Jobs.Fault("metadata_type", "Material metadata has no registry key");
+            return object("kind", "symbol", "namespace", Materials.class.getName(), "value", material.mName);
+        }
+        if (value instanceof Sievert) {
+            Sievert radiation = (Sievert) value;
+            return fields(facts, depth, "sievert", radiation.sievert, "isExact", radiation.isExact);
+        }
+        if (value instanceof QuantumComputerRecipeData) {
+            QuantumComputerRecipeData computer = (QuantumComputerRecipeData) value;
+            return fields(facts, depth, "heatConstant", computer.heatConstant, "coolConstant", computer.coolConstant,
+                    "computation", computer.computation, "maxHeat", computer.maxHeat, "subZero", computer.subZero);
+        }
+        if (value instanceof SpaceMiningData) {
+            SpaceMiningData mining = (SpaceMiningData) value;
+            return fields(facts, depth, "asteroidName", mining.asteroidName, "minDistance", mining.minDistance,
+                    "maxDistance", mining.maxDistance, "minSize", mining.minSize, "maxSize", mining.maxSize,
+                    "computation", mining.computation, "recipeWeight", mining.recipeWeight);
+        }
+        if (value instanceof SourceChamberMetadata) {
+            SourceChamberMetadata chamber = (SourceChamberMetadata) value;
+            return fields(facts, depth, "particleID", chamber.particleID, "rate", chamber.rate, "maxEnergy", chamber.maxEnergy,
+                    "focus", chamber.focus, "energyRatio", chamber.energyRatio);
+        }
+        if (value instanceof TargetChamberMetadata) {
+            TargetChamberMetadata chamber = (TargetChamberMetadata) value;
+            return fields(facts, depth, "particleID", chamber.particleID, "amount", chamber.amount, "minEnergy", chamber.minEnergy,
+                    "maxEnergy", chamber.maxEnergy, "minFocus", chamber.minFocus, "energyRatio", chamber.energyRatio,
+                    "focusItem", chamber.focusItem);
+        }
         if (value instanceof SolarFactoryRecipeData) {
             SolarFactoryRecipeData solar = (SolarFactoryRecipeData) value;
-            return object("kind", "map", "values", object(
-                    "minimumWaferTier", capture(solar.minimumWaferTier, facts, depth + 1),
-                    "minimumWaferCount", capture(solar.minimumWaferCount, facts, depth + 1),
-                    "tierRequired", capture(solar.tierRequired, facts, depth + 1)));
+            return fields(facts, depth, "minimumWaferTier", solar.minimumWaferTier,
+                    "minimumWaferCount", solar.minimumWaferCount, "tierRequired", solar.tierRequired);
         }
         if (value != null && value.getClass().isArray()) {
             int length = Array.getLength(value);
@@ -94,6 +129,14 @@ final class Values {
             return object("kind", "list", "values", values);
         }
         throw new Jobs.Fault("metadata_type", "No metadata adapter for " + (value == null ? "null" : value.getClass().getName()));
+    }
+
+    private static JsonObject fields(Facts facts, int depth, Object... fields) {
+        JsonObject values = new JsonObject();
+        for (int index = 0; index < fields.length; index += 2) {
+            values.add((String) fields[index], capture(fields[index + 1], facts, depth + 1));
+        }
+        return object("kind", "map", "values", values);
     }
 
     private static JsonObject stack(String kind, String id, int amount, String unit, int depth) {

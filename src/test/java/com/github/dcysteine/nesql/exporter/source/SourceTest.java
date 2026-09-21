@@ -279,7 +279,7 @@ public final class SourceTest {
         NBTTagCompound tile = new NBTTagCompound();
         tile.setString("id", "fixture.controller"); tile.setInteger("x", 0); tile.setInteger("y", 64); tile.setInteger("z", 0);
         tile.setLong("energy", 9007199254740993L);
-        JsonObject controller = object("registry", "fixture:controller", "meta", 1, "nbt", TypedNbt.encode(tile), "item", item);
+        JsonObject controller = object("registry", "fixture:controller", "meta", 65535, "nbt", TypedNbt.encode(tile), "item", item);
         String controllerId = Identity.content("block", controller); controller.addProperty("id", controllerId);
         records(dataset, "blocks", Arrays.asList(casing, controller));
         JsonObject cube = model(texture, 0), slab = model(texture, .5f), panel = model(texture, 0);
