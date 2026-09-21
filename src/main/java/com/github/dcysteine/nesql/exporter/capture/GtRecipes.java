@@ -9,7 +9,6 @@ import com.google.gson.JsonObject;
 import com.gtnewhorizons.modularui.api.screen.ModularWindow;
 import com.gtnewhorizons.modularui.api.drawable.IDrawable;
 import com.gtnewhorizons.modularui.api.math.Pos2d;
-import com.gtnewhorizons.modularui.api.widget.IWidgetParent;
 import com.gtnewhorizons.modularui.api.widget.Widget;
 import com.gtnewhorizons.modularui.common.widget.SlotWidget;
 import cpw.mods.fml.relauncher.ReflectionHelper;
@@ -25,7 +24,6 @@ import net.minecraft.item.ItemStack;
 import net.minecraftforge.fluids.FluidStack;
 import net.minecraftforge.oredict.OreDictionary;
 
-import java.util.HashMap;
 import java.util.Map;
 import java.util.ArrayList;
 import java.util.List;
@@ -37,7 +35,7 @@ import static com.github.dcysteine.nesql.exporter.source.Json.*;
 /** GTNH 2.8.4 adapter: inventory bindings define slot roles; display items never define fluid identity. */
 final class GtRecipes implements AutoCloseable {
     private final GTNEIDefaultHandler handler;
-    private final Map<String, Binding> bindings = new HashMap<>();
+    private final List<Binding> bindings = new ArrayList<>();
     private final ModularWindow window;
     final Ui ui;
 
@@ -54,22 +52,18 @@ final class GtRecipes implements AutoCloseable {
             Object itemInputs = field("itemInputsInventory"), itemOutputs = field("itemOutputsInventory");
             Object fluidInputs = field("fluidInputsInventory"), fluidOutputs = field("fluidOutputsInventory");
             Object special = field("specialSlotInventory");
-            List<Node> nodes = new ArrayList<>();
-            for (Widget child : window.getChildren()) nodes.add(new Node(child, 0, 0));
-            Set<Widget> visited = java.util.Collections.newSetFromMap(new java.util.IdentityHashMap<>());
-            for (int index = 0; index < nodes.size(); index++) {
-                Node node = nodes.get(index);
-                Widget widget = node.widget;
-                if (!visited.add(widget) || visited.size() > 4096) throw new Jobs.Fault("view_limit", "GT widget tree is cyclic or exceeds 4096 nodes");
-                int x = node.x + widget.getPos().x, y = node.y + widget.getPos().y;
-                if (widget instanceof IWidgetParent) for (Widget child : ((IWidgetParent) widget).getChildren()) nodes.add(new Node(child, x, y));
+            if (window.getChildren().size() > 4096) throw new Jobs.Fault("view_limit", "GT window exceeds 4096 widgets");
+            // Pinned CachedDefaultRecipe visits the direct children in this order,
+            // then appends overflow slots. Screen positions are not slot identities.
+            for (Widget widget : window.getChildren()) {
                 if (!(widget instanceof SlotWidget)) continue;
                 SlotWidget slot = (SlotWidget) widget;
                 Object inventory = slot.getMcSlot().getItemHandler();
                 boolean input = inventory == itemInputs || inventory == fluidInputs || inventory == special;
                 boolean fluid = inventory == fluidInputs || inventory == fluidOutputs;
                 if (!input && inventory != itemOutputs && inventory != fluidOutputs) continue;
-                bind(bindings, x + 1, y + 1, input, new Binding(slot.getMcSlot().getSlotIndex(), fluid, inventory == special, false));
+                bindings.add(new Binding(slot.getMcSlot().getSlotIndex(), fluid, inventory == special, false, input,
+                        widget.getPos().x + 1, widget.getPos().y + 1));
             }
             ui = views ? new Ui(handler, location) : null;
         } catch (RuntimeException | Error failure) {
@@ -86,11 +80,21 @@ final class GtRecipes implements AutoCloseable {
     void capture(GTNEIDefaultHandler.CachedDefaultRecipe cached, RecipeRow row) {
         GTRecipe recipe = cached.mRecipe;
         NEIRecipeProperties presentation = handler.getRecipeMap().getFrontend().getNEIProperties();
-        ItemStack[] itemInputs = presentation.itemInputsGetter.apply(recipe);
+        Object[] itemInputs = inputs(recipe, presentation);
         ItemStack[] itemOutputs = presentation.itemOutputsGetter.apply(recipe);
         FluidStack[] fluidInputs = presentation.fluidInputsGetter.apply(recipe);
         FluidStack[] fluidOutputs = presentation.fluidOutputsGetter.apply(recipe);
-        Map<String, Binding> slots = slots(recipe);
+        List<Binding> slots = slots(recipe);
+        java.util.function.Function<Binding, Object> source = binding -> {
+            if (binding.special) return recipe.mSpecialItems;
+            if (binding.fluid) return optional(binding.input
+                    ? binding.overflow ? recipe.mFluidInputs : fluidInputs
+                    : binding.overflow ? recipe.mFluidOutputs : fluidOutputs, binding.index);
+            return optional(binding.input ? binding.overflow ? recipe.mInputs : itemInputs
+                    : binding.overflow ? recipe.mOutputs : itemOutputs, binding.index);
+        };
+        List<Placement> projectedInputs = project(slots, source, cached.mInputs, true);
+        List<Placement> projectedOutputs = project(slots, source, cached.mOutputs, false);
         Set<String> captured = new HashSet<>();
         row.record.addProperty("duration", Integer.toString(recipe.mDuration));
         row.record.addProperty("energy", Integer.toString(recipe.mEUt));
@@ -105,19 +109,20 @@ final class GtRecipes implements AutoCloseable {
             // GT identifies keys by both their declared type and name.
             row.property("gregtech:metadata/" + type.getName().replace('[', '_').replace(';', '_') + "/" + name, name, metadata.getValue());
         }
-        for (PositionedStack display : cached.mInputs) {
-            Binding binding = binding(slots, display, true);
-            if (!captured.add(binding.identity(true))) throw new Jobs.Fault("slot_conflict", "GT recipe repeats an input binding");
+        for (Placement placement : projectedInputs) {
+            PositionedStack display = placement.display;
+            Binding binding = placement.binding;
+            if (!captured.add(binding.identity())) throw new Jobs.Fault("slot_conflict", "GT recipe repeats an input binding");
             if (binding.special) {
                 int amount = fixed(display).realStackSize;
                 requireAmount(amount);
                 row.itemInput(display, 65535, Math.max(1, amount), true, false, object("kind", "exact"));
             } else if (binding.fluid) {
-                FluidStack fluid = at(binding.overflow ? recipe.mFluidInputs : fluidInputs, binding.index);
+                FluidStack fluid = (FluidStack) placement.source;
                 requireAmount(fluid.amount);
                 row.fluidInput(display, binding.index, fluid);
             } else {
-                ItemStack item = at(binding.overflow ? recipe.mInputs : itemInputs, binding.index);
+                ItemStack item = ingredient(placement.source);
                 requireAmount(item.stackSize);
                 boolean meta = Items.feather.getDamage(item) == OreDictionary.WILDCARD_VALUE;
                 JsonObject rule = meta || !recipe.isNBTSensitive
@@ -125,11 +130,12 @@ final class GtRecipes implements AutoCloseable {
                 row.itemInput(display, binding.index, Math.max(1, item.stackSize), item.stackSize == 0, false, rule);
             }
         }
-        for (PositionedStack display : cached.mOutputs) {
-            Binding binding = binding(slots, display, false);
-            if (!captured.add(binding.identity(false))) throw new Jobs.Fault("slot_conflict", "GT recipe repeats an output binding");
-            if (binding.fluid) row.fluidOutput(display, binding.index, at(binding.overflow ? recipe.mFluidOutputs : fluidOutputs, binding.index));
-            else row.itemOutput(display, binding.index, at(binding.overflow ? recipe.mOutputs : itemOutputs, binding.index), recipe.getOutputChance(binding.index));
+        for (Placement placement : projectedOutputs) {
+            PositionedStack display = placement.display;
+            Binding binding = placement.binding;
+            if (!captured.add(binding.identity())) throw new Jobs.Fault("slot_conflict", "GT recipe repeats an output binding");
+            if (binding.fluid) row.fluidOutput(display, binding.index, (FluidStack) placement.source);
+            else row.itemOutput(display, binding.index, (ItemStack) placement.source, recipe.getOutputChance(binding.index));
         }
         BasicUIProperties ui = handler.getRecipeMap().getFrontend().getUIProperties();
         covered(captured, itemInputs, recipe.mInputs, ui.maxItemInputs, false, true);
@@ -138,14 +144,8 @@ final class GtRecipes implements AutoCloseable {
         covered(captured, fluidOutputs, recipe.mFluidOutputs, ui.maxFluidOutputs, true, false);
     }
 
-    private Binding binding(Map<String, Binding> slots, PositionedStack display, boolean input) {
-        Binding binding = slots.get(key(display.relx, display.rely, input));
-        if (binding == null) throw new Jobs.Fault("slot_missing", "GT recipe display has no inventory binding: " + handler.getOverlayIdentifier());
-        return binding;
-    }
-
-    private Map<String, Binding> slots(GTRecipe recipe) {
-        Map<String, Binding> slots = new HashMap<>(bindings);
+    private List<Binding> slots(GTRecipe recipe) {
+        List<Binding> slots = new ArrayList<>(bindings);
         BasicUIProperties ui = handler.getRecipeMap().getFrontend().getUIProperties();
         Pos2d offset = field("WINDOW_OFFSET");
         // CachedDefaultRecipe adds these overflow stacks separately from the fixed ModularUI slots.
@@ -160,31 +160,80 @@ final class GtRecipes implements AutoCloseable {
         return slots;
     }
 
-    private void overflow(Map<String, Binding> slots, Pos2d position, int index, int fixed, boolean fluid, boolean input) {
-        if (index >= fixed) bind(slots, position.x + 1, position.y + 1, input, new Binding(index, fluid, false, true));
+    private void overflow(List<Binding> slots, Pos2d position, int index, int fixed, boolean fluid, boolean input) {
+        if (index >= fixed) slots.add(new Binding(index, fluid, false, true, input, position.x + 1, position.y + 1));
     }
 
-    private void bind(Map<String, Binding> slots, int x, int y, boolean input, Binding binding) {
-        Binding previous = slots.putIfAbsent(key(x, y, input), binding);
-        if (previous != null && !previous.identity(input).equals(binding.identity(input))) {
-            throw new Jobs.Fault("slot_conflict", "GT UI has overlapping recipe bindings: " + handler.getOverlayIdentifier());
+    static List<Placement> project(List<Binding> slots, java.util.function.Function<Binding, Object> source,
+                                   List<PositionedStack> displays, boolean input) {
+        List<Placement> result = new ArrayList<>();
+        for (Binding binding : slots) {
+            if (binding.input != input) continue;
+            Object value = source.apply(binding);
+            if (value == null || value instanceof FluidStack && ((FluidStack) value).getFluid() == null) continue;
+            if (result.size() >= displays.size()) throw new Jobs.Fault("slot_missing", "GT view omits native binding " + binding.identity());
+            PositionedStack display = displays.get(result.size());
+            if (display.relx != binding.x || display.rely != binding.y) {
+                throw new Jobs.Fault("slot_changed", "GT native slot order or position changed: " + binding.identity());
+            }
+            result.add(new Placement(binding, value, display));
         }
+        if (result.size() != displays.size()) throw new Jobs.Fault("slot_missing", "GT view contains a stack without a native binding");
+        return result;
+    }
+
+    private static Object[] inputs(GTRecipe recipe, NEIRecipeProperties presentation) {
+        if (!(recipe instanceof GTRecipe.GTRecipe_WithAlt)) return presentation.itemInputsGetter.apply(recipe);
+        return inputs(recipe.mInputs, ((GTRecipe.GTRecipe_WithAlt) recipe).mOreDictAlt);
+    }
+
+    /** Same source choice/copy boundary as GTRecipe_WithAlt.getAltRepresentativeInput. */
+    static Object[] inputs(ItemStack[] base, ItemStack[][] alternatives) {
+        int size = Math.max(base.length, alternatives.length);
+        if (size > 65536) throw new Jobs.Fault("recipe_limit", "GT ingredient slot count exceeds 65536");
+        Object[] inputs = new Object[size];
+        for (int index = 0; index < inputs.length; index++) {
+            Jobs.checkpoint();
+            ItemStack[] choices = index < alternatives.length ? alternatives[index] : null;
+            if (choices != null && choices.length > 0) {
+                if (choices.length > 65536) throw new Jobs.Fault("recipe_limit", "GT ingredient choices exceed 65536");
+                ItemStack[] copies = new ItemStack[choices.length];
+                for (int choice = 0; choice < copies.length; choice++) copies[choice] = copy(choices[choice]);
+                inputs[index] = copies;
+            } else if (index < base.length) inputs[index] = copy(base[index]);
+        }
+        return inputs;
+    }
+
+    private static ItemStack copy(ItemStack item) { return item == null ? null : item.copy(); }
+
+    static ItemStack ingredient(Object source) {
+        ItemStack[] alternatives = source instanceof ItemStack ? new ItemStack[] {(ItemStack) source}
+                : source instanceof ItemStack[] ? (ItemStack[]) source : null;
+        if (alternatives == null || alternatives.length == 0) throw new Jobs.Fault("empty_ingredient", "GT ingredient has no source alternatives");
+        ItemStack first = alternatives[0];
+        if (first == null || first.getItem() == null) throw new Jobs.Fault("empty_ingredient", "GT ingredient contains an empty source stack");
+        boolean wildcard = Items.feather.getDamage(first) == OreDictionary.WILDCARD_VALUE;
+        for (ItemStack item : alternatives) {
+            if (item == null || item.getItem() == null || item.stackSize != first.stackSize
+                    || (Items.feather.getDamage(item) == OreDictionary.WILDCARD_VALUE) != wildcard) {
+                throw new Jobs.Fault("recipe_unsupported", "GT alternatives require distinct quantity or matching semantics");
+            }
+        }
+        return first;
     }
 
     private static void covered(Set<String> captured, Object[] shown, Object[] source, int fixed, boolean fluid, boolean input) {
         int length = Math.max(Math.min(shown.length, fixed), source.length);
         for (int index = 0; index < length; index++) {
             Object value = index < fixed ? index < shown.length ? shown[index] : null : index < source.length ? source[index] : null;
-            if (value != null && !captured.contains(new Binding(index, fluid, false, false).identity(input))) {
+            if (value != null && !captured.contains(new Binding(index, fluid, false, false, input, 0, 0).identity())) {
                 throw new Jobs.Fault("slot_missing", "GT recipe contains a value without an exported slot: " + index);
             }
         }
     }
 
-    private static <T> T at(T[] values, int index) {
-        if (values == null || index < 0 || index >= values.length || values[index] == null) throw new Jobs.Fault("slot_missing", "GT recipe slot has no source value");
-        return values[index];
-    }
+    private static Object optional(Object[] values, int index) { return index >= 0 && index < values.length ? values[index] : null; }
 
     private static GTNEIDefaultHandler.FixedPositionedStack fixed(PositionedStack value) {
         if (!(value instanceof GTNEIDefaultHandler.FixedPositionedStack)) throw new Jobs.Fault("slot_type", "Unsupported GT display stack");
@@ -196,20 +245,20 @@ final class GtRecipes implements AutoCloseable {
     }
 
     private <T> T field(String name) { return ReflectionHelper.getPrivateValue(GTNEIDefaultHandler.class, handler, name); }
-    private static String key(int x, int y, boolean input) { return x + "/" + y + "/" + input; }
-
-    private static final class Binding {
-        final int index;
-        final boolean fluid, special, overflow;
-        Binding(int index, boolean fluid, boolean special, boolean overflow) {
-            this.index = index; this.fluid = fluid; this.special = special; this.overflow = overflow;
+    static final class Binding {
+        final int index, x, y;
+        final boolean fluid, special, overflow, input;
+        Binding(int index, boolean fluid, boolean special, boolean overflow, boolean input, int x, int y) {
+            this.index = index; this.fluid = fluid; this.special = special; this.overflow = overflow; this.input = input;
+            this.x = x; this.y = y;
         }
-        String identity(boolean input) { return input + "/" + fluid + "/" + special + "/" + index; }
+        String identity() { return input + "/" + fluid + "/" + special + "/" + index; }
     }
 
-    private static final class Node {
-        final Widget widget;
-        final int x, y;
-        Node(Widget widget, int x, int y) { this.widget = widget; this.x = x; this.y = y; }
+    static final class Placement {
+        final Binding binding;
+        final Object source;
+        final PositionedStack display;
+        Placement(Binding binding, Object source, PositionedStack display) { this.binding = binding; this.source = source; this.display = display; }
     }
 }

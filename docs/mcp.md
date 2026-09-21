@@ -93,7 +93,7 @@ Thaumcraft 4 的空 AspectList 会返回 `[null]`；原生 copy/add/merge 还可
 
 研究的 `itemTriggers` 在修订11中保存Clue对象：`{registry, meta, nbt, ore, matches}`。registry/meta/类型化nbt是原始触发模板，meta=32767仍表示通配；ore是原生检查的首个矿辞组，没有时为null。模板不要求存在于items表，不调用名称、提示或绘制API。matches保存NEI已知具体物品中通过原生匹配的ID，有序且无重复。空示例列表仍完整保留条件，例如MIRROR的minecraft:portal；它不表示该条件无效或研究不能解锁。
 
-Clues按触发项自身与首个矿辞组的Item类型选择NEI候选，调用与ResearchManager.createClue相同的InventoryUtils.areItemStacksEqual(trigger,candidate,true,true,false)筛选，保留实际矿辞替代、耐久、metadata和NBT判断；不从原始模板或矿辞模式构造物品示例。原生矿辞分支可能忽略NBT，直接物品分支按原生规则比较。匹配和读取使用副本，不修改游戏堆栈或扫描/研究状态。示例不是任意NBT状态的全枚举。空触发对象、未注册物品及超出预算仍报research_trigger。研究按最多16次匹配成功或2ms分批处理，单次API调用不可抢占。错误保留研究key/分类/零基index、trigger位置和registry/meta。模组使用0.12.2，编译器使用0.11.1、Web契约使用0.11.0，source/catalog均为修订11，不提供旧字符串数组的兼容路径。
+Clues按触发项自身与首个矿辞组的Item类型选择NEI候选，调用与ResearchManager.createClue相同的InventoryUtils.areItemStacksEqual(trigger,candidate,true,true,false)筛选，保留实际矿辞替代、耐久、metadata和NBT判断；不从原始模板或矿辞模式构造物品示例。原生矿辞分支可能忽略NBT，直接物品分支按原生规则比较。匹配和读取使用副本，不修改游戏堆栈或扫描/研究状态。示例不是任意NBT状态的全枚举。空触发对象、未注册物品及超出预算仍报research_trigger。研究按最多16次匹配成功或2ms分批处理，单次API调用不可抢占。错误保留研究key/分类/零基index、trigger位置和registry/meta。模组使用0.12.3，编译器使用0.11.1、Web契约使用0.11.0，source/catalog均为修订11，不提供旧字符串数组的兼容路径。
 
 已迁移要素与研究关系，魔法配方按下述明确适配范围采集；完整研究正文页面仍待继续。
 
@@ -168,3 +168,5 @@ GT 捕获使用独立窗口和注入的 200 tick 进度源，不改动全局 dra
 Salis的CHESTSCAN使用数量0、metadata32767的箱子作为研究图标。箱子既无子类型也无耐久，原生cycleItemStack会保留该值；原版箱子绘制助手按方块选择模型而不使用传入metadata。因此图标采集保留原生输出，并走现有已知物品引用/独立图像路径，不强制将所有32767转换成库存变体，不改为metadata0。数量0的装饰图标也不生成可取得物品记录。data仍不调用GL，full/images的实际绘制另行验收。
 
 0.12.2集中修复首轮诊断的结构状态和GT元数据：预览及配套Compiler保留NotEnoughIDs的16位方块metadata（0–65535），不截断框架材料ID。土高炉3×4×3预览调用其原生creative构建，避免StructureLib空气/熔岩备选链的survival反复切换；build.method据实记录creative。其他控制器仍走原有构建路径，连续八次声称放置却无世界变化时明确终止，不伪造成功。Sievert、SpaceMiningData、Source/TargetChamberMetadata、QuantumComputerRecipeData按具名字段递归编码，Materials保留原生类名与mName符号。未知类型仍拒绝，数值精度和领域引用继续校验。本轮不将剩余槽位、动态产量、自定义魔法配方、缺失研究键或未支持处理器记为已解决。
+
+0.12.3按GTNEIDefaultHandler原生顺序，将直接窗口槽位和随后追加的overflow槽位绑定到配方来源；空槽位按原生条件过滤，屏幕坐标可重叠，身份仍为方向/内容类型/槽号。显示数量不作为真实产出数量或流体身份。数量、坐标或生成顺序不符继续明确失败；未展示的来源值仍须覆盖检查。GTRecipe_WithAlt优先使用独立备选数组，保留空槽、原始数量和副本；基础数组为空不再使原木拟生场的工具候选丢失。不同数量或通配语义的候选继续要求专门适配，不猜测。fake配方仍保留gregtech:fake标记，此修复不声称还原原木拟生场的完整动态生产算法。

@@ -40,5 +40,6 @@ public final class GameTest {
         StructuresTest.run();
         PreviewTest.run();
         ValuesTest.run();
+        SlotsTest.run();
     }
 }
