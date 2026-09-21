@@ -12,6 +12,8 @@ import net.minecraft.item.ItemStack;
 import net.minecraftforge.fluids.FluidStack;
 
 import java.util.HashSet;
+import java.util.ArrayList;
+import java.util.List;
 import java.util.Set;
 
 import static com.github.dcysteine.nesql.exporter.source.Json.*;
@@ -36,14 +38,23 @@ final class RecipeRow {
     void itemInput(PositionedStack display, int slot, long amount, boolean keep, boolean crafting,
                    java.util.function.BiFunction<ItemStack, Integer, JsonObject> rule) {
         if (display.items == null || display.items.length == 0) throw new Jobs.Fault("empty_ingredient", "Recipe ingredient has no choices");
+        List<Ingredient> ingredients = new ArrayList<>();
+        for (int index = 0; index < display.items.length; index++) {
+            ItemStack item = display.items[index];
+            ingredients.add(new Ingredient(item, amount, keep, rule.apply(item, index)));
+        }
+        itemInput(display, slot, ingredients, crafting);
+    }
+
+    void itemInput(PositionedStack display, int slot, List<Ingredient> ingredients, boolean crafting) {
+        if (ingredients.isEmpty() || ingredients.size() > 65536) throw new Jobs.Fault("empty_ingredient", "Invalid recipe ingredient choice count");
         JsonArray choices = new JsonArray();
         Set<String> seen = new HashSet<>();
-        int index = 0;
-        for (ItemStack item : display.items) {
+        for (Ingredient ingredient : ingredients) {
+            Jobs.checkpoint();
+            ItemStack item = ingredient.item;
             String id = facts.item(item);
-            JsonObject matching = rule.apply(item, index++);
-            if (!seen.add(id + CanonicalJson.digest(matching))) continue;
-            JsonObject consumption = object("kind", keep ? "keep" : "consume");
+            JsonObject consumption = object("kind", ingredient.keep ? "keep" : "consume");
             JsonArray returns = new JsonArray();
             if (crafting && item.getItem().hasContainerItem(item)) {
                 ItemStack original = item.copy(); original.stackSize = 1;
@@ -57,7 +68,11 @@ final class RecipeRow {
                     } else returns.add(object("kind", "item", "id", facts.item(returned), "amount", Integer.toString(returned.stackSize)));
                 }
             }
-            choices.add(object("id", id, "amount", positive(amount), "consume", consumption, "returns", returns, "rule", matching));
+            JsonObject choice = object("id", id, "amount", positive(ingredient.amount), "consume", consumption,
+                    "returns", returns, "rule", ingredient.rule);
+            // The same item and predicate may be offered for different quantities
+            // or consumption. Only identical complete alternatives are duplicates.
+            if (seen.add(CanonicalJson.digest(choice))) choices.add(choice);
         }
         inputs.add(object("slot", slot, "kind", "item", "choices", choices));
         slot(display, "input", "item", slot);
@@ -72,10 +87,15 @@ final class RecipeRow {
     }
 
     void itemOutput(PositionedStack display, int slot, ItemStack item, int chance) {
+        if (item.stackSize <= 0) throw new Jobs.Fault("invalid_amount", "Item output slot=" + slot + "; registry="
+                + net.minecraft.item.Item.itemRegistry.getNameForObject(item.getItem()) + "; meta=" + Items.feather.getDamage(item)
+                + "; amount=" + item.stackSize + ": a fixed recipe output must be positive");
         output(display, slot, "item", facts.item(item), item.stackSize, chance);
     }
 
     void fluidOutput(PositionedStack display, int slot, FluidStack fluid) {
+        if (fluid.amount <= 0) throw new Jobs.Fault("invalid_amount", "Fluid output slot=" + slot + "; registry="
+                + fluid.getFluid().getName() + "; amount=" + fluid.amount + ": a fixed recipe output must be positive");
         output(display, slot, "fluid", facts.fluid(fluid), fluid.amount, 10000);
     }
 
@@ -97,6 +117,19 @@ final class RecipeRow {
     }
 
     void finish() { record.addProperty("id", Identity.recipe(record)); }
+
+    static final class Ingredient {
+        final ItemStack item, display;
+        final long amount;
+        final boolean keep;
+        final JsonObject rule;
+        Ingredient(ItemStack item, long amount, boolean keep, JsonObject rule) {
+            this(item, item, amount, keep, rule);
+        }
+        Ingredient(ItemStack item, ItemStack display, long amount, boolean keep, JsonObject rule) {
+            this.item = item; this.display = display; this.amount = amount; this.keep = keep; this.rule = rule;
+        }
+    }
 
     private static String positive(long amount) {
         if (amount <= 0) throw new Jobs.Fault("invalid_amount", "Recipe amount must be positive");

@@ -17,6 +17,7 @@ import gregtech.api.recipe.BasicUIProperties;
 import gregtech.api.enums.SteamVariant;
 import gregtech.api.recipe.RecipeMetadataKey;
 import gregtech.api.util.GTRecipe;
+import gregtech.api.util.GTOreDictUnificator;
 import gregtech.nei.GTNEIDefaultHandler;
 import gregtech.common.gui.modularui.UIHelper;
 import net.minecraft.init.Items;
@@ -122,12 +123,10 @@ final class GtRecipes implements AutoCloseable {
                 requireAmount(fluid.amount);
                 row.fluidInput(display, binding.index, fluid);
             } else {
-                ItemStack item = ingredient(placement.source);
-                requireAmount(item.stackSize);
-                boolean meta = Items.feather.getDamage(item) == OreDictionary.WILDCARD_VALUE;
-                JsonObject rule = meta || !recipe.isNBTSensitive
-                        ? object("kind", "wildcard", "meta", meta, "nbt", !recipe.isNBTSensitive) : object("kind", "exact");
-                row.itemInput(display, binding.index, Math.max(1, item.stackSize), item.stackSize == 0, false, rule);
+                List<RecipeRow.Ingredient> ingredients = ingredients(placement.source, recipe.isNBTSensitive,
+                        item -> new PositionedStack(GTOreDictUnificator.getNonUnifiedStacks(item), display.relx, display.rely, true).items);
+                displayed(display, ingredients);
+                row.itemInput(display, binding.index, ingredients, false);
             }
         }
         for (Placement placement : projectedOutputs) {
@@ -207,20 +206,45 @@ final class GtRecipes implements AutoCloseable {
 
     private static ItemStack copy(ItemStack item) { return item == null ? null : item.copy(); }
 
-    static ItemStack ingredient(Object source) {
+    static List<RecipeRow.Ingredient> ingredients(Object source, boolean sensitive,
+                                                 java.util.function.Function<ItemStack, ItemStack[]> expand) {
         ItemStack[] alternatives = source instanceof ItemStack ? new ItemStack[] {(ItemStack) source}
                 : source instanceof ItemStack[] ? (ItemStack[]) source : null;
         if (alternatives == null || alternatives.length == 0) throw new Jobs.Fault("empty_ingredient", "GT ingredient has no source alternatives");
-        ItemStack first = alternatives[0];
-        if (first == null || first.getItem() == null) throw new Jobs.Fault("empty_ingredient", "GT ingredient contains an empty source stack");
-        boolean wildcard = Items.feather.getDamage(first) == OreDictionary.WILDCARD_VALUE;
+        List<RecipeRow.Ingredient> result = new ArrayList<>();
         for (ItemStack item : alternatives) {
-            if (item == null || item.getItem() == null || item.stackSize != first.stackSize
-                    || (Items.feather.getDamage(item) == OreDictionary.WILDCARD_VALUE) != wildcard) {
-                throw new Jobs.Fault("recipe_unsupported", "GT alternatives require distinct quantity or matching semantics");
+            Jobs.checkpoint();
+            if (item == null || item.getItem() == null) throw new Jobs.Fault("empty_ingredient", "GT ingredient contains an empty source stack");
+            requireAmount(item.stackSize);
+            boolean wildcard = Items.feather.getDamage(item) == OreDictionary.WILDCARD_VALUE;
+            JsonObject rule = wildcard || !sensitive ? object("kind", "wildcard", "meta", wildcard, "nbt", !sensitive) : object("kind", "exact");
+            ItemStack[] variants = expand.apply(item.copy());
+            if (variants == null || variants.length == 0 || variants.length > 65536 - result.size()) {
+                throw new Jobs.Fault("recipe_limit", "GT ingredient expansion is empty or exceeds 65536 choices");
+            }
+            for (ItemStack variant : variants) {
+                if (variant == null || variant.getItem() == null) throw new Jobs.Fault("empty_ingredient", "GT expansion contains an empty stack");
+                ItemStack candidate = variant.copy();
+                // NEI's wildcard permutation replaces the stack with an ItemList
+                // example; the native recipe's NBT predicate still belongs to its source.
+                if (sensitive) candidate.setTagCompound(item.hasTagCompound() ? (net.minecraft.nbt.NBTTagCompound) item.getTagCompound().copy() : null);
+                result.add(new RecipeRow.Ingredient(candidate, variant.copy(), Math.max(1, item.stackSize), item.stackSize == 0, rule));
             }
         }
-        return first;
+        return result;
+    }
+
+    static void displayed(PositionedStack display, List<RecipeRow.Ingredient> ingredients) {
+        if (display.items.length != ingredients.size()) throw new Jobs.Fault("slot_changed", "GT input expansion changed its alternative count");
+        for (int index = 0; index < ingredients.size(); index++) {
+            ItemStack shown = display.items[index], expected = ingredients.get(index).display;
+            // FixedPositionedStack may render every quantity as 1. Item/meta/NBT
+            // order still has to agree with the native combined expansion.
+            if (shown == null || shown.getItem() != expected.getItem() || Items.feather.getDamage(shown) != Items.feather.getDamage(expected)
+                    || !ItemStack.areItemStackTagsEqual(shown, expected)) {
+                throw new Jobs.Fault("slot_changed", "GT input expansion changed alternative " + index);
+            }
+        }
     }
 
     private static void covered(Set<String> captured, Object[] shown, Object[] source, int fixed, boolean fluid, boolean input) {
