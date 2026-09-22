@@ -90,23 +90,29 @@ final class RecipeRow {
         if (item.stackSize <= 0) throw new Jobs.Fault("invalid_amount", "Item output slot=" + slot + "; registry="
                 + net.minecraft.item.Item.itemRegistry.getNameForObject(item.getItem()) + "; meta=" + Items.feather.getDamage(item)
                 + "; amount=" + item.stackSize + ": a fixed recipe output must be positive");
-        output(display, slot, "item", facts.item(item), item.stackSize, chance);
+        output(display, slot, "item", facts.item(item), Integer.toString(item.stackSize), chance, null);
     }
 
     void fluidOutput(PositionedStack display, int slot, FluidStack fluid) {
         if (fluid.amount <= 0) throw new Jobs.Fault("invalid_amount", "Fluid output slot=" + slot + "; registry="
                 + fluid.getFluid().getName() + "; amount=" + fluid.amount + ": a fixed recipe output must be positive");
-        output(display, slot, "fluid", facts.fluid(fluid), fluid.amount, 10000);
+        output(display, slot, "fluid", facts.fluid(fluid), Integer.toString(fluid.amount), 10000, null);
     }
 
-    private void output(PositionedStack display, int slot, String kind, String id, long amount, int chance) {
+    void fluidOutput(PositionedStack display, int slot, FluidStack fluid, JsonObject quantity) {
+        if (quantity == null) fluidOutput(display, slot, fluid);
+        else output(display, slot, "fluid", facts.fluid(fluid), null, 10000, quantity);
+    }
+
+    private void output(PositionedStack display, int slot, String kind, String id, String amount, int chance, JsonObject quantity) {
         if (chance < 0 || chance > 10000) throw new Jobs.Fault("invalid_chance", "GT recipe chance is outside 0..10000");
-        outputs.add(object("slot", slot, "kind", kind, "id", id, "amount", positive(amount),
+        outputs.add(object("slot", slot, "kind", kind, "id", id, "amount", amount, "quantity", quantity,
                 "chance", Chance.of(chance, 10000), "role", "result", "change", null));
         slot(display, "output", kind, slot);
     }
 
     private void slot(PositionedStack display, String direction, String kind, int slot) {
+        if (display == null) return; // Semantic output omitted by the native UI.
         elements.add(object("kind", "slot", "direction", direction, "substance", kind, "slot", slot,
                 "x", display.relx, "y", display.rely, "width", 16, "height", 16, "z", 1));
     }

@@ -43,7 +43,7 @@
 
 0.12.0新增start_check，HTTP入口为POST /checks，复用同一单任务队列和cancel_export/read_job。domain为structures或recipes，world必填。structures的controllers为最多512个不重复的0–32767编号，省略或[]表示全部IConstructable；不能传配方筛选。recipes的handlers来自inspect_game，省略或[]表示全部处理器，未适配项标unsupported。offset默认0、最大1000000，limit默认128、范围1–4096，限定每个处理器本轮范围。请求不接受任意代码或输出路径。
 
-结构诊断复用Structures.Cursor/Preview，独立Facts和Rows，不先采集公共物品库。配方诊断复用生产处理器/适配器，每条配方独立Facts和排序缓冲；同一处理器实例依次读取范围。检查捕获读取、序列化、大小和重复身份问题，不替代Compiler完整领域/引用校验。诊断只使用data模式，不执行模型/图像/背景绘制；source/catalog修订仍为11。
+结构诊断复用Structures.Cursor/Preview，独立Facts和Rows，不先采集公共物品库。配方诊断复用生产处理器/适配器，每条配方独立Facts和排序缓冲；同一处理器实例依次读取范围。检查捕获读取、序列化、大小和重复身份问题，不替代Compiler完整领域/引用校验。诊断只使用data模式，不执行模型/图像/背景绘制；source/catalog修订为12。
 
 初期捕获完整模组/配置/资源/知识指纹，末尾再次比较；每个目标前后检查固定世界、玩家、资源代数、NEI列表、语言及知识。目标失败且释放成功时继续。文件故障、环境变化、无法安全释放或底层Error停止本轮，未执行目标保留pending。preview_cleanup不会被selection的preview_failed降级处理吞掉。单个原生调用未结束时，不开始下一项目，也不使用Thread.stop。
 
@@ -93,7 +93,7 @@ Thaumcraft 4 的空 AspectList 会返回 `[null]`；原生 copy/add/merge 还可
 
 研究的 `itemTriggers` 在修订11中保存Clue对象：`{registry, meta, nbt, ore, matches}`。registry/meta/类型化nbt是原始触发模板，meta=32767仍表示通配；ore是原生检查的首个矿辞组，没有时为null。模板不要求存在于items表，不调用名称、提示或绘制API。matches保存NEI已知具体物品中通过原生匹配的ID，有序且无重复。空示例列表仍完整保留条件，例如MIRROR的minecraft:portal；它不表示该条件无效或研究不能解锁。
 
-Clues按触发项自身与首个矿辞组的Item类型选择NEI候选，调用与ResearchManager.createClue相同的InventoryUtils.areItemStacksEqual(trigger,candidate,true,true,false)筛选，保留实际矿辞替代、耐久、metadata和NBT判断；不从原始模板或矿辞模式构造物品示例。原生矿辞分支可能忽略NBT，直接物品分支按原生规则比较。匹配和读取使用副本，不修改游戏堆栈或扫描/研究状态。示例不是任意NBT状态的全枚举。空触发对象、未注册物品及超出预算仍报research_trigger。研究按最多16次匹配成功或2ms分批处理，单次API调用不可抢占。错误保留研究key/分类/零基index、trigger位置和registry/meta。模组使用0.12.4，编译器使用0.11.2、Web契约使用0.11.0，source/catalog均为修订11，不提供旧字符串数组的兼容路径。
+Clues按触发项自身与首个矿辞组的Item类型选择NEI候选，调用与ResearchManager.createClue相同的InventoryUtils.areItemStacksEqual(trigger,candidate,true,true,false)筛选，保留实际矿辞替代、耐久、metadata和NBT判断；不从原始模板或矿辞模式构造物品示例。原生矿辞分支可能忽略NBT，直接物品分支按原生规则比较。匹配和读取使用副本，不修改游戏堆栈或扫描/研究状态。示例不是任意NBT状态的全枚举。空触发对象、未注册物品及超出预算仍报research_trigger。研究按最多16次匹配成功或2ms分批处理，单次API调用不可抢占。错误保留研究key/分类/零基index、trigger位置和registry/meta。模组使用0.13.0，编译器与Web契约使用0.12.0，source/catalog均为修订12，不提供旧字符串数组的兼容路径。
 
 已迁移要素与研究关系，魔法配方按下述明确适配范围采集；完整研究正文页面仍待继续。
 
@@ -172,3 +172,5 @@ Salis的CHESTSCAN使用数量0、metadata32767的箱子作为研究图标。箱�
 0.12.3按GTNEIDefaultHandler原生顺序，将直接窗口槽位和随后追加的overflow槽位绑定到配方来源；空槽位按原生条件过滤，屏幕坐标可重叠，身份仍为方向/内容类型/槽号。显示数量不作为真实产出数量或流体身份。数量、坐标或生成顺序不符继续明确失败；未展示的来源值仍须覆盖检查。GTRecipe_WithAlt优先使用独立备选数组，保留空槽、原始数量和副本；基础数组为空不再使原木拟生场的工具候选丢失。不同数量或通配语义的候选继续要求专门适配，不猜测。fake配方仍保留gregtech:fake标记，此修复不声称还原原木拟生场的完整动态生产算法。
 
 0.12.4保留每个GT备选输入自己的数量、消耗与匹配规则。每个源候选单独调用同一GT去统一/NEI排列展开，按合并顺序核对缓存显示项的物品、metadata和NBT；显示数量归一为1不影响数据量。NBT敏感候选保留来源的NBT条件，NEI展示示例另用于一致性比较。候选仅在身份、数量、消耗、归还和规则全部相同时折叠，配套Compiler0.11.2执行同样的完整候选去重约束。schema形状与revision11保持。非正的固定产出继续失败，错误包含物品/流体registry、slot、meta和原始amount，动态产量需专门建模。
+
+0.13.0升级至修订12。Output增加quantity，和固定amount二选一；动态量amount=null，不以0作哨兵。draw保存input、after、limit，按1到min(limit,剩余输入量-1)做原生整数均匀抽取；remainder保存同组全部draw的有序引用。Compiler验证唯一回收项、完整前缀、输入来源、正预算、无环与无重复，所有量保持整数字符串。GT注册输出堆栈即使已被一次真实处理写入随机数量，也仍按原生规则导出，导出本身不调用随机数。原生View可只展示部分槽位，但语义记录仍必须完整，Web在原生布局外补充显示未绑定的输入/产出。本轮对ZhuhaiFrontend明确采用该策略，未知缺失槽仍拒绝。此前版本的修复记录保留为历史，当前使用新修订配套包。

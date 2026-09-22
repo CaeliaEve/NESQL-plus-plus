@@ -180,11 +180,23 @@ public final class SourceTest {
             }
             inputs.add(object("slot", 0, "kind", "item", "choices", choices));
             outputs.add(object("slot", 0, "kind", machine ? "fluid" : "item", "id", machine ? water : paper,
-                    "amount", machine ? "1000" : "2", "chance", object("numerator", "1", "denominator", machine ? "3" : "1"), "role", "result", "change", null));
+                    "amount", machine ? "1000" : "2", "quantity", null, "chance", object("numerator", "1", "denominator", machine ? "3" : "1"), "role", "result", "change", null));
             elements.add(object("kind", "slot", "direction", "input", "substance", "item", "slot", 0, "x", 8, "y", 20, "width", 18, "height", 18, "z", 1));
             elements.add(object("kind", "slot", "direction", "output", "substance", machine ? "fluid" : "item", "slot", 0,
                     "x", 110, "y", 20, "width", 18, "height", 18, "z", 1));
             if (machine) {
+                // Additional semantic slots need no invented native UI coordinates.
+                inputs.add(object("slot", 0, "kind", "fluid", "choices", array(object("id", water, "amount", "100",
+                        "consume", object("kind", "consume"), "returns", new JsonArray(), "rule", object("kind", "exact")))));
+                outputs.add(object("slot", 1, "kind", "fluid", "id", water, "amount", null,
+                        "quantity", object("kind", "remainder", "input", 0, "after", array(2, 3)),
+                        "chance", Chance.of(1, 1), "role", "result", "change", null));
+                outputs.add(object("slot", 2, "kind", "fluid", "id", water, "amount", null,
+                        "quantity", object("kind", "draw", "input", 0, "after", array(), "limit", "10"),
+                        "chance", Chance.of(1, 1), "role", "result", "change", null));
+                outputs.add(object("slot", 3, "kind", "fluid", "id", water, "amount", null,
+                        "quantity", object("kind", "draw", "input", 0, "after", array(2), "limit", "20"),
+                        "chance", Chance.of(1, 1), "role", "result", "change", null));
                 JsonObject track = object("frames", array(object("ticks", 4, "areas", new JsonArray()),
                             object("ticks", 4, "areas", array(array("0.0", "0.0", "0.5", "1.0"))),
                             object("ticks", 4, "areas", array(array("0.5", "0.0", "1.0", "0.5"), array("0.0", "0.5", "0.5", "1.0"))),

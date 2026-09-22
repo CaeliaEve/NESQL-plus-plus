@@ -36,7 +36,7 @@ npm --prefix bridge test
 node scripts/release.mjs
 ```
 
-普通增量构建无需重复 setup 或 clean。`build` 执行两组 Java 行为检查并生成经过 reobf 的 `build/libs/NESQL++-0.12.4.jar`。`check-jar` 检查实际产物的命令和预览世界 SRG 方法、版本替换和打包边界。`release` 要求目标目录不存在，按明确清单打包，不操作游戏目录。
+普通增量构建无需重复 setup 或 clean。`build` 执行两组 Java 行为检查并生成经过 reobf 的 `build/libs/NESQL++-0.13.0.jar`。`check-jar` 检查实际产物的命令和预览世界 SRG 方法、版本替换和打包边界。`release` 要求目标目录不存在，按明确清单打包，不操作游戏目录。
 
 可用 `NESQL_LOCAL_MAVEN_REPO` 指定本地 Maven 仓库。Forge 1.7.10 的工具链固定为 ForgeGradle 1.2.11 / Gradle 6.9.1；这里的旧版本是目标游戏的构建约束。
 
@@ -88,3 +88,5 @@ GT 的统一方块实体入口仅在 MTE 实现 IMTERenderer 时绘制附加几�
 Java source/jobs 行为检查、真实本机 HTTP 端点、MCP SDK stdio 握手/工具调用、生产 jar 校验已通过。尚未在运行中的 GTNH 世界部署验证；不能据此宣称 GL 兼容性、全量性能或所有领域已经验收。
 
 协议、目录和任务语义见 [docs/mcp.md](docs/mcp.md)。
+
+0.13.0使用source/catalog修订12，配套Compiler/契约0.12.0。固定产出保存amount，关联随机产出保存quantity并令amount为null；气体喷射按原生顺序保留抽取上限、前序依赖和回收余量，不采样随机结果。珠海渔场保留5×5原生窗口之外的真实产出，原生坐标不伪造。热交换机、树场和其他动态算法仍需专用适配。旧修订11快照需按新格式重新导出，不提供旧reader。

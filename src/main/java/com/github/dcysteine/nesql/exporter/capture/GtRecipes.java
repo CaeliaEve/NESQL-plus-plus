@@ -17,6 +17,7 @@ import gregtech.api.recipe.BasicUIProperties;
 import gregtech.api.enums.SteamVariant;
 import gregtech.api.recipe.RecipeMetadataKey;
 import gregtech.api.util.GTRecipe;
+import gregtech.api.util.GTRecipeConstants;
 import gregtech.api.util.GTOreDictUnificator;
 import gregtech.nei.GTNEIDefaultHandler;
 import gregtech.common.gui.modularui.UIHelper;
@@ -85,6 +86,7 @@ final class GtRecipes implements AutoCloseable {
         ItemStack[] itemOutputs = presentation.itemOutputsGetter.apply(recipe);
         FluidStack[] fluidInputs = presentation.fluidInputsGetter.apply(recipe);
         FluidStack[] fluidOutputs = presentation.fluidOutputsGetter.apply(recipe);
+        Map<Integer, JsonObject> quantities = quantities(recipe);
         List<Binding> slots = slots(recipe);
         java.util.function.Function<Binding, Object> source = binding -> {
             if (binding.special) return recipe.mSpecialItems;
@@ -133,14 +135,28 @@ final class GtRecipes implements AutoCloseable {
             PositionedStack display = placement.display;
             Binding binding = placement.binding;
             if (!captured.add(binding.identity())) throw new Jobs.Fault("slot_conflict", "GT recipe repeats an output binding");
-            if (binding.fluid) row.fluidOutput(display, binding.index, (FluidStack) placement.source);
+            if (binding.fluid) row.fluidOutput(display, binding.index, (FluidStack) placement.source, quantities.get(binding.index));
             else row.itemOutput(display, binding.index, (ItemStack) placement.source, recipe.getOutputChance(binding.index));
         }
         BasicUIProperties ui = handler.getRecipeMap().getFrontend().getUIProperties();
-        covered(captured, itemInputs, recipe.mInputs, ui.maxItemInputs, false, true);
-        covered(captured, itemOutputs, recipe.mOutputs, ui.maxItemOutputs, false, false);
-        covered(captured, fluidInputs, recipe.mFluidInputs, ui.maxFluidInputs, true, true);
-        covered(captured, fluidOutputs, recipe.mFluidOutputs, ui.maxFluidOutputs, true, false);
+        covered(captured, itemInputs, recipe.mInputs, ui.maxItemInputs, false, true, null);
+        boolean hidden = handler.getRecipeMap().getFrontend().getClass().getName().equals("gtPlusPlus.api.recipe.ZhuhaiFrontend");
+        covered(captured, itemOutputs, recipe.mOutputs, ui.maxItemOutputs, false, false,
+                hidden ? (slot, value) -> row.itemOutput(null, slot, (ItemStack) value, recipe.getOutputChance(slot)) : null);
+        covered(captured, fluidInputs, recipe.mFluidInputs, ui.maxFluidInputs, true, true, null);
+        covered(captured, fluidOutputs, recipe.mFluidOutputs, ui.maxFluidOutputs, true, false, null);
+    }
+
+    private Map<Integer, JsonObject> quantities(GTRecipe recipe) {
+        if (!handler.getRecipeMap().getFrontend().getClass().getName().equals("gtPlusPlus.api.recipe.SpargeTowerFrontend")) {
+            return java.util.Collections.emptyMap();
+        }
+        if (recipe.mFluidInputs.length < 1 || recipe.mFluidInputs[0] == null || recipe.mFluidOutputs.length < 2
+                || recipe.mFluidOutputs[1] == null || !recipe.mFluidInputs[0].isFluidEqual(recipe.mFluidOutputs[1])) {
+            throw new Jobs.Fault("quantity_rule", "Sparging remainder must return its source gas");
+        }
+        return Amounts.sparge(0, recipe.mFluidOutputs.length,
+                recipe.getMetadataOrDefault(GTRecipeConstants.SPARGE_MAX_BYPRODUCT, 0), recipe.mFluidInputs[0].amount);
     }
 
     private List<Binding> slots(GTRecipe recipe) {
@@ -247,12 +263,15 @@ final class GtRecipes implements AutoCloseable {
         }
     }
 
-    private static void covered(Set<String> captured, Object[] shown, Object[] source, int fixed, boolean fluid, boolean input) {
+    static void covered(Set<String> captured, Object[] shown, Object[] source, int fixed, boolean fluid, boolean input,
+                        java.util.function.BiConsumer<Integer, Object> omitted) {
         int length = Math.max(Math.min(shown.length, fixed), source.length);
         for (int index = 0; index < length; index++) {
             Object value = index < fixed ? index < shown.length ? shown[index] : null : index < source.length ? source[index] : null;
             if (value != null && !captured.contains(new Binding(index, fluid, false, false, input, 0, 0).identity())) {
-                throw new Jobs.Fault("slot_missing", "GT recipe contains a value without an exported slot: " + index);
+                if (omitted == null) throw new Jobs.Fault("slot_missing", "GT recipe contains a value without an exported slot: " + index);
+                omitted.accept(index, value);
+                captured.add(new Binding(index, fluid, false, false, input, 0, 0).identity());
             }
         }
     }

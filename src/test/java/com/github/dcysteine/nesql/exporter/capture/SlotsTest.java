@@ -76,7 +76,33 @@ final class SlotsTest {
         require(fallback.length == 2 && ((ItemStack) fallback[0]).stackSize == 3 && fallback[1] != second,
                 "An empty or absent alternative hid the base source");
         alternatives(facts);
+        quantities(facts);
         System.out.println("GT slots: ordered overlaps, empty slots, input/output separation, exact output quantities and alternative-only inputs passed");
+    }
+
+    private static void quantities(Facts facts) {
+        java.util.Map<Integer, com.google.gson.JsonObject> rules = Amounts.sparge(0, 7, 200, 1000);
+        RecipeRow row = new RecipeRow(facts, object("owner", "fixture", "handler", "sparge", "key", "quantities"), "fixture", 0);
+        for (int slot = 1; slot < 7; slot++) row.fluidOutput(display(), slot,
+                new FluidStack(FluidRegistry.WATER, slot == 2 ? 123 : 0), rules.get(slot));
+        require(row.outputs.size() == 6 && row.outputs.get(0).getAsJsonObject().get("amount").isJsonNull()
+                && row.outputs.get(1).getAsJsonObject().get("amount").isJsonNull(), "Sparging retained a placeholder or a previously sampled amount");
+        require(rules.get(1).getAsJsonArray("after").size() == 5 && rules.get(6).getAsJsonArray("after").size() == 4
+                && rules.get(2).get("limit").getAsJsonPrimitive().isString(), "Sparging lost dependency order or exact limits");
+        reject("quantity_rule", () -> Amounts.sparge(0, 4, 200, 2));
+        reject("quantity_rule", () -> Amounts.sparge(0, 7, 0, 1000));
+        require(Amounts.sparge(0, 2, 0, 1).get(1).getAsJsonArray("after").size() == 0, "A remainder without draws was rejected");
+
+        ItemStack[] outputs = new ItemStack[26]; outputs[25] = new ItemStack(Items.paper, 9);
+        Set<String> captured = new java.util.HashSet<>();
+        reject("slot_missing", () -> GtRecipes.covered(captured, outputs, outputs, 25, false, false, null));
+        RecipeRow hidden = new RecipeRow(facts, object("owner", "fixture", "handler", "slots", "key", "hidden"), "fixture", 0);
+        GtRecipes.covered(captured, outputs, outputs, 25, false, false,
+                (slot, value) -> hidden.itemOutput(null, slot, (ItemStack) value, 10000));
+        require(hidden.outputs.size() == 1 && hidden.elements.size() == 0
+                && hidden.outputs.get(0).getAsJsonObject().get("slot").getAsInt() == 25
+                && hidden.outputs.get(0).getAsJsonObject().get("amount").getAsString().equals("9"),
+                "A hidden native output was dropped or assigned fabricated coordinates");
     }
 
     private static void alternatives(Facts facts) {

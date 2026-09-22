@@ -143,7 +143,7 @@ final class Changes {
             if (views.stream().noneMatch(existing -> existing.get("id").getAsString().equals(viewId))) views.add(view);
             JsonObject action = object("kind", "patch", "set", TypedNbt.encode(set).getAsJsonObject().get("value"), "limits", limits);
             JsonObject output = object("slot", 0, "kind", "item", "id", samples.get(0).getAsJsonObject().get("id"), "amount", "1",
-                    "chance", object("numerator", "1", "denominator", "1"), "role", "result", "change", object("input", 0, "action", action, "samples", samples));
+                    "quantity", null, "chance", object("numerator", "1", "denominator", "1"), "role", "result", "change", object("input", 0, "action", action, "samples", samples));
             JsonObject payment = staffMode ? null : object("input", 0, "charges", object(air, "air", fire, "fire"), "capacity", capacity, "preserve", !clear);
             JsonObject recipe = object("source", origin, "category", category, "inputs", inputs, "outputs", array(output), "duration", null, "energy", null,
                     "grid", null, "properties", new JsonObject(), "view", viewId, "order", 0,
@@ -165,7 +165,7 @@ final class Changes {
         String aspect = Identity.origin("aspect", object("owner", "fixture", "handler", "aspects", "key", "fire"));
         String research = Identity.origin("research", object("owner", "fixture", "handler", "research", "key", "BASICS"));
         JsonObject output = object("slot", 0, "kind", "item", "id", outputs.get(0), "amount", "1",
-                "chance", object("numerator", "1", "denominator", "1"), "role", "result", "change", object("input", 0, "action", action, "samples", samples));
+                "quantity", null, "chance", object("numerator", "1", "denominator", "1"), "role", "result", "change", object("input", 0, "action", action, "samples", samples));
         JsonObject recipe = object("source", origin, "category", category,
                 "inputs", array(object("slot", 0, "kind", "item", "choices", choices), object("slot", 1, "kind", "item", "choices", array(choice(paper)))),
                 "outputs", array(output), "duration", null, "energy", null, "grid", null, "properties", new JsonObject(), "view", view, "order", 0,
