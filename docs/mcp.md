@@ -176,3 +176,9 @@ Salis的CHESTSCAN使用数量0、metadata32767的箱子作为研究图标。箱�
 0.13.0升级至修订12。Output增加quantity，和固定amount二选一；动态量amount=null，不以0作哨兵。draw保存input、after、limit，按1到min(limit,剩余输入量-1)做原生整数均匀抽取；remainder保存同组全部draw的有序引用。Compiler验证唯一回收项、完整前缀、输入来源、正预算、无环与无重复，所有量保持整数字符串。GT注册输出堆栈即使已被一次真实处理写入随机数量，也仍按原生规则导出，导出本身不调用随机数。原生View可只展示部分槽位，但语义记录仍必须完整，Web在原生布局外补充显示未绑定的输入/产出。本轮对ZhuhaiFrontend明确采用该策略，未知缺失槽仍拒绝。此前版本的修复记录保留为历史，当前使用新修订配套包。
 
 0.13.1修正输入候选核对：GT缓存的NEI展示排列不是源候选的语义序号。校验使用完整物品身份（registry、metadata和typed NBT）及重复次数，忽略展示顺序和显示数量；不会修改缓存、按缓存下标重绑数量，或合并不同数量/消耗/匹配规则的源候选。候选增减、重复次数或内容不符仍报slot_changed并终止诊断，错误记录输入slot、缓存候选位置、实际身份和未匹配来源示例。真实报告未记录旧错误两侧的候选内容，原生通配排列重排已在本地复现同一错误，具体实机原因与修复效果仍需新检查确认。
+
+## Scanner member semantics in 0.14.0
+
+source/catalog revision13 requires Compiler/contracts0.13.0. Forestry scanner entries now produce separate unanalyzed/analyzed branches with native results for every concrete input member. Display-only outputs such as “Scanned Sapling” never become item facts. The whole input stack is processed; 500tick/2EU/t/100mB applies before analysis, while an already analyzed member takes 1tick/1EU/t and requires but retains 100mB honey. Candidate samples retain their genotype and mate. Missing genomes, unknown member implementations, repaired genotypes and unstable serialization remain explicit failures.
+
+For diagnostics, check the scanner's full range once (298 entries in the last inventory), confirming its current total before choosing the limit. The first nine entries cover the Forestry forms in the pinned target; the original failures were sapling at3 and pollen at8. `checkedRecipes` counts native entries, not the two emitted branch records. Retain exclusions and exact error chains, then use ordinary handlers as controls. A successful check does not validate GL or produce a compilable source.

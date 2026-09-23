@@ -82,7 +82,23 @@ final class GtRecipes implements AutoCloseable {
         finally { Ui.destroy(window); }
     }
 
-    void capture(GTNEIDefaultHandler.CachedDefaultRecipe cached, RecipeRow row) {
+    void foreground(int index, RecipeRow row) {
+        GTNEIDefaultHandler.CachedDefaultRecipe cached = (GTNEIDefaultHandler.CachedDefaultRecipe) handler.arecipes.get(index);
+        GTRecipe nativeRecipe = cached.mRecipe;
+        int duration = row.record.get("duration").getAsInt(), energy = row.record.get("energy").getAsInt();
+        if (duration == nativeRecipe.mDuration && energy == nativeRecipe.mEUt) {
+            ui.context(nativeRecipe, () -> handler.drawForeground(index));
+            return;
+        }
+        // This handler and its list belong to the capture. Never mutate the shared GT cache recipe.
+        GTRecipe branch = nativeRecipe.copy(); branch.mDuration = duration; branch.mEUt = energy;
+        try {
+            handler.arecipes.set(index, handler.new CachedDefaultRecipe(branch));
+            ui.context(branch, () -> handler.drawForeground(index));
+        } finally { handler.arecipes.set(index, cached); }
+    }
+
+    List<RecipeRow> capture(GTNEIDefaultHandler.CachedDefaultRecipe cached, RecipeRow row) {
         GTRecipe recipe = cached.mRecipe;
         NEIRecipeProperties presentation = handler.getRecipeMap().getFrontend().getNEIProperties();
         Object[] itemInputs = inputs(recipe, presentation);
@@ -101,6 +117,7 @@ final class GtRecipes implements AutoCloseable {
         };
         List<Placement> projectedInputs = project(slots, source, cached.mInputs, true);
         List<Placement> projectedOutputs = project(slots, source, cached.mOutputs, false);
+        String root = Scan.root(handler.getRecipeMap().unlocalizedName, recipe);
         Set<String> captured = new HashSet<>();
         row.record.addProperty("duration", Integer.toString(recipe.mDuration));
         row.record.addProperty("energy", Integer.toString(recipe.mEUt));
@@ -115,6 +132,7 @@ final class GtRecipes implements AutoCloseable {
             // GT identifies keys by both their declared type and name.
             row.property("gregtech:metadata/" + type.getName().replace('[', '_').replace(';', '_') + "/" + name, name, metadata.getValue());
         }
+        if (root != null) return Scan.capture(root, recipe, projectedInputs, projectedOutputs, row);
         for (Placement placement : projectedInputs) {
             PositionedStack display = placement.display;
             Binding binding = placement.binding;
@@ -148,6 +166,7 @@ final class GtRecipes implements AutoCloseable {
                 hidden ? (slot, value) -> row.itemOutput(null, slot, (ItemStack) value, recipe.getOutputChance(slot)) : null);
         covered(captured, fluidInputs, recipe.mFluidInputs, ui.maxFluidInputs, true, true, null);
         covered(captured, fluidOutputs, recipe.mFluidOutputs, ui.maxFluidOutputs, true, false, null);
+        return java.util.Collections.singletonList(row);
     }
 
     private Map<Integer, JsonObject> quantities(GTRecipe recipe) {

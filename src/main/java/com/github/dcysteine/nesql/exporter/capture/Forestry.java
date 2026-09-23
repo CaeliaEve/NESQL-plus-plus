@@ -51,11 +51,15 @@ final class Forestry {
     private final Map<String, Integer> occurrences = new java.util.HashMap<>();
 
     static List<Forestry> all() {
+        require();
+        return Arrays.asList(new Forestry(BeeManager.beeRoot, true), new Forestry(TreeManager.treeRoot, false));
+    }
+
+    static void require() {
         ModContainer mod = Loader.instance().getIndexedModList().get("Forestry");
         if (mod == null || !"4.10.17".equals(mod.getVersion()) || AlleleManager.alleleRegistry == null) {
             throw new Jobs.Fault("domain_unsupported", "Genetics requires the target Forestry 4.10.17");
         }
-        return Arrays.asList(new Forestry(BeeManager.beeRoot, true), new Forestry(TreeManager.treeRoot, false));
     }
 
     private Forestry(ISpeciesRoot root, boolean bees) {

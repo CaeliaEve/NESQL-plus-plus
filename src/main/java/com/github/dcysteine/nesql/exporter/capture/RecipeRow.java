@@ -79,9 +79,13 @@ final class RecipeRow {
     }
 
     void fluidInput(PositionedStack display, int slot, FluidStack fluid) {
+        fluidInput(display, slot, fluid, fluid.amount == 0);
+    }
+
+    void fluidInput(PositionedStack display, int slot, FluidStack fluid, boolean keep) {
         JsonArray choices = new JsonArray();
         choices.add(object("id", facts.fluid(fluid), "amount", positive(Math.max(1, fluid.amount)),
-                "consume", object("kind", fluid.amount == 0 ? "keep" : "consume"), "returns", new JsonArray(), "rule", object("kind", "exact")));
+                "consume", object("kind", keep ? "keep" : "consume"), "returns", new JsonArray(), "rule", object("kind", "exact")));
         inputs.add(object("slot", slot, "kind", "fluid", "choices", choices));
         slot(display, "input", "fluid", slot);
     }
@@ -123,6 +127,12 @@ final class RecipeRow {
     }
 
     void finish() { record.addProperty("id", Identity.recipe(record)); }
+
+    RecipeRow branch() {
+        RecipeRow row = new RecipeRow(facts, record.getAsJsonObject("source"), record.get("category").getAsString(), record.get("order").getAsInt());
+        for (java.util.Map.Entry<String, com.google.gson.JsonElement> entry : properties.entrySet()) row.properties.add(entry.getKey(), entry.getValue());
+        return row;
+    }
 
     static final class Ingredient {
         final ItemStack item, display;

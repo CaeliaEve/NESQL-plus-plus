@@ -78,7 +78,77 @@ final class SlotsTest {
         alternatives(facts);
         permutations(facts);
         quantities(facts);
+        scans(facts);
         System.out.println("GT slots: ordered overlaps, empty slots, input/output separation, exact output quantities and alternative-only inputs passed");
+    }
+
+    private static void scans(Facts facts) {
+        net.minecraft.nbt.NBTTagCompound genome = new net.minecraft.nbt.NBTTagCompound();
+        genome.setString("testAllele", "fixture.oak");
+        net.minecraft.nbt.NBTTagCompound tags = new net.minecraft.nbt.NBTTagCompound();
+        tags.setTag("Genome", genome); tags.setBoolean("IsAnalyzed", false);
+        ItemStack input = new ItemStack(Items.paper, 12, 7); input.setTagCompound(tags);
+        input.setStackDisplayName("Unrelated name to discard on first analysis");
+        net.minecraft.nbt.NBTTagCompound original = (net.minecraft.nbt.NBTTagCompound) input.getTagCompound().copy();
+        java.util.function.Function<ItemStack, forestry.api.genetics.IIndividual> reader = stack -> {
+            net.minecraft.nbt.NBTTagCompound encoded = new net.minecraft.nbt.NBTTagCompound();
+            encoded.setTag("Genome", stack.getTagCompound().getCompoundTag("Genome").copy());
+            boolean[] analyzed = {stack.getTagCompound().getBoolean("IsAnalyzed")};
+            // A strict API boundary double: unknown calls fail; native registry/serialization is checked in game.
+            return (forestry.api.genetics.IIndividual) java.lang.reflect.Proxy.newProxyInstance(
+                    SlotsTest.class.getClassLoader(), new Class<?>[] {forestry.api.genetics.IIndividual.class}, (proxy, method, args) -> {
+                        switch (method.getName()) {
+                            case "isAnalyzed": return analyzed[0];
+                            case "analyze": boolean changed = !analyzed[0]; analyzed[0] = true; return changed;
+                            case "writeToNBT":
+                                net.minecraft.nbt.NBTTagCompound target = (net.minecraft.nbt.NBTTagCompound) args[0];
+                                target.setTag("Genome", encoded.getTag("Genome").copy()); target.setBoolean("IsAnalyzed", analyzed[0]); return null;
+                            default: throw new AssertionError("Unexpected individual API: " + method);
+                        }
+                    });
+        };
+        ItemStack analyzed = Scan.analyze(input, reader);
+        require(analyzed.stackSize == 12 && Items.feather.getDamage(analyzed) == 7
+                && analyzed.getTagCompound().getBoolean("IsAnalyzed") && !analyzed.hasDisplayName(),
+                "Scan did not use fresh native serialization and preserve the whole stack");
+        analyzed.setStackDisplayName("Keep on already analyzed branch");
+        ItemStack copied = Scan.analyze(analyzed, reader);
+        require(copied != analyzed && ItemStack.areItemStackTagsEqual(copied, analyzed) && copied.stackSize == 12,
+                "Already analyzed input was serialized again or lost its count");
+        require(input.stackSize == 12 && original.equals(input.getTagCompound()), "Analysis mutated the offered stack");
+
+        Set<String> known = ReflectionHelper.getPrivateValue(Facts.class, facts, "items");
+        for (boolean state : new boolean[] {false, true}) {
+            net.minecraft.nbt.NBTTagCompound canonical = new net.minecraft.nbt.NBTTagCompound();
+            canonical.setTag("Genome", genome.copy()); canonical.setBoolean("IsAnalyzed", state);
+            known.add(Identity.item("minecraft:paper", 7, com.github.dcysteine.nesql.exporter.source.TypedNbt.encode(canonical)));
+        }
+        RecipeRow base = new RecipeRow(facts, object("owner", "fixture", "handler", "scan", "key", "scan"), "fixture", 3);
+        List<RecipeRow> rows = Scan.branches(base, "rootTrees", Arrays.asList(input, input.copy()),
+                new FluidStack(FluidRegistry.WATER, 100), display(), display(), display(), reader);
+        require(rows.size() == 2, "Scanner lost its analyzed or unanalyzed branch");
+        for (int index = 0; index < rows.size(); index++) {
+            RecipeRow row = rows.get(index);
+            com.google.gson.JsonObject subject = row.inputs.get(0).getAsJsonObject().getAsJsonArray("choices").get(0).getAsJsonObject();
+            com.google.gson.JsonObject liquid = row.inputs.get(1).getAsJsonObject().getAsJsonArray("choices").get(0).getAsJsonObject();
+            com.google.gson.JsonObject change = row.outputs.get(0).getAsJsonObject().getAsJsonObject("change");
+            require(subject.getAsJsonObject("consume").get("kind").getAsString().equals("stack")
+                    && subject.getAsJsonObject("rule").get("analyzed").getAsBoolean() == (index == 1)
+                    && liquid.get("amount").getAsString().equals("100")
+                    && liquid.getAsJsonObject("consume").get("kind").getAsString().equals(index == 0 ? "consume" : "keep")
+                    && row.record.get("duration").getAsString().equals(index == 0 ? "500" : "1")
+                    && row.record.get("energy").getAsString().equals(index == 0 ? "2" : "1")
+                    && change.getAsJsonArray("samples").size() == 1, "Scan branch costs, deduplication or member semantics changed");
+        }
+        reject("scan_semantics", () -> Scan.branches(base, "rootTrees", Collections.singletonList(new ItemStack(Items.paper)),
+                new FluidStack(FluidRegistry.WATER, 100), display(), display(), display(), reader));
+        reject("scan_semantics", () -> Scan.branches(base, "rootTrees", Collections.singletonList(input),
+                new FluidStack(FluidRegistry.WATER, 100), display(), display(), display(), stack -> {
+                    stack.getTagCompound().getCompoundTag("Genome").setString("testAllele", "invented.default");
+                    return reader.apply(stack);
+                }));
+        require(original.equals(input.getTagCompound()), "Sample normalization changed the shared NEI member");
+        System.out.println("Scanner: native API boundary, two analysis branches, whole-stack counts, fresh/preserved NBT, deduplication and missing-genome rejection passed");
     }
 
     private static void quantities(Facts facts) {

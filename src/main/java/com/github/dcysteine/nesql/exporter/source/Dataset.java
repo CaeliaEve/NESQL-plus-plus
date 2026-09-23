@@ -24,7 +24,7 @@ import java.util.zip.GZIPOutputStream;
 /** Writes one immutable, declared source dataset. The caller owns record ordering. */
 public final class Dataset implements AutoCloseable {
     public static final String FORMAT = "elysium.source";
-    public static final int REVISION = 12;
+    public static final int REVISION = 13;
     public static final int RECORD_LIMIT = 1024 * 1024;
     public static final List<String> COLLECTIONS = java.util.Collections.unmodifiableList(java.util.Arrays.asList(
             "aspects", "assets", "blocks", "builds", "categories", "circuits", "fluids", "groups", "items", "materials", "models", "mutations", "recipes", "research", "shapes", "species", "strings", "structures", "tracks", "views"));

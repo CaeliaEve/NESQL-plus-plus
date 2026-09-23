@@ -147,7 +147,10 @@ final class Recipes {
         private void captureRow(int index, Facts facts) {
             Jobs.checkpoint();
             RecipeRow row = new RecipeRow(facts, source.origin, source.id, index);
-            if (gt != null) gt.capture((GTNEIDefaultHandler.CachedDefaultRecipe) handler.arecipes.get(index), row);
+            if (gt != null) {
+                for (RecipeRow branch : gt.capture((GTNEIDefaultHandler.CachedDefaultRecipe) handler.arecipes.get(index), row)) emit(index, branch, facts);
+                return;
+            }
             else if (magic != null) { if (!magic.capture(index, row)) return; }
             else {
                 boolean crafting = !(handler instanceof FurnaceRecipeHandler);
@@ -162,6 +165,10 @@ final class Recipes {
                 else row.record.addProperty("duration", "200");
                 // Furnace.getOtherStacks() is the fuel display, not a recipe output.
             }
+            emit(index, row, facts);
+        }
+
+        private void emit(int index, RecipeRow row, Facts facts) {
             row.finish();
             if (!recipes.add(row.record.get("id").getAsString())) return;
             if (views) {
@@ -183,7 +190,7 @@ final class Recipes {
                 if (gt != null) gt.ui.add(facts, row, width, height, nativeRecipe);
                 facts.scene(new Facts.Scene(row.record, row.elements, width, height, gt == null ? 0 : gt.ui.foreground(), source.id, () -> {
                     if (gt == null) { handler.drawBackground(at); if (decorations.size() == 0) handler.drawForeground(at); }
-                    else gt.ui.context(nativeRecipe, () -> handler.drawForeground(at));
+                    else gt.foreground(at, row);
                 }));
             }
             facts.row("recipes", row.record);

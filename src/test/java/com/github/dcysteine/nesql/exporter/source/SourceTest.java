@@ -110,6 +110,8 @@ public final class SourceTest {
                     "name", text.apply("Water"), "temperature", 300, "density", 1000, "viscosity", 1000,
                     "luminosity", 0, "gaseous", false, "icon", asset),
                     object("id", crystal, "registry", "Liquid Crystal", "nbt", null, "name", text.apply("Liquid Crystal 流体样本"),
+                            "temperature", 300, "density", 1000, "viscosity", 1000, "luminosity", 0, "gaseous", false, "icon", asset),
+                    object("id", Identity.fluid("honey", null), "registry", "honey", "nbt", null, "name", text.apply("Honey 蜂蜜"),
                             "temperature", 300, "density", 1000, "viscosity", 1000, "luminosity", 0, "gaseous", false, "icon", asset))));
             JsonObject origin = object("owner", "fixture", "handler", "fixture:machine", "key", "machine");
             recipes(dataset, stone, paper, water, asset, text, items);
@@ -220,6 +222,7 @@ public final class SourceTest {
             recipe.addProperty("id", Identity.recipe(recipe)); recipes.add(recipe);
         }
         Changes.fixture(items, recipes, categories, views, paper, texture, text);
+        Changes.scans(items, recipes, categories, Identity.fluid("honey", null), texture, text);
         records(dataset, "recipes", recipes); records(dataset, "categories", categories);
         java.util.TreeMap<String, JsonObject> unique = new java.util.TreeMap<>();
         for (JsonObject view : views) unique.put(view.get("id").getAsString(), view);

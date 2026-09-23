@@ -14,6 +14,38 @@ import static com.github.dcysteine.nesql.exporter.source.Json.*;
 final class Changes {
     private Changes() {}
 
+    static void scans(List<JsonObject> items, List<JsonObject> recipes, List<JsonObject> categories,
+                      String honey, String texture, Function<String, String> text) {
+        JsonObject origin = object("owner", "fixture", "handler", "fixture:scanner", "key", "scanner");
+        String category = Identity.origin("category", origin);
+        JsonArray[] choices = {new JsonArray(), new JsonArray()}, samples = {new JsonArray(), new JsonArray()};
+        for (String species : Arrays.asList("oak", "birch")) {
+            NBTTagCompound chromosome = new NBTTagCompound(); chromosome.setByte("Slot", (byte) 0);
+            chromosome.setString("UID0", "fixture." + species); chromosome.setString("UID1", "fixture." + species);
+            NBTTagCompound genome = new NBTTagCompound(); genome.setTag("Chromosomes", list(chromosome));
+            String[] ids = new String[2];
+            for (int state = 0; state < 2; state++) {
+                NBTTagCompound data = new NBTTagCompound(); data.setTag("Genome", genome.copy()); data.setTag("Mate", genome.copy());
+                data.setBoolean("IsAnalyzed", state == 1);
+                ids[state] = item(items, "fixture:sapling", 0, data, false, (state == 0 ? "Unanalyzed " : "Analyzed ") + species + " 树苗", texture, text);
+                choices[state].add(object("id", ids[state], "amount", "1", "consume", object("kind", "stack"), "returns", new JsonArray(),
+                        "rule", object("kind", "member", "root", "rootTrees", "analyzed", state == 1)));
+            }
+            for (JsonArray cases : samples) cases.add(stack(ids[1]));
+        }
+        categories.add(object("id", category, "source", origin, "name", text.apply("Scanner 基因扫描"), "icon", object("kind", "item", "id", choices[0].get(0).getAsJsonObject().get("id")),
+                "machines", new JsonArray(), "view", null, "order", categories.size()));
+        for (int state = 0; state < 2; state++) {
+            JsonObject output = object("slot", 0, "kind", "item", "id", samples[state].get(0).getAsJsonObject().get("id"), "amount", "1", "quantity", null,
+                    "chance", object("numerator", "1", "denominator", "1"), "role", "result", "change", object("input", 0, "action", object("kind", "analyze"), "samples", samples[state]));
+            JsonObject row = object("source", origin, "category", category, "inputs", array(object("slot", 0, "kind", "item", "choices", choices[state]),
+                    object("slot", 0, "kind", "fluid", "choices", array(object("id", honey, "amount", "100", "consume", object("kind", state == 0 ? "consume" : "keep"), "returns", new JsonArray(), "rule", object("kind", "exact"))))),
+                    "outputs", array(output), "duration", state == 0 ? "500" : "1", "energy", state == 0 ? "2" : "1", "grid", null, "magic", null,
+                    "properties", new JsonObject(), "view", null, "order", state);
+            row.addProperty("id", Identity.recipe(row)); recipes.add(row);
+        }
+    }
+
     static void fixture(List<JsonObject> items, List<JsonObject> recipes, List<JsonObject> categories, List<JsonObject> views,
                         String paper, String texture, Function<String, String> text) {
         NBTTagCompound memory = new NBTTagCompound();
