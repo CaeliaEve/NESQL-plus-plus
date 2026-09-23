@@ -292,12 +292,29 @@ final class GtRecipes implements AutoCloseable {
             Integer count = remaining.get(key);
             if (count == null) {
                 String expected = "none";
+                RecipeRow.Ingredient unmatchedIngredient = null;
+                RecipeRow.Ingredient sameItemIngredient = null;
+                String shownRegistry = shown != null && shown.getItem() != null
+                        ? Item.itemRegistry.getNameForObject(shown.getItem()) : null;
+                int shownMeta = shown != null ? Items.feather.getDamage(shown) : 0;
                 for (RecipeRow.Ingredient ingredient : ingredients) {
-                    if (remaining.containsKey(displayKey(ingredient.display))) { expected = describe(ingredient.display); break; }
+                    if (remaining.containsKey(displayKey(ingredient.display))) {
+                        if (unmatchedIngredient == null) unmatchedIngredient = ingredient;
+                        if (sameItemIngredient == null && ingredient.display != null && ingredient.display.getItem() != null
+                                && shownRegistry != null && shownRegistry.equals(Item.itemRegistry.getNameForObject(ingredient.display.getItem()))
+                                && shownMeta == Items.feather.getDamage(ingredient.display)) {
+                            sameItemIngredient = ingredient;
+                            break;
+                        }
+                    }
                 }
+                RecipeRow.Ingredient reported = sameItemIngredient != null ? sameItemIngredient : unmatchedIngredient;
+                if (reported != null) expected = describe(reported.display);
+                String diff = reported != null && sameItemIngredient != null ? nbtDiff(shown, reported.display) : null;
                 throw new Jobs.Fault("slot_changed", location + "; cached alternative=" + index
                         + " is absent from the source or repeated too often: " + describe(shown)
-                        + "; unmatched source example: " + expected);
+                        + "; unmatched source example: " + expected
+                        + (diff == null ? "" : "; " + diff));
             }
             if (count == 1) remaining.remove(key); else remaining.put(key, count - 1);
         }
@@ -309,15 +326,73 @@ final class GtRecipes implements AutoCloseable {
         if (registry == null || Item.itemRegistry.getObject(registry) != stack.getItem()) {
             throw new Jobs.Fault("unregistered_item", "GT display uses an unregistered item");
         }
-        // Match the same exact metadata and typed NBT identity as item facts;
-        // display stack sizes may all be 1 and must never replace source amounts.
-        return Identity.item(registry, Items.feather.getDamage(stack), TypedNbt.encode(stack.getTagCompound()));
+        // Match the same exact metadata and typed NBT identity as item facts,
+        // respecting Forge/MC empty-tag equivalence (null and compound with hasNoTags() are equal).
+        // Display stack sizes may all be 1 and must never replace source amounts.
+        net.minecraft.nbt.NBTTagCompound tag = stack.getTagCompound();
+        com.google.gson.JsonElement nbt = tag == null || tag.hasNoTags() ? null : TypedNbt.encode(tag);
+        return Identity.item(registry, Items.feather.getDamage(stack), nbt);
     }
 
     private static String describe(ItemStack stack) {
         if (stack == null || stack.getItem() == null) return "empty";
-        return Item.itemRegistry.getNameForObject(stack.getItem()) + "; meta=" + Items.feather.getDamage(stack) + "; id=" + displayKey(stack);
+        String key = displayKey(stack);
+        String raw = rawId(stack);
+        return Item.itemRegistry.getNameForObject(stack.getItem()) + "; meta=" + Items.feather.getDamage(stack)
+                + "; id=" + key + (raw.equals(key) ? "" : "; raw=" + raw);
     }
+
+    private static String rawId(ItemStack stack) {
+        if (stack == null || stack.getItem() == null) return "empty";
+        String registry = Item.itemRegistry.getNameForObject(stack.getItem());
+        if (registry == null || Item.itemRegistry.getObject(registry) != stack.getItem()) return "unregistered";
+        return Identity.item(registry, Items.feather.getDamage(stack), TypedNbt.encode(stack.getTagCompound()));
+    }
+
+    private static String nbtDiff(ItemStack cached, ItemStack source) {
+        if (cached == null || source == null) return null;
+        net.minecraft.nbt.NBTTagCompound tagA = cached.getTagCompound();
+        net.minecraft.nbt.NBTTagCompound tagB = source.getTagCompound();
+        boolean emptyA = tagA == null || tagA.hasNoTags();
+        boolean emptyB = tagB == null || tagB.hasNoTags();
+        if (emptyA && emptyB) return null;
+        java.util.Set<String> keys = new java.util.TreeSet<>();
+        if (!emptyA) for (Object key : tagA.func_150296_c()) keys.add((String) key);
+        if (!emptyB) for (Object key : tagB.func_150296_c()) keys.add((String) key);
+        List<String> diffs = new ArrayList<>();
+        int totalDiffs = 0;
+        for (String key : keys) {
+            net.minecraft.nbt.NBTBase valA = !emptyA && tagA.hasKey(key) ? tagA.getTag(key) : null;
+            net.minecraft.nbt.NBTBase valB = !emptyB && tagB.hasKey(key) ? tagB.getTag(key) : null;
+            if (valA == null && valB != null) {
+                totalDiffs++;
+                if (diffs.size() < 3) diffs.add(key + ": cached=absent vs source=" + describeTag(valB));
+            } else if (valA != null && valB == null) {
+                totalDiffs++;
+                if (diffs.size() < 3) diffs.add(key + ": cached=" + describeTag(valA) + " vs source=absent");
+            } else if (valA != null && valB != null && !valA.equals(valB)) {
+                totalDiffs++;
+                if (diffs.size() < 3) diffs.add(key + ": cached=" + describeTag(valA) + " vs source=" + describeTag(valB));
+            }
+        }
+        if (diffs.isEmpty()) return null;
+        String result = "nbt diff: [" + String.join(", ", diffs) + "]";
+        if (totalDiffs > 3) result += " (+" + (totalDiffs - 3) + " more)";
+        return result;
+    }
+
+    private static String describeTag(net.minecraft.nbt.NBTBase tag) {
+        if (tag == null) return "absent";
+        int id = tag.getId();
+        String typeName = id >= 0 && id < TAG_TYPES.length ? TAG_TYPES[id] : ("type_" + id);
+        String text = tag.toString();
+        if (text.length() > 32) text = text.substring(0, 32) + "...";
+        return typeName + "=" + text;
+    }
+
+    private static final String[] TAG_TYPES = {
+            "end", "byte", "short", "int", "long", "float", "double", "byte_array", "string", "list", "compound", "int_array"
+    };
 
     static void covered(Set<String> captured, Object[] shown, Object[] source, int fixed, boolean fluid, boolean input,
                         java.util.function.BiConsumer<Integer, Object> omitted) {

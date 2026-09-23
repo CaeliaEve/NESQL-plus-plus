@@ -240,13 +240,41 @@ final class SlotsTest {
             reject("slot_changed", () -> GtRecipes.displayed(2, cached, ingredients));
             cached.items = original.clone();
             cached.items[1] = cached.items[1].copy();
+            cached.items[1].setTagCompound(new net.minecraft.nbt.NBTTagCompound());
+            // Direction 1: cached has empty compound {}, source has null -> equal
+            GtRecipes.displayed(2, cached, ingredients);
+
+            // Direction 2: cached has null, source has empty compound {} -> equal
+            cached.items[1].setTagCompound(null);
+            ingredients.get(1).display.setTagCompound(new net.minecraft.nbt.NBTTagCompound());
+            GtRecipes.displayed(2, cached, ingredients);
+            ingredients.get(1).display.setTagCompound(null);
+
+            cached.items = original.clone();
+            cached.items[1] = cached.items[1].copy();
             net.minecraft.nbt.NBTTagCompound tag = new net.minecraft.nbt.NBTTagCompound(); tag.setInteger("owner", 1);
             cached.items[1].setTagCompound(tag);
             try { GtRecipes.displayed(2, cached, ingredients); throw new AssertionError("NBT drift was accepted"); }
             catch (Jobs.Fault expected) {
                 require(expected.code.equals("slot_changed") && expected.getMessage().contains("slot=2")
                         && expected.getMessage().contains("minecraft:paper") && expected.getMessage().contains("meta=1")
-                        && expected.getMessage().contains("id=item_"), "Candidate mismatch lost its slot and exact item identity");
+                        && expected.getMessage().contains("id=item_")
+                        && expected.getMessage().contains("nbt diff: [owner: cached=int=1 vs source=absent]"),
+                        "Candidate mismatch lost its slot, exact item identity or bounded NBT diff diagnostic");
+            }
+
+            // Diagnostic test: multi-tag diff and value truncation (values > 32 chars and > 3 tags)
+            net.minecraft.nbt.NBTTagCompound multiCached = new net.minecraft.nbt.NBTTagCompound();
+            multiCached.setString("alpha", "very_long_string_value_exceeding_thirty_two_characters_limit");
+            multiCached.setInteger("beta", 100);
+            multiCached.setInteger("gamma", 200);
+            multiCached.setInteger("delta", 300);
+            cached.items[1].setTagCompound(multiCached);
+            try { GtRecipes.displayed(2, cached, ingredients); throw new AssertionError("Multi-tag drift was accepted"); }
+            catch (Jobs.Fault expected) {
+                String msg = expected.getMessage();
+                require(msg.contains("nbt diff: [") && msg.contains("alpha: cached=string=\"very_long_string_value_exceedin...")
+                        && msg.contains("(+1 more)"), "Bounded NBT diff did not truncate long value or tag count: " + msg);
             }
             cached.items = Arrays.copyOf(original, original.length - 1);
             reject("slot_changed", () -> GtRecipes.displayed(2, cached, ingredients));

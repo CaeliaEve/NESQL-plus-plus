@@ -36,7 +36,7 @@ npm --prefix bridge test
 node scripts/release.mjs
 ```
 
-普通增量构建无需重复 setup 或 clean。`build` 执行两组 Java 行为检查并生成经过 reobf 的 `build/libs/NESQL++-0.14.0.jar`。`check-jar` 检查实际产物的命令和预览世界 SRG 方法、版本替换和打包边界。`release` 要求目标目录不存在，按明确清单打包，不操作游戏目录。
+普通增量构建无需重复 setup 或 clean。`build` 执行两组 Java 行为检查并生成经过 reobf 的 `build/libs/NESQL++-0.14.1.jar`。`check-jar` 检查实际产物的命令和预览世界 SRG 方法、版本替换和打包边界。`release` 要求目标目录不存在，按明确清单打包，不操作游戏目录。
 
 可用 `NESQL_LOCAL_MAVEN_REPO` 指定本地 Maven 仓库。Forge 1.7.10 的工具链固定为 ForgeGradle 1.2.11 / Gradle 6.9.1；这里的旧版本是目标游戏的构建约束。
 
@@ -92,3 +92,7 @@ Java source/jobs 行为检查、真实本机 HTTP 端点、MCP SDK stdio 握手/
 0.13.0使用source/catalog修订12，配套Compiler/契约0.12.0。固定产出保存amount，关联随机产出保存quantity并令amount为null；气体喷射按原生顺序保留抽取上限、前序依赖和回收余量，不采样随机结果。珠海渔场保留5×5原生窗口之外的真实产出，原生坐标不伪造。热交换机、树场和其他动态算法仍需专用适配。旧修订11快照需按新格式重新导出，不提供旧reader。
 
 0.13.1按物品、metadata、NBT及重复次数核对GT输入候选，允许NEI显示缓存与当前候选顺序不同。源候选独立携带数量、消耗和匹配条件，缓存显示数量不参与绑定；真正的内容变化仍以slot_changed停止检查，并附槽号与物品身份。配方诊断按实际尝试数计算checkedRecipes与unexamined，中断时保留未执行范围。数据修订及Compiler/Web配套包不变。
+
+0.14.0通过原生 Forestry 遗传 API 进行扫描仪配方分析，支持整叠样本与未分析/已分析双分支导出，维持原生蜂蜜消耗条件与严格基因去重。
+
+0.14.1按 Minecraft / Forge 原生规范支持 GT 输入展示缓存与重新展开候选的空 NBT 等价性（`null` 与 `hasNoTags()` 空复合体视为等价展示），消除 IC2 等模组运行时动态附加空 NBTTagCompound 引发的虚假展示漂移。非空 NBT 真实漂移、候选丢失、增加及数量错误仍严格拦截，并在触发 `slot_changed` 时补充最多 3 项截断至 32 字符的有界 NBT 差异诊断。数据修订（13）及配套包（0.13.0）保持不变。
