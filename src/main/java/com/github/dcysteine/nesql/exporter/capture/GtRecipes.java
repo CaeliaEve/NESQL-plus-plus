@@ -4,6 +4,8 @@ import bartworks.neiHandler.BioLabNEIHandler;
 import bartworks.neiHandler.BioVatNEIHandler;
 import codechicken.nei.recipe.ICraftingHandler;
 import codechicken.nei.PositionedStack;
+import com.github.dcysteine.nesql.exporter.source.Identity;
+import com.github.dcysteine.nesql.exporter.source.TypedNbt;
 import com.github.dcysteine.nesql.exporter.task.Jobs;
 import com.google.gson.JsonObject;
 import com.gtnewhorizons.modularui.api.screen.ModularWindow;
@@ -22,6 +24,7 @@ import gregtech.api.util.GTOreDictUnificator;
 import gregtech.nei.GTNEIDefaultHandler;
 import gregtech.common.gui.modularui.UIHelper;
 import net.minecraft.init.Items;
+import net.minecraft.item.Item;
 import net.minecraft.item.ItemStack;
 import net.minecraftforge.fluids.FluidStack;
 import net.minecraftforge.oredict.OreDictionary;
@@ -127,7 +130,7 @@ final class GtRecipes implements AutoCloseable {
             } else {
                 List<RecipeRow.Ingredient> ingredients = ingredients(placement.source, recipe.isNBTSensitive,
                         item -> new PositionedStack(GTOreDictUnificator.getNonUnifiedStacks(item), display.relx, display.rely, true).items);
-                displayed(display, ingredients);
+                displayed(binding.index, display, ingredients);
                 row.itemInput(display, binding.index, ingredients, false);
             }
         }
@@ -250,17 +253,51 @@ final class GtRecipes implements AutoCloseable {
         return result;
     }
 
-    static void displayed(PositionedStack display, List<RecipeRow.Ingredient> ingredients) {
-        if (display.items.length != ingredients.size()) throw new Jobs.Fault("slot_changed", "GT input expansion changed its alternative count");
-        for (int index = 0; index < ingredients.size(); index++) {
-            ItemStack shown = display.items[index], expected = ingredients.get(index).display;
-            // FixedPositionedStack may render every quantity as 1. Item/meta/NBT
-            // order still has to agree with the native combined expansion.
-            if (shown == null || shown.getItem() != expected.getItem() || Items.feather.getDamage(shown) != Items.feather.getDamage(expected)
-                    || !ItemStack.areItemStackTagsEqual(shown, expected)) {
-                throw new Jobs.Fault("slot_changed", "GT input expansion changed alternative " + index);
-            }
+    static void displayed(int slot, PositionedStack display, List<RecipeRow.Ingredient> ingredients) {
+        String location = "GT input slot=" + slot;
+        if (display.items == null || display.items.length != ingredients.size()) {
+            throw new Jobs.Fault("slot_changed", location + "; source alternatives=" + ingredients.size()
+                    + "; cached alternatives=" + (display.items == null ? "null" : display.items.length));
         }
+        // GT reuses mutable NEI display caches. Permutation order is presentation,
+        // not a binding to a source candidate's quantity, consumption or predicate.
+        Map<String, Integer> remaining = new java.util.LinkedHashMap<>();
+        for (RecipeRow.Ingredient ingredient : ingredients) {
+            Jobs.checkpoint();
+            remaining.merge(displayKey(ingredient.display), 1, Integer::sum);
+        }
+        for (int index = 0; index < display.items.length; index++) {
+            Jobs.checkpoint();
+            ItemStack shown = display.items[index];
+            String key = displayKey(shown);
+            Integer count = remaining.get(key);
+            if (count == null) {
+                String expected = "none";
+                for (RecipeRow.Ingredient ingredient : ingredients) {
+                    if (remaining.containsKey(displayKey(ingredient.display))) { expected = describe(ingredient.display); break; }
+                }
+                throw new Jobs.Fault("slot_changed", location + "; cached alternative=" + index
+                        + " is absent from the source or repeated too often: " + describe(shown)
+                        + "; unmatched source example: " + expected);
+            }
+            if (count == 1) remaining.remove(key); else remaining.put(key, count - 1);
+        }
+    }
+
+    private static String displayKey(ItemStack stack) {
+        if (stack == null || stack.getItem() == null) return "empty";
+        String registry = Item.itemRegistry.getNameForObject(stack.getItem());
+        if (registry == null || Item.itemRegistry.getObject(registry) != stack.getItem()) {
+            throw new Jobs.Fault("unregistered_item", "GT display uses an unregistered item");
+        }
+        // Match the same exact metadata and typed NBT identity as item facts;
+        // display stack sizes may all be 1 and must never replace source amounts.
+        return Identity.item(registry, Items.feather.getDamage(stack), TypedNbt.encode(stack.getTagCompound()));
+    }
+
+    private static String describe(ItemStack stack) {
+        if (stack == null || stack.getItem() == null) return "empty";
+        return Item.itemRegistry.getNameForObject(stack.getItem()) + "; meta=" + Items.feather.getDamage(stack) + "; id=" + displayKey(stack);
     }
 
     static void covered(Set<String> captured, Object[] shown, Object[] source, int fixed, boolean fluid, boolean input,

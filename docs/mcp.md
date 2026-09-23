@@ -47,7 +47,7 @@
 
 初期捕获完整模组/配置/资源/知识指纹，末尾再次比较；每个目标前后检查固定世界、玩家、资源代数、NEI列表、语言及知识。目标失败且释放成功时继续。文件故障、环境变化、无法安全释放或底层Error停止本轮，未执行目标保留pending。preview_cleanup不会被selection的preview_failed降级处理吞掉。单个原生调用未结束时，不开始下一项目，也不使用Thread.stop。
 
-报告位于nesql/checks/<job-id>.json，格式nesql.check，最大16MiB，原子替换；包含request、环境、目标、计数、耗时和有界异常cause/suppressed/栈。read_job.report返回路径、字节数、SHA256及汇总，大内容留在本地。终态checked表示报告完整，行状态可为passed、failed、unsupported、partial；pending表示未执行。recipe行含totalRecipes/offset/end/checkedRecipes/unexamined、failedRecipes和最多32条错误详情及省略计数；excludedRecipes为适配器过滤或重复折叠项，不虚构成独立产物。
+报告位于nesql/checks/<job-id>.json，格式nesql.check，最大16MiB，原子替换；包含request、环境、目标、计数、耗时和有界异常cause/suppressed/栈。read_job.report返回路径、字节数、SHA256及汇总，大内容留在本地。终态checked表示报告完整，行状态可为passed、failed、unsupported、partial；pending表示未执行。recipe行含totalRecipes/offset/end/checkedRecipes/unexamined、failedRecipes和最多32条错误详情及省略计数；excludedRecipes为适配器过滤或重复折叠项，不虚构成独立产物。0.13.1起checkedRecipes记录已实际尝试的数量，包含失败及排除项；unexamined为totalRecipes减去实际尝试数，包含请求范围外与中断后未执行的配方。offset/end只描述计划范围；例如483条在index11失败，中断报告应为checkedRecipes=12、failedRecipes=[11]、unexamined=471。
 
 有失败的诊断也可到checked，但result为空，不进入list_exports/read_export，不能collect/compile。取消或停止后也可收集报告；重启可能保留最后一份running报告，不能将其计为完成。重试是新任务，不复用旧临时产物。结构按稳定controller ID定位，配方index只在相同处理器与环境中有意义。正式导出缓存/检查点和公共领域/图像专项诊断仍待后续。
 
@@ -93,7 +93,7 @@ Thaumcraft 4 的空 AspectList 会返回 `[null]`；原生 copy/add/merge 还可
 
 研究的 `itemTriggers` 在修订11中保存Clue对象：`{registry, meta, nbt, ore, matches}`。registry/meta/类型化nbt是原始触发模板，meta=32767仍表示通配；ore是原生检查的首个矿辞组，没有时为null。模板不要求存在于items表，不调用名称、提示或绘制API。matches保存NEI已知具体物品中通过原生匹配的ID，有序且无重复。空示例列表仍完整保留条件，例如MIRROR的minecraft:portal；它不表示该条件无效或研究不能解锁。
 
-Clues按触发项自身与首个矿辞组的Item类型选择NEI候选，调用与ResearchManager.createClue相同的InventoryUtils.areItemStacksEqual(trigger,candidate,true,true,false)筛选，保留实际矿辞替代、耐久、metadata和NBT判断；不从原始模板或矿辞模式构造物品示例。原生矿辞分支可能忽略NBT，直接物品分支按原生规则比较。匹配和读取使用副本，不修改游戏堆栈或扫描/研究状态。示例不是任意NBT状态的全枚举。空触发对象、未注册物品及超出预算仍报research_trigger。研究按最多16次匹配成功或2ms分批处理，单次API调用不可抢占。错误保留研究key/分类/零基index、trigger位置和registry/meta。模组使用0.13.0，编译器与Web契约使用0.12.0，source/catalog均为修订12，不提供旧字符串数组的兼容路径。
+Clues按触发项自身与首个矿辞组的Item类型选择NEI候选，调用与ResearchManager.createClue相同的InventoryUtils.areItemStacksEqual(trigger,candidate,true,true,false)筛选，保留实际矿辞替代、耐久、metadata和NBT判断；不从原始模板或矿辞模式构造物品示例。原生矿辞分支可能忽略NBT，直接物品分支按原生规则比较。匹配和读取使用副本，不修改游戏堆栈或扫描/研究状态。示例不是任意NBT状态的全枚举。空触发对象、未注册物品及超出预算仍报research_trigger。研究按最多16次匹配成功或2ms分批处理，单次API调用不可抢占。错误保留研究key/分类/零基index、trigger位置和registry/meta。模组使用0.13.1，编译器与Web契约使用0.12.0，source/catalog均为修订12，不提供旧字符串数组的兼容路径。
 
 已迁移要素与研究关系，魔法配方按下述明确适配范围采集；完整研究正文页面仍待继续。
 
@@ -174,3 +174,5 @@ Salis的CHESTSCAN使用数量0、metadata32767的箱子作为研究图标。箱�
 0.12.4保留每个GT备选输入自己的数量、消耗与匹配规则。每个源候选单独调用同一GT去统一/NEI排列展开，按合并顺序核对缓存显示项的物品、metadata和NBT；显示数量归一为1不影响数据量。NBT敏感候选保留来源的NBT条件，NEI展示示例另用于一致性比较。候选仅在身份、数量、消耗、归还和规则全部相同时折叠，配套Compiler0.11.2执行同样的完整候选去重约束。schema形状与revision11保持。非正的固定产出继续失败，错误包含物品/流体registry、slot、meta和原始amount，动态产量需专门建模。
 
 0.13.0升级至修订12。Output增加quantity，和固定amount二选一；动态量amount=null，不以0作哨兵。draw保存input、after、limit，按1到min(limit,剩余输入量-1)做原生整数均匀抽取；remainder保存同组全部draw的有序引用。Compiler验证唯一回收项、完整前缀、输入来源、正预算、无环与无重复，所有量保持整数字符串。GT注册输出堆栈即使已被一次真实处理写入随机数量，也仍按原生规则导出，导出本身不调用随机数。原生View可只展示部分槽位，但语义记录仍必须完整，Web在原生布局外补充显示未绑定的输入/产出。本轮对ZhuhaiFrontend明确采用该策略，未知缺失槽仍拒绝。此前版本的修复记录保留为历史，当前使用新修订配套包。
+
+0.13.1修正输入候选核对：GT缓存的NEI展示排列不是源候选的语义序号。校验使用完整物品身份（registry、metadata和typed NBT）及重复次数，忽略展示顺序和显示数量；不会修改缓存、按缓存下标重绑数量，或合并不同数量/消耗/匹配规则的源候选。候选增减、重复次数或内容不符仍报slot_changed并终止诊断，错误记录输入slot、缓存候选位置、实际身份和未匹配来源示例。真实报告未记录旧错误两侧的候选内容，原生通配排列重排已在本地复现同一错误，具体实机原因与修复效果仍需新检查确认。

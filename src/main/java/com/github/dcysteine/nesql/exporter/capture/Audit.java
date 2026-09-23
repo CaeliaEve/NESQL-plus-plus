@@ -80,7 +80,7 @@ final class Audit {
                         if (handler == null) throw new Jobs.Fault("handler_missing", "Handler is not registered");
                         if (!handler.supported) {
                             row.addProperty("status", "unsupported"); row.addProperty("reason", "No production adapter");
-                        } else recipes(session, request, handler, row, locale, work.resolve("handler-" + index), context, guard, report);
+                        } else recipes(session, handler, row, locale, work.resolve("handler-" + index), context, guard, report);
                     }
             });
             if (!fingerprint.equals(CanonicalJson.digest(Environment.capture(session, instance, request)))) {
@@ -123,46 +123,22 @@ final class Audit {
         }
     }
 
-    private void recipes(ClientThread.Session session, Jobs.Request request, Recipes.Handler handler, JsonObject result,
+    private void recipes(ClientThread.Session session, Recipes.Handler handler, JsonObject result,
                          String locale, Path path, Jobs.Context context, Checks.Guard guard, Checks.Report report) throws Exception {
         Dataset.directory(path);
         Facts opening = new Facts(locale);
-        JsonArray failures = new JsonArray(), failed = new JsonArray();
-        JsonArray excluded = new JsonArray();
-        int attempted = 0;
-        result.add("failedRecipes", failed); result.add("failures", failures); result.add("excludedRecipes", excluded);
         Recipes.Cursor cursor = session.call("handler " + handler.id + " open", () -> handler.open(opening, false));
         try (AutoCloseable owned = () -> release("handler " + handler.id, cursor::close)) {
             try (Buffer buffer = new Buffer(path.resolve("category"))) { buffer.write(opening.drain()); result.add("categoryCounts", buffer.check()); }
-            Recipes.Cursor active = cursor;
-            int total = session.call("handler " + handler.id + " size", active::size);
-            int begin = Math.min(total, request.check.offset), end = Math.min(total, begin + request.check.limit);
-            result.addProperty("totalRecipes", total); result.addProperty("offset", begin); result.addProperty("end", end);
-            result.addProperty("unexamined", total - (end - begin));
-            for (int index = begin; index < end; index++) {
-                context.check();
-                final int recipe = index;
+            int total = session.call("handler " + handler.id + " size", cursor::size);
+            Checks.recipes(context, report, guard, result, total, index -> {
                 Facts facts = new Facts(locale);
                 try (Buffer buffer = new Buffer(path.resolve("recipe-" + index))) {
-                    session.call("recipe " + handler.id + " index=" + index, () -> { active.capture(recipe, facts); return null; });
+                    session.call("recipe " + handler.id + " index=" + index, () -> { cursor.capture(index, facts); return null; });
                     buffer.write(facts.drain());
-                    if (!buffer.check().has("recipes")) excluded.add(value(index));
-                } catch (Exception error) {
-                    failed.add(value(index));
-                    if (failures.size() < 32) failures.add(object("index", index, "error", Checks.failure(error)));
-                    if (Checks.fatal(error)) throw error;
+                    return buffer.check().has("recipes");
                 }
-                attempted++;
-                result.addProperty("checkedRecipes", attempted);
-                result.addProperty("failuresOmitted", failed.size() - failures.size());
-                if (attempted % 16 == 0 || failed.size() > 0 && failed.get(failed.size() - 1).getAsInt() == index) report.save();
-                guard.check();
-            }
-            result.addProperty("status", failed.size() > 0 ? "failed" : begin != 0 || end != total ? "partial" : "passed");
-        } finally {
-            result.addProperty("checkedRecipes", attempted); result.add("failedRecipes", failed); result.add("failures", failures);
-            result.add("excludedRecipes", excluded);
-            result.addProperty("failuresOmitted", failed.size() - failures.size());
+            });
         }
     }
 

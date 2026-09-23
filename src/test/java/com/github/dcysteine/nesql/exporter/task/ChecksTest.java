@@ -119,7 +119,51 @@ final class ChecksTest {
         require(Checks.fatal(new Jobs.Fault("environment_changed", "fixture")), "Environment changes must stop checks");
         Jobs.Fault wrapped = new Jobs.Fault("structure_capture", "wrapper"); wrapped.initCause(new Jobs.Fault("preview_cleanup", "fixture"));
         require(Checks.fatal(wrapped), "Wrapped preview cleanup failures were treated as independent failures");
+        recipes(root);
         System.out.println("Diagnostic tasks: observed work through timing reports, decimal quantities, failure/cancel reports, retry identity and publication separation passed");
+    }
+
+    private static void recipes(Path root) throws Exception {
+        Path scope = root.resolve("recipes");
+        java.util.Map<String, java.util.List<Integer>> attempts = new java.util.HashMap<>();
+        try (Jobs jobs = new Jobs(scope.resolve("jobs"), context -> {
+            String key = context.request().key;
+            java.util.List<Integer> visited = new java.util.ArrayList<>(); attempts.put(key, visited);
+            JsonObject row = object("handler", "fixture", "status", "pending");
+            Checks.Report report = new Checks.Report(scope.resolve("checks"), context, object(), array(row));
+            try {
+                Checks.sweep(context, report, () -> {}, (target, result) ->
+                        Checks.recipes(context, report, () -> {}, result, key.equals("recipe-stop") ? 483 : 20, index -> {
+                            visited.add(index);
+                            if (key.equals("recipe-stop") && index == 11) throw new Jobs.Fault("slot_changed", "Candidate content changed");
+                            if (key.equals("recipe-range") && (index == 7 || index == 9)) throw new Jobs.Fault("recipe_capture", "Independent recipe failure");
+                            return !key.equals("recipe-range") || index != 10;
+                        }));
+                context.checked(report.finish("complete", null));
+            } catch (Exception error) { report.finish("stopped", error); throw error; }
+        })) {
+            Jobs.Request stopped = Checks.request(object("key", "recipe-stop", "world", "test-copy", "domain", "recipes", "limit", 483));
+            Jobs.Job failed = await(jobs, jobs.start(stopped).id);
+            JsonObject row = readReport(scope, failed.id);
+            require(failed.state.equals("failed") && failed.error.get("code").equals("slot_changed")
+                    && attempts.get("recipe-stop").size() == 12 && row.get("checkedRecipes").getAsInt() == 12
+                    && row.get("unexamined").getAsInt() == 471 && row.get("end").getAsInt() == 483
+                    && row.getAsJsonArray("failedRecipes").size() == 1 && row.getAsJsonArray("failedRecipes").get(0).getAsInt() == 11,
+                    "Fatal recipe mismatch continued or the report claimed the unvisited tail was checked");
+            Jobs.Request range = Checks.request(object("key", "recipe-range", "world", "test-copy", "domain", "recipes", "offset", 5, "limit", 8));
+            Jobs.Job checked = await(jobs, jobs.start(range).id);
+            row = readReport(scope, checked.id);
+            require(checked.state.equals("checked") && checked.report.failed == 1 && attempts.get("recipe-range").size() == 8
+                    && row.get("checkedRecipes").getAsInt() == 8 && row.get("unexamined").getAsInt() == 12
+                    && row.getAsJsonArray("failedRecipes").size() == 2 && row.getAsJsonArray("excludedRecipes").size() == 1,
+                    "Bounded diagnostic ranges lost independent failures, excluded recipes or actual coverage");
+        }
+        System.out.println("Recipe diagnostics: fatal index 11 leaves 471 unexamined, bounded ranges retain independent failures and exclusions");
+    }
+
+    private static JsonObject readReport(Path root, String id) throws Exception {
+        return new com.google.gson.JsonParser().parse(new String(Files.readAllBytes(root.resolve("checks").resolve(id + ".json")),
+                StandardCharsets.UTF_8)).getAsJsonObject().getAsJsonArray("rows").get(0).getAsJsonObject();
     }
 
     private static void observed(String name, String phase, Runnable action, java.util.List<JsonObject> samples) throws Exception {

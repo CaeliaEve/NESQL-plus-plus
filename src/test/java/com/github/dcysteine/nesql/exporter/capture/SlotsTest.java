@@ -76,6 +76,7 @@ final class SlotsTest {
         require(fallback.length == 2 && ((ItemStack) fallback[0]).stackSize == 3 && fallback[1] != second,
                 "An empty or absent alternative hid the base source");
         alternatives(facts);
+        permutations(facts);
         quantities(facts);
         System.out.println("GT slots: ordered overlaps, empty slots, input/output separation, exact output quantities and alternative-only inputs passed");
     }
@@ -112,7 +113,7 @@ final class SlotsTest {
                 item -> new PositionedStack(item, 10, 20, true).items);
         PositionedStack display = new PositionedStack(source, 10, 20, true);
         for (ItemStack item : display.items) item.stackSize = 1; // Native renderRealStackSizes=false.
-        GtRecipes.displayed(display, ingredients);
+        GtRecipes.displayed(0, display, ingredients);
         RecipeRow row = new RecipeRow(facts, object("owner", "fixture", "handler", "slots", "key", "alternatives"), "fixture", 0);
         row.itemInput(display, 0, ingredients, false);
         com.google.gson.JsonArray choices = row.inputs.get(0).getAsJsonObject().getAsJsonArray("choices");
@@ -127,7 +128,7 @@ final class SlotsTest {
         require(source[0].stackSize == 3 && source[2].stackSize == 0 && source[3].getItemDamage() == OreDictionary.WILDCARD_VALUE,
                 "Alternative capture changed the registered stacks");
         display.items[1] = new ItemStack(Items.diamond);
-        reject("slot_changed", () -> GtRecipes.displayed(display, ingredients));
+        reject("slot_changed", () -> GtRecipes.displayed(0, display, ingredients));
         reject("invalid_amount", () -> GtRecipes.ingredients(new ItemStack(Items.paper, -1), false,
                 item -> new PositionedStack(item, 0, 0, true).items));
         ItemStack tagged = new ItemStack(Items.paper, 4, OreDictionary.WILDCARD_VALUE);
@@ -135,9 +136,56 @@ final class SlotsTest {
         List<RecipeRow.Ingredient> sensitive = GtRecipes.ingredients(tagged, true, item -> new ItemStack[] {new ItemStack(Items.paper)});
         require(sensitive.get(0).item.getTagCompound().getLong("owner") == Long.MAX_VALUE && !sensitive.get(0).display.hasTagCompound(),
                 "The display permutation replaced the source NBT predicate");
-        GtRecipes.displayed(display(), sensitive);
+        GtRecipes.displayed(0, display(), sensitive);
         sensitive.get(0).item.getTagCompound().setLong("owner", 0);
         require(tags.getLong("owner") == Long.MAX_VALUE, "Source NBT was shared with its expanded candidate");
+    }
+
+    private static void permutations(Facts facts) {
+        List<ItemStack> previous = new java.util.ArrayList<>(codechicken.nei.ItemList.itemMap.get(Items.paper));
+        ItemStack a = new ItemStack(Items.paper, 1, 0), b = new ItemStack(Items.paper, 1, 1), c = new ItemStack(Items.paper, 1, 2);
+        ItemStack[] source = {new ItemStack(Items.paper, 3, OreDictionary.WILDCARD_VALUE), new ItemStack(Items.paper, 0, 1)};
+        try {
+            codechicken.nei.ItemList.itemMap.replaceValues(Items.paper, Arrays.asList(a, b, c));
+            PositionedStack cached = new PositionedStack(source, 10, 20, true);
+            for (ItemStack item : cached.items) item.stackSize = 1;
+            // A GT cached display predates the current NEI wildcard ordering.
+            codechicken.nei.ItemList.itemMap.replaceValues(Items.paper, Arrays.asList(a, c, b));
+            List<RecipeRow.Ingredient> ingredients = GtRecipes.ingredients(source, false,
+                    item -> new PositionedStack(item, 10, 20, true).items);
+            require(cached.items[1].getItemDamage() != ingredients.get(1).display.getItemDamage(),
+                    "Native permutation fixture did not reorder the second alternative");
+            GtRecipes.displayed(2, cached, ingredients);
+            Set<String> known = ReflectionHelper.getPrivateValue(Facts.class, facts, "items");
+            known.add(Identity.item("minecraft:paper", 1, null)); known.add(Identity.item("minecraft:paper", 2, null));
+            RecipeRow row = new RecipeRow(facts, object("owner", "fixture", "handler", "slots", "key", "permutations"), "fixture", 0);
+            row.itemInput(cached, 2, ingredients, false);
+            com.google.gson.JsonArray choices = row.inputs.get(0).getAsJsonObject().getAsJsonArray("choices");
+            require(choices.size() == 4 && choices.get(0).getAsJsonObject().get("amount").getAsString().equals("3")
+                    && choices.get(3).getAsJsonObject().getAsJsonObject("consume").get("kind").getAsString().equals("keep")
+                    && cached.items[1].getItemDamage() == 1 && source[0].stackSize == 3 && source[1].stackSize == 0,
+                    "Display reordering changed source semantics or the shared cached display");
+            ItemStack[] original = cached.items.clone();
+            cached.items[1] = cached.items[0].copy();
+            reject("slot_changed", () -> GtRecipes.displayed(2, cached, ingredients));
+            cached.items = original.clone();
+            cached.items[1] = cached.items[1].copy();
+            net.minecraft.nbt.NBTTagCompound tag = new net.minecraft.nbt.NBTTagCompound(); tag.setInteger("owner", 1);
+            cached.items[1].setTagCompound(tag);
+            try { GtRecipes.displayed(2, cached, ingredients); throw new AssertionError("NBT drift was accepted"); }
+            catch (Jobs.Fault expected) {
+                require(expected.code.equals("slot_changed") && expected.getMessage().contains("slot=2")
+                        && expected.getMessage().contains("minecraft:paper") && expected.getMessage().contains("meta=1")
+                        && expected.getMessage().contains("id=item_"), "Candidate mismatch lost its slot and exact item identity");
+            }
+            cached.items = Arrays.copyOf(original, original.length - 1);
+            reject("slot_changed", () -> GtRecipes.displayed(2, cached, ingredients));
+            cached.items = original.clone(); cached.items[1] = null;
+            reject("slot_changed", () -> GtRecipes.displayed(2, cached, ingredients));
+        } finally {
+            codechicken.nei.ItemList.itemMap.replaceValues(Items.paper, previous);
+        }
+        System.out.println("GT alternatives: native cached wildcard reorder, multiplicity, NBT drift, independent quantities and unchanged cache passed");
     }
 
     private static PositionedStack display() { return new PositionedStack(new ItemStack(Items.paper), 10, 20, false); }

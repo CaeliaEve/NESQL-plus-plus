@@ -143,6 +143,40 @@ public final class Checks {
 
     public interface Guard { void check() throws Exception; }
     public interface Step { void run(int index, JsonObject row) throws Exception; }
+    public interface Recipe { boolean check(int index) throws Exception; }
+
+    /** Count actual attempts, including the failing recipe when a range stops early. */
+    public static void recipes(Jobs.Context context, Report report, Guard guard, JsonObject row, int total, Recipe recipe) throws Exception {
+        Selection selection = context.request().check;
+        int begin = Math.min(total, selection.offset), end = Math.min(total, begin + selection.limit);
+        JsonArray failed = new JsonArray(), failures = new JsonArray(), excluded = new JsonArray();
+        row.addProperty("totalRecipes", total); row.addProperty("offset", begin); row.addProperty("end", end);
+        row.addProperty("checkedRecipes", 0); row.addProperty("unexamined", total); row.addProperty("failuresOmitted", 0);
+        row.add("failedRecipes", failed); row.add("failures", failures); row.add("excludedRecipes", excluded);
+        int attempted = 0;
+        for (int index = begin; index < end; index++) {
+            context.check();
+            try {
+                if (!recipe.check(index)) excluded.add(value(index));
+            } catch (Exception error) {
+                failed.add(value(index));
+                if (failures.size() < 32) failures.add(object("index", index, "error", failure(error)));
+                if (fatal(error)) throw error;
+            } catch (Error error) {
+                failed.add(value(index));
+                if (failures.size() < 32) failures.add(object("index", index, "error", failure(error)));
+                throw error;
+            } finally {
+                attempted++;
+                row.addProperty("checkedRecipes", attempted);
+                row.addProperty("unexamined", total - attempted);
+                row.addProperty("failuresOmitted", failed.size() - failures.size());
+            }
+            if (attempted % 16 == 0 || failed.size() > 0 && failed.get(failed.size() - 1).getAsInt() == index) report.save();
+            guard.check();
+        }
+        row.addProperty("status", failed.size() > 0 ? "failed" : begin != 0 || end != total ? "partial" : "passed");
+    }
 
     /** The same failure-isolation loop serves native checks and lifecycle regressions. */
     public static void sweep(Jobs.Context context, Report report, Guard guard, Step step) throws Exception {
