@@ -106,7 +106,7 @@ final class Products {
     private static JsonObject carry(InfusionRecipe recipe, ItemStack base, Facts facts) {
         Object overrides = field(type(CARRY), null, "overrides");
         if (!(overrides instanceof Map<?, ?>)) throw fault("Invalid pinned infusion behavior registry");
-        if (((Map<?, ?>) overrides).get(recipe) != null) return null;
+        if (((Map<?, ?>) overrides).get(recipe) != null) throw fault("Infusion output uses custom NBT overrides: " + recipe.getClass().getName());
         Class<?> configType = type("net.glease.tc4tweak.ConfigurationHandler");
         Object config = field(configType, null, "INSTANCE");
         if (!(Boolean) invoke(configType, config, "isInfusionRecipeNBTCarryOver", new Class<?>[0])) return null;

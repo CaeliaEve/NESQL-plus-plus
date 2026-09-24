@@ -68,13 +68,12 @@ final class Recipes {
             origin = object("owner", owner, "handler", handler.getClass().getName(), "key", key);
             id = Identity.origin("category", origin);
             supported = GtRecipes.supports(handler) || MagicRecipes.supports(handler)
-                    || handler.getClass() == ShapedRecipeHandler.class || handler.getClass() == ShapelessRecipeHandler.class
-                    || handler.getClass() == FurnaceRecipeHandler.class;
+                    || (handler instanceof TemplateRecipeHandler && !handler.getClass().getName().contains("ProfilerRecipeHandler"));
         }
 
         JsonObject describe() {
             return object("id", id, "name", name, "source", origin, "supported", supported,
-                    "reason", supported ? null : "No explicit enumeration and semantics adapter");
+                    "reason", supported ? null : "Excluded non-gameplay profiling utility");
         }
 
         Cursor open(Facts facts, boolean views) {
@@ -90,8 +89,24 @@ final class Recipes {
                     GTNEIDefaultHandler machine = (GTNEIDefaultHandler) handler;
                     handler.arecipes.addAll(machine.getCache());
                     gt = new GtRecipes(machine, views, id);
-                } else if (MagicRecipes.supports(handler)) magic = new MagicRecipes(handler);
-                else handler.loadCraftingRecipes(handler instanceof FurnaceRecipeHandler ? "smelting" : "crafting");
+                } else if (MagicRecipes.supports(handler)) {
+                    magic = new MagicRecipes(handler);
+                } else if (handler instanceof FurnaceRecipeHandler) {
+                    handler.loadCraftingRecipes("smelting");
+                } else if (handler.getClass() == ShapedRecipeHandler.class || handler.getClass() == ShapelessRecipeHandler.class) {
+                    handler.loadCraftingRecipes("crafting");
+                } else {
+                    String overlay = handler.getOverlayIdentifier();
+                    if (overlay != null && !overlay.isEmpty()) {
+                        try { handler.loadCraftingRecipes(overlay); } catch (Throwable ignored) {}
+                    }
+                    if (handler.arecipes.isEmpty()) {
+                        try { handler.loadCraftingRecipes(handler.getHandlerId()); } catch (Throwable ignored) {}
+                    }
+                    if (handler.arecipes.isEmpty()) {
+                        try { handler.loadCraftingRecipes("crafting"); } catch (Throwable ignored) {}
+                    }
+                }
                 HandlerInfo info = GuiRecipeTab.getHandlerInfo(handler);
                 JsonObject icon = info.getItemStack() == null ? null : object("kind", "item", "id", facts.item(info.getItemStack()));
                 JsonArray machines = new JsonArray();
@@ -159,10 +174,18 @@ final class Recipes {
                     row.itemInput(input, slot++, 1, false, crafting, object("kind", "wildcard", "meta", false, "nbt", true));
                 }
                 PositionedStack output = handler.getResultStack(index);
-                if (output == null || output.item == null) throw new Jobs.Fault("output_missing", "NEI recipe has no result: " + source.name);
-                row.itemOutput(output, 0, output.item, 10000);
-                if (crafting) row.property("minecraft:shapeless", "Shapeless", handler instanceof ShapelessRecipeHandler);
-                else row.record.addProperty("duration", "200");
+                if (output != null && output.item != null) {
+                    row.itemOutput(output, 0, output.item, 10000);
+                } else {
+                    List<PositionedStack> others = handler.getOtherStacks(index);
+                    if (others != null && !others.isEmpty() && others.get(0) != null && others.get(0).item != null) {
+                        row.itemOutput(others.get(0), 0, others.get(0).item, 10000);
+                    } else {
+                        throw new Jobs.Fault("output_missing", "NEI recipe has no result: " + source.name);
+                    }
+                }
+                if (crafting && handler instanceof ShapelessRecipeHandler) row.property("minecraft:shapeless", "Shapeless", true);
+                else if (!crafting) row.record.addProperty("duration", "200");
                 // Furnace.getOtherStacks() is the fuel display, not a recipe output.
             }
             emit(index, row, facts);

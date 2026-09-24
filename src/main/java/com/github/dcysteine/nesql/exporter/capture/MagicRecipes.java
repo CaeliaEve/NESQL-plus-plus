@@ -93,7 +93,7 @@ final class MagicRecipes {
         List<Integer> positionsToSlots = new ArrayList<>();
         TreeSet<String> research = new TreeSet<>();
         AspectList aspects;
-        ItemStack output;
+        ItemStack output = null;
         Object projection;
         Products product = null;
         JsonObject payment = null;
@@ -108,22 +108,38 @@ final class MagicRecipes {
             if (result.fixed) row.property("salisarcana:effect", "Part effect", "Bracelet components are fixed by its item type; replacement only writes part tags.");
         } else if (family == Family.SHAPED) {
             IArcaneRecipe arcane = (IArcaneRecipe) source;
-            aspects = arcane.getAspects(); output = result(arcane.getRecipeOutput()); addResearch(research, arcane.getResearch());
+            aspects = arcane.getAspects(); addResearch(research, arcane.getResearch());
             int width = 3, height = 3;
             Object[] inputArr = null;
             boolean mirror = false;
-            if (source instanceof ShapedArcaneRecipe) {
-                ShapedArcaneRecipe recipe = (ShapedArcaneRecipe) source;
-                width = recipe.width; height = recipe.height; inputArr = recipe.input;
-                mirror = (Boolean) field(recipe, "mirrored");
+            boolean isStickyJar = source.getClass().getName().contains("RecipeStickyJar");
+            if (isStickyJar) {
+                ItemStack jarOut = new ItemStack(thaumcraft.common.config.ConfigBlocks.blockJar, 1, 0);
+                net.minecraft.nbt.NBTTagCompound tag = new net.minecraft.nbt.NBTTagCompound();
+                tag.setByte("isStickyJar", (byte) 1);
+                jarOut.setTagCompound(tag);
+                output = jarOut;
+                inputArr = new Object[] {
+                    new ItemStack(Items.slime_ball), new ItemStack(thaumcraft.common.config.ConfigBlocks.blockJar, 1, 0), null,
+                    null, null, null,
+                    null, null, null
+                };
+                width = 3; height = 3;
             } else {
-                try { width = (Integer) field(source, "width"); height = (Integer) field(source, "height"); } catch (Exception ignored) {}
-                try { inputArr = (Object[]) field(source, "input"); } catch (Exception ignored) {
-                    try {
-                        Object inp = invoke(source.getClass(), source, "getInput", new Class<?>[0]);
-                        if (inp instanceof Object[]) inputArr = (Object[]) inp;
-                        else if (inp instanceof List<?>) inputArr = ((List<?>) inp).toArray();
-                    } catch (Exception ignored2) {}
+                output = result(arcane.getRecipeOutput());
+                if (source instanceof ShapedArcaneRecipe) {
+                    ShapedArcaneRecipe recipe = (ShapedArcaneRecipe) source;
+                    width = recipe.width; height = recipe.height; inputArr = recipe.input;
+                    mirror = (Boolean) field(recipe, "mirrored");
+                } else {
+                    try { width = (Integer) field(source, "width"); height = (Integer) field(source, "height"); } catch (Exception ignored) {}
+                    try { inputArr = (Object[]) field(source, "input"); } catch (Exception ignored) {
+                        try {
+                            Object inp = invoke(source.getClass(), source, "getInput", new Class<?>[0]);
+                            if (inp instanceof Object[]) inputArr = (Object[]) inp;
+                            else if (inp instanceof List<?>) inputArr = ((List<?>) inp).toArray();
+                        } catch (Exception ignored2) {}
+                    }
                 }
             }
             if (inputArr == null) throw fault("Unsupported arcane recipe inputs: " + source.getClass().getName());
@@ -147,7 +163,9 @@ final class MagicRecipes {
             }
             projection = copy; kind = "arcane";
         } else if (family == Family.SHAPELESS) {
-            exact(source, ShapelessArcaneRecipe.class);
+            if (!(source instanceof ShapelessArcaneRecipe)) {
+                throw fault("Not a shapeless arcane recipe: " + source.getClass().getName());
+            }
             ShapelessArcaneRecipe recipe = (ShapelessArcaneRecipe) source;
             aspects = recipe.getAspects(); output = result(recipe.getRecipeOutput()); addResearch(research, recipe.getResearch());
             for (Object ingredient : recipe.getInput()) inputs.add(ordinary(ingredient, true));
@@ -186,8 +204,16 @@ final class MagicRecipes {
                     for (ItemStack comp : recipe.getComponents()) inputs.add(ordinary(comp, true));
                 }
             }
+            if (recipe.getClass().getName().contains("RecipeInfusionWandAugmentation")) {
+                try {
+                    Object augOut = invoke(recipe.getClass(), recipe, "getRecipeOutput", new Class<?>[] {ItemStack.class}, recipe.getRecipeInput());
+                    if (augOut instanceof ItemStack) {
+                        output = (ItemStack) augOut;
+                    }
+                } catch (Exception ignored) {}
+            }
             product = Products.infusion(recipe, Arrays.asList(stacks(inputs.get(0))), row.facts);
-            output = product.output;
+            if (output == null) output = product.output;
             ItemStack[] componentsCopy = new ItemStack[inputs.size() - 1];
             for (int part = 1; part < inputs.size(); part++) componentsCopy[part - 1] = inputs.get(part).get(0).item.copy();
             instability = recipe.getInstability(); central = 0;

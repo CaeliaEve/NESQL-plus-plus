@@ -8,13 +8,15 @@ import { randomUUID } from 'node:crypto';
 import test from 'node:test';
 import { AcceptanceCoordinator } from '../src/coordinator.mjs';
 
-test('AcceptanceCoordinator automatically advances pagination windows and recovers from checkpoint', async t => {
+test('AcceptanceCoordinator handles 73-char IDs, keys <= 80 chars, pagination, and resume', async t => {
   const instance = await mkdtemp(path.join(os.tmpdir(), 'nesql-coord-'));
   t.after(() => rm(instance, { recursive: true, force: true }));
   await mkdir(path.join(instance, 'nesql'));
   const token = 'a'.repeat(64);
   const session = randomUUID();
+  let requestedKeys = [];
   let requestedOffsets = [];
+  const realHandlerId = 'category_000c7fb73efe2db4c011955bd10e5ec5f5bbc2ea18fe1062a24bd28ae073f381';
 
   const game = createServer(async (request, response) => {
     let body = '';
@@ -23,17 +25,27 @@ test('AcceptanceCoordinator automatically advances pagination windows and recove
     response.setHeader('Content-Type', 'application/json');
     response.setHeader('X-NESQL-Session', session);
 
+    // Capture.java returns game: "Minecraft 1.7.10", ready: true, world: { folder, name } - NO singleplayer field!
     if (request.url === '/game') {
-      response.end(JSON.stringify({ ready: true, singleplayer: true, world: { folder: 'test-world' } }));
+      response.end(JSON.stringify({
+        ready: true,
+        game: 'Minecraft 1.7.10',
+        world: { folder: 'test-world', name: 'Test World' },
+        exporter: '0.15.0',
+        revision: 14
+      }));
     } else if (request.url === '/checks' && request.method === 'POST') {
+      requestedKeys.push(jsonBody.key);
       requestedOffsets.push(jsonBody.offset);
+      assert.ok(jsonBody.key.length <= 80, `Job key must be <= 80 chars: ${jsonBody.key}`);
+
       const currentOffset = jsonBody.offset;
       const reportFile = path.join(instance, 'nesql', `report-${currentOffset}.json`);
-      // Simulate a handler with 6000 total recipes, returning in chunks of 4000
       const isFirst = currentOffset === 0;
       const checked = isFirst ? 4000 : 2000;
       const reportData = {
         rows: [{
+          id: realHandlerId,
           totalRecipes: 6000,
           offset: currentOffset,
           end: currentOffset + checked,
@@ -74,16 +86,82 @@ test('AcceptanceCoordinator automatically advances pagination windows and recove
   const coordinator = new AcceptanceCoordinator(instance, { pageSize: 4000 });
   const plan = {
     world: 'test-world',
-    handlers: [{ id: 'category_test', name: 'Large Machine' }]
+    handlers: [{ id: realHandlerId, name: 'Wiremill' }]
   };
 
+  // Run 1: Verify pagination from 0 to 6000
   const checkpoint = await coordinator.runPlan(plan);
-  assert.equal(checkpoint.handlers['category_test'].status, 'passed');
-  assert.equal(checkpoint.handlers['category_test'].checked, 6000);
-  assert.equal(checkpoint.handlers['category_test'].unexamined, 0);
+  assert.equal(checkpoint.handlers[realHandlerId].status, 'passed');
+  assert.equal(checkpoint.handlers[realHandlerId].checked, 6000);
+  assert.equal(checkpoint.handlers[realHandlerId].unexamined, 0);
   assert.deepEqual(requestedOffsets, [0, 4000]);
+  for (const k of requestedKeys) {
+    assert.ok(k.length <= 80, `Key length must be <= 80: ${k}`);
+  }
 
-  // Verify checkpoint was written to disk
-  const onDisk = JSON.parse(await readFile(coordinator.checkpointPath, 'utf8'));
-  assert.equal(onDisk.handlers['category_test'].status, 'passed');
+  // Run 2: Verify resume skips completed handler
+  requestedOffsets = [];
+  const checkpoint2 = await coordinator.runPlan(plan);
+  assert.equal(checkpoint2.handlers[realHandlerId].status, 'passed');
+  assert.equal(requestedOffsets.length, 0, 'Completed handler must be skipped without re-requesting');
+});
+
+test('AcceptanceCoordinator halts whole plan on fatal error and isolates environment', async t => {
+  const instance = await mkdtemp(path.join(os.tmpdir(), 'nesql-coord-fatal-'));
+  t.after(() => rm(instance, { recursive: true, force: true }));
+  await mkdir(path.join(instance, 'nesql'));
+  const token = 'b'.repeat(64);
+  const session = randomUUID();
+
+  const game = createServer(async (request, response) => {
+    let body = '';
+    for await (const chunk of request) body += chunk;
+    response.setHeader('Content-Type', 'application/json');
+    response.setHeader('X-NESQL-Session', session);
+
+    if (request.url === '/game') {
+      response.end(JSON.stringify({
+        ready: true,
+        game: 'Minecraft 1.7.10',
+        world: { folder: 'test-world', name: 'Test World' },
+        exporter: '0.15.0',
+        revision: 14
+      }));
+    } else if (request.url === '/checks' && request.method === 'POST') {
+      response.end(JSON.stringify({ id: 'job-fatal', state: 'queued' }));
+    } else if (request.url === '/jobs/job-fatal') {
+      response.end(JSON.stringify({
+        job: {
+          id: 'job-fatal',
+          state: 'failed',
+          error: { code: 'world_changed', message: 'World instance was replaced during capture' }
+        }
+      }));
+    }
+  });
+
+  game.listen(0, '127.0.0.1');
+  await once(game, 'listening');
+  t.after(() => { game.closeAllConnections(); game.close(); });
+
+  await writeFile(
+    path.join(instance, 'nesql', 'connection.json'),
+    JSON.stringify({ protocol: 1, port: game.address().port, token, session })
+  );
+
+  const coordinator = new AcceptanceCoordinator(instance);
+  const plan = {
+    world: 'test-world',
+    handlers: [{ id: 'handler-1', name: 'Machine 1' }, { id: 'handler-2', name: 'Machine 2' }]
+  };
+
+  await assert.rejects(
+    async () => coordinator.runPlan(plan),
+    /Fatal execution failure/
+  );
+
+  // Verify checkpoint stopped without processing handler-2
+  const cp = JSON.parse(await readFile(coordinator.checkpointPath, 'utf8'));
+  assert.equal(cp.handlers['handler-1'].status, 'failed');
+  assert.equal(cp.handlers['handler-2'], undefined, 'Handler 2 must not be run after fatal failure');
 });

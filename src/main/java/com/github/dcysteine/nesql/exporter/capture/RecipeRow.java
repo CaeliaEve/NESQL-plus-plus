@@ -91,26 +91,46 @@ final class RecipeRow {
     }
 
     void itemOutput(PositionedStack display, int slot, ItemStack item, int chance) {
-        if (item.stackSize <= 0) throw new Jobs.Fault("invalid_amount", "Item output slot=" + slot + "; registry="
-                + net.minecraft.item.Item.itemRegistry.getNameForObject(item.getItem()) + "; meta=" + Items.feather.getDamage(item)
-                + "; amount=" + item.stackSize + ": a fixed recipe output must be positive");
-        output(display, slot, "item", facts.item(item), Integer.toString(item.stackSize), chance, null);
+        itemOutput(display, slot, item, chance, null, null);
     }
 
     void itemOutput(PositionedStack display, int slot, ItemStack item, int chance, JsonObject quantity) {
-        if (quantity == null) itemOutput(display, slot, item, chance);
-        else output(display, slot, "item", facts.item(item), null, chance, quantity);
+        itemOutput(display, slot, item, chance, null, quantity);
+    }
+
+    void itemOutput(PositionedStack display, int slot, ItemStack item, int chance, String amount, JsonObject quantity) {
+        if (quantity != null) {
+            output(display, slot, "item", facts.item(item), null, chance, quantity);
+        } else {
+            String exactAmount = amount != null ? amount : Integer.toString(item.stackSize);
+            if (exactAmount.startsWith("-") || exactAmount.equals("0")) {
+                throw new Jobs.Fault("invalid_amount", "Item output slot=" + slot + "; registry="
+                        + net.minecraft.item.Item.itemRegistry.getNameForObject(item.getItem()) + "; meta=" + Items.feather.getDamage(item)
+                        + "; amount=" + exactAmount + ": a fixed recipe output must be positive");
+            }
+            output(display, slot, "item", facts.item(item), exactAmount, chance, null);
+        }
     }
 
     void fluidOutput(PositionedStack display, int slot, FluidStack fluid) {
-        if (fluid.amount <= 0) throw new Jobs.Fault("invalid_amount", "Fluid output slot=" + slot + "; registry="
-                + fluid.getFluid().getName() + "; amount=" + fluid.amount + ": a fixed recipe output must be positive");
-        output(display, slot, "fluid", facts.fluid(fluid), Integer.toString(fluid.amount), 10000, null);
+        fluidOutput(display, slot, fluid, null, null);
     }
 
     void fluidOutput(PositionedStack display, int slot, FluidStack fluid, JsonObject quantity) {
-        if (quantity == null) fluidOutput(display, slot, fluid);
-        else output(display, slot, "fluid", facts.fluid(fluid), null, 10000, quantity);
+        fluidOutput(display, slot, fluid, null, quantity);
+    }
+
+    void fluidOutput(PositionedStack display, int slot, FluidStack fluid, String amount, JsonObject quantity) {
+        if (quantity != null) {
+            output(display, slot, "fluid", facts.fluid(fluid), null, 10000, quantity);
+        } else {
+            String exactAmount = amount != null ? amount : Integer.toString(fluid.amount);
+            if (exactAmount.startsWith("-") || exactAmount.equals("0")) {
+                throw new Jobs.Fault("invalid_amount", "Fluid output slot=" + slot + "; registry="
+                        + fluid.getFluid().getName() + "; amount=" + exactAmount + ": a fixed recipe output must be positive");
+            }
+            output(display, slot, "fluid", facts.fluid(fluid), exactAmount, 10000, null);
+        }
     }
 
     private void output(PositionedStack display, int slot, String kind, String id, String amount, int chance, JsonObject quantity) {
