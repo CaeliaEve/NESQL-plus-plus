@@ -1,12 +1,13 @@
 import assert from 'node:assert/strict';
 import { createServer } from 'node:http';
 import { mkdtemp, mkdir, rm, writeFile, readFile } from 'node:fs/promises';
+import { existsSync } from 'node:fs';
 import os from 'node:os';
 import path from 'node:path';
 import { once } from 'node:events';
 import { randomUUID, createHash } from 'node:crypto';
 import test from 'node:test';
-import { AcceptanceCoordinator } from '../src/coordinator.mjs';
+import { AcceptanceCoordinator, isFatalError } from '../src/coordinator.mjs';
 
 test('AcceptanceCoordinator handles 73-char IDs, keys <= 80 chars, pagination, and resume', async t => {
   const instance = await mkdtemp(path.join(os.tmpdir(), 'nesql-coord-'));
@@ -454,6 +455,10 @@ test('AcceptanceCoordinator isolates recipe failures across pages and archives r
   assert.equal(handlerState.unexamined, 0);
   assert.deepEqual(handlerState.failed, [10, 20, 75]);
   assert.equal(checkpoint.archivedReports.length, 2, 'Must archive 2 report shards');
+  assert.ok(checkpoint.archivedReports[0].archivePath);
+  assert.equal(existsSync(checkpoint.archivedReports[0].archivePath), true, 'Archived report shard must exist on disk');
+  assert.equal(checkpoint.archivedReports[0].failures.length, 2);
+  assert.equal(checkpoint.archivedReports[1].failures.length, 1);
 });
 
 test('AcceptanceCoordinator restores persisted runId on reload ensuring idempotent job keys (C8)', async t => {
@@ -495,4 +500,171 @@ test('AcceptanceCoordinator restores persisted runId on reload ensuring idempote
   const loaded = await coordinator2.loadCheckpoint(envFingerprint);
   assert.equal(loaded.runId, fixedRunId);
   assert.equal(coordinator2.runId, fixedRunId, 'runId must be restored to coordinator instance');
+});
+
+test('isFatalError aligns strictly with Checks.fatal for all categories (U8)', () => {
+  // Checks.fatal: CancellationException, InterruptedException, IOException, Error, suppressed.length != 0
+  assert.equal(isFatalError({ fatal: true }), true);
+  assert.equal(isFatalError({ type: 'java.util.concurrent.CancellationException' }), true);
+  assert.equal(isFatalError({ type: 'java.lang.InterruptedException' }), true);
+  assert.equal(isFatalError({ type: 'java.io.IOException' }), true);
+  assert.equal(isFatalError({ type: 'java.lang.OutOfMemoryError' }), true);
+  assert.equal(isFatalError({ type: 'java.lang.Error' }), true);
+
+  // Checks.fatal: check_cleanup, preview_cleanup, client_*, *_changed, world_unavailable
+  assert.equal(isFatalError({ code: 'check_cleanup' }), true);
+  assert.equal(isFatalError({ code: 'preview_cleanup' }), true);
+  assert.equal(isFatalError({ code: 'world_unavailable' }), true);
+  assert.equal(isFatalError({ code: 'client_timeout' }), true);
+  assert.equal(isFatalError({ code: 'client_disconnected' }), true);
+  assert.equal(isFatalError({ code: 'world_changed' }), true);
+  assert.equal(isFatalError({ code: 'environment_changed' }), true);
+  assert.equal(isFatalError({ code: 'slot_changed' }), true);
+  assert.equal(isFatalError({ code: 'handler_changed' }), true);
+
+  // Suppressed exceptions & omitted
+  assert.equal(isFatalError({ code: 'ordinary_error', suppressed: [{ code: 'check_cleanup' }] }), true);
+  assert.equal(isFatalError({ code: 'ordinary_error', suppressedOmitted: 1 }), true);
+
+  // Cause chain traversal
+  assert.equal(isFatalError({ code: 'wrapper_error', cause: { code: 'environment_changed' } }), true);
+
+  // Non-fatal ordinary errors
+  assert.equal(isFatalError(null), false);
+  assert.equal(isFatalError(undefined), false);
+  assert.equal(isFatalError({ code: 'recipe_mismatch', message: 'Item stack count did not match expected' }), false);
+  assert.equal(isFatalError({ code: 'handler_unsupported', message: 'No loader found for handler' }), false);
+  assert.equal(isFatalError({ code: 'invalid_quantity', message: 'Tree species has zero yield' }), false);
+});
+
+test('AcceptanceCoordinator enforces real mod SHA256 and protocol revision (U4)', async t => {
+  const instance = await mkdtemp(path.join(os.tmpdir(), 'nesql-coord-sha256-'));
+  t.after(() => rm(instance, { recursive: true, force: true }));
+  await mkdir(path.join(instance, 'nesql'));
+  const token = 'f'.repeat(64);
+  const session = randomUUID();
+
+  // Create a dummy mod jar on disk
+  const dummyJarPath = path.join(instance, 'dummy-mod.jar');
+  await writeFile(dummyJarPath, Buffer.from('dummy mod jar content for sha test'));
+  const dummyJarSha = createHash('sha256').update(await readFile(dummyJarPath)).digest('hex');
+
+  const game = createServer(async (request, response) => {
+    let body = '';
+    for await (const chunk of request) body += chunk;
+    response.setHeader('Content-Type', 'application/json');
+    response.setHeader('X-NESQL-Session', session);
+
+    if (request.url === '/game') {
+      response.end(JSON.stringify({
+        ready: true,
+        game: 'Minecraft 1.7.10',
+        world: { folder: 'test-world', name: 'Test World' },
+        exporter: '0.15.0',
+        revision: 14,
+        sources: {
+          rows: [
+            { id: 'nesql-exporter', name: 'NESQL++', version: '0.15.0', path: dummyJarPath }
+          ]
+        }
+      }));
+    } else {
+      response.statusCode = 404;
+      response.end(JSON.stringify({ error: { code: 'not_found' } }));
+    }
+  });
+
+  game.listen(0, '127.0.0.1');
+  await once(game, 'listening');
+  t.after(() => { game.closeAllConnections(); game.close(); });
+
+  await writeFile(
+    path.join(instance, 'nesql', 'connection.json'),
+    JSON.stringify({ protocol: 1, port: game.address().port, token, session })
+  );
+
+  const coordinator = new AcceptanceCoordinator(instance);
+
+  // Mismatched modSha256 must reject
+  await assert.rejects(
+    async () => coordinator.runPlan({
+      world: 'test-world',
+      modSha256: '0'.repeat(64),
+      handlers: []
+    }),
+    /Loaded mod SHA256 mismatch/
+  );
+
+  // Mismatched protocol revision must reject
+  await assert.rejects(
+    async () => coordinator.runPlan({
+      world: 'test-world',
+      expectedRevision: 99,
+      handlers: []
+    }),
+    /Game exporter protocol mismatch/
+  );
+});
+
+test('AcceptanceCoordinator routes tooling exclusions and updates summary (U2, U3)', async t => {
+  const instance = await mkdtemp(path.join(os.tmpdir(), 'nesql-coord-tooling-'));
+  t.after(() => rm(instance, { recursive: true, force: true }));
+  await mkdir(path.join(instance, 'nesql'));
+  const token = '9'.repeat(64);
+  const session = randomUUID();
+  let checksCalled = 0;
+
+  const game = createServer(async (request, response) => {
+    let body = '';
+    for await (const chunk of request) body += chunk;
+    response.setHeader('Content-Type', 'application/json');
+    response.setHeader('X-NESQL-Session', session);
+
+    if (request.url === '/game') {
+      response.end(JSON.stringify({
+        ready: true,
+        game: 'Minecraft 1.7.10',
+        world: { folder: 'test-world', name: 'Test World' },
+        exporter: '0.15.0',
+        revision: 14
+      }));
+    } else if (request.url === '/checks') {
+      checksCalled++;
+      response.end(JSON.stringify({ id: 'job-unexpected', state: 'queued' }));
+    } else {
+      response.statusCode = 404;
+      response.end(JSON.stringify({ error: { code: 'not_found' } }));
+    }
+  });
+
+  game.listen(0, '127.0.0.1');
+  await once(game, 'listening');
+  t.after(() => { game.closeAllConnections(); game.close(); });
+
+  await writeFile(
+    path.join(instance, 'nesql', 'connection.json'),
+    JSON.stringify({ protocol: 1, port: game.address().port, token, session })
+  );
+
+  const coordinator = new AcceptanceCoordinator(instance);
+  const plan = {
+    world: 'test-world',
+    handlers: [
+      {
+        id: 'category_profiler_exclusion_test_ProfilerRecipeHandler',
+        name: 'Profiler',
+        classification: 'tooling',
+        implementationStatus: 'excluded_justified',
+        reason: 'Approved tooling exclusion'
+      }
+    ]
+  };
+
+  const checkpoint = await coordinator.runPlan(plan);
+  assert.equal(checksCalled, 0, 'Tooling exclusion must not be dispatched to /checks');
+  assert.equal(checkpoint.handlers['category_profiler_exclusion_test_ProfilerRecipeHandler'].status, 'excluded');
+  assert.equal(checkpoint.summary.total, 1);
+  assert.equal(checkpoint.summary.excluded, 1);
+  assert.equal(checkpoint.summary.checked, 0);
+  assert.equal(checkpoint.summary.failed, 0);
 });

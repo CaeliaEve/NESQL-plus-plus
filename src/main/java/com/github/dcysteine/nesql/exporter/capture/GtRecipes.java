@@ -213,8 +213,13 @@ final class GtRecipes implements AutoCloseable {
     }
 
     private static JsonObject getTreeFarmFruitPotential(GTRecipe recipe, ItemStack item) {
-        if (recipe.mInputs != null && recipe.mInputs.length > 0 && recipe.mInputs[0] != null) {
-            ItemStack sapling = recipe.mInputs[0];
+        ItemStack sapling = null;
+        if (recipe.mSpecialItems instanceof ItemStack) {
+            sapling = (ItemStack) recipe.mSpecialItems;
+        } else if (recipe.mInputs != null && recipe.mInputs.length > 0 && recipe.mInputs[0] != null) {
+            sapling = recipe.mInputs[0];
+        }
+        if (sapling != null) {
             try {
                 Forestry.require();
                 forestry.api.genetics.IIndividual ind = forestry.api.arboriculture.TreeManager.treeRoot.getMember(sapling);
@@ -223,9 +228,14 @@ final class GtRecipes implements AutoCloseable {
                     forestry.api.arboriculture.ITreeGenome genome = tree.getGenome();
                     float yield = genome.getYield();
                     forestry.api.arboriculture.IAlleleTreeSpecies species = genome.getPrimary();
-                    if (species != null && tree.canBearFruit()) {
-                        long nominal = Math.max(1L, (long) Math.ceil(yield * 10.0f));
-                        return Amounts.potential("forestry.yield", "species=" + species.getUID() + ";yield=" + yield, "0", nominal);
+                    if (!tree.canBearFruit()) {
+                        throw new Jobs.Fault("invalid_quantity", "Tree species cannot bear fruit: " + (species != null ? species.getUID() : "unknown"));
+                    }
+                    if (species != null) {
+                        int baseSize = 1;
+                        int truncated = (int) ((double) baseSize * (double) yield * 10.0);
+                        long nominal = Math.max(1L, (long) Math.ceil((double) yield * 10.0));
+                        return Amounts.potential("forestry.yield", "species=" + species.getUID() + ";yield=" + yield, Integer.toString(truncated), nominal);
                     }
                 }
             } catch (Jobs.Fault f) {
@@ -359,16 +369,42 @@ final class GtRecipes implements AutoCloseable {
                 }
                 int waterIn = recipe.mFluidInputs[1].amount;
                 int thresholdVal = recipe.mSpecialValue;
-                long normalRate = (long) waterIn * 160L;
-                long heatedRate = (long) waterIn * 80L;
+                int eut = recipe.mEUt;
+                if (eut <= 0) {
+                    throw new Jobs.Fault("invalid_heat_recipe", "Extreme heat exchanger recipe missing positive EUt: " + eut);
+                }
+                boolean isPlasma = false;
+                if (recipe.mFluidInputs[0] != null) {
+                    String hotName = recipe.mFluidInputs[0].getUnlocalizedName();
+                    if (hotName != null && hotName.toLowerCase().contains("plasma")) isPlasma = true;
+                    if (recipe.mFluidInputs[0].getFluid() != null && recipe.mFluidInputs[0].getFluid().getName().toLowerCase().contains("plasma")) isPlasma = true;
+                }
+                // Native getUnitSteamPower: "steam" = 0.5d, "ic2superheatedsteam"/"supercriticalsteam"/"densesupercriticalsteam" = 1.0d
+                double unitPowerNormal = 0.5d;
+                if (recipe.mFluidOutputs[0] != null && recipe.mFluidOutputs[0].getFluid() != null) {
+                    String sName = recipe.mFluidOutputs[0].getFluid().getName();
+                    if (!"steam".equalsIgnoreCase(sName)) unitPowerNormal = 1.0d;
+                }
+                double unitPowerHeated = 1.0d;
+
+                int waterPerTickNormal = (int) ((double) eut / unitPowerNormal) / 160;
+                int normalSteamPerTick = isPlasma ? (waterPerTickNormal * 160) / 1000 : (waterPerTickNormal * 160);
+                long normalRate = (long) normalSteamPerTick * 20L;
+                if (normalRate <= 0) normalRate = (long) waterIn * 160L;
+
+                int waterPerTickHeated = (int) ((double) eut / unitPowerHeated) / 160;
+                int heatedSteamPerTick = isPlasma ? (waterPerTickHeated * 160) / 1000 : (waterPerTickHeated * 160);
+                long heatedRate = (long) heatedSteamPerTick * 20L;
+                if (heatedRate <= 0) heatedRate = (long) waterIn * 80L;
+
                 String thresholdStr = Integer.toString(thresholdVal);
                 if (recipe.mFluidOutputs[0] != null) {
                     long amt0 = recipe.mFluidOutputs[0].amount > 0 ? (long) recipe.mFluidOutputs[0].amount : normalRate;
-                    result.put(0, Amounts.branch("steam_output", "normal", "tRealConsume < threshold", thresholdStr, amt0));
+                    result.put(0, Amounts.branch("steam_output", "normal", "tRealConsume < threshold;isPlasma=" + isPlasma, thresholdStr, amt0));
                 }
                 if (recipe.mFluidOutputs[1] != null) {
                     long amt1 = recipe.mFluidOutputs[1].amount > 0 ? (long) recipe.mFluidOutputs[1].amount : heatedRate;
-                    result.put(1, Amounts.branch("steam_output", "superheated", "tRealConsume >= threshold", thresholdStr, amt1));
+                    result.put(1, Amounts.branch("steam_output", "superheated", "tRealConsume >= threshold;isPlasma=" + isPlasma, thresholdStr, amt1));
                 }
             }
             return result;

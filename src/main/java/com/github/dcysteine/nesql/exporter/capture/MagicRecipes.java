@@ -118,6 +118,11 @@ final class MagicRecipes {
                 List<ItemStack> jarChoices = new ArrayList<>();
                 // Normal empty warded jar
                 jarChoices.add(new ItemStack(thaumcraft.common.config.ConfigBlocks.blockJar, 1, 0));
+                // Void jar
+                jarChoices.add(new ItemStack(thaumcraft.common.config.ConfigBlocks.blockJar, 1, 3));
+                // Filled jar variants
+                jarChoices.add(new ItemStack(thaumcraft.common.config.ConfigItems.itemJarFilled, 1, 0));
+                jarChoices.add(new ItemStack(thaumcraft.common.config.ConfigItems.itemJarFilled, 1, 3));
                 // Jars with aspect content (preserved)
                 ItemStack jarWithAspect = new ItemStack(thaumcraft.common.config.ConfigBlocks.blockJar, 1, 0);
                 net.minecraft.nbt.NBTTagCompound aspectTag = new net.minecraft.nbt.NBTTagCompound();
@@ -125,8 +130,9 @@ final class MagicRecipes {
                 aspectTag.setShort("Amount", (short) 64);
                 jarWithAspect.setTagCompound(aspectTag);
                 jarChoices.add(jarWithAspect);
-                // Void jar
-                jarChoices.add(new ItemStack(thaumcraft.common.config.ConfigBlocks.blockJar, 1, 3));
+                // Remote jar if registered
+                ItemStack remoteJar = cpw.mods.fml.common.registry.GameRegistry.findItemStack("gadomancy", "remote_jar", 1);
+                if (remoteJar != null) jarChoices.add(remoteJar);
 
                 product = Products.stickyJar(jarChoices, row.facts);
                 output = product.output;
@@ -182,27 +188,11 @@ final class MagicRecipes {
             }
             ShapelessArcaneRecipe recipe = (ShapelessArcaneRecipe) source;
             aspects = recipe.getAspects(); output = result(recipe.getRecipeOutput()); addResearch(research, recipe.getResearch());
-            int filterSlot = -1;
-            int currentSlot = 0;
             for (Object ingredient : recipe.getInput()) {
-                List<Candidate> ingList = ordinary(ingredient, true);
-                inputs.add(ingList);
-                for (Candidate ing : ingList) {
-                    if (ing.item != null && (ing.item.getUnlocalizedName().contains("filter") || ing.item.getUnlocalizedName().contains("Paper"))) {
-                        filterSlot = currentSlot;
-                    }
-                }
-                currentSlot++;
+                inputs.add(ordinary(ingredient, true));
             }
             if (source.getClass().getName().contains("PreserveFilterRecipe")) {
                 row.property("automagy:filter_preservation", "Filter Preservation", "Transfers custom filter options and metadata from input filter paper.");
-                if (filterSlot != -1) {
-                    List<ItemStack> filterChoices = new ArrayList<>();
-                    for (Candidate ing : inputs.get(filterSlot)) {
-                        filterChoices.add(ing.item.copy());
-                    }
-                    product = Products.preserveFilter(output, filterChoices, row.facts, filterSlot);
-                }
             }
             projection = shapeless(inputs, output, aspects); kind = "arcane";
         } else if (family == Family.CRUCIBLE) {

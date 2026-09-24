@@ -67,7 +67,8 @@ final class Recipes {
             if (key == null || key.isEmpty()) throw new Jobs.Fault("handler_identity", "NEI handler has no identity: " + handler.getClass().getName());
             origin = object("owner", owner, "handler", handler.getClass().getName(), "key", key);
             id = Identity.origin("category", origin);
-            supported = !handler.getClass().getName().contains("ProfilerRecipeHandler") && (handler instanceof TemplateRecipeHandler);
+            supported = GtRecipes.supports(handler) || MagicRecipes.supports(handler)
+                    || handler instanceof FurnaceRecipeHandler || handler instanceof ShapedRecipeHandler || handler instanceof ShapelessRecipeHandler;
         }
 
         JsonObject describe() {
@@ -102,16 +103,7 @@ final class Recipes {
                 } else if (handler.getClass() == ShapedRecipeHandler.class || handler.getClass() == ShapelessRecipeHandler.class) {
                     handler.loadCraftingRecipes("crafting");
                 } else {
-                    String overlay = handler.getOverlayIdentifier();
-                    if (overlay != null && !overlay.isEmpty()) {
-                        try { handler.loadCraftingRecipes(overlay); } catch (Exception ignored) {}
-                    }
-                    if (handler.arecipes.isEmpty()) {
-                        try { handler.loadCraftingRecipes(handler.getHandlerId()); } catch (Exception ignored) {}
-                    }
-                    if (handler.arecipes.isEmpty()) {
-                        try { handler.loadCraftingRecipes("crafting"); } catch (Exception ignored) {}
-                    }
+                    throw new Jobs.Fault("handler_unsupported", "No recipe loader for: " + handler.getClass().getName());
                 }
                 HandlerInfo info = GuiRecipeTab.getHandlerInfo(handler);
                 JsonObject icon = info.getItemStack() == null ? null : object("kind", "item", "id", facts.item(info.getItemStack()));

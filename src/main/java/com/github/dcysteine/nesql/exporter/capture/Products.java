@@ -45,19 +45,6 @@ final class Products {
         }, facts, 0);
     }
 
-    static Products preserveFilter(ItemStack baseOutput, List<ItemStack> filterChoices, Facts facts, int inputIndex) {
-        JsonObject action = object("kind", "merge", "base", object("id", facts.item(baseOutput), "amount", Integer.toString(baseOutput.stackSize)),
-                "keys", null, "tools", false);
-        return observe(filterChoices, action, filterStack -> {
-            ItemStack output = baseOutput.copy();
-            if (filterStack.hasTagCompound()) {
-                output.setTagCompound((NBTTagCompound) filterStack.getTagCompound().copy());
-            }
-            output.setItemDamage(filterStack.getItemDamage());
-            return output;
-        }, facts, inputIndex);
-    }
-
     static Products infusion(InfusionRecipe recipe, List<ItemStack> centers, Facts facts) {
         if (recipe.getClass().getName().contains("RecipeInfusionWandAugmentation")) {
             try {

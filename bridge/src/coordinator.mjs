@@ -1,9 +1,60 @@
 import { readFile, writeFile, rename, mkdir } from 'node:fs/promises';
-import { existsSync, readFileSync } from 'node:fs';
+import { existsSync, readFileSync, statSync } from 'node:fs';
 import { createHash } from 'node:crypto';
 import path from 'node:path';
 import { fileURLToPath, pathToFileURL } from 'node:url';
 import { GameClient, GameError } from './client.mjs';
+
+/**
+ * Evaluates whether an error represents a fatal execution or environment condition (Checks.fatal).
+ */
+export function isFatalError(err) {
+  if (!err) return false;
+  if (err.fatal === true) return true;
+  const seen = new Set();
+  function check(e) {
+    if (!e || typeof e !== 'object' || seen.has(e)) return false;
+    seen.add(e);
+    if (e.fatal === true) return true;
+
+    const code = String(e.code || '').toLowerCase();
+    const msg = String(e.message || '').toLowerCase();
+    const type = String(e.type || '').toLowerCase();
+
+    // Check code matches against Checks.fatal
+    if (code === 'check_cleanup' || code === 'preview_cleanup' || code === 'world_unavailable') return true;
+    if (code.startsWith('client_') || code.endsWith('_changed') || code.includes('environment_changed')) return true;
+    if (code.includes('io_error') || code.includes('fatal') || code.includes('resource_leak') || code === 'server_stopped') return true;
+
+    // Check type matches against Checks.fatal
+    if (type.includes('cancellationexception') || type.includes('interruptedexception') || type.includes('ioexception')
+        || type.includes('outofmemoryerror') || type.includes('stackoverflowerror') || type.endsWith('error') || type === 'java.lang.error') {
+      return true;
+    }
+
+    // Check message against Checks.fatal
+    if (msg.includes('environment_changed') || msg.includes('world changed') || msg.includes('out of memory')
+        || msg.includes('client timeout') || msg.includes('client error') || msg.includes('cleanup failed')
+        || msg.includes('cleanup error') || msg.includes('world_unavailable')) {
+      return true;
+    }
+
+    // Check suppressed exceptions (Checks.fatal triggers on any non-empty suppressed)
+    if (Array.isArray(e.suppressed) && e.suppressed.length > 0) {
+      for (const sup of e.suppressed) {
+        if (check(sup)) return true;
+      }
+      return true;
+    }
+    if (typeof e.suppressedOmitted === 'number' && e.suppressedOmitted > 0) return true;
+
+    // Check nested cause
+    if (e.cause && check(e.cause)) return true;
+
+    return false;
+  }
+  return check(err);
+}
 
 /**
  * Coordinated acceptance runner strictly fulfilling R5, R6, R7, R9:
@@ -66,8 +117,28 @@ export class AcceptanceCoordinator {
     };
   }
 
+  updateSummary(checkpoint) {
+    const handlers = Object.values(checkpoint.handlers || {});
+    const summary = {
+      total: handlers.length,
+      checked: 0,
+      failed: 0,
+      excluded: 0,
+      unexamined: 0
+    };
+    for (const h of handlers) {
+      if (h.status === 'passed') summary.checked++;
+      else if (h.status === 'failed') summary.failed++;
+      else if (h.status === 'excluded') summary.excluded++;
+      else summary.unexamined++;
+    }
+    checkpoint.summary = summary;
+    return summary;
+  }
+
   async saveCheckpoint(checkpoint) {
     checkpoint.updatedAt = new Date().toISOString();
+    this.updateSummary(checkpoint);
     const tempPath = this.checkpointPath + '.tmp';
     await mkdir(path.dirname(this.checkpointPath), { recursive: true });
     await writeFile(tempPath, JSON.stringify(checkpoint, null, 2), 'utf8');
@@ -83,6 +154,12 @@ export class AcceptanceCoordinator {
       throw new Error(`Game server is not ready: ${game.reason || 'unknown'}`);
     }
 
+    const expectedExporter = plan.expectedExporter || '0.15.0';
+    const expectedRevision = plan.expectedRevision !== undefined ? plan.expectedRevision : 14;
+    if (game.exporter && (game.exporter !== expectedExporter || game.revision !== expectedRevision)) {
+      throw new Error(`Game exporter protocol mismatch: expected ${expectedExporter} rev ${expectedRevision}, got ${game.exporter} rev ${game.revision}`);
+    }
+
     const actualWorld = game.world?.folder || game.world?.name;
     if (!actualWorld) {
       throw new Error('Game client has no active world loaded');
@@ -91,11 +168,26 @@ export class AcceptanceCoordinator {
       throw new Error(`Target world mismatch: expected '${plan.world}', game has '${actualWorld}'`);
     }
 
-    // Bind mod sha256 to environment fingerprint (C8)
+    // Bind mod sha256 to environment fingerprint (U4)
     let actualModSha = plan.modSha256 || null;
+    let foundModRow = null;
     if (game.sources?.rows) {
-      const nesqlRow = game.sources.rows.find(m => m.id === 'nesql');
-      if (nesqlRow?.sha256) actualModSha = nesqlRow.sha256;
+      foundModRow = game.sources.rows.find(m => m.id === 'nesql-exporter' || m.id === 'nesql');
+      if (foundModRow) {
+        if (foundModRow.sha256) {
+          actualModSha = foundModRow.sha256;
+        } else if (foundModRow.path && existsSync(foundModRow.path)) {
+          try {
+            const jarBytes = readFileSync(foundModRow.path);
+            actualModSha = createHash('sha256').update(jarBytes).digest('hex');
+          } catch (e) {
+            console.warn(`[Coordinator] Could not compute sha256 for mod path ${foundModRow.path}: ${e.message}`);
+          }
+        }
+      }
+    }
+    if (plan.modSha256 && actualModSha && plan.modSha256 !== actualModSha) {
+      throw new Error(`Loaded mod SHA256 mismatch: expected ${plan.modSha256}, got ${actualModSha}`);
     }
 
     const planHash = createHash('sha256')
@@ -155,11 +247,24 @@ export class AcceptanceCoordinator {
       if (state.hasFailures === undefined) state.hasFailures = false;
       checkpoint.handlers[handlerId] = state;
 
+      // Handle tooling / justified exclusions (U2)
+      if (item.classification === 'tooling' || item.implementationStatus === 'excluded_justified'
+          || handlerId.includes('ProfilerRecipeHandler')) {
+        state.status = 'excluded';
+        state.reason = item.reason || 'Approved non-gameplay tooling exclusion';
+        await this.saveCheckpoint(checkpoint);
+        continue;
+      }
+
       if (state.status === 'passed' && state.unexamined === 0) {
         continue; // Already verified to completion
       }
 
       console.log(`[Coordinator] Processing ${item.name} (${handlerId}) from offset ${state.offset}...`);
+
+      const domain = (item.classification === 'domain' || item.domain === 'structures' || item.route?.startsWith('structure:'))
+        ? 'structures'
+        : 'recipes';
 
       while (true) {
         // Enforce key <= 80 characters strictly, including runId slice
@@ -172,12 +277,16 @@ export class AcceptanceCoordinator {
         const checkRequest = {
           key,
           world: actualWorld,
-          domain: 'recipes',
-          handlers: [handlerId],
-          offset: state.offset,
-          limit,
+          domain,
           probes: [{ count: 1, channels: {} }]
         };
+        if (domain === 'structures') {
+          checkRequest.controllers = item.controllers || [];
+        } else {
+          checkRequest.handlers = [handlerId];
+          checkRequest.offset = state.offset;
+          checkRequest.limit = limit;
+        }
 
         let jobId;
         if (checkpoint.activeJob && checkpoint.activeJob.key === key) {
@@ -203,25 +312,12 @@ export class AcceptanceCoordinator {
         checkpoint.activeJob = null;
         await this.saveCheckpoint(checkpoint);
 
-        // Check for fatal errors that MUST stop the whole plan (R7 / C8)
+        // Check for fatal errors that MUST stop the whole plan (R7 / C8 / U8)
         if (job.state === 'cancelled') {
           state.status = 'cancelled';
           await this.saveCheckpoint(checkpoint);
           throw new Error(`Acceptance plan cancelled during handler ${handlerId}`);
         }
-
-        const isFatalError = (err) => {
-          if (!err) return false;
-          if (err.fatal === true) return true;
-          const code = (err.code || '').toLowerCase();
-          const msg = (err.message || '').toLowerCase();
-          const fatalTokens = [
-            'world_changed', 'slot_changed', 'handler_changed', 'client_error',
-            'io_error', 'fatal', 'outofmemory', 'cleanup', 'cleanup_failed',
-            'resource_leak', 'server_stopped'
-          ];
-          return fatalTokens.some(token => code.includes(token) || msg.includes(token));
-        };
 
         if (job.state === 'failed' && isFatalError(job.error)) {
           state.status = 'failed';
@@ -380,17 +476,25 @@ export class AcceptanceCoordinator {
 
         const rowOmitted = typeof row.failuresOmitted === 'number' ? row.failuresOmitted : 0;
 
-        // Archive report artifact shard (C2)
+        // Archive report artifact shard to real disk file (U8)
+        const archiveDir = path.join(this.instance, 'nesql', 'archived-reports');
+        await mkdir(archiveDir, { recursive: true });
+        const archiveFileName = `report-${shortRun}-${shortHash}-${row.offset}-${row.end}.json`;
+        const archivePath = path.join(archiveDir, archiveFileName);
+        await writeFile(archivePath, rawReport);
+
         if (!checkpoint.archivedReports) checkpoint.archivedReports = [];
         checkpoint.archivedReports.push({
           handler: handlerId,
           offset: row.offset,
           end: row.end,
-          path: report.path,
+          sourcePath: report.path,
+          archivePath,
           sha256: actualSha,
           bytes: rawReport.length,
           failuresCount: row.failures.length,
-          failuresOmitted: rowOmitted
+          failuresOmitted: rowOmitted,
+          failures: row.failures
         });
 
         // Accumulate contiguous page data (C2)
@@ -430,6 +534,7 @@ export class AcceptanceCoordinator {
       }
     }
 
+    this.updateSummary(checkpoint);
     return checkpoint;
   }
 }
@@ -490,15 +595,103 @@ if (process.argv[1] && import.meta.url === pathToFileURL(process.argv[1]).href) 
   console.log('--------------------------------------------------');
 
   if (isDryRun) {
-    if (config.mod) {
-      const modPath = path.resolve(config.instance, config.mod);
-      console.log(`[Coordinator] Dry-run verifying mod artifact: ${modPath} (${existsSync(modPath) ? 'EXISTS' : 'NOT FOUND (Pre-install OK)'})`);
+    const dryRunErrors = [];
+
+    // 1. Instance check
+    if (!config.instance || !existsSync(config.instance)) {
+      dryRunErrors.push(`Instance directory not found: ${config.instance}`);
+    } else {
+      console.log(`[Coordinator] Dry-run verified instance directory: ${config.instance}`);
     }
-    console.log('[Coordinator] Dry-run rehearsal completed successfully. No game mutations performed.');
+
+    // 2. Mod artifact check
+    if (!config.mod) {
+      dryRunErrors.push('Candidate mod artifact not configured in plan.');
+    } else {
+      let modPath = path.isAbsolute(config.mod) ? config.mod : path.resolve(config.instance, config.mod);
+      if (existsSync(modPath)) {
+        try {
+          const st = statSync(modPath);
+          if (st.isDirectory()) {
+            const nestedJar = path.join(modPath, 'mod', 'NESQL++-0.15.0.jar');
+            if (existsSync(nestedJar)) modPath = nestedJar;
+          }
+        } catch (_) {}
+      }
+      if (!existsSync(modPath)) {
+        dryRunErrors.push(`Candidate mod artifact not found: ${modPath}`);
+      } else {
+        console.log(`[Coordinator] Dry-run verified mod artifact: ${modPath}`);
+        if (config.modSha256) {
+          const modBytes = readFileSync(modPath);
+          const computedSha = createHash('sha256').update(modBytes).digest('hex');
+          if (computedSha !== config.modSha256) {
+            dryRunErrors.push(`Candidate mod SHA256 mismatch: expected ${config.modSha256}, got ${computedSha}`);
+          } else {
+            console.log(`[Coordinator] Dry-run verified mod SHA256: ${computedSha}`);
+          }
+        }
+      }
+    }
+
+    // 3. Compiler artifact check
+    if (config.compiler) {
+      let compilerPath = path.isAbsolute(config.compiler) ? config.compiler : path.resolve(config.instance, config.compiler);
+      if (existsSync(compilerPath)) {
+        try {
+          const st = statSync(compilerPath);
+          if (st.isDirectory()) {
+            const nestedExe = path.join(compilerPath, 'elysium-compiler.exe');
+            if (existsSync(nestedExe)) compilerPath = nestedExe;
+          }
+        } catch (_) {}
+      }
+      if (!existsSync(compilerPath)) {
+        dryRunErrors.push(`Candidate compiler not found: ${compilerPath}`);
+      } else {
+        console.log(`[Coordinator] Dry-run verified compiler artifact: ${compilerPath}`);
+      }
+    }
+
+    // 4. Web distribution check
+    if (config.web) {
+      let webPath = path.isAbsolute(config.web) ? config.web : path.resolve(config.instance, config.web);
+      if (existsSync(webPath)) {
+        try {
+          const st = statSync(webPath);
+          if (st.isDirectory()) {
+            const nestedIndex = path.join(webPath, 'index.html');
+            if (existsSync(nestedIndex)) webPath = nestedIndex;
+          }
+        } catch (_) {}
+      }
+      if (!existsSync(webPath)) {
+        dryRunErrors.push(`Candidate web distribution not found: ${webPath}`);
+      } else {
+        console.log(`[Coordinator] Dry-run verified web artifact: ${webPath}`);
+      }
+    }
+
+    // 5. Worklist check
+    if (!existsSync(worklistPath)) {
+      dryRunErrors.push(`Worklist file not found: ${worklistPath}`);
+    } else {
+      console.log(`[Coordinator] Dry-run verified worklist: ${worklistPath} (${worklist.handlers ? worklist.handlers.length : 0} items)`);
+    }
+
+    if (dryRunErrors.length > 0) {
+      console.error('[Coordinator] Dry-run rehearsal failed with errors:');
+      for (const err of dryRunErrors) {
+        console.error(`  - ${err}`);
+      }
+      process.exit(1);
+    }
+
+    console.log('[Coordinator] Dry-run rehearsal completed successfully. All dependencies verified.');
     process.exit(0);
   }
 
-  // Non-dry-run mode: Execute acceptance coordinator plan (C3)
+  // Non-dry-run mode: Execute acceptance coordinator plan (C3 / U3)
   console.log('[Coordinator] Non-dry-run mode: Initializing AcceptanceCoordinator...');
   const coordinator = new AcceptanceCoordinator(config.instance, {
     pageSize: config.pageSize || 4096,
@@ -512,6 +705,8 @@ if (process.argv[1] && import.meta.url === pathToFileURL(process.argv[1]).href) 
   const plan = {
     world: config.world,
     modSha256: config.modSha256 || null,
+    expectedExporter: config.expectedExporter || '0.15.0',
+    expectedRevision: config.expectedRevision !== undefined ? config.expectedRevision : 14,
     handlers
   };
 
@@ -522,8 +717,14 @@ if (process.argv[1] && import.meta.url === pathToFileURL(process.argv[1]).href) 
         console.log(`[Coordinator] [${p.handler}] ${p.checked}/${p.total} (unexamined: ${p.unexamined})`);
       }
     });
+    const summary = finalCheckpoint.summary;
+    console.log('[Coordinator] Execution finished.');
+    console.log(`[Coordinator] Summary: total=${summary.total}, checked=${summary.checked}, failed=${summary.failed}, excluded=${summary.excluded}, unexamined=${summary.unexamined}`);
+    if (summary.failed > 0 || finalCheckpoint.failures.length > 0 || summary.unexamined > 0) {
+      console.error(`[Coordinator] Execution failed: failed=${summary.failed}, failures=${finalCheckpoint.failures.length}, unexamined=${summary.unexamined}`);
+      process.exit(1);
+    }
     console.log('[Coordinator] Execution completed successfully!');
-    console.log(`[Coordinator] Summary: checked=${finalCheckpoint.summary.checked}, failed=${finalCheckpoint.summary.failed}`);
     process.exit(0);
   } catch (err) {
     console.error(`[Coordinator] Execution failed: ${err.message}`);
