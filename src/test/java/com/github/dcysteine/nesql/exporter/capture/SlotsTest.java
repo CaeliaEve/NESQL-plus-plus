@@ -2,9 +2,11 @@ package com.github.dcysteine.nesql.exporter.capture;
 
 import codechicken.nei.PositionedStack;
 import com.github.dcysteine.nesql.exporter.source.Identity;
+import com.github.dcysteine.nesql.exporter.source.TypedNbt;
 import com.github.dcysteine.nesql.exporter.task.Jobs;
 import cpw.mods.fml.relauncher.ReflectionHelper;
 import net.minecraft.init.Items;
+import net.minecraft.item.Item;
 import net.minecraft.item.ItemStack;
 import net.minecraftforge.oredict.OreDictionary;
 import net.minecraftforge.fluids.FluidRegistry;
@@ -207,6 +209,29 @@ final class SlotsTest {
         require(sensitive.get(0).item.getTagCompound().getLong("owner") == Long.MAX_VALUE && !sensitive.get(0).display.hasTagCompound(),
                 "The display permutation replaced the source NBT predicate");
         GtRecipes.displayed(0, display(), sensitive);
+        PositionedStack emptyTagged = display();
+        emptyTagged.items[0].setTagCompound(new net.minecraft.nbt.NBTTagCompound());
+        require(!ItemStack.areItemStackTagsEqual(emptyTagged.items[0], sensitive.get(0).display),
+                "Pinned native NBT equality unexpectedly treats missing and empty compounds as equal");
+        reject("slot_changed", () -> GtRecipes.displayed(0, emptyTagged, sensitive));
+        sensitive.get(0).display.setTagCompound(new net.minecraft.nbt.NBTTagCompound());
+        reject("slot_changed", () -> GtRecipes.displayed(0, display(), sensitive));
+        sensitive.get(0).display.setTagCompound(null);
+        require("wildcard".equals(sensitive.get(0).rule.get("kind").getAsString()) && !sensitive.get(0).rule.get("nbt").getAsBoolean(),
+                "Sensitive wildcard rule was changed or permitted NBT drift");
+        String sensitiveFact = Identity.item(Item.itemRegistry.getNameForObject(sensitive.get(0).item.getItem()),
+                Items.feather.getDamage(sensitive.get(0).item), TypedNbt.encode(sensitive.get(0).item.getTagCompound()));
+        require(sensitiveFact.startsWith("item_") && sensitive.get(0).item.getTagCompound().getLong("owner") == Long.MAX_VALUE,
+                "Sensitive fact identity or NBT predicate changed");
+        ItemStack exactTagged = new ItemStack(Items.paper, 1, 0); exactTagged.setTagCompound(tags);
+        List<RecipeRow.Ingredient> sensitiveExact = GtRecipes.ingredients(exactTagged, true, item -> new ItemStack[] {new ItemStack(Items.paper)});
+        require("exact".equals(sensitiveExact.get(0).rule.get("kind").getAsString()), "Sensitive exact rule was changed");
+        reject("slot_changed", () -> GtRecipes.displayed(0, emptyTagged, sensitiveExact));
+        List<RecipeRow.Ingredient> mixed = Arrays.asList(sensitive.get(0), ingredients.get(0));
+        PositionedStack mixedDisplay = new PositionedStack(new ItemStack[] {new ItemStack(Items.paper), new ItemStack(Items.paper)}, 10, 20, false);
+        mixedDisplay.items[1].setTagCompound(new net.minecraft.nbt.NBTTagCompound());
+        // A mixed slot contains both exact and wildcard predicates: missing vs empty compound must NOT be tolerated.
+        reject("slot_changed", () -> GtRecipes.displayed(0, mixedDisplay, mixed));
         sensitive.get(0).item.getTagCompound().setLong("owner", 0);
         require(tags.getLong("owner") == Long.MAX_VALUE, "Source NBT was shared with its expanded candidate");
     }
@@ -250,6 +275,29 @@ final class SlotsTest {
             GtRecipes.displayed(2, cached, ingredients);
             ingredients.get(1).display.setTagCompound(null);
 
+            // Multiplicity check after empty tag projection: 2 empty-tag candidates require exactly 2 display stacks
+            List<RecipeRow.Ingredient> duplicateEmpty = Arrays.asList(ingredients.get(0), ingredients.get(0));
+            PositionedStack duplicateDisplay = new PositionedStack(new ItemStack[] {new ItemStack(Items.paper, 1, 0), new ItemStack(Items.paper, 1, 0)}, 10, 20, false);
+            duplicateDisplay.items[1].setTagCompound(new net.minecraft.nbt.NBTTagCompound());
+            GtRecipes.displayed(0, duplicateDisplay, duplicateEmpty);
+            PositionedStack underflowDisplay = new PositionedStack(new ItemStack[] {new ItemStack(Items.paper, 1, 0)}, 10, 20, false);
+            reject("slot_changed", () -> GtRecipes.displayed(0, underflowDisplay, duplicateEmpty));
+            PositionedStack overflowDisplay = new PositionedStack(new ItemStack[] {new ItemStack(Items.paper, 1, 0), new ItemStack(Items.paper, 1, 0), new ItemStack(Items.paper, 1, 0)}, 10, 20, false);
+            reject("slot_changed", () -> GtRecipes.displayed(0, overflowDisplay, duplicateEmpty));
+
+            // Container diagnostic test: summarize compound keys and list length without recursive values
+            net.minecraft.nbt.NBTTagCompound containerCached = new net.minecraft.nbt.NBTTagCompound();
+            containerCached.setTag("compoundTag", new net.minecraft.nbt.NBTTagCompound());
+            containerCached.setTag("listTag", new net.minecraft.nbt.NBTTagList());
+            cached.items[1].setTagCompound(containerCached);
+            try { GtRecipes.displayed(2, cached, ingredients); throw new AssertionError("Container drift was accepted"); }
+            catch (Jobs.Fault expected) {
+                String msg = expected.getMessage();
+                require(msg.contains("\"compoundTag\": cached=compound=keys=0 (values omitted)")
+                        && msg.contains("\"listTag\": cached=list=length=0 (values omitted)"),
+                        "Container diagnostic did not summarize keys/length without full values: " + msg);
+            }
+
             cached.items = original.clone();
             cached.items[1] = cached.items[1].copy();
             net.minecraft.nbt.NBTTagCompound tag = new net.minecraft.nbt.NBTTagCompound(); tag.setInteger("owner", 1);
@@ -259,7 +307,7 @@ final class SlotsTest {
                 require(expected.code.equals("slot_changed") && expected.getMessage().contains("slot=2")
                         && expected.getMessage().contains("minecraft:paper") && expected.getMessage().contains("meta=1")
                         && expected.getMessage().contains("id=item_")
-                        && expected.getMessage().contains("nbt diff: [owner: cached=int=1 vs source=absent]"),
+                        && expected.getMessage().contains("nbt diff: [\"owner\": cached=int=1 vs source=absent]"),
                         "Candidate mismatch lost its slot, exact item identity or bounded NBT diff diagnostic");
             }
 
@@ -273,8 +321,19 @@ final class SlotsTest {
             try { GtRecipes.displayed(2, cached, ingredients); throw new AssertionError("Multi-tag drift was accepted"); }
             catch (Jobs.Fault expected) {
                 String msg = expected.getMessage();
-                require(msg.contains("nbt diff: [") && msg.contains("alpha: cached=string=\"very_long_string_value_exceedin...")
+                require(msg.contains("nbt diff: [") && msg.contains("\"alpha\": cached=string=\"")
+                        && !msg.contains("very_long_string_value_exceeding_thirty_two_characters_limit") && msg.contains("...\"")
                         && msg.contains("(+1 more)"), "Bounded NBT diff did not truncate long value or tag count: " + msg);
+            }
+            net.minecraft.nbt.NBTTagCompound longKey = new net.minecraft.nbt.NBTTagCompound();
+            String key = String.join("", Collections.nCopies(2000, "label")) + "\n";
+            longKey.setString(key, "value\nwith control character");
+            cached.items[1].setTagCompound(longKey);
+            try { GtRecipes.displayed(2, cached, ingredients); throw new AssertionError("Long-key drift was accepted"); }
+            catch (Jobs.Fault expected) {
+                require(expected.code.equals("slot_changed") && expected.getMessage().length() < 1500
+                        && !expected.getMessage().contains(key) && !expected.getMessage().contains("\n"),
+                        "NBT diagnostic did not bound/escape keys and values");
             }
             cached.items = Arrays.copyOf(original, original.length - 1);
             reject("slot_changed", () -> GtRecipes.displayed(2, cached, ingredients));

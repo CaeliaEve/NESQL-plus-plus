@@ -280,15 +280,20 @@ final class GtRecipes implements AutoCloseable {
         }
         // GT reuses mutable NEI display caches. Permutation order is presentation,
         // not a binding to a source candidate's quantity, consumption or predicate.
+        // Native exact NBT matching distinguishes a missing compound from an empty one.
+        // Tolerate that display-only difference only when every source predicate ignores NBT.
+        boolean emptyTags = !ingredients.isEmpty() && ingredients.stream().allMatch(ingredient ->
+                "wildcard".equals(ingredient.rule.get("kind").getAsString())
+                        && ingredient.rule.has("nbt") && ingredient.rule.get("nbt").getAsBoolean());
         Map<String, Integer> remaining = new java.util.LinkedHashMap<>();
         for (RecipeRow.Ingredient ingredient : ingredients) {
             Jobs.checkpoint();
-            remaining.merge(displayKey(ingredient.display), 1, Integer::sum);
+            remaining.merge(displayKey(ingredient.display, emptyTags), 1, Integer::sum);
         }
         for (int index = 0; index < display.items.length; index++) {
             Jobs.checkpoint();
             ItemStack shown = display.items[index];
-            String key = displayKey(shown);
+            String key = displayKey(shown, emptyTags);
             Integer count = remaining.get(key);
             if (count == null) {
                 String expected = "none";
@@ -298,7 +303,7 @@ final class GtRecipes implements AutoCloseable {
                         ? Item.itemRegistry.getNameForObject(shown.getItem()) : null;
                 int shownMeta = shown != null ? Items.feather.getDamage(shown) : 0;
                 for (RecipeRow.Ingredient ingredient : ingredients) {
-                    if (remaining.containsKey(displayKey(ingredient.display))) {
+                    if (remaining.containsKey(displayKey(ingredient.display, emptyTags))) {
                         if (unmatchedIngredient == null) unmatchedIngredient = ingredient;
                         if (sameItemIngredient == null && ingredient.display != null && ingredient.display.getItem() != null
                                 && shownRegistry != null && shownRegistry.equals(Item.itemRegistry.getNameForObject(ingredient.display.getItem()))
@@ -320,33 +325,23 @@ final class GtRecipes implements AutoCloseable {
         }
     }
 
-    private static String displayKey(ItemStack stack) {
+    private static String displayKey(ItemStack stack, boolean emptyTags) {
         if (stack == null || stack.getItem() == null) return "empty";
         String registry = Item.itemRegistry.getNameForObject(stack.getItem());
         if (registry == null || Item.itemRegistry.getObject(registry) != stack.getItem()) {
             throw new Jobs.Fault("unregistered_item", "GT display uses an unregistered item");
         }
-        // Match the same exact metadata and typed NBT identity as item facts,
-        // respecting Forge/MC empty-tag equivalence (null and compound with hasNoTags() are equal).
-        // Display stack sizes may all be 1 and must never replace source amounts.
+        // This projection never changes item facts, source predicates or source amounts.
+        // Nonempty tags always retain their complete typed identity, even for an NBT-ignoring input.
         net.minecraft.nbt.NBTTagCompound tag = stack.getTagCompound();
-        com.google.gson.JsonElement nbt = tag == null || tag.hasNoTags() ? null : TypedNbt.encode(tag);
+        com.google.gson.JsonElement nbt = tag == null || emptyTags && tag.hasNoTags() ? null : TypedNbt.encode(tag);
         return Identity.item(registry, Items.feather.getDamage(stack), nbt);
     }
 
     private static String describe(ItemStack stack) {
         if (stack == null || stack.getItem() == null) return "empty";
-        String key = displayKey(stack);
-        String raw = rawId(stack);
         return Item.itemRegistry.getNameForObject(stack.getItem()) + "; meta=" + Items.feather.getDamage(stack)
-                + "; id=" + key + (raw.equals(key) ? "" : "; raw=" + raw);
-    }
-
-    private static String rawId(ItemStack stack) {
-        if (stack == null || stack.getItem() == null) return "empty";
-        String registry = Item.itemRegistry.getNameForObject(stack.getItem());
-        if (registry == null || Item.itemRegistry.getObject(registry) != stack.getItem()) return "unregistered";
-        return Identity.item(registry, Items.feather.getDamage(stack), TypedNbt.encode(stack.getTagCompound()));
+                + "; id=" + displayKey(stack, false);
     }
 
     private static String nbtDiff(ItemStack cached, ItemStack source) {
@@ -355,7 +350,9 @@ final class GtRecipes implements AutoCloseable {
         net.minecraft.nbt.NBTTagCompound tagB = source.getTagCompound();
         boolean emptyA = tagA == null || tagA.hasNoTags();
         boolean emptyB = tagB == null || tagB.hasNoTags();
-        if (emptyA && emptyB) return null;
+        if (emptyA && emptyB) return tagA == tagB ? null : "nbt diff: [root: cached="
+                + (tagA == null ? "absent" : "compound={}") + " vs source="
+                + (tagB == null ? "absent" : "compound={}") + "]";
         java.util.Set<String> keys = new java.util.TreeSet<>();
         if (!emptyA) for (Object key : tagA.func_150296_c()) keys.add((String) key);
         if (!emptyB) for (Object key : tagB.func_150296_c()) keys.add((String) key);
@@ -366,13 +363,13 @@ final class GtRecipes implements AutoCloseable {
             net.minecraft.nbt.NBTBase valB = !emptyB && tagB.hasKey(key) ? tagB.getTag(key) : null;
             if (valA == null && valB != null) {
                 totalDiffs++;
-                if (diffs.size() < 3) diffs.add(key + ": cached=absent vs source=" + describeTag(valB));
+                if (diffs.size() < 3) diffs.add(brief(key) + ": cached=absent vs source=" + describeTag(valB));
             } else if (valA != null && valB == null) {
                 totalDiffs++;
-                if (diffs.size() < 3) diffs.add(key + ": cached=" + describeTag(valA) + " vs source=absent");
+                if (diffs.size() < 3) diffs.add(brief(key) + ": cached=" + describeTag(valA) + " vs source=absent");
             } else if (valA != null && valB != null && !valA.equals(valB)) {
                 totalDiffs++;
-                if (diffs.size() < 3) diffs.add(key + ": cached=" + describeTag(valA) + " vs source=" + describeTag(valB));
+                if (diffs.size() < 3) diffs.add(brief(key) + ": cached=" + describeTag(valA) + " vs source=" + describeTag(valB));
             }
         }
         if (diffs.isEmpty()) return null;
@@ -385,9 +382,21 @@ final class GtRecipes implements AutoCloseable {
         if (tag == null) return "absent";
         int id = tag.getId();
         String typeName = id >= 0 && id < TAG_TYPES.length ? TAG_TYPES[id] : ("type_" + id);
-        String text = tag.toString();
-        if (text.length() > 32) text = text.substring(0, 32) + "...";
+        String text;
+        // Summarize containers instead of formatting an entire subtree or array before truncation.
+        switch (id) {
+            case 7: text = "length=" + ((net.minecraft.nbt.NBTTagByteArray) tag).func_150292_c().length + " (values omitted)"; break;
+            case 8: text = brief(((net.minecraft.nbt.NBTTagString) tag).func_150285_a_()); break;
+            case 9: text = "length=" + ((net.minecraft.nbt.NBTTagList) tag).tagCount() + " (values omitted)"; break;
+            case 10: text = "keys=" + ((net.minecraft.nbt.NBTTagCompound) tag).func_150296_c().size() + " (values omitted)"; break;
+            case 11: text = "length=" + ((net.minecraft.nbt.NBTTagIntArray) tag).func_150302_c().length + " (values omitted)"; break;
+            default: text = tag.toString(); break; // Primitive numeric tags only; no recursive rendering.
+        }
         return typeName + "=" + text;
+    }
+
+    private static String brief(String text) {
+        return value(text.length() > 32 ? text.substring(0, 32) + "..." : text).toString();
     }
 
     private static final String[] TAG_TYPES = {

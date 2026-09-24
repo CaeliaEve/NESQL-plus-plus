@@ -36,7 +36,7 @@ npm --prefix bridge test
 node scripts/release.mjs
 ```
 
-普通增量构建无需重复 setup 或 clean。`build` 执行两组 Java 行为检查并生成经过 reobf 的 `build/libs/NESQL++-0.14.1.jar`。`check-jar` 检查实际产物的命令和预览世界 SRG 方法、版本替换和打包边界。`release` 要求目标目录不存在，按明确清单打包，不操作游戏目录。
+普通增量构建无需重复 setup 或 clean。`build` 执行两组 Java 行为检查并生成经过 reobf 的 `build/libs/NESQL++-0.14.2.jar`。`check-jar` 检查实际产物的命令和预览世界 SRG 方法、版本替换和打包边界。`release` 要求目标目录不存在，按明确清单打包，不操作游戏目录。
 
 可用 `NESQL_LOCAL_MAVEN_REPO` 指定本地 Maven 仓库。Forge 1.7.10 的工具链固定为 ForgeGradle 1.2.11 / Gradle 6.9.1；这里的旧版本是目标游戏的构建约束。
 
@@ -95,4 +95,4 @@ Java source/jobs 行为检查、真实本机 HTTP 端点、MCP SDK stdio 握手/
 
 0.14.0通过原生 Forestry 遗传 API 进行扫描仪配方分析，支持整叠样本与未分析/已分析双分支导出，维持原生蜂蜜消耗条件与严格基因去重。
 
-0.14.1按 Minecraft / Forge 原生规范支持 GT 输入展示缓存与重新展开候选的空 NBT 等价性（`null` 与 `hasNoTags()` 空复合体视为等价展示），消除 IC2 等模组运行时动态附加空 NBTTagCompound 引发的虚假展示漂移。非空 NBT 真实漂移、候选丢失、增加及数量错误仍严格拦截，并在触发 `slot_changed` 时补充最多 3 项截断至 32 字符的有界 NBT 差异诊断。数据修订（13）及配套包（0.13.0）保持不变。
+0.14.2在GT输入展示校验中只在所有来源候选都已声明忽略 NBT 时容忍 `null` 与空复合体的展示差异。目标 Minecraft / Forge 的精确标签比较区分这两种状态；NBT 敏感或混合规则的候选继续严格核对。物品事实和源谓词不归一化，非空 NBT 漂移、候选增减及重复次数错误继续以 `slot_changed` 拒绝。诊断最多列出 3 个根标签差异，对名称和字符串截断并转义，对复合体及数组只输出明确省略值的摘要，错误中的物品 ID 始终为完整精确身份。数据修订（13）及配套包（0.13.0）保持不变。
