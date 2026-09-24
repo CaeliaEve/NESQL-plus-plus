@@ -3,6 +3,7 @@ package com.github.dcysteine.nesql.exporter.capture;
 import codechicken.nei.PositionedStack;
 import codechicken.nei.recipe.ICraftingHandler;
 import codechicken.nei.recipe.TemplateRecipeHandler;
+import cpw.mods.fml.common.Loader;
 import com.github.dcysteine.nesql.exporter.task.Jobs;
 import com.google.gson.JsonArray;
 import com.google.gson.JsonObject;
@@ -114,14 +115,23 @@ final class MagicRecipes {
             boolean mirror = false;
             boolean isStickyJar = source.getClass().getName().contains("RecipeStickyJar");
             if (isStickyJar) {
-                ItemStack jarIn = new ItemStack(thaumcraft.common.config.ConfigBlocks.blockJar, 1, 0);
-                ItemStack jarOut = jarIn.copy();
-                net.minecraft.nbt.NBTTagCompound tag = new net.minecraft.nbt.NBTTagCompound();
-                tag.setByte("isStickyJar", (byte) 1);
-                jarOut.setTagCompound(tag);
-                output = jarOut;
+                List<ItemStack> jarChoices = new ArrayList<>();
+                // Normal empty warded jar
+                jarChoices.add(new ItemStack(thaumcraft.common.config.ConfigBlocks.blockJar, 1, 0));
+                // Jars with aspect content (preserved)
+                ItemStack jarWithAspect = new ItemStack(thaumcraft.common.config.ConfigBlocks.blockJar, 1, 0);
+                net.minecraft.nbt.NBTTagCompound aspectTag = new net.minecraft.nbt.NBTTagCompound();
+                aspectTag.setString("AspectFilter", "ignis");
+                aspectTag.setShort("Amount", (short) 64);
+                jarWithAspect.setTagCompound(aspectTag);
+                jarChoices.add(jarWithAspect);
+                // Void jar
+                jarChoices.add(new ItemStack(thaumcraft.common.config.ConfigBlocks.blockJar, 1, 3));
+
+                product = Products.stickyJar(jarChoices, row.facts);
+                output = product.output;
                 inputArr = new Object[] {
-                    jarIn, null, null,
+                    jarChoices.toArray(new ItemStack[0]), null, null,
                     new ItemStack(Items.slime_ball), null, null,
                     null, null, null
                 };
@@ -172,9 +182,27 @@ final class MagicRecipes {
             }
             ShapelessArcaneRecipe recipe = (ShapelessArcaneRecipe) source;
             aspects = recipe.getAspects(); output = result(recipe.getRecipeOutput()); addResearch(research, recipe.getResearch());
-            for (Object ingredient : recipe.getInput()) inputs.add(ordinary(ingredient, true));
+            int filterSlot = -1;
+            int currentSlot = 0;
+            for (Object ingredient : recipe.getInput()) {
+                List<Candidate> ingList = ordinary(ingredient, true);
+                inputs.add(ingList);
+                for (Candidate ing : ingList) {
+                    if (ing.item != null && (ing.item.getUnlocalizedName().contains("filter") || ing.item.getUnlocalizedName().contains("Paper"))) {
+                        filterSlot = currentSlot;
+                    }
+                }
+                currentSlot++;
+            }
             if (source.getClass().getName().contains("PreserveFilterRecipe")) {
                 row.property("automagy:filter_preservation", "Filter Preservation", "Transfers custom filter options and metadata from input filter paper.");
+                if (filterSlot != -1) {
+                    List<ItemStack> filterChoices = new ArrayList<>();
+                    for (Candidate ing : inputs.get(filterSlot)) {
+                        filterChoices.add(ing.item.copy());
+                    }
+                    product = Products.preserveFilter(output, filterChoices, row.facts, filterSlot);
+                }
             }
             projection = shapeless(inputs, output, aspects); kind = "arcane";
         } else if (family == Family.CRUCIBLE) {
@@ -191,18 +219,31 @@ final class MagicRecipes {
             InfusionRecipe recipe = (InfusionRecipe) source;
             aspects = recipe.getAspects(); addResearch(research, recipe.getResearch());
             boolean enhancedOk = false;
-            try {
-                Object api = invoke(type(EXT + "InfusionRecipeExt"), null, "get", new Class<?>[0]);
-                Object enhanced = invoke(type(EXT + "InfusionRecipeExt"), api, "convert", new Class<?>[] {InfusionRecipe.class}, recipe);
-                if (enhanced != null) {
-                    inputs.add(ingredient(invoke(type(EXT + "EnhancedInfusionRecipe"), enhanced, "getCentral", new Class<?>[0])));
-                    Object components = invoke(type(EXT + "EnhancedInfusionRecipe"), enhanced, "getComponentsExt", new Class<?>[0]);
-                    if (components instanceof List<?> && ((List<?>) components).size() <= 4095) {
-                        for (Object component : (List<?>) components) inputs.add(ingredient(component));
-                        enhancedOk = true;
+            if (Loader.isModLoaded("tc4tweak")) {
+                try {
+                    Class<?> extClass = type(EXT + "InfusionRecipeExt");
+                    Object api = invoke(extClass, null, "get", new Class<?>[0]);
+                    Object enhanced = invoke(extClass, api, "convert", new Class<?>[] {InfusionRecipe.class}, recipe);
+                    if (enhanced != null) {
+                        inputs.add(ingredient(invoke(type(EXT + "EnhancedInfusionRecipe"), enhanced, "getCentral", new Class<?>[0])));
+                        Object components = invoke(type(EXT + "EnhancedInfusionRecipe"), enhanced, "getComponentsExt", new Class<?>[0]);
+                        if (components instanceof List<?> && ((List<?>) components).size() <= 4095) {
+                            for (Object component : (List<?>) components) inputs.add(ingredient(component));
+                            enhancedOk = true;
+                        }
                     }
+                } catch (Jobs.Fault f) {
+                    throw f;
+                } catch (Error e) {
+                    throw e;
+                } catch (RuntimeException re) {
+                    throw re;
+                } catch (Exception e) {
+                    Jobs.Fault fault = fault("Failed to convert enhanced infusion recipe: " + e.getMessage());
+                    fault.initCause(e);
+                    throw fault;
                 }
-            } catch (Exception ignored) {}
+            }
             if (!enhancedOk) {
                 inputs.clear();
                 inputs.add(ordinary(recipe.getRecipeInput(), true));

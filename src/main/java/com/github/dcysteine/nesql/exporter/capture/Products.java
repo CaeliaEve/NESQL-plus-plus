@@ -27,9 +27,35 @@ final class Products {
     final ItemStack output;
     private final JsonObject action;
     private final Map<String, JsonObject> samples;
+    private final int inputIndex;
 
-    private Products(ItemStack output, JsonObject action, Map<String, JsonObject> samples) {
-        this.output = output; this.action = action; this.samples = samples;
+    private Products(ItemStack output, JsonObject action, Map<String, JsonObject> samples, int inputIndex) {
+        this.output = output; this.action = action; this.samples = samples; this.inputIndex = inputIndex;
+    }
+
+    static Products stickyJar(List<ItemStack> jarChoices, Facts facts) {
+        JsonObject action = object("kind", "patch", "set", object("isStickyJar", object("type", "byte", "value", "1")), "limits", new JsonObject());
+        return observe(jarChoices, action, jar -> {
+            ItemStack output = jar.copy();
+            output.stackSize = 1;
+            NBTTagCompound tag = output.hasTagCompound() ? (NBTTagCompound) output.getTagCompound().copy() : new NBTTagCompound();
+            tag.setByte("isStickyJar", (byte) 1);
+            output.setTagCompound(tag);
+            return output;
+        }, facts, 0);
+    }
+
+    static Products preserveFilter(ItemStack baseOutput, List<ItemStack> filterChoices, Facts facts, int inputIndex) {
+        JsonObject action = object("kind", "merge", "base", object("id", facts.item(baseOutput), "amount", Integer.toString(baseOutput.stackSize)),
+                "keys", null, "tools", false);
+        return observe(filterChoices, action, filterStack -> {
+            ItemStack output = baseOutput.copy();
+            if (filterStack.hasTagCompound()) {
+                output.setTagCompound((NBTTagCompound) filterStack.getTagCompound().copy());
+            }
+            output.setItemDamage(filterStack.getItemDamage());
+            return output;
+        }, facts, inputIndex);
     }
 
     static Products infusion(InfusionRecipe recipe, List<ItemStack> centers, Facts facts) {
@@ -37,7 +63,7 @@ final class Products {
             try {
                 Object aug = field(recipe, "augmentation");
                 String augName = (String) invoke(aug.getClass(), aug, "getAugmentationName", new Class<?>[0]);
-                JsonObject action = object("kind", "append_list", "tag", "Augmentations", "value", augName);
+                JsonObject action = object("kind", "append", "path", "Augmentations", "value", object("type", "string", "value", augName));
                 return observe(centers, action, center -> {
                     try {
                         Object res = invoke(recipe.getClass(), recipe, "getRecipeOutput", new Class<?>[] {ItemStack.class}, center.copy());
@@ -45,7 +71,7 @@ final class Products {
                     } catch (Exception e) {
                         throw fault("Failed to compute wand augmentation result: " + e.getMessage());
                     }
-                }, facts);
+                }, facts, 0);
             } catch (Exception e) {
                 throw fault("Failed to inspect wand augmentation: " + e.getMessage());
             }
@@ -58,7 +84,7 @@ final class Products {
         if (supplied instanceof ItemStack) {
             base = concrete((ItemStack) supplied);
             action = carry(recipe, base, facts);
-            if (action == null) return new Products(base, null, new HashMap<>());
+            if (action == null) return new Products(base, null, new HashMap<>(), 0);
         } else if (supplied instanceof Object[]) {
             Object[] change = (Object[]) supplied;
             if (change.length != 2 || !(change[0] instanceof String) || !(change[1] instanceof NBTBase)) throw fault("Invalid infusion tag replacement");
@@ -75,10 +101,14 @@ final class Products {
             }
             return concrete((ItemStack) invoke(type(CARRY), null, "getOutput",
                     new Class<?>[] {InfusionRecipe.class, ItemStack.class, ItemStack.class}, recipe, center.copy(), template.copy()));
-        }, facts);
+        }, facts, 0);
     }
 
     static Products observe(List<ItemStack> centers, JsonObject action, Function<ItemStack, ItemStack> transform, Facts facts) {
+        return observe(centers, action, transform, facts, 0);
+    }
+
+    static Products observe(List<ItemStack> centers, JsonObject action, Function<ItemStack, ItemStack> transform, Facts facts, int inputIndex) {
         Map<String, JsonObject> samples = new HashMap<>();
         ItemStack first = null;
         for (ItemStack center : centers) {
@@ -90,7 +120,7 @@ final class Products {
             samples.put(input, object("id", facts.item(result), "amount", Integer.toString(result.stackSize)));
         }
         if (first == null) throw fault("Changed output has no representative input");
-        return new Products(first, action, samples);
+        return new Products(first, action, samples, inputIndex);
     }
 
     static ItemStack patch(ItemStack input, NBTTagCompound set, Map<String, Integer> limits) {
@@ -108,16 +138,16 @@ final class Products {
         JsonObject center = null;
         for (JsonElement value : row.inputs) {
             JsonObject input = value.getAsJsonObject();
-            if (input.get("kind").getAsString().equals("item") && input.get("slot").getAsInt() == 0) center = input;
+            if (input.get("kind").getAsString().equals("item") && input.get("slot").getAsInt() == inputIndex) center = input;
         }
-        if (center == null) throw fault("Changed output has no center binding");
+        if (center == null) throw fault("Changed output has no center binding at input slot " + inputIndex);
         JsonArray examples = new JsonArray();
         for (JsonElement value : center.getAsJsonArray("choices")) {
             JsonObject sample = samples.get(value.getAsJsonObject().get("id").getAsString());
             if (sample == null) throw fault("Native result sample is missing an input choice");
             examples.add(sample);
         }
-        row.outputs.get(0).getAsJsonObject().add("change", object("input", 0, "action", action, "samples", examples));
+        row.outputs.get(0).getAsJsonObject().add("change", object("input", inputIndex, "action", action, "samples", examples));
     }
 
     private static JsonObject carry(InfusionRecipe recipe, ItemStack base, Facts facts) {
