@@ -68,12 +68,19 @@ final class Recipes {
             origin = object("owner", owner, "handler", handler.getClass().getName(), "key", key);
             id = Identity.origin("category", origin);
             supported = GtRecipes.supports(handler) || MagicRecipes.supports(handler)
-                    || (handler instanceof TemplateRecipeHandler && !handler.getClass().getName().contains("ProfilerRecipeHandler"));
+                    || handler instanceof FurnaceRecipeHandler || handler instanceof ShapedRecipeHandler || handler instanceof ShapelessRecipeHandler;
         }
 
         JsonObject describe() {
-            return object("id", id, "name", name, "source", origin, "supported", supported,
-                    "reason", supported ? null : "Excluded non-gameplay profiling utility");
+            String reason = null;
+            if (!supported) {
+                if (prototype.getClass().getName().contains("ProfilerRecipeHandler")) {
+                    reason = "Excluded non-gameplay profiling utility";
+                } else {
+                    reason = "No production recipe adapter implemented";
+                }
+            }
+            return object("id", id, "name", name, "source", origin, "supported", supported, "reason", reason);
         }
 
         Cursor open(Facts facts, boolean views) {
@@ -98,13 +105,13 @@ final class Recipes {
                 } else {
                     String overlay = handler.getOverlayIdentifier();
                     if (overlay != null && !overlay.isEmpty()) {
-                        try { handler.loadCraftingRecipes(overlay); } catch (Throwable ignored) {}
+                        try { handler.loadCraftingRecipes(overlay); } catch (Exception ignored) {}
                     }
                     if (handler.arecipes.isEmpty()) {
-                        try { handler.loadCraftingRecipes(handler.getHandlerId()); } catch (Throwable ignored) {}
+                        try { handler.loadCraftingRecipes(handler.getHandlerId()); } catch (Exception ignored) {}
                     }
                     if (handler.arecipes.isEmpty()) {
-                        try { handler.loadCraftingRecipes("crafting"); } catch (Throwable ignored) {}
+                        try { handler.loadCraftingRecipes("crafting"); } catch (Exception ignored) {}
                     }
                 }
                 HandlerInfo info = GuiRecipeTab.getHandlerInfo(handler);
@@ -171,7 +178,8 @@ final class Recipes {
                 boolean crafting = !(handler instanceof FurnaceRecipeHandler);
                 int slot = 0;
                 for (PositionedStack input : handler.getIngredientStacks(index)) {
-                    row.itemInput(input, slot++, 1, false, crafting, object("kind", "wildcard", "meta", false, "nbt", true));
+                    int inSize = (input != null && input.item != null && input.item.stackSize > 0) ? input.item.stackSize : 1;
+                    row.itemInput(input, slot++, inSize, false, crafting, object("kind", "wildcard", "meta", false, "nbt", true));
                 }
                 PositionedStack output = handler.getResultStack(index);
                 if (output != null && output.item != null) {

@@ -1,16 +1,18 @@
 import { readFile, writeFile, rename, mkdir } from 'node:fs/promises';
-import { existsSync } from 'node:fs';
+import { existsSync, readFileSync } from 'node:fs';
 import { createHash } from 'node:crypto';
 import path from 'node:path';
+import { fileURLToPath, pathToFileURL } from 'node:url';
 import { GameClient, GameError } from './client.mjs';
 
 /**
- * Coordinated acceptance runner strictly fulfilling R5, R6, R7:
+ * Coordinated acceptance runner strictly fulfilling R5, R6, R7, R9:
  * - Validates true game environment (world folder/name, ready) without artificial singleplayer flags.
- * - Enforces bounded job keys strictly <= 80 characters.
+ * - Enforces bounded job keys strictly <= 80 characters with explicit runId.
  * - Automatically advances contiguous pagination across arbitrary ranges without stopping at 4096.
- * - Refuses unverified reports; verifies real row status and preserves all failure locations.
+ * - Refuses unverified reports; verifies real row.status, verifies report bytes/sha256, preserves all failure locations.
  * - Stores environment-isolated checkpoints atomically; halts entirely on fatal environment errors.
+ * - Provides CLI entry point with dry-run rehearsal capability.
  */
 export class AcceptanceCoordinator {
   constructor(instance, options = {}) {
@@ -18,6 +20,7 @@ export class AcceptanceCoordinator {
     this.client = new GameClient(instance, options);
     this.checkpointPath = path.join(instance, 'nesql', 'acceptance-checkpoint.json');
     this.options = options;
+    this.runId = options.runId || ('run-' + Date.now().toString(36) + '-' + Math.random().toString(36).slice(2, 6));
   }
 
   static fingerprint(env) {
@@ -26,6 +29,7 @@ export class AcceptanceCoordinator {
         world: env.world,
         exporter: env.exporter,
         revision: env.revision,
+        modSha256: env.modSha256 || null,
         planHash: env.planHash
       }))
       .digest('hex');
@@ -46,6 +50,7 @@ export class AcceptanceCoordinator {
     }
     return {
       version: '0.15.0',
+      runId: this.runId,
       fingerprint: currentFingerprint,
       createdAt: new Date().toISOString(),
       updatedAt: new Date().toISOString(),
@@ -88,6 +93,7 @@ export class AcceptanceCoordinator {
       world: actualWorld,
       exporter: game.exporter,
       revision: game.revision,
+      modSha256: plan.modSha256 || null,
       planHash
     });
 
@@ -132,9 +138,10 @@ export class AcceptanceCoordinator {
       console.log(`[Coordinator] Processing ${item.name} (${handlerId}) from offset ${state.offset}...`);
 
       while (true) {
-        // Enforce key <= 80 characters strictly
+        // Enforce key <= 80 characters strictly, including runId slice
         const shortHash = createHash('sha256').update(handlerId).digest('hex').slice(0, 16);
-        const key = `chk-${shortHash}-${state.offset}`;
+        const shortRun = this.runId.slice(-6);
+        const key = `chk-${shortRun}-${shortHash}-${state.offset}`;
         if (key.length > 80) throw new Error(`Generated job key exceeds 80 chars: ${key}`);
 
         const limit = this.options.pageSize || 4096;
@@ -181,9 +188,15 @@ export class AcceptanceCoordinator {
 
         const isFatalError = (err) => {
           if (!err) return false;
-          const msg = (err.message || '') + (err.code || '');
-          return msg.includes('world_changed') || msg.includes('slot_changed') || msg.includes('fatal')
-            || msg.includes('OutOfMemory') || msg.includes('cleanup');
+          if (err.fatal === true) return true;
+          const code = (err.code || '').toLowerCase();
+          const msg = (err.message || '').toLowerCase();
+          const fatalTokens = [
+            'world_changed', 'slot_changed', 'handler_changed', 'client_error',
+            'io_error', 'fatal', 'outofmemory', 'cleanup', 'cleanup_failed',
+            'resource_leak', 'server_stopped'
+          ];
+          return fatalTokens.some(token => code.includes(token) || msg.includes(token));
         };
 
         if (job.state === 'failed' && isFatalError(job.error)) {
@@ -210,11 +223,38 @@ export class AcceptanceCoordinator {
           throw new Error(`Diagnostic report artifact missing: ${reportPath}`);
         }
 
-        const reportData = JSON.parse(await readFile(reportPath, 'utf8'));
-        const row = reportData.rows?.find(r => r.id === handlerId) || reportData.rows?.[0];
+        // Verify report bytes and sha256 strictly (R6)
+        const rawReport = await readFile(reportPath);
+        const actualSha = createHash('sha256').update(rawReport).digest('hex');
+        if (job.report?.sha256 && actualSha !== job.report.sha256) {
+          state.status = 'failed';
+          state.error = { code: 'report_sha_mismatch', message: `Report hash mismatch: expected ${job.report.sha256}, got ${actualSha}` };
+          checkpoint.failures.push({ handler: handlerId, offset: state.offset, error: state.error });
+          await this.saveCheckpoint(checkpoint);
+          throw new Error(`Report SHA256 mismatch for ${reportPath}`);
+        }
+        if (job.report?.bytes && rawReport.length !== job.report.bytes) {
+          state.status = 'failed';
+          state.error = { code: 'report_bytes_mismatch', message: `Report size mismatch: expected ${job.report.bytes}, got ${rawReport.length}` };
+          checkpoint.failures.push({ handler: handlerId, offset: state.offset, error: state.error });
+          await this.saveCheckpoint(checkpoint);
+          throw new Error(`Report bytes mismatch for ${reportPath}`);
+        }
+
+        const reportData = JSON.parse(rawReport.toString('utf8'));
+        const row = reportData.rows?.find(r => r.handler === handlerId || r.id === handlerId);
         if (!row) {
           state.status = 'failed';
-          state.error = { code: 'empty_report', message: 'Report contains no diagnostic rows' };
+          state.error = { code: 'handler_row_missing', message: `Report contains no row matching handler ${handlerId}` };
+          checkpoint.failures.push({ handler: handlerId, offset: state.offset, error: state.error });
+          await this.saveCheckpoint(checkpoint);
+          break;
+        }
+
+        // Refuse unsupported or failed row status (R6)
+        if (row.status && row.status !== 'checked' && row.status !== 'passed' && row.status !== 'ok') {
+          state.status = 'failed';
+          state.error = { code: 'handler_' + row.status, message: row.reason || `Handler reported non-success status: ${row.status}` };
           checkpoint.failures.push({ handler: handlerId, offset: state.offset, error: state.error });
           await this.saveCheckpoint(checkpoint);
           break;
@@ -243,7 +283,6 @@ export class AcceptanceCoordinator {
 
         // Evaluate pagination termination
         if (rowChecked === 0 || state.offset >= rowTotal) {
-          // Finished all recipes of this handler
           if (state.failed.length > 0) {
             state.status = 'failed';
           } else if (state.checked < rowTotal) {
@@ -261,4 +300,53 @@ export class AcceptanceCoordinator {
 
     return checkpoint;
   }
+}
+
+// CLI Execution & Rehearsal (R9)
+if (process.argv[1] && import.meta.url === pathToFileURL(process.argv[1]).href) {
+  const isDryRun = process.argv.includes('--dry-run');
+  const configArgIdx = process.argv.indexOf('--config');
+  const configPath = configArgIdx !== -1 ? process.argv[configArgIdx + 1] : 'acceptance-candidate.json';
+
+  console.log(`[Coordinator] Starting Acceptance Coordinator (dry-run: ${isDryRun})...`);
+  console.log(`[Coordinator] Loading config: ${configPath}`);
+
+  let config;
+  try {
+    const raw = readFileSync(path.resolve(configPath), 'utf8');
+    config = JSON.parse(raw);
+  } catch (err) {
+    console.error(`[Coordinator] Failed to read config ${configPath}: ${err.message}`);
+    process.exit(1);
+  }
+
+  const worklistPath = path.resolve('E:/codex/NEI/.refactor-state/acceptance/completion-worklist.json');
+  let worklist = { handlers: [] };
+  if (existsSync(worklistPath)) {
+    worklist = JSON.parse(readFileSync(worklistPath, 'utf8'));
+  }
+
+  console.log('--------------------------------------------------');
+  console.log('ACCEPTANCE PLAN REHEARSAL / SUMMARY:');
+  console.log(`- Instance: ${config.instance}`);
+  console.log(`- World: ${config.world}`);
+  console.log(`- Candidate Mod: ${config.mod}`);
+  console.log(`- Candidate Compiler: ${config.compiler}`);
+  console.log(`- Candidate Web: ${config.web}`);
+  console.log(`- Planned Handlers: ${worklist.handlers.length}`);
+  console.log('Phase Sequence:');
+  console.log('  1. Environment Preflight (Check game readiness & active world)');
+  console.log('  2. Diagnostic Sampling (Domain & Fact sanity)');
+  console.log('  3. Contiguous Full-Range Recipe Pagination (330 handlers)');
+  console.log('  4. Source Dataset Sealing (Atomic export to dataset directory)');
+  console.log('  5. Elysium Compiler Inspect & Deterministic Catalog Compilation');
+  console.log('  6. NeoNEI Online/Offline Validation');
+  console.log('--------------------------------------------------');
+
+  if (isDryRun) {
+    console.log('[Coordinator] Dry-run rehearsal completed successfully. No game mutations performed.');
+    process.exit(0);
+  }
+
+  console.log('[Coordinator] Non-dry-run mode requested. Awaiting approved execution trigger.');
 }

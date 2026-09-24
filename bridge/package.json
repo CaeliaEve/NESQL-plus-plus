@@ -9,7 +9,9 @@
   "scripts": {
     "start": "node src/index.mjs",
     "check": "node --check src/index.mjs && node --check src/server.mjs && node --check src/client.mjs",
-    "test": "node --test test/*.test.mjs"
+    "test": "node --test test/*.test.mjs",
+    "accept": "node src/coordinator.mjs",
+    "accept:dry": "node src/coordinator.mjs --dry-run"
   },
   "dependencies": {
     "@modelcontextprotocol/sdk": "1.30.0",

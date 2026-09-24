@@ -114,14 +114,15 @@ final class MagicRecipes {
             boolean mirror = false;
             boolean isStickyJar = source.getClass().getName().contains("RecipeStickyJar");
             if (isStickyJar) {
-                ItemStack jarOut = new ItemStack(thaumcraft.common.config.ConfigBlocks.blockJar, 1, 0);
+                ItemStack jarIn = new ItemStack(thaumcraft.common.config.ConfigBlocks.blockJar, 1, 0);
+                ItemStack jarOut = jarIn.copy();
                 net.minecraft.nbt.NBTTagCompound tag = new net.minecraft.nbt.NBTTagCompound();
                 tag.setByte("isStickyJar", (byte) 1);
                 jarOut.setTagCompound(tag);
                 output = jarOut;
                 inputArr = new Object[] {
-                    new ItemStack(Items.slime_ball), new ItemStack(thaumcraft.common.config.ConfigBlocks.blockJar, 1, 0), null,
-                    null, null, null,
+                    jarIn, null, null,
+                    new ItemStack(Items.slime_ball), null, null,
                     null, null, null
                 };
                 width = 3; height = 3;
@@ -132,13 +133,16 @@ final class MagicRecipes {
                     width = recipe.width; height = recipe.height; inputArr = recipe.input;
                     mirror = (Boolean) field(recipe, "mirrored");
                 } else {
-                    try { width = (Integer) field(source, "width"); height = (Integer) field(source, "height"); } catch (Exception ignored) {}
-                    try { inputArr = (Object[]) field(source, "input"); } catch (Exception ignored) {
+                    try { width = (Integer) field(source, "width"); height = (Integer) field(source, "height"); } catch (Exception e) { throw fault("Missing width/height in arcane recipe: " + source.getClass().getName()); }
+                    try { inputArr = (Object[]) field(source, "input"); } catch (Exception e) {
                         try {
                             Object inp = invoke(source.getClass(), source, "getInput", new Class<?>[0]);
                             if (inp instanceof Object[]) inputArr = (Object[]) inp;
                             else if (inp instanceof List<?>) inputArr = ((List<?>) inp).toArray();
-                        } catch (Exception ignored2) {}
+                            else throw fault("Cannot obtain input array from arcane recipe: " + source.getClass().getName());
+                        } catch (Exception e2) {
+                            throw fault("Failed to reflect arcane recipe inputs: " + source.getClass().getName());
+                        }
                     }
                 }
             }
@@ -169,7 +173,9 @@ final class MagicRecipes {
             ShapelessArcaneRecipe recipe = (ShapelessArcaneRecipe) source;
             aspects = recipe.getAspects(); output = result(recipe.getRecipeOutput()); addResearch(research, recipe.getResearch());
             for (Object ingredient : recipe.getInput()) inputs.add(ordinary(ingredient, true));
-            if (inputs.isEmpty() || inputs.size() > 9) throw fault("Invalid shapeless arcane ingredients");
+            if (source.getClass().getName().contains("PreserveFilterRecipe")) {
+                row.property("automagy:filter_preservation", "Filter Preservation", "Transfers custom filter options and metadata from input filter paper.");
+            }
             projection = shapeless(inputs, output, aspects); kind = "arcane";
         } else if (family == Family.CRUCIBLE) {
             exact(source, CrucibleRecipe.class);
@@ -204,16 +210,8 @@ final class MagicRecipes {
                     for (ItemStack comp : recipe.getComponents()) inputs.add(ordinary(comp, true));
                 }
             }
-            if (recipe.getClass().getName().contains("RecipeInfusionWandAugmentation")) {
-                try {
-                    Object augOut = invoke(recipe.getClass(), recipe, "getRecipeOutput", new Class<?>[] {ItemStack.class}, recipe.getRecipeInput());
-                    if (augOut instanceof ItemStack) {
-                        output = (ItemStack) augOut;
-                    }
-                } catch (Exception ignored) {}
-            }
             product = Products.infusion(recipe, Arrays.asList(stacks(inputs.get(0))), row.facts);
-            if (output == null) output = product.output;
+            output = product.output;
             ItemStack[] componentsCopy = new ItemStack[inputs.size() - 1];
             for (int part = 1; part < inputs.size(); part++) componentsCopy[part - 1] = inputs.get(part).get(0).item.copy();
             instability = recipe.getInstability(); central = 0;

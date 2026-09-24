@@ -33,6 +33,23 @@ final class Products {
     }
 
     static Products infusion(InfusionRecipe recipe, List<ItemStack> centers, Facts facts) {
+        if (recipe.getClass().getName().contains("RecipeInfusionWandAugmentation")) {
+            try {
+                Object aug = field(recipe, "augmentation");
+                String augName = (String) invoke(aug.getClass(), aug, "getAugmentationName", new Class<?>[0]);
+                JsonObject action = object("kind", "append_list", "tag", "Augmentations", "value", augName);
+                return observe(centers, action, center -> {
+                    try {
+                        Object res = invoke(recipe.getClass(), recipe, "getRecipeOutput", new Class<?>[] {ItemStack.class}, center.copy());
+                        return concrete((ItemStack) res);
+                    } catch (Exception e) {
+                        throw fault("Failed to compute wand augmentation result: " + e.getMessage());
+                    }
+                }, facts);
+            } catch (Exception e) {
+                throw fault("Failed to inspect wand augmentation: " + e.getMessage());
+            }
+        }
         Object supplied = recipe.getRecipeOutput();
         JsonObject action;
         ItemStack base = null;

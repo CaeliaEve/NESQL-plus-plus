@@ -164,6 +164,10 @@ final class GtRecipes implements AutoCloseable {
             if (binding.fluid) {
                 FluidStack fluid = (FluidStack) placement.source;
                 String exactAmount = isEoh ? getEohFluidAmount(recipe, fluid) : null;
+                if (!isEoh && exactAmount == null && quantities.containsKey(binding.index)) {
+                    JsonObject q = quantities.get(binding.index);
+                    if (q != null && q.has("nominal")) exactAmount = q.get("nominal").getAsString();
+                }
                 row.fluidOutput(display, binding.index, fluid, exactAmount, qty);
             } else {
                 ItemStack item = (ItemStack) placement.source;
@@ -171,7 +175,7 @@ final class GtRecipes implements AutoCloseable {
                     throw new Jobs.Fault("invalid_quantity", "Negative GT output item stackSize: " + item.stackSize);
                 }
                 if (qty == null && item.stackSize == 0 && isTreeFarm) {
-                    qty = Amounts.potential("forestry.yield", "requires genetic yield trait or fertilizer", "0", 1);
+                    qty = Amounts.potential("forestry.yield", "yield >= 0.1", "0", 4L);
                 }
                 String exactAmount = isEoh ? getEohItemAmount(recipe, item) : null;
                 row.itemOutput(display, binding.index, item, recipe.getOutputChance(binding.index), exactAmount, qty);
@@ -189,7 +193,7 @@ final class GtRecipes implements AutoCloseable {
                     }
                     JsonObject qty = quantities.get(slot);
                     if (qty == null && item.stackSize == 0 && isTreeFarm) {
-                        qty = Amounts.potential("forestry.yield", "requires genetic yield trait or fertilizer", "0", 1);
+                        qty = Amounts.potential("forestry.yield", "yield >= 0.1", "0", 4L);
                     }
                     String exactAmount = isEoh ? getEohItemAmount(recipe, item) : null;
                     row.itemOutput(null, slot, item, recipe.getOutputChance(slot), exactAmount, qty);
@@ -199,54 +203,90 @@ final class GtRecipes implements AutoCloseable {
                 supportsUnbound ? (slot, value) -> {
                     FluidStack fluid = (FluidStack) value;
                     String exactAmount = isEoh ? getEohFluidAmount(recipe, fluid) : null;
+                    if (!isEoh && exactAmount == null && quantities.containsKey(slot)) {
+                        JsonObject q = quantities.get(slot);
+                        if (q != null && q.has("nominal")) exactAmount = q.get("nominal").getAsString();
+                    }
                     row.fluidOutput(null, slot, fluid, exactAmount, quantities.get(slot));
                 } : null);
         return java.util.Collections.singletonList(row);
     }
 
     private static String getEohItemAmount(GTRecipe recipe, ItemStack item) {
-        if (recipe == null || recipe.mSpecialItems == null || item == null) return null;
+        if (recipe == null || recipe.mSpecialItems == null || item == null) {
+            throw new Jobs.Fault("eoh_quantity_missing", "Eye of Harmony recipe missing mSpecialItems or item");
+        }
         try {
             Class<?> eohClass = recipe.mSpecialItems.getClass();
-            if (eohClass.getName().contains("EyeOfHarmonyRecipe")) {
-                java.lang.reflect.Method mapMethod = eohClass.getMethod("getItemStackToTrueStackSizeMap");
-                Object map = mapMethod.invoke(recipe.mSpecialItems);
-                if (map instanceof java.util.Map<?, ?>) {
-                    Object val = ((java.util.Map<?, ?>) map).get(item);
-                    if (val instanceof Long) return Long.toString((Long) val);
-                } else if (map != null) {
-                    java.lang.reflect.Method getMethod = map.getClass().getMethod("get", Object.class);
-                    Object val = getMethod.invoke(map, item);
-                    if (val instanceof Long) return Long.toString((Long) val);
-                }
+            if (!eohClass.getName().contains("EyeOfHarmonyRecipe")) {
+                throw new Jobs.Fault("eoh_quantity_missing", "Expected EyeOfHarmonyRecipe instance, got " + eohClass.getName());
             }
-        } catch (Throwable ignored) {}
-        return null;
-    }
-
-    private static String getEohFluidAmount(GTRecipe recipe, FluidStack fluid) {
-        if (recipe == null || recipe.mSpecialItems == null || fluid == null) return null;
-        try {
-            Class<?> eohClass = recipe.mSpecialItems.getClass();
-            if (eohClass.getName().contains("EyeOfHarmonyRecipe")) {
-                java.lang.reflect.Method fluidsMethod = eohClass.getMethod("getOutputFluids");
-                Object list = fluidsMethod.invoke(recipe.mSpecialItems);
-                if (list instanceof java.util.List<?>) {
-                    for (Object elem : (java.util.List<?>) list) {
-                        if (elem != null) {
-                            java.lang.reflect.Field fStackField = elem.getClass().getField("fluidStack");
-                            Object fStack = fStackField.get(elem);
-                            if (fStack instanceof FluidStack && ((FluidStack) fStack).isFluidEqual(fluid)) {
-                                java.lang.reflect.Field amtField = elem.getClass().getField("amount");
-                                Object amt = amtField.get(elem);
-                                if (amt instanceof Long) return Long.toString((Long) amt);
-                            }
+            java.lang.reflect.Method itemsMethod = eohClass.getMethod("getOutputItems");
+            Object list = itemsMethod.invoke(recipe.mSpecialItems);
+            if (list instanceof java.util.List<?>) {
+                for (Object elem : (java.util.List<?>) list) {
+                    if (elem != null) {
+                        java.lang.reflect.Field itemStackField = elem.getClass().getField("itemStack");
+                        ItemStack is = (ItemStack) itemStackField.get(elem);
+                        if (is != null && (is.isItemEqual(item) || is.getUnlocalizedName().equals(item.getUnlocalizedName()))) {
+                            java.lang.reflect.Field sizeField = elem.getClass().getField("stackSize");
+                            long size = sizeField.getLong(elem);
+                            return Long.toString(size);
                         }
                     }
                 }
             }
-        } catch (Throwable ignored) {}
-        return null;
+            java.lang.reflect.Method mapMethod = eohClass.getMethod("getItemStackToTrueStackSizeMap");
+            Object map = mapMethod.invoke(recipe.mSpecialItems);
+            if (map instanceof java.util.Map<?, ?>) {
+                for (Map.Entry<?, ?> entry : ((java.util.Map<?, ?>) map).entrySet()) {
+                    if (entry.getKey() instanceof ItemStack) {
+                        ItemStack k = (ItemStack) entry.getKey();
+                        if (k.isItemEqual(item) || k.getUnlocalizedName().equals(item.getUnlocalizedName())) {
+                            Object val = entry.getValue();
+                            if (val instanceof Long) return Long.toString((Long) val);
+                        }
+                    }
+                }
+            }
+        } catch (Jobs.Fault f) {
+            throw f;
+        } catch (Throwable t) {
+            throw new Jobs.Fault("eoh_quantity_missing", "Failed to inspect EOH item: " + t.getMessage());
+        }
+        throw new Jobs.Fault("eoh_quantity_missing", "Cannot find exact long quantity for EOH item: " + item.getUnlocalizedName());
+    }
+
+    private static String getEohFluidAmount(GTRecipe recipe, FluidStack fluid) {
+        if (recipe == null || recipe.mSpecialItems == null || fluid == null) {
+            throw new Jobs.Fault("eoh_quantity_missing", "Eye of Harmony recipe missing mSpecialItems or fluid");
+        }
+        try {
+            Class<?> eohClass = recipe.mSpecialItems.getClass();
+            if (!eohClass.getName().contains("EyeOfHarmonyRecipe")) {
+                throw new Jobs.Fault("eoh_quantity_missing", "Expected EyeOfHarmonyRecipe instance, got " + eohClass.getName());
+            }
+            java.lang.reflect.Method fluidsMethod = eohClass.getMethod("getOutputFluids");
+            Object list = fluidsMethod.invoke(recipe.mSpecialItems);
+            if (list instanceof java.util.List<?>) {
+                for (Object elem : (java.util.List<?>) list) {
+                    if (elem != null) {
+                        java.lang.reflect.Field fStackField = elem.getClass().getField("fluidStack");
+                        Object fStack = fStackField.get(elem);
+                        if (fStack instanceof FluidStack && ((FluidStack) fStack).isFluidEqual(fluid)) {
+                            java.lang.reflect.Field amtField = elem.getClass().getField("amount");
+                            long amt = amtField.getLong(elem);
+                            return Long.toString(amt);
+                        }
+                    }
+                }
+            }
+        } catch (Jobs.Fault f) {
+            throw f;
+        } catch (Throwable t) {
+            throw new Jobs.Fault("eoh_quantity_missing", "Failed to inspect EOH fluid: " + t.getMessage());
+        }
+        throw new Jobs.Fault("eoh_quantity_missing", "Cannot find exact long quantity for EOH fluid: " + fluid.getLocalizedName());
     }
 
     private Map<Integer, JsonObject> quantities(GTRecipe recipe) {
@@ -254,16 +294,19 @@ final class GtRecipes implements AutoCloseable {
         String frontendName = handler.getRecipeMap().getFrontend().getClass().getName();
         if ("gg.recipe.extreme_heat_exchanger".equals(mapName) || frontendName.contains("ExtremeHeatExchanger")) {
             Map<Integer, JsonObject> result = new java.util.LinkedHashMap<>();
-            if (recipe.mFluidOutputs.length >= 2) {
+            if (recipe.mFluidOutputs.length >= 2 && recipe.mFluidInputs.length >= 2 && recipe.mFluidInputs[1] != null) {
+                int waterIn = Math.max(1, recipe.mFluidInputs[1].amount);
+                long normalRate = (long) waterIn * 160L;
+                long heatedRate = (long) waterIn * 80L;
+                int thresholdVal = recipe.mSpecialValue > 0 ? recipe.mSpecialValue : 16000;
+                String thresholdStr = Integer.toString(thresholdVal);
                 if (recipe.mFluidOutputs[0] != null) {
-                    int amt0 = recipe.mFluidOutputs[0].amount;
-                    if (amt0 <= 0) throw new Jobs.Fault("quantity_rule", "Extreme heat exchanger normal steam output non-positive: " + amt0);
-                    result.put(0, Amounts.branch("steam_output", "normal", "steam_type: normal", null, (long) amt0));
+                    long amt0 = recipe.mFluidOutputs[0].amount > 0 ? (long) recipe.mFluidOutputs[0].amount : normalRate;
+                    result.put(0, Amounts.branch("steam_output", "normal", "tRealConsume < threshold", thresholdStr, amt0));
                 }
                 if (recipe.mFluidOutputs[1] != null) {
-                    int amt1 = recipe.mFluidOutputs[1].amount;
-                    if (amt1 <= 0) throw new Jobs.Fault("quantity_rule", "Extreme heat exchanger superheated steam output non-positive: " + amt1);
-                    result.put(1, Amounts.branch("steam_output", "superheated", "steam_type: superheated", null, (long) amt1));
+                    long amt1 = recipe.mFluidOutputs[1].amount > 0 ? (long) recipe.mFluidOutputs[1].amount : heatedRate;
+                    result.put(1, Amounts.branch("steam_output", "superheated", "tRealConsume >= threshold", thresholdStr, amt1));
                 }
             }
             return result;
