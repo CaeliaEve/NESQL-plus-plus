@@ -457,8 +457,10 @@ if (process.argv[1] && import.meta.url === pathToFileURL(process.argv[1]).href) 
     ? path.resolve(config.worklist)
     : path.resolve(path.dirname(configPath), 'completion-worklist.json');
   if (!existsSync(worklistPath)) {
-    const fallback = path.resolve('.refactor-state/acceptance/completion-worklist.json');
-    if (existsSync(fallback)) worklistPath = fallback;
+    const fallback1 = path.resolve(path.dirname(configPath), '.refactor-state/acceptance/completion-worklist.json');
+    const fallback2 = path.resolve('.refactor-state/acceptance/completion-worklist.json');
+    if (existsSync(fallback1)) worklistPath = fallback1;
+    else if (existsSync(fallback2)) worklistPath = fallback2;
   }
 
   let worklist = { handlers: [] };

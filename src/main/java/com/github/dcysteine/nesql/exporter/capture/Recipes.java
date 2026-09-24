@@ -67,8 +67,7 @@ final class Recipes {
             if (key == null || key.isEmpty()) throw new Jobs.Fault("handler_identity", "NEI handler has no identity: " + handler.getClass().getName());
             origin = object("owner", owner, "handler", handler.getClass().getName(), "key", key);
             id = Identity.origin("category", origin);
-            supported = GtRecipes.supports(handler) || MagicRecipes.supports(handler)
-                    || handler instanceof FurnaceRecipeHandler || handler instanceof ShapedRecipeHandler || handler instanceof ShapelessRecipeHandler;
+            supported = !handler.getClass().getName().contains("ProfilerRecipeHandler") && (handler instanceof TemplateRecipeHandler);
         }
 
         JsonObject describe() {
@@ -184,13 +183,18 @@ final class Recipes {
                 PositionedStack output = handler.getResultStack(index);
                 if (output != null && output.item != null) {
                     row.itemOutput(output, 0, output.item, 10000);
-                } else {
-                    List<PositionedStack> others = handler.getOtherStacks(index);
-                    if (others != null && !others.isEmpty() && others.get(0) != null && others.get(0).item != null) {
-                        row.itemOutput(others.get(0), 0, others.get(0).item, 10000);
-                    } else {
-                        throw new Jobs.Fault("output_missing", "NEI recipe has no result: " + source.name);
+                }
+                int outSlot = (output != null && output.item != null) ? 1 : 0;
+                List<PositionedStack> others = handler.getOtherStacks(index);
+                if (others != null && !(handler instanceof FurnaceRecipeHandler)) {
+                    for (PositionedStack other : others) {
+                        if (other != null && other.item != null) {
+                            row.itemOutput(other, outSlot++, other.item, 10000);
+                        }
                     }
+                }
+                if (outSlot == 0) {
+                    throw new Jobs.Fault("output_missing", "NEI recipe has no result: " + source.name);
                 }
                 if (crafting && handler instanceof ShapelessRecipeHandler) row.property("minecraft:shapeless", "Shapeless", true);
                 else if (!crafting) row.record.addProperty("duration", "200");
