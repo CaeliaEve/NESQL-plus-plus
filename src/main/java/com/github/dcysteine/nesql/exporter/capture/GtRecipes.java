@@ -152,25 +152,61 @@ final class GtRecipes implements AutoCloseable {
                 row.itemInput(display, binding.index, ingredients, false);
             }
         }
+        String mapName = handler.getRecipeMap().unlocalizedName;
+        String frontendName = handler.getRecipeMap().getFrontend().getClass().getName();
+        boolean isTreeFarm = "gtpp.recipe.treefarm".equals(mapName) || frontendName.contains("TreeFarm");
         for (Placement placement : projectedOutputs) {
             PositionedStack display = placement.display;
             Binding binding = placement.binding;
             if (!captured.add(binding.identity())) throw new Jobs.Fault("slot_conflict", "GT recipe repeats an output binding");
-            if (binding.fluid) row.fluidOutput(display, binding.index, (FluidStack) placement.source, quantities.get(binding.index));
-            else row.itemOutput(display, binding.index, (ItemStack) placement.source, recipe.getOutputChance(binding.index));
+            JsonObject qty = quantities.get(binding.index);
+            if (binding.fluid) {
+                row.fluidOutput(display, binding.index, (FluidStack) placement.source, qty);
+            } else {
+                ItemStack item = (ItemStack) placement.source;
+                if (qty == null && item.stackSize <= 0 && isTreeFarm) {
+                    qty = Amounts.potential("forestry.yield", "yield_dependent", "0", 1);
+                }
+                row.itemOutput(display, binding.index, item, recipe.getOutputChance(binding.index), qty);
+            }
         }
         BasicUIProperties ui = handler.getRecipeMap().getFrontend().getUIProperties();
         covered(captured, itemInputs, recipe.mInputs, ui.maxItemInputs, false, true, null);
-        boolean hidden = handler.getRecipeMap().getFrontend().getClass().getName().equals("gtPlusPlus.api.recipe.ZhuhaiFrontend");
+        boolean supportsUnbound = frontendName.equals("gtPlusPlus.api.recipe.ZhuhaiFrontend")
+                || "gt.recipe.eyeofharmony".equals(mapName) || frontendName.contains("EyeOfHarmony");
         covered(captured, itemOutputs, recipe.mOutputs, ui.maxItemOutputs, false, false,
-                hidden ? (slot, value) -> row.itemOutput(null, slot, (ItemStack) value, recipe.getOutputChance(slot)) : null);
+                supportsUnbound ? (slot, value) -> {
+                    ItemStack item = (ItemStack) value;
+                    JsonObject qty = quantities.get(slot);
+                    if (qty == null && item.stackSize <= 0 && isTreeFarm) {
+                        qty = Amounts.potential("forestry.yield", "yield_dependent", "0", 1);
+                    }
+                    row.itemOutput(null, slot, item, recipe.getOutputChance(slot), qty);
+                } : null);
         covered(captured, fluidInputs, recipe.mFluidInputs, ui.maxFluidInputs, true, true, null);
-        covered(captured, fluidOutputs, recipe.mFluidOutputs, ui.maxFluidOutputs, true, false, null);
+        covered(captured, fluidOutputs, recipe.mFluidOutputs, ui.maxFluidOutputs, true, false,
+                supportsUnbound ? (slot, value) -> row.fluidOutput(null, slot, (FluidStack) value, quantities.get(slot)) : null);
         return java.util.Collections.singletonList(row);
     }
 
     private Map<Integer, JsonObject> quantities(GTRecipe recipe) {
-        if (!handler.getRecipeMap().getFrontend().getClass().getName().equals("gtPlusPlus.api.recipe.SpargeTowerFrontend")) {
+        String mapName = handler.getRecipeMap().unlocalizedName;
+        String frontendName = handler.getRecipeMap().getFrontend().getClass().getName();
+        if ("gg.recipe.extreme_heat_exchanger".equals(mapName) || frontendName.contains("ExtremeHeatExchanger")) {
+            Map<Integer, JsonObject> result = new java.util.LinkedHashMap<>();
+            if (recipe.mFluidOutputs.length >= 2) {
+                if (recipe.mFluidOutputs[0] != null) {
+                    long nominal0 = Math.max(1, recipe.mFluidOutputs[0].amount);
+                    result.put(0, Amounts.branch("steam_output", "normal", "tRealConsume < threshold", null, nominal0));
+                }
+                if (recipe.mFluidOutputs[1] != null) {
+                    long nominal1 = Math.max(1, recipe.mFluidOutputs[1].amount);
+                    result.put(1, Amounts.branch("steam_output", "superheated", "tRealConsume >= threshold", null, nominal1));
+                }
+            }
+            return result;
+        }
+        if (!frontendName.equals("gtPlusPlus.api.recipe.SpargeTowerFrontend")) {
             return java.util.Collections.emptyMap();
         }
         if (recipe.mFluidInputs.length < 1 || recipe.mFluidInputs[0] == null || recipe.mFluidOutputs.length < 2

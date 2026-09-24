@@ -97,6 +97,11 @@ final class RecipeRow {
         output(display, slot, "item", facts.item(item), Integer.toString(item.stackSize), chance, null);
     }
 
+    void itemOutput(PositionedStack display, int slot, ItemStack item, int chance, JsonObject quantity) {
+        if (quantity == null) itemOutput(display, slot, item, chance);
+        else output(display, slot, "item", facts.item(item), null, chance, quantity);
+    }
+
     void fluidOutput(PositionedStack display, int slot, FluidStack fluid) {
         if (fluid.amount <= 0) throw new Jobs.Fault("invalid_amount", "Fluid output slot=" + slot + "; registry="
                 + fluid.getFluid().getName() + "; amount=" + fluid.amount + ": a fixed recipe output must be positive");

@@ -30,4 +30,20 @@ final class Amounts {
         result.put(1, object("kind", "remainder", "input", input, "after", preceding));
         return result;
     }
+
+    static JsonObject branch(String group, String branch, String condition, String threshold, long nominal) {
+        if (nominal < 1) throw new Jobs.Fault("quantity_rule", "Invalid branch nominal amount: " + nominal);
+        JsonObject result = object("kind", "branch", "group", group, "branch", branch, "nominal", Long.toString(nominal));
+        if (condition != null) result.addProperty("condition", condition);
+        if (threshold != null) result.addProperty("threshold", threshold);
+        return result;
+    }
+
+    static JsonObject potential(String stat, String condition, String sample, long nominal) {
+        if (nominal < 1) throw new Jobs.Fault("quantity_rule", "Invalid potential nominal amount: " + nominal);
+        JsonObject result = object("kind", "potential", "stat", stat, "nominal", Long.toString(nominal));
+        if (condition != null) result.addProperty("condition", condition);
+        if (sample != null) result.addProperty("sample", sample);
+        return result;
+    }
 }

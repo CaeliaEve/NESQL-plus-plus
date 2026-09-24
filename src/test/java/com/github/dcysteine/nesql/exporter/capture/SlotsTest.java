@@ -166,6 +166,25 @@ final class SlotsTest {
         reject("quantity_rule", () -> Amounts.sparge(0, 7, 0, 1000));
         require(Amounts.sparge(0, 2, 0, 1).get(1).getAsJsonArray("after").size() == 0, "A remainder without draws was rejected");
 
+        // Branch quantity assertions (Extreme Heat Exchanger)
+        com.google.gson.JsonObject branchNormal = Amounts.branch("steam_output", "normal", "tRealConsume < threshold", null, 32000);
+        com.google.gson.JsonObject branchSuper = Amounts.branch("steam_output", "superheated", "tRealConsume >= threshold", null, 64000);
+        require("branch".equals(branchNormal.get("kind").getAsString()) && "normal".equals(branchNormal.get("branch").getAsString()), "Invalid branch structure");
+        RecipeRow branchRow = new RecipeRow(facts, object("owner", "fixture", "handler", "heat_exchanger", "key", "branch"), "fixture", 0);
+        branchRow.fluidOutput(display(), 0, new FluidStack(FluidRegistry.WATER, 0), branchNormal);
+        branchRow.fluidOutput(display(), 1, new FluidStack(FluidRegistry.WATER, 0), branchSuper);
+        require(branchRow.outputs.size() == 2 && branchRow.outputs.get(0).getAsJsonObject().get("amount").isJsonNull()
+                && branchRow.outputs.get(1).getAsJsonObject().get("amount").isJsonNull(), "Branch quantity did not clear fixed amount");
+        reject("quantity_rule", () -> Amounts.branch("steam_output", "normal", null, null, 0));
+
+        // Potential quantity assertions (Tree Farm)
+        com.google.gson.JsonObject potential = Amounts.potential("forestry.yield", "yield_dependent", "0", 4);
+        require("potential".equals(potential.get("kind").getAsString()) && "forestry.yield".equals(potential.get("stat").getAsString()), "Invalid potential structure");
+        RecipeRow potentialRow = new RecipeRow(facts, object("owner", "fixture", "handler", "tree_farm", "key", "potential"), "fixture", 0);
+        potentialRow.itemOutput(display(), 0, new ItemStack(Items.paper, 0), 10000, potential);
+        require(potentialRow.outputs.size() == 1 && potentialRow.outputs.get(0).getAsJsonObject().get("amount").isJsonNull(), "Potential quantity did not clear fixed amount");
+        reject("quantity_rule", () -> Amounts.potential("forestry.yield", null, null, 0));
+
         ItemStack[] outputs = new ItemStack[26]; outputs[25] = new ItemStack(Items.paper, 9);
         Set<String> captured = new java.util.HashSet<>();
         reject("slot_missing", () -> GtRecipes.covered(captured, outputs, outputs, 25, false, false, null));

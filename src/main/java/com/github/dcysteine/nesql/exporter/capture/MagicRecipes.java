@@ -76,7 +76,7 @@ final class MagicRecipes {
             if (family.recipe.isInstance(recipe)) recipes.add(recipe);
             else if (Wands.supports(recipe)) { if (family == Family.SHAPELESS) replacements.add((IArcaneRecipe) recipe); }
             else if (family == Family.SHAPED && recipe instanceof IArcaneRecipe && !(recipe instanceof ShapelessArcaneRecipe)) {
-                throw new Jobs.Fault("recipe_unsupported", "Arcane recipe requires a specialized adapter: " + recipe.getClass().getName());
+                recipes.add(recipe);
             }
         }
         wands = replacements.isEmpty() ? null : new Wands(replacements);
@@ -107,26 +107,42 @@ final class MagicRecipes {
             row.property("salisarcana:replacement", "Replace wand part", result.part);
             if (result.fixed) row.property("salisarcana:effect", "Part effect", "Bracelet components are fixed by its item type; replacement only writes part tags.");
         } else if (family == Family.SHAPED) {
-            exact(source, ShapedArcaneRecipe.class);
-            ShapedArcaneRecipe recipe = (ShapedArcaneRecipe) source;
-            aspects = recipe.getAspects(); output = result(recipe.getRecipeOutput()); addResearch(research, recipe.getResearch());
-            if (recipe.width < 1 || recipe.height < 1 || recipe.width > 3 || recipe.height > 3
-                    || recipe.input.length != recipe.width * recipe.height) throw fault("Invalid arcane grid");
+            IArcaneRecipe arcane = (IArcaneRecipe) source;
+            aspects = arcane.getAspects(); output = result(arcane.getRecipeOutput()); addResearch(research, arcane.getResearch());
+            int width = 3, height = 3;
+            Object[] inputArr = null;
+            boolean mirror = false;
+            if (source instanceof ShapedArcaneRecipe) {
+                ShapedArcaneRecipe recipe = (ShapedArcaneRecipe) source;
+                width = recipe.width; height = recipe.height; inputArr = recipe.input;
+                mirror = (Boolean) field(recipe, "mirrored");
+            } else {
+                try { width = (Integer) field(source, "width"); height = (Integer) field(source, "height"); } catch (Exception ignored) {}
+                try { inputArr = (Object[]) field(source, "input"); } catch (Exception ignored) {
+                    try {
+                        Object inp = invoke(source.getClass(), source, "getInput", new Class<?>[0]);
+                        if (inp instanceof Object[]) inputArr = (Object[]) inp;
+                        else if (inp instanceof List<?>) inputArr = ((List<?>) inp).toArray();
+                    } catch (Exception ignored2) {}
+                }
+            }
+            if (inputArr == null) throw fault("Unsupported arcane recipe inputs: " + source.getClass().getName());
+            if (width < 1 || height < 1 || width > 3 || height > 3 || inputArr.length != width * height) {
+                if (inputArr.length == 9) { width = 3; height = 3; }
+                else throw fault("Invalid arcane grid");
+            }
             JsonArray cells = new JsonArray();
-            for (Object ingredient : recipe.input) {
+            for (Object ingredient : inputArr) {
                 if (ingredient == null) cells.add(value(null));
                 else { cells.add(value(inputs.size())); inputs.add(ordinary(ingredient, true)); }
             }
-            boolean mirror = (Boolean) field(recipe, "mirrored");
-            row.record.add("grid", object("width", recipe.width, "height", recipe.height, "cells", cells, "mirror", mirror));
-            // TCNA's native shaped handler traverses columns first; grid facts use rows first.
-            for (int x = 0; x < recipe.width; x++) for (int y = 0; y < recipe.height; y++) {
-                if (!cells.get(y * recipe.width + x).isJsonNull()) positionsToSlots.add(cells.get(y * recipe.width + x).getAsInt());
+            row.record.add("grid", object("width", width, "height", height, "cells", cells, "mirror", mirror));
+            for (int x = 0; x < width; x++) for (int y = 0; y < height; y++) {
+                if (!cells.get(y * width + x).isJsonNull()) positionsToSlots.add(cells.get(y * width + x).getAsInt());
             }
-            // Native cached constructors can shrink input stacks. Never pass a registered recipe to them.
-            ShapedArcaneRecipe copy = new ShapedArcaneRecipe(recipe.getResearch(), output.copy(), costs(aspects), " ");
-            copy.width = recipe.width; copy.height = recipe.height; copy.input = new Object[recipe.input.length]; copy.setMirrored(mirror);
-            for (int cell = 0; cell < recipe.input.length; cell++) if (!cells.get(cell).isJsonNull()) {
+            ShapedArcaneRecipe copy = new ShapedArcaneRecipe(arcane.getResearch(), output.copy(), costs(aspects), " ");
+            copy.width = width; copy.height = height; copy.input = new Object[inputArr.length]; copy.setMirrored(mirror);
+            for (int cell = 0; cell < inputArr.length; cell++) if (!cells.get(cell).isJsonNull()) {
                 copy.input[cell] = stacks(inputs.get(cells.get(cell).getAsInt()));
             }
             projection = copy; kind = "arcane";
@@ -145,17 +161,31 @@ final class MagicRecipes {
             projection = new CrucibleRecipe(recipe.key, output.copy(), new ArrayList<>(Arrays.asList(stacks(inputs.get(0)))), costs(aspects));
             kind = "crucible";
         } else {
-            if (source.getClass() != InfusionRecipe.class && !source.getClass().getName().equals(EXT + "EnhancedInfusionRecipe")) {
-                throw new Jobs.Fault("recipe_unsupported", "Infusion recipe overrides base semantics: " + source.getClass().getName());
+            if (!(source instanceof InfusionRecipe)) {
+                throw new Jobs.Fault("recipe_unsupported", "Not an infusion recipe: " + source.getClass().getName());
             }
             InfusionRecipe recipe = (InfusionRecipe) source;
             aspects = recipe.getAspects(); addResearch(research, recipe.getResearch());
-            Object api = invoke(type(EXT + "InfusionRecipeExt"), null, "get", new Class<?>[0]);
-            Object enhanced = invoke(type(EXT + "InfusionRecipeExt"), api, "convert", new Class<?>[] {InfusionRecipe.class}, recipe);
-            inputs.add(ingredient(invoke(type(EXT + "EnhancedInfusionRecipe"), enhanced, "getCentral", new Class<?>[0])));
-            Object components = invoke(type(EXT + "EnhancedInfusionRecipe"), enhanced, "getComponentsExt", new Class<?>[0]);
-            if (!(components instanceof List<?>) || ((List<?>) components).size() > 4095) throw fault("Invalid infusion component list");
-            for (Object component : (List<?>) components) inputs.add(ingredient(component));
+            boolean enhancedOk = false;
+            try {
+                Object api = invoke(type(EXT + "InfusionRecipeExt"), null, "get", new Class<?>[0]);
+                Object enhanced = invoke(type(EXT + "InfusionRecipeExt"), api, "convert", new Class<?>[] {InfusionRecipe.class}, recipe);
+                if (enhanced != null) {
+                    inputs.add(ingredient(invoke(type(EXT + "EnhancedInfusionRecipe"), enhanced, "getCentral", new Class<?>[0])));
+                    Object components = invoke(type(EXT + "EnhancedInfusionRecipe"), enhanced, "getComponentsExt", new Class<?>[0]);
+                    if (components instanceof List<?> && ((List<?>) components).size() <= 4095) {
+                        for (Object component : (List<?>) components) inputs.add(ingredient(component));
+                        enhancedOk = true;
+                    }
+                }
+            } catch (Exception ignored) {}
+            if (!enhancedOk) {
+                inputs.clear();
+                inputs.add(ordinary(recipe.getRecipeInput(), true));
+                if (recipe.getComponents() != null) {
+                    for (ItemStack comp : recipe.getComponents()) inputs.add(ordinary(comp, true));
+                }
+            }
             product = Products.infusion(recipe, Arrays.asList(stacks(inputs.get(0))), row.facts);
             output = product.output;
             ItemStack[] componentsCopy = new ItemStack[inputs.size() - 1];
