@@ -132,7 +132,7 @@ export class AcceptanceCoordinator {
     }
 
     assert.ok(game.sources?.valid === true && Array.isArray(game.sources.rows), 'Game source provenance is missing or invalid');
-    const foundModRow = game.sources.rows.find(row => row.id === 'nesql-exporter');
+    const foundModRow = game.sources.rows.find(row => row.id === 'nesql-exporter' || row.id === 'nesql');
     assert.ok(foundModRow?.valid === true && typeof foundModRow.path === 'string' && path.isAbsolute(foundModRow.path), 'Loaded mod source is missing or invalid');
     assert.ok((await stat(foundModRow.path)).isFile(), 'Loaded mod source is not a file');
     const actualModSha = digest(await readFile(foundModRow.path));

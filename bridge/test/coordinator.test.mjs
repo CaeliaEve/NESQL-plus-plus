@@ -580,7 +580,7 @@ test('AcceptanceCoordinator enforces real mod SHA256 and protocol revision (U4)'
         sources: {
           valid: true,
           rows: [
-            { id: 'nesql-exporter', valid: true, name: 'NESQL++', version: '0.15.0', path: dummyJarPath }
+            { id: 'nesql', valid: true, name: 'NESQL++', version: '0.15.0', path: dummyJarPath }
           ]
         }
       })));
