@@ -4,9 +4,25 @@ import { createHash } from 'node:crypto';
 import path from 'node:path';
 import { pathToFileURL } from 'node:url';
 import { parseArgs } from 'node:util';
+import { execFile } from 'node:child_process';
+import { promisify } from 'node:util';
 import assert from 'node:assert/strict';
 import { prepare, canonical, sha, artifact, digest } from './plan.mjs';
 import { GameClient, GameError } from './client.mjs';
+
+const execFileAsync = promisify(execFile);
+
+async function runCompiler(binary, args) {
+  try {
+    const result = await execFileAsync(binary, args, { windowsHide: true, maxBuffer: 16 * 1024 * 1024 });
+    let value;
+    try { value = JSON.parse(result.stdout); } catch { throw new Error(`Compiler returned invalid JSON for ${args[0]}`); }
+    return { value, stdout: result.stdout, stderr: result.stderr };
+  } catch (error) {
+    const detail = error.stderr?.trim() || error.message;
+    throw new Error(`Compiler ${args[0]} failed: ${detail}`);
+  }
+}
 
 /** Only the Java producer can classify exception inheritance and cleanup failures.
  * Missing severity is unknown isolation, so it must stop further game work. */
@@ -219,6 +235,9 @@ export class AcceptanceCoordinator {
         state.error = { code: 'domain_export_required', message: 'A complete source export and domain report are required for ' + item.route };
         checkpoint.failures.push({ handler: handlerId, error: state.error });
         await this.saveCheckpoint(checkpoint);
+        // A complete source stage may still run after diagnostics. Keep this
+        // route explicitly pending; never turn it into a recipe pass.
+        if (plan.stages?.source?.execute) continue;
         throw new Error(state.error.message);
       }
 
@@ -492,7 +511,58 @@ export class AcceptanceCoordinator {
     }
 
     this.updateSummary(checkpoint);
+    if (plan.stages?.source?.execute) {
+      checkpoint.stages ??= {};
+      if (!checkpoint.stages.source?.status || checkpoint.stages.source.status === 'failed') {
+        checkpoint.stages.source = await this.runSourceStage(plan, checkpoint);
+        await this.saveCheckpoint(checkpoint);
+      }
+    }
+    if (plan.stages?.compiler?.execute) {
+      checkpoint.stages ??= {};
+      if (!checkpoint.stages.compiler?.status || checkpoint.stages.compiler.status === 'failed') {
+        checkpoint.stages.compiler = await this.runCompilerStage(plan, checkpoint);
+        await this.saveCheckpoint(checkpoint);
+      }
+    }
     return checkpoint;
+  }
+
+  async runSourceStage(plan, checkpoint) {
+    const stage = plan.stages.source;
+    const request = { key: stage.key || `full-${this.runId.slice(-12)}`, name: stage.name || 'gtnh-full', profile: 'full', world: plan.world, probes: plan.probes };
+    const started = checkpoint.activeExport?.key === request.key
+      ? checkpoint.activeExport
+      : await this.client.request('POST', '/jobs', request);
+    assert.ok(started.id, 'Full export did not return a job id');
+    checkpoint.activeExport = { id: started.id, key: request.key };
+    await this.saveCheckpoint(checkpoint);
+    let job;
+    for (;;) {
+      const response = await this.client.request('GET', `/jobs/${started.id}`);
+      job = response.job;
+      if (job && ['succeeded', 'failed', 'cancelled'].includes(job.state)) break;
+      await new Promise(resolve => setTimeout(resolve, 1000));
+    }
+    checkpoint.activeExport = null;
+    if (job.state !== 'succeeded' || !job.result?.path) {
+      const error = job.error || { code: `export_${job.state}`, message: 'Full source export did not complete' };
+      throw new Error(`${error.code}: ${error.message}`);
+    }
+    return { status: 'passed', job: started.id, result: job.result, request };
+  }
+
+  async runCompilerStage(plan, checkpoint) {
+    const stage = plan.stages.compiler;
+    const source = checkpoint.stages?.source?.result?.path;
+    assert.ok(source && path.isAbsolute(source), 'Compiler stage requires a completed source export');
+    const output = stage.output;
+    assert.ok(typeof output === 'string' && path.isAbsolute(output), 'Compiler output must be an absolute path');
+    const report = stage.report || path.join(output, '..', 'compile-report.json');
+    const inspect = await runCompiler(stage.executable, ['inspect', '--input', source]);
+    const compiled = await runCompiler(stage.executable, ['compile', '--input', source, '--output', output, '--report', report]);
+    const checked = await runCompiler(stage.executable, ['check', '--input', output]);
+    return { status: 'passed', source, output, report, inspect: inspect.value, compile: compiled.value, check: checked.value };
   }
 
   async archiveReport(job, rawReport, rows) {
