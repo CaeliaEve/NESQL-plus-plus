@@ -36,7 +36,7 @@ npm --prefix bridge test
 node scripts/release.mjs
 ```
 
-普通增量构建无需重复 setup 或 clean。`build` 执行两组 Java 行为检查并生成经过 reobf 的 `build/libs/NESQL++-0.14.2.jar`。`check-jar` 检查实际产物的命令和预览世界 SRG 方法、版本替换和打包边界。`release` 要求目标目录不存在，按明确清单打包，不操作游戏目录。
+普通增量构建无需重复 setup 或 clean。`build` 执行两组 Java 行为检查并生成经过 reobf 的 `build/libs/NESQL++-0.15.0.jar`。`check-jar` 检查实际产物的命令和预览世界 SRG 方法、版本替换和打包边界。`release` 要求目标目录不存在，按明确清单打包，不操作游戏目录。
 
 可用 `NESQL_LOCAL_MAVEN_REPO` 指定本地 Maven 仓库。Forge 1.7.10 的工具链固定为 ForgeGradle 1.2.11 / Gradle 6.9.1；这里的旧版本是目标游戏的构建约束。
 
@@ -73,7 +73,10 @@ node scripts/release.mjs
 
 ## 验证状态
 
-source/catalog 修订为 10。匹配规则属于每个输入候选；网格形状独立于截图保存，研究观察状态不进入配方内容 ID。构建变体与环境中的请求参数逐项对应。TCWands 的普通法杖组合从最终 ShapedArcaneRecipe 注册表读取；Salis 换芯/换端按部件、形态与配置惰性枚举，保留原生 NBT 变换、独立材料槽位与自行供能条件。施法手环和一次性法杖按目标子类的实际语义处理。未知 IArcaneRecipe、未核实的配方覆写和自定义 NBT 函数仍明确失败。
+当前候选为 NESQL++ 0.15.0、source/catalog 修订 14；真实 GTNH 安装、完整导出、Compiler 实机编译及 NeoNEI 在线/离线验收仍需在批准的集中计划中执行。
+
+
+source/catalog 修订为 14。匹配规则属于每个输入候选；网格形状独立于截图保存，研究观察状态不进入配方内容 ID。构建变体与环境中的请求参数逐项对应。TCWands 的普通法杖组合从最终 ShapedArcaneRecipe 注册表读取；Salis 换芯/换端按部件、形态与配置惰性枚举，保留原生 NBT 变换、独立材料槽位与自行供能条件。施法手环和一次性法杖按目标子类的实际语义处理。未知 IArcaneRecipe、未核实的配方覆写和自定义 NBT 函数仍明确失败。
 
 注魔的 Object[]{标签名, NBT} 输出保存为根标签替换；TC4Tweaks 的默认继承保存为 merge 操作，包含模板、根键白名单与护甲/工具限制。每个中心候选都有通过原生函数在副本上取得的产物示例。示例不进入配方语义 ID，编译器仍逐项验证其 NBT、metadata、数量和引用。目标版本“非空白名单且模板无 NBT”的错误分支会明确拒绝，不伪造成功结果。
 
@@ -96,3 +99,5 @@ Java source/jobs 行为检查、真实本机 HTTP 端点、MCP SDK stdio 握手/
 0.14.0通过原生 Forestry 遗传 API 进行扫描仪配方分析，支持整叠样本与未分析/已分析双分支导出，维持原生蜂蜜消耗条件与严格基因去重。
 
 0.14.2在GT输入展示校验中只在所有来源候选都已声明忽略 NBT 时容忍 `null` 与空复合体的展示差异。目标 Minecraft / Forge 的精确标签比较区分这两种状态；NBT 敏感或混合规则的候选继续严格核对。物品事实和源谓词不归一化，非空 NBT 漂移、候选增减及重复次数错误继续以 `slot_changed` 拒绝。诊断最多列出 3 个根标签差异，对名称和字符串截断并转义，对复合体及数组只输出明确省略值的摘要，错误中的物品 ID 始终为完整精确身份。数据修订（13）及配套包（0.13.0）保持不变。
+
+
