@@ -114,25 +114,10 @@ final class MagicRecipes {
             Object[] inputArr = null;
             boolean mirror = false;
             boolean isStickyJar = source.getClass().getName().contains("RecipeStickyJar");
+            List<ItemStack> jarChoices = null;
             if (isStickyJar) {
-                List<ItemStack> jarChoices = new ArrayList<>();
-                // Normal empty warded jar
-                jarChoices.add(new ItemStack(thaumcraft.common.config.ConfigBlocks.blockJar, 1, 0));
-                // Void jar
-                jarChoices.add(new ItemStack(thaumcraft.common.config.ConfigBlocks.blockJar, 1, 3));
-                // Filled jar variants
-                jarChoices.add(new ItemStack(thaumcraft.common.config.ConfigItems.itemJarFilled, 1, 0));
-                jarChoices.add(new ItemStack(thaumcraft.common.config.ConfigItems.itemJarFilled, 1, 3));
-                // Jars with aspect content (preserved)
-                ItemStack jarWithAspect = new ItemStack(thaumcraft.common.config.ConfigBlocks.blockJar, 1, 0);
-                net.minecraft.nbt.NBTTagCompound aspectTag = new net.minecraft.nbt.NBTTagCompound();
-                aspectTag.setString("AspectFilter", "ignis");
-                aspectTag.setShort("Amount", (short) 64);
-                jarWithAspect.setTagCompound(aspectTag);
-                jarChoices.add(jarWithAspect);
-                // Remote jar if registered
-                ItemStack remoteJar = cpw.mods.fml.common.registry.GameRegistry.findItemStack("gadomancy", "remote_jar", 1);
-                if (remoteJar != null) jarChoices.add(remoteJar);
+                jarChoices = registeredStickyJars();
+                if (jarChoices.isEmpty()) throw fault("Gadomancy registered no sticky-jar recipe stacks");
 
                 product = Products.stickyJar(jarChoices, row.facts);
                 output = product.output;
@@ -168,9 +153,14 @@ final class MagicRecipes {
                 else throw fault("Invalid arcane grid");
             }
             JsonArray cells = new JsonArray();
-            for (Object ingredient : inputArr) {
+            for (int cellIndex = 0; cellIndex < inputArr.length; cellIndex++) {
+                Object ingredient = inputArr[cellIndex];
                 if (ingredient == null) cells.add(value(null));
-                else { cells.add(value(inputs.size())); inputs.add(ordinary(ingredient, true)); }
+                else {
+                    cells.add(value(inputs.size()));
+                    if (isStickyJar && cellIndex == 0) inputs.add(stickyJars(jarChoices));
+                    else inputs.add(ordinary(ingredient, true));
+                }
             }
             row.record.add("grid", object("width", width, "height", height, "cells", cells, "mirror", mirror));
             for (int x = 0; x < width; x++) for (int y = 0; y < height; y++) {
@@ -192,8 +182,27 @@ final class MagicRecipes {
                 inputs.add(ordinary(ingredient, true));
             }
             if (source.getClass().getName().contains("PreserveFilterRecipe")) {
-                row.property("automagy:filter_preservation", "Filter Preservation", "Transfers custom filter options and metadata from input filter paper.");
+                int config = -1, metadata = -1;
+                Class<?> paper = type("tuhljin.automagy.items.ItemEnchantedPaper");
+                for (int at = 0; at < inputs.size(); at++) {
+                    for (Candidate candidate : inputs.get(at)) {
+                        Object filter = invoke(paper, null, "getFilterInventory", new Class<?>[] {ItemStack.class}, candidate.item);
+                        if (filter != null) { config = at; break; }
+                    }
+                    if (config >= 0) break;
+                }
+                for (int at = config + 1; at < inputs.size(); at++) {
+                    for (Candidate candidate : inputs.get(at)) {
+                        Object accepted = invoke(paper, null, "stackIsFilter", new Class<?>[] {ItemStack.class}, candidate.item);
+                        if (Boolean.TRUE.equals(accepted)) { metadata = at; break; }
+                    }
+                    if (metadata >= 0) break;
+                }
+                if (config < 0 || metadata < 0) throw fault("PreserveFilter has no configuration and metadata filter inputs");
+                product = Products.preserveFilter(source, inputs, config, metadata, row.facts);
+                output = product.output;
             }
+            if (output == null) output = result(recipe.getRecipeOutput());
             projection = shapeless(inputs, output, aspects); kind = "arcane";
         } else if (family == Family.CRUCIBLE) {
             exact(source, CrucibleRecipe.class);
@@ -299,6 +308,41 @@ final class MagicRecipes {
         return true;
     }
 
+    /** Read the mod's authoritative sticky-jar registry instead of inventing a fixed sample list. */
+    @SuppressWarnings("unchecked")
+    private static List<ItemStack> registeredStickyJars() {
+        try {
+            Class<?> items = Class.forName("makeo.gadomancy.common.registration.RegisteredItems");
+            List<ItemStack> result = new ArrayList<>();
+            java.lang.reflect.Field registry = items.getDeclaredField("stickyJarItems");
+            registry.setAccessible(true);
+            Object value = registry.get(null);
+            if (!(value instanceof List<?>)) throw fault("Gadomancy sticky-jar registry returned a non-list");
+            for (Object entry : (List<?>) value) {
+                java.lang.reflect.Field itemField = entry.getClass().getField("item");
+                java.lang.reflect.Field damageField = entry.getClass().getField("damage");
+                java.lang.reflect.Field recipeField = entry.getClass().getField("recipeStack");
+                itemField.setAccessible(true); damageField.setAccessible(true); recipeField.setAccessible(true);
+                net.minecraft.item.Item item = (net.minecraft.item.Item) itemField.get(entry);
+                int damage = damageField.getInt(entry);
+                ItemStack raw = (ItemStack) recipeField.get(entry);
+                ItemStack stack = raw == null ? new ItemStack(item, 1, damage) : raw.copy();
+                if (stack.getItem() == null || stack.stackSize < 1) throw fault("Gadomancy sticky-jar registry contains an invalid item");
+                boolean duplicate = false;
+                for (ItemStack previous : result) if (previous.getItem() == stack.getItem() && previous.getItemDamage() == stack.getItemDamage()
+                        && ItemStack.areItemStackTagsEqual(previous, stack)) { duplicate = true; break; }
+                if (!duplicate) result.add(stack);
+            }
+            return result;
+        } catch (Jobs.Fault failure) {
+            throw failure;
+        } catch (ReflectiveOperationException error) {
+            Jobs.Fault failure = fault("Cannot inspect Gadomancy sticky-jar registry: " + error.getMessage());
+            failure.initCause(error);
+            throw failure;
+        }
+    }
+
     private static ShapelessArcaneRecipe shapeless(List<List<Candidate>> inputs, ItemStack output, AspectList aspects) {
         ShapelessArcaneRecipe copy = new ShapelessArcaneRecipe("", output.copy(), costs(aspects));
         for (List<Candidate> candidates : inputs) copy.getInput().add(new ArrayList<>(Arrays.asList(stacks(candidates))));
@@ -324,6 +368,22 @@ final class MagicRecipes {
             boolean wildcard = Items.feather.getDamage(item) == OreDictionary.WILDCARD_VALUE;
             result.add(new Candidate(item, tags ? tags(item, wildcard)
                     : object("kind", "wildcard", "meta", wildcard, "nbt", true)));
+        }
+        return result;
+    }
+
+    /** Gadomancy's native sticky-jar recipe rejects an already sticky jar. */
+    private static List<Candidate> stickyJars(List<ItemStack> values) {
+        List<Candidate> result = new ArrayList<>();
+        for (ItemStack raw : values) {
+            if (raw == null || raw.getItem() == null) throw fault("Sticky-jar registry contains an invalid input");
+            ItemStack item = raw.copy(); item.stackSize = 1;
+            TreeSet<String> keys = new TreeSet<>();
+            if (item.hasTagCompound()) for (Object key : item.getTagCompound().func_150296_c()) keys.add((String) key);
+            JsonArray present = new JsonArray(); for (String key : keys) present.add(value(key));
+            JsonArray absent = new JsonArray(); absent.add(value("isStickyJar"));
+            result.add(new Candidate(item, object("kind", "tags", "meta", true, "keys", present,
+                    "present", new JsonArray(), "absent", absent)));
         }
         return result;
     }

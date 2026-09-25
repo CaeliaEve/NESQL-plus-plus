@@ -1,59 +1,32 @@
-import { readFile, writeFile, rename, mkdir } from 'node:fs/promises';
+import { readFile, writeFile, rename, mkdir, stat } from 'node:fs/promises';
 import { existsSync, readFileSync, statSync } from 'node:fs';
 import { createHash } from 'node:crypto';
 import path from 'node:path';
-import { fileURLToPath, pathToFileURL } from 'node:url';
+import { pathToFileURL } from 'node:url';
+import { parseArgs } from 'node:util';
+import assert from 'node:assert/strict';
+import { prepare, canonical, sha, artifact, digest } from './plan.mjs';
 import { GameClient, GameError } from './client.mjs';
 
-/**
- * Evaluates whether an error represents a fatal execution or environment condition (Checks.fatal).
- */
-export function isFatalError(err) {
-  if (!err) return false;
-  if (err.fatal === true) return true;
-  const seen = new Set();
-  function check(e) {
-    if (!e || typeof e !== 'object' || seen.has(e)) return false;
-    seen.add(e);
-    if (e.fatal === true) return true;
+/** Only the Java producer can classify exception inheritance and cleanup failures.
+ * Missing severity is unknown isolation, so it must stop further game work. */
+export function isFatalError(error) {
+  if (!error || error.fatal !== false) return true;
+  const code = typeof error.code === 'string' ? error.code : '';
+  return Boolean(code === 'environment_changed' || code === 'world_unavailable'
+    || code === 'check_cleanup' || code === 'preview_cleanup'
+    || code.startsWith('client_') || code.endsWith('_changed')
+    || (Array.isArray(error.suppressed) && error.suppressed.length > 0)
+    || (Number.isInteger(error.suppressedOmitted) && error.suppressedOmitted > 0)
+    || (error.cause && isFatalError(error.cause)));
+}
 
-    const code = String(e.code || '').toLowerCase();
-    const msg = String(e.message || '').toLowerCase();
-    const type = String(e.type || '').toLowerCase();
-
-    // Check code matches against Checks.fatal
-    if (code === 'check_cleanup' || code === 'preview_cleanup' || code === 'world_unavailable') return true;
-    if (code.startsWith('client_') || code.endsWith('_changed') || code.includes('environment_changed')) return true;
-    if (code.includes('io_error') || code.includes('fatal') || code.includes('resource_leak') || code === 'server_stopped') return true;
-
-    // Check type matches against Checks.fatal
-    if (type.includes('cancellationexception') || type.includes('interruptedexception') || type.includes('ioexception')
-        || type.includes('outofmemoryerror') || type.includes('stackoverflowerror') || type.endsWith('error') || type === 'java.lang.error') {
-      return true;
-    }
-
-    // Check message against Checks.fatal
-    if (msg.includes('environment_changed') || msg.includes('world changed') || msg.includes('out of memory')
-        || msg.includes('client timeout') || msg.includes('client error') || msg.includes('cleanup failed')
-        || msg.includes('cleanup error') || msg.includes('world_unavailable')) {
-      return true;
-    }
-
-    // Check suppressed exceptions (Checks.fatal triggers on any non-empty suppressed)
-    if (Array.isArray(e.suppressed) && e.suppressed.length > 0) {
-      for (const sup of e.suppressed) {
-        if (check(sup)) return true;
-      }
-      return true;
-    }
-    if (typeof e.suppressedOmitted === 'number' && e.suppressedOmitted > 0) return true;
-
-    // Check nested cause
-    if (e.cause && check(e.cause)) return true;
-
-    return false;
-  }
-  return check(err);
+export function assertFailureDetails(error) {
+  if (!error || typeof error !== 'object') throw new Error('Job failure has no structured Java details');
+  const details = error.details;
+  assert.ok(details && typeof details === 'object' && typeof details.type === 'string', 'Job failure details are missing');
+  assert.ok(typeof details.fatal === 'boolean' || typeof error.fatal === 'boolean', 'Job failure severity is missing');
+  return details;
 }
 
 /**
@@ -75,17 +48,7 @@ export class AcceptanceCoordinator {
   }
 
   static fingerprint(env) {
-    return createHash('sha256')
-      .update(JSON.stringify({
-        world: env.world,
-        exporter: env.exporter,
-        revision: env.revision,
-        modSha256: env.modSha256 || null,
-        planHash: env.planHash,
-        probes: env.probes || null,
-        dependencies: env.dependencies || null
-      }))
-      .digest('hex');
+    return digest(JSON.stringify(canonical(env)));
   }
 
   async loadCheckpoint(currentFingerprint) {
@@ -128,7 +91,7 @@ export class AcceptanceCoordinator {
     };
     for (const h of handlers) {
       if (h.status === 'passed') summary.checked++;
-      else if (h.status === 'failed') summary.failed++;
+      else if (h.status === 'failed' || h.status === 'unsupported') summary.failed++;
       else if (h.status === 'excluded') summary.excluded++;
       else summary.unexamined++;
     }
@@ -156,7 +119,7 @@ export class AcceptanceCoordinator {
 
     const expectedExporter = plan.expectedExporter || '0.15.0';
     const expectedRevision = plan.expectedRevision !== undefined ? plan.expectedRevision : 14;
-    if (game.exporter && (game.exporter !== expectedExporter || game.revision !== expectedRevision)) {
+    if (game.exporter !== expectedExporter || game.revision !== expectedRevision) {
       throw new Error(`Game exporter protocol mismatch: expected ${expectedExporter} rev ${expectedRevision}, got ${game.exporter} rev ${game.revision}`);
     }
 
@@ -168,39 +131,22 @@ export class AcceptanceCoordinator {
       throw new Error(`Target world mismatch: expected '${plan.world}', game has '${actualWorld}'`);
     }
 
-    // Bind mod sha256 to environment fingerprint (U4)
-    let actualModSha = plan.modSha256 || null;
-    let foundModRow = null;
-    if (game.sources?.rows) {
-      foundModRow = game.sources.rows.find(m => m.id === 'nesql-exporter' || m.id === 'nesql');
-      if (foundModRow) {
-        if (foundModRow.sha256) {
-          actualModSha = foundModRow.sha256;
-        } else if (foundModRow.path && existsSync(foundModRow.path)) {
-          try {
-            const jarBytes = readFileSync(foundModRow.path);
-            actualModSha = createHash('sha256').update(jarBytes).digest('hex');
-          } catch (e) {
-            console.warn(`[Coordinator] Could not compute sha256 for mod path ${foundModRow.path}: ${e.message}`);
-          }
-        }
-      }
-    }
-    if (plan.modSha256 && actualModSha && plan.modSha256 !== actualModSha) {
-      throw new Error(`Loaded mod SHA256 mismatch: expected ${plan.modSha256}, got ${actualModSha}`);
-    }
-
-    const planHash = createHash('sha256')
-      .update(plan.handlers.map(h => h.id).sort().join(','))
-      .digest('hex');
+    assert.ok(game.sources?.valid === true && Array.isArray(game.sources.rows), 'Game source provenance is missing or invalid');
+    const foundModRow = game.sources.rows.find(row => row.id === 'nesql-exporter');
+    assert.ok(foundModRow?.valid === true && typeof foundModRow.path === 'string' && path.isAbsolute(foundModRow.path), 'Loaded mod source is missing or invalid');
+    assert.ok((await stat(foundModRow.path)).isFile(), 'Loaded mod source is not a file');
+    const actualModSha = digest(await readFile(foundModRow.path));
+    assert.ok(sha(plan.modSha256), 'Expected mod SHA256 is required');
+    assert.equal(actualModSha, plan.modSha256, 'Loaded mod SHA256 mismatch');
+    if (foundModRow.sha256 !== undefined) assert.equal(foundModRow.sha256, actualModSha, 'Reported mod source digest differs from its file');
+    assert.ok(Array.isArray(plan.handlers) && plan.handlers.length, 'A nonempty plan is required');
+    assert.equal(new Set(plan.handlers.map(item => item.id)).size, plan.handlers.length, 'Duplicate plan target');
+    const planHash = digest(JSON.stringify(canonical({ handlers: plan.handlers, probes: plan.probes ?? [], dependencies: plan.dependencies ?? {}, pageSize: this.options.pageSize ?? 4096 })));
     const envFingerprint = AcceptanceCoordinator.fingerprint({
-      world: actualWorld,
-      exporter: game.exporter,
-      revision: game.revision,
-      modSha256: actualModSha,
-      planHash,
-      probes: plan.probes || null,
-      dependencies: plan.dependencies || null
+      world: actualWorld, exporter: game.exporter, revision: game.revision,
+      modSha256: actualModSha, planHash, session: this.client.session,
+      sources: game.sources, handlers: game.handlers, structures: game.structures,
+      environment: game.environment, dependencies: plan.dependencies ?? {},
     });
 
     const checkpoint = await this.loadCheckpoint(envFingerprint);
@@ -248,8 +194,7 @@ export class AcceptanceCoordinator {
       checkpoint.handlers[handlerId] = state;
 
       // Handle tooling / justified exclusions (U2)
-      if (item.classification === 'tooling' || item.implementationStatus === 'excluded_justified'
-          || handlerId.includes('ProfilerRecipeHandler')) {
+      if (item.classification === 'tooling' && item.implementationStatus === 'excluded_justified') {
         state.status = 'excluded';
         state.reason = item.reason || 'Approved non-gameplay tooling exclusion';
         await this.saveCheckpoint(checkpoint);
@@ -262,9 +207,20 @@ export class AcceptanceCoordinator {
 
       console.log(`[Coordinator] Processing ${item.name} (${handlerId}) from offset ${state.offset}...`);
 
-      const domain = (item.classification === 'domain' || item.domain === 'structures' || item.route?.startsWith('structure:'))
-        ? 'structures'
-        : 'recipes';
+      const domain = item.domain === 'structures' || item.route === 'domain:structures' || item.route?.startsWith('structure:') ? 'structures' : 'recipes';
+      if ((item.classification === 'domain' || item.classification === 'interactive') && domain !== 'structures') {
+        // Domain and interactive work is validated by the export pipeline, not
+        // by recipe pagination. Require a declared export dataset and record
+        // it as a pending route until the domain report is consumed. Never
+        // silently downgrade it to unsupported.
+        assert.ok(item.route && item.route.startsWith(`${item.classification}:`), `Invalid ${item.classification} route`);
+        state.status = 'pending';
+        state.route = item.route;
+        state.error = { code: 'domain_export_required', message: 'A complete source export and domain report are required for ' + item.route };
+        checkpoint.failures.push({ handler: handlerId, error: state.error });
+        await this.saveCheckpoint(checkpoint);
+        throw new Error(state.error.message);
+      }
 
       while (true) {
         // Enforce key <= 80 characters strictly, including runId slice
@@ -278,10 +234,11 @@ export class AcceptanceCoordinator {
           key,
           world: actualWorld,
           domain,
-          probes: [{ count: 1, channels: {} }]
+          probes: plan.probes ?? [{ count: 1, channels: {} }]
         };
         if (domain === 'structures') {
-          checkRequest.controllers = item.controllers || [];
+          checkRequest.controllers = item.controllers ?? game.structures?.map(row => row.controller);
+          assert.ok(Array.isArray(checkRequest.controllers) && checkRequest.controllers.length, 'An explicit structure inventory is required');
         } else {
           checkRequest.handlers = [handlerId];
           checkRequest.offset = state.offset;
@@ -320,6 +277,7 @@ export class AcceptanceCoordinator {
         }
 
         if (job.state === 'failed' && isFatalError(job.error)) {
+          assertFailureDetails(job.error);
           state.status = 'failed';
           state.error = job.error;
           await this.saveCheckpoint(checkpoint);
@@ -327,6 +285,7 @@ export class AcceptanceCoordinator {
         }
 
         if (job.state !== 'checked') {
+          if (job.error) assertFailureDetails(job.error);
           state.status = 'failed';
           state.error = job.error || { code: 'job_' + job.state, message: 'Job stopped without check completion' };
           checkpoint.failures.push({ handler: handlerId, offset: state.offset, error: state.error });
@@ -390,6 +349,22 @@ export class AcceptanceCoordinator {
           checkpoint.failures.push({ handler: handlerId, offset: state.offset, error: state.error });
           await this.saveCheckpoint(checkpoint);
           throw new Error(`Report rows array missing for ${report.path}`);
+        }
+        if (domain === 'structures') {
+          const expected = new Set(checkRequest.controllers);
+          assert.equal(reportData.rows.length, expected.size, 'Structure report has a different target count');
+          for (const row of reportData.rows) {
+            assert.ok(expected.delete(row.controller), 'Unexpected or duplicate structure report row');
+            assert.ok(['passed', 'failed', 'unsupported'].includes(row.status), 'Structure report is incomplete');
+          }
+          const archive = await this.archiveReport(job, rawReport, reportData.rows);
+          checkpoint.archivedReports.push(archive);
+          state.total = state.checked = reportData.rows.length; state.unexamined = 0;
+          state.failures = reportData.rows.filter(row => row.status !== 'passed');
+          state.status = state.failures.length ? 'failed' : 'passed';
+          checkpoint.failures.push(...state.failures.map(row => ({ handler: handlerId, ...row })));
+          await this.saveCheckpoint(checkpoint);
+          break;
         }
         const row = reportData.rows.find(r => r.handler === handlerId || r.id === handlerId);
         if (!row) {
@@ -476,26 +451,8 @@ export class AcceptanceCoordinator {
 
         const rowOmitted = typeof row.failuresOmitted === 'number' ? row.failuresOmitted : 0;
 
-        // Archive report artifact shard to real disk file (U8)
-        const archiveDir = path.join(this.instance, 'nesql', 'archived-reports');
-        await mkdir(archiveDir, { recursive: true });
-        const archiveFileName = `report-${shortRun}-${shortHash}-${row.offset}-${row.end}.json`;
-        const archivePath = path.join(archiveDir, archiveFileName);
-        await writeFile(archivePath, rawReport);
-
-        if (!checkpoint.archivedReports) checkpoint.archivedReports = [];
-        checkpoint.archivedReports.push({
-          handler: handlerId,
-          offset: row.offset,
-          end: row.end,
-          sourcePath: report.path,
-          archivePath,
-          sha256: actualSha,
-          bytes: rawReport.length,
-          failuresCount: row.failures.length,
-          failuresOmitted: rowOmitted,
-          failures: row.failures
-        });
+        const archive = await this.archiveReport(job, rawReport, [row]);
+        checkpoint.archivedReports.push(archive);
 
         // Accumulate contiguous page data (C2)
         state.checked += row.checkedRecipes;
@@ -537,197 +494,69 @@ export class AcceptanceCoordinator {
     this.updateSummary(checkpoint);
     return checkpoint;
   }
+
+  async archiveReport(job, rawReport, rows) {
+    const directory = path.join(this.instance, 'nesql', 'archived-reports', job.id);
+    assert.match(job.id, /^[a-zA-Z0-9_-]{1,80}$/);
+    await mkdir(directory, { recursive: true });
+    const files = [];
+    for (const row of rows) {
+      const isStructure = Number.isInteger(row.controller);
+      const failures = isStructure
+        ? (row.status === 'passed' ? [] : [
+          ...(Array.isArray(row.failedStructures) ? row.failedStructures : row.status === 'failed' ? [row.controller] : []),
+          ...(Array.isArray(row.unsupportedStructures) ? row.unsupportedStructures : row.status === 'unsupported' ? [row.controller] : [])
+        ])
+        : (row.failedRecipes ?? []);
+      const details = row.failureFiles ?? [];
+      assert.equal(details.length, failures.length, 'Failure detail files are incomplete');
+      const pending = isStructure ? null : new Set(failures);
+      for (const entry of details) {
+        if (!isStructure) assert.ok(pending.delete(entry.index), 'Unexpected or duplicate failure detail');
+        const reportDirectory = path.dirname(job.report.path);
+        const checked = await artifact(reportDirectory, entry, 16 * 1024 * 1024);
+        const detail = JSON.parse(checked.bytes.toString('utf8'));
+        assert.equal(detail.format, 'nesql.failure'); assert.equal(detail.job, job.id);
+        if (isStructure) assert.equal(detail.target.controller, row.controller);
+        else assert.equal(detail.target.handler, row.handler);
+        assert.equal(detail.index, entry.index);
+        const archivePath = path.join(directory, path.basename(entry.path));
+        await this.storeArtifact(archivePath, checked.bytes);
+        files.push({ ...entry, archivePath });
+      }
+      if (pending) assert.equal(pending.size, 0, 'Failure detail files do not cover every failed target');
+    }
+    const archivePath = path.join(directory, 'report.json');
+    await this.storeArtifact(archivePath, rawReport);
+    return { job: job.id, sourcePath: job.report.path, archivePath, sha256: digest(rawReport), bytes: rawReport.length, files };
+  }
+
+  async storeArtifact(file, bytes) {
+    if (existsSync(file)) {
+      assert.equal(digest(await readFile(file)), digest(bytes), 'An existing archive has different bytes');
+      return;
+    }
+    const temporary = file + '.tmp';
+    await writeFile(temporary, bytes, { flag: 'wx' });
+    await rename(temporary, file);
+  }
 }
 
-// CLI Execution & Rehearsal (R9 / C3)
+// Rehearsal and execution validate the same immutable candidate inputs.
 if (process.argv[1] && import.meta.url === pathToFileURL(process.argv[1]).href) {
-  const isDryRun = process.argv.includes('--dry-run');
-  const configArgIdx = process.argv.indexOf('--config');
-  const configPath = configArgIdx !== -1 ? process.argv[configArgIdx + 1] : 'acceptance-candidate.json';
-
-  console.log(`[Coordinator] Starting Acceptance Coordinator (dry-run: ${isDryRun})...`);
-  console.log(`[Coordinator] Loading config: ${configPath}`);
-
-  let config;
   try {
-    const raw = readFileSync(path.resolve(configPath), 'utf8');
-    config = JSON.parse(raw);
-  } catch (err) {
-    console.error(`[Coordinator] Failed to read config ${configPath}: ${err.message}`);
-    process.exit(1);
-  }
-
-  // Resolve worklist dynamically without hardcoded machine paths
-  let worklistPath = config.worklist
-    ? path.resolve(config.worklist)
-    : path.resolve(path.dirname(configPath), 'completion-worklist.json');
-  if (!existsSync(worklistPath)) {
-    const fallback1 = path.resolve(path.dirname(configPath), '.refactor-state/acceptance/completion-worklist.json');
-    const fallback2 = path.resolve('.refactor-state/acceptance/completion-worklist.json');
-    if (existsSync(fallback1)) worklistPath = fallback1;
-    else if (existsSync(fallback2)) worklistPath = fallback2;
-  }
-
-  let worklist = { handlers: [] };
-  if (existsSync(worklistPath)) {
-    try {
-      worklist = JSON.parse(readFileSync(worklistPath, 'utf8'));
-    } catch (e) {
-      console.warn(`[Coordinator] Could not parse worklist: ${e.message}`);
+    const { values } = parseArgs({ options: { config: { type: 'string' }, 'dry-run': { type: 'boolean' } }, strict: true, allowPositionals: false });
+    assert.ok(values.config, 'Usage: coordinator.mjs --config <plan.json> [--dry-run]');
+    const { config, plan, packages } = await prepare(values.config);
+    console.log(JSON.stringify({ world: plan.world, targets: plan.handlers.length, packages: plan.dependencies.packages, dryRun: !!values['dry-run'] }));
+    if (!values['dry-run']) {
+      const coordinator = new AcceptanceCoordinator(config.instance, { pageSize: config.pageSize ?? 4096, runId: config.runId });
+      const result = await coordinator.runPlan(plan);
+      console.log(JSON.stringify(result.summary));
+      process.exitCode = result.summary.failed || result.summary.unexamined || result.failures.length ? 1 : 0;
     }
-  }
-
-  console.log('--------------------------------------------------');
-  console.log('ACCEPTANCE PLAN REHEARSAL / SUMMARY:');
-  console.log(`- Instance: ${config.instance}`);
-  console.log(`- World: ${config.world}`);
-  console.log(`- Candidate Mod: ${config.mod}`);
-  console.log(`- Candidate Compiler: ${config.compiler}`);
-  console.log(`- Candidate Web: ${config.web}`);
-  console.log(`- Planned Handlers: ${worklist.handlers ? worklist.handlers.length : 0}`);
-  console.log('Phase Sequence:');
-  console.log('  1. Environment Preflight (Check game readiness & active world)');
-  console.log('  2. Diagnostic Sampling (Domain & Fact sanity)');
-  console.log('  3. Contiguous Full-Range Recipe Pagination (330 handlers)');
-  console.log('  4. Source Dataset Sealing (Atomic export to dataset directory)');
-  console.log('  5. Elysium Compiler Inspect & Deterministic Catalog Compilation');
-  console.log('  6. NeoNEI Online/Offline Validation');
-  console.log('--------------------------------------------------');
-
-  if (isDryRun) {
-    const dryRunErrors = [];
-
-    // 1. Instance check
-    if (!config.instance || !existsSync(config.instance)) {
-      dryRunErrors.push(`Instance directory not found: ${config.instance}`);
-    } else {
-      console.log(`[Coordinator] Dry-run verified instance directory: ${config.instance}`);
-    }
-
-    // 2. Mod artifact check
-    if (!config.mod) {
-      dryRunErrors.push('Candidate mod artifact not configured in plan.');
-    } else {
-      let modPath = path.isAbsolute(config.mod) ? config.mod : path.resolve(config.instance, config.mod);
-      if (existsSync(modPath)) {
-        try {
-          const st = statSync(modPath);
-          if (st.isDirectory()) {
-            const nestedJar = path.join(modPath, 'mod', 'NESQL++-0.15.0.jar');
-            if (existsSync(nestedJar)) modPath = nestedJar;
-          }
-        } catch (_) {}
-      }
-      if (!existsSync(modPath)) {
-        dryRunErrors.push(`Candidate mod artifact not found: ${modPath}`);
-      } else {
-        console.log(`[Coordinator] Dry-run verified mod artifact: ${modPath}`);
-        if (config.modSha256) {
-          const modBytes = readFileSync(modPath);
-          const computedSha = createHash('sha256').update(modBytes).digest('hex');
-          if (computedSha !== config.modSha256) {
-            dryRunErrors.push(`Candidate mod SHA256 mismatch: expected ${config.modSha256}, got ${computedSha}`);
-          } else {
-            console.log(`[Coordinator] Dry-run verified mod SHA256: ${computedSha}`);
-          }
-        }
-      }
-    }
-
-    // 3. Compiler artifact check
-    if (config.compiler) {
-      let compilerPath = path.isAbsolute(config.compiler) ? config.compiler : path.resolve(config.instance, config.compiler);
-      if (existsSync(compilerPath)) {
-        try {
-          const st = statSync(compilerPath);
-          if (st.isDirectory()) {
-            const nestedExe = path.join(compilerPath, 'elysium-compiler.exe');
-            if (existsSync(nestedExe)) compilerPath = nestedExe;
-          }
-        } catch (_) {}
-      }
-      if (!existsSync(compilerPath)) {
-        dryRunErrors.push(`Candidate compiler not found: ${compilerPath}`);
-      } else {
-        console.log(`[Coordinator] Dry-run verified compiler artifact: ${compilerPath}`);
-      }
-    }
-
-    // 4. Web distribution check
-    if (config.web) {
-      let webPath = path.isAbsolute(config.web) ? config.web : path.resolve(config.instance, config.web);
-      if (existsSync(webPath)) {
-        try {
-          const st = statSync(webPath);
-          if (st.isDirectory()) {
-            const nestedIndex = path.join(webPath, 'index.html');
-            if (existsSync(nestedIndex)) webPath = nestedIndex;
-          }
-        } catch (_) {}
-      }
-      if (!existsSync(webPath)) {
-        dryRunErrors.push(`Candidate web distribution not found: ${webPath}`);
-      } else {
-        console.log(`[Coordinator] Dry-run verified web artifact: ${webPath}`);
-      }
-    }
-
-    // 5. Worklist check
-    if (!existsSync(worklistPath)) {
-      dryRunErrors.push(`Worklist file not found: ${worklistPath}`);
-    } else {
-      console.log(`[Coordinator] Dry-run verified worklist: ${worklistPath} (${worklist.handlers ? worklist.handlers.length : 0} items)`);
-    }
-
-    if (dryRunErrors.length > 0) {
-      console.error('[Coordinator] Dry-run rehearsal failed with errors:');
-      for (const err of dryRunErrors) {
-        console.error(`  - ${err}`);
-      }
-      process.exit(1);
-    }
-
-    console.log('[Coordinator] Dry-run rehearsal completed successfully. All dependencies verified.');
-    process.exit(0);
-  }
-
-  // Non-dry-run mode: Execute acceptance coordinator plan (C3 / U3)
-  console.log('[Coordinator] Non-dry-run mode: Initializing AcceptanceCoordinator...');
-  const coordinator = new AcceptanceCoordinator(config.instance, {
-    pageSize: config.pageSize || 4096,
-    runId: config.runId
-  });
-
-  const handlers = worklist.handlers && worklist.handlers.length > 0
-    ? worklist.handlers
-    : (config.handlers || []);
-
-  const plan = {
-    world: config.world,
-    modSha256: config.modSha256 || null,
-    expectedExporter: config.expectedExporter || '0.15.0',
-    expectedRevision: config.expectedRevision !== undefined ? config.expectedRevision : 14,
-    handlers
-  };
-
-  console.log(`[Coordinator] Executing plan with ${handlers.length} handlers...`);
-  try {
-    const finalCheckpoint = await coordinator.runPlan(plan, {
-      onProgress: (p) => {
-        console.log(`[Coordinator] [${p.handler}] ${p.checked}/${p.total} (unexamined: ${p.unexamined})`);
-      }
-    });
-    const summary = finalCheckpoint.summary;
-    console.log('[Coordinator] Execution finished.');
-    console.log(`[Coordinator] Summary: total=${summary.total}, checked=${summary.checked}, failed=${summary.failed}, excluded=${summary.excluded}, unexamined=${summary.unexamined}`);
-    if (summary.failed > 0 || finalCheckpoint.failures.length > 0 || summary.unexamined > 0) {
-      console.error(`[Coordinator] Execution failed: failed=${summary.failed}, failures=${finalCheckpoint.failures.length}, unexamined=${summary.unexamined}`);
-      process.exit(1);
-    }
-    console.log('[Coordinator] Execution completed successfully!');
-    process.exit(0);
-  } catch (err) {
-    console.error(`[Coordinator] Execution failed: ${err.message}`);
-    process.exit(1);
+  } catch (error) {
+    console.error(error.message);
+    process.exitCode = 1;
   }
 }

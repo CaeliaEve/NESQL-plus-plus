@@ -102,6 +102,35 @@ public final class Checks {
         public void inventory(JsonArray handlers) { record.add("handlers", handlers); }
         public void planning(JsonObject timings) { record.add("planning", timings); }
 
+        /** Every failed recipe has an immutable detail file, independently of the inline preview limit. */
+        public void failure(JsonObject row, int index, Throwable error) throws IOException {
+            JsonObject identity = row.has("handler") ? object("handler", row.get("handler")) : object("controller", row.get("controller"));
+            String name = CanonicalJson.digest(identity) + "-" + index + ".json";
+            String folder = context.id() + "-details";
+            Path directory = path.getParent().resolve(folder);
+            Dataset.directory(directory);
+            JsonObject detail = object("format", "nesql.failure", "job", context.id(), "target", identity,
+                    "index", index, "error", Checks.failure(error));
+            byte[] bytes = CanonicalJson.bytes(detail);
+            if (bytes.length > REPORT_LIMIT) throw new IOException("Failure detail exceeds its size budget");
+            Path output = directory.resolve(name), temporary = directory.resolve(name + ".tmp");
+            if (Files.exists(output, LinkOption.NOFOLLOW_LINKS) || Files.exists(temporary, LinkOption.NOFOLLOW_LINKS)) {
+                throw new IOException("Failure detail already exists: " + name);
+            }
+            Files.write(temporary, bytes, java.nio.file.StandardOpenOption.CREATE_NEW);
+            Files.move(temporary, output, StandardCopyOption.ATOMIC_MOVE);
+            if (!row.has("failureFiles")) row.add("failureFiles", new JsonArray());
+            row.getAsJsonArray("failureFiles").add(object("path", folder + "/" + name, "sha256", CanonicalJson.digest(bytes), "bytes", bytes.length, "index", index));
+        }
+
+        /** Unsupported structure variants still need an immutable reason artifact. */
+        public void unsupported(JsonObject row, int index, String code, String message) throws IOException {
+            Jobs.Fault error = new Jobs.Fault(code, message);
+            failure(row, index, error);
+            if (!row.has("unsupportedStructures")) row.add("unsupportedStructures", new JsonArray());
+            row.getAsJsonArray("unsupportedStructures").add(row.get("controller"));
+        }
+
         public Summary save() throws IOException {
             boolean interrupted = Thread.interrupted();
             try { return write(); }
@@ -136,7 +165,7 @@ public final class Checks {
 
         public Summary finish(String status, Throwable error) throws IOException {
             record.addProperty("status", status); record.addProperty("finished", Instant.now().toString());
-            if (error != null) record.add("error", failure(error));
+            if (error != null) record.add("error", Checks.failure(error));
             return save();
         }
     }
@@ -153,6 +182,7 @@ public final class Checks {
         row.addProperty("totalRecipes", total); row.addProperty("offset", begin); row.addProperty("end", end);
         row.addProperty("checkedRecipes", 0); row.addProperty("unexamined", total); row.addProperty("failuresOmitted", 0);
         row.add("failedRecipes", failed); row.add("failures", failures); row.add("excludedRecipes", excluded);
+        row.add("failureFiles", new JsonArray());
         int attempted = 0;
         for (int index = begin; index < end; index++) {
             context.check();
@@ -161,10 +191,12 @@ public final class Checks {
             } catch (Exception error) {
                 failed.add(value(index));
                 if (failures.size() < 32) failures.add(object("index", index, "error", failure(error)));
+                archive(report, row, index, error);
                 if (fatal(error)) throw error;
             } catch (Error error) {
                 failed.add(value(index));
                 if (failures.size() < 32) failures.add(object("index", index, "error", failure(error)));
+                archive(report, row, index, error);
                 throw error;
             } finally {
                 attempted++;
@@ -193,9 +225,19 @@ public final class Checks {
                 }
             } catch (Exception error) {
                 row.addProperty("status", "failed"); row.add("error", failure(error));
+                if (row.has("controller")) {
+                    if (!row.has("failedStructures")) row.add("failedStructures", new JsonArray());
+                    row.getAsJsonArray("failedStructures").add(row.get("controller"));
+                }
+                archive(report, row, index, error);
                 if (fatal(error)) throw error;
             } catch (Error error) {
                 row.addProperty("status", "failed"); row.add("error", failure(error));
+                if (row.has("controller")) {
+                    if (!row.has("failedStructures")) row.add("failedStructures", new JsonArray());
+                    row.getAsJsonArray("failedStructures").add(row.get("controller"));
+                }
+                archive(report, row, index, error);
                 throw error;
             } finally {
                 row.addProperty("elapsedMicros", Long.toString((System.nanoTime() - began) / 1000));
@@ -206,7 +248,12 @@ public final class Checks {
         }
     }
 
-    public static boolean fatal(Exception error) {
+    private static void archive(Report report, JsonObject row, int index, Throwable error) throws IOException {
+        try { report.failure(row, index, error); }
+        catch (IOException reporting) { reporting.addSuppressed(error); throw reporting; }
+    }
+
+    public static boolean fatal(Throwable error) {
         Set<Throwable> seen = Collections.newSetFromMap(new IdentityHashMap<>());
         for (Throwable cause = error; cause != null && seen.add(cause); cause = cause.getCause()) {
             if (cause instanceof java.util.concurrent.CancellationException || cause instanceof InterruptedException
@@ -221,7 +268,9 @@ public final class Checks {
     }
 
     public static JsonObject failure(Throwable error) {
-        return failure(error, Collections.newSetFromMap(new IdentityHashMap<>()), new int[] {0}, 0);
+        JsonObject result = failure(error, Collections.newSetFromMap(new IdentityHashMap<>()), new int[] {0}, 0);
+        if (result != null) result.addProperty("fatal", fatal(error));
+        return result;
     }
 
     private static JsonObject failure(Throwable error, Set<Throwable> seen, int[] count, int depth) {

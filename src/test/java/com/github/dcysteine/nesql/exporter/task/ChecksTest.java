@@ -120,6 +120,7 @@ final class ChecksTest {
         Jobs.Fault wrapped = new Jobs.Fault("structure_capture", "wrapper"); wrapped.initCause(new Jobs.Fault("preview_cleanup", "fixture"));
         require(Checks.fatal(wrapped), "Wrapped preview cleanup failures were treated as independent failures");
         recipes(root);
+        failureProtocol(root.resolve("severity"));
         System.out.println("Diagnostic tasks: observed work through timing reports, decimal quantities, failure/cancel reports, retry identity and publication separation passed");
     }
 
@@ -133,8 +134,9 @@ final class ChecksTest {
             Checks.Report report = new Checks.Report(scope.resolve("checks"), context, object(), array(row));
             try {
                 Checks.sweep(context, report, () -> {}, (target, result) ->
-                        Checks.recipes(context, report, () -> {}, result, key.equals("recipe-stop") ? 483 : 20, index -> {
+                        Checks.recipes(context, report, () -> {}, result, key.equals("recipe-stop") ? 483 : key.equals("recipe-many") ? 65 : 20, index -> {
                             visited.add(index);
+                            if (key.equals("recipe-many")) throw new Jobs.Fault("recipe_capture", "Independent failure " + index);
                             if (key.equals("recipe-stop") && index == 11) throw new Jobs.Fault("slot_changed", "Candidate content changed");
                             if (key.equals("recipe-range") && (index == 7 || index == 9)) throw new Jobs.Fault("recipe_capture", "Independent recipe failure");
                             return !key.equals("recipe-range") || index != 10;
@@ -157,8 +159,47 @@ final class ChecksTest {
                     && row.get("checkedRecipes").getAsInt() == 8 && row.get("unexamined").getAsInt() == 12
                     && row.getAsJsonArray("failedRecipes").size() == 2 && row.getAsJsonArray("excludedRecipes").size() == 1,
                     "Bounded diagnostic ranges lost independent failures, excluded recipes or actual coverage");
+            Jobs.Request many = Checks.request(object("key", "recipe-many", "world", "test-copy", "domain", "recipes", "limit", 65));
+            Jobs.Job complete = await(jobs, jobs.start(many).id);
+            row = readReport(scope, complete.id);
+            require(complete.state.equals("checked") && row.getAsJsonArray("failedRecipes").size() == 65
+                    && row.getAsJsonArray("failures").size() == 32 && row.getAsJsonArray("failureFiles").size() == 65,
+                    "Failure details after the inline limit were discarded");
+            for (com.google.gson.JsonElement value : row.getAsJsonArray("failureFiles")) {
+                JsonObject file = value.getAsJsonObject();
+                Path detailPath = scope.resolve("checks").resolve(file.get("path").getAsString());
+                byte[] bytes = Files.readAllBytes(detailPath);
+                require(bytes.length == file.get("bytes").getAsInt()
+                        && com.github.dcysteine.nesql.exporter.source.CanonicalJson.digest(bytes).equals(file.get("sha256").getAsString()), "Failure detail digest changed");
+                JsonObject detail = new com.google.gson.JsonParser().parse(new String(bytes, StandardCharsets.UTF_8)).getAsJsonObject();
+                require(detail.get("job").getAsString().equals(complete.id) && detail.get("index").equals(file.get("index"))
+                        && detail.getAsJsonObject("error").get("message").getAsString().equals("Independent failure " + file.get("index").getAsInt()),
+                        "Failure detail lost its recipe identity or reason");
+            }
         }
         System.out.println("Recipe diagnostics: fatal index 11 leaves 471 unexamined, bounded ranges retain independent failures and exclusions");
+    }
+
+    private static void failureProtocol(Path root) throws Exception {
+        Jobs.Fault wrapped = new Jobs.Fault("recipe_capture", "Wrapped read failure");
+        wrapped.initCause(new java.io.FileNotFoundException("Missing source"));
+        Jobs.Fault suppressed = new Jobs.Fault("recipe_capture", "Independent error with failed release");
+        suppressed.addSuppressed(new IllegalStateException("Release failed"));
+        java.util.List<Exception> errors = java.util.Arrays.asList(new java.io.FileNotFoundException("Missing source"), wrapped, suppressed,
+                new Jobs.Fault("recipe_capture", "Independent semantic failure"));
+        try (Jobs jobs = new Jobs(root.resolve("jobs"), context -> { throw errors.get(Integer.parseInt(context.request().name)); });
+             GameServer server = new GameServer(root, jobs, () -> object("ready", true), () -> {})) {
+            JsonObject connection = new com.google.gson.JsonParser().parse(new String(Files.readAllBytes(root.resolve("connection.json")), StandardCharsets.UTF_8)).getAsJsonObject();
+            for (int index = 0; index < errors.size(); index++) {
+                String id = jobs.start(new Jobs.Request("failure-" + index, Integer.toString(index), "data")).id;
+                Jobs.Job done = await(jobs, id);
+                JsonObject response = JobsTest.http(connection, "GET", "/jobs/" + id, null, null).getAsJsonObject("job");
+                JsonObject error = response.getAsJsonObject("error");
+                require(done.state.equals("failed") && error.get("fatal").getAsJsonPrimitive().isBoolean()
+                        && error.get("fatal").getAsBoolean() == (index < 3), "HTTP dropped native exception severity");
+                require(error.get("type").getAsString().equals(errors.get(index).getClass().getName()), "HTTP lost the exception type");
+            }
+        }
     }
 
     private static JsonObject readReport(Path root, String id) throws Exception {

@@ -56,6 +56,7 @@ export class GameClient {
           || new Set(new URLSearchParams(query).keys()).size !== [...new URLSearchParams(query)].length))) {
       throw new Error('Invalid game endpoint.');
     }
+    this.session = session;
     const timeout = AbortSignal.timeout(this.timeout);
     const requestSignal = signal ? AbortSignal.any([signal, timeout]) : timeout;
     let response;

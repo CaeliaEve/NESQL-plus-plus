@@ -74,7 +74,7 @@ final class Audit {
                     if (row.has("controller")) {
                         Structures.Machine machine = structures.get(row.get("controller").getAsInt());
                         if (machine == null) throw new Jobs.Fault("controller_missing", "Controller is not registered");
-                        structure(session, request, machine, row, locale, work.resolve("structure-" + machine.id));
+                        structure(session, request, machine, row, locale, work.resolve("structure-" + machine.id), report);
                     } else {
                         Recipes.Handler handler = handlers.get(row.get("handler").getAsString());
                         if (handler == null) throw new Jobs.Fault("handler_missing", "Handler is not registered");
@@ -105,7 +105,7 @@ final class Audit {
         });
     }
 
-    private void structure(ClientThread.Session session, Jobs.Request request, Structures.Machine machine, JsonObject result, String locale, Path path) throws Exception {
+    private void structure(ClientThread.Session session, Jobs.Request request, Structures.Machine machine, JsonObject result, String locale, Path path, Checks.Report report) throws Exception {
         Facts facts = new Facts(locale);
         String name = "structure " + machine.id;
         try (Buffer buffer = new Buffer(path)) {
@@ -120,6 +120,9 @@ final class Audit {
             result.add("counts", buffer.check());
             result.add("limitations", buffer.limitations());
             result.addProperty("status", buffer.problems.isEmpty() ? "passed" : "unsupported");
+            if (!buffer.problems.isEmpty()) {
+                report.unsupported(result, machine.id, "structure_unsupported", "Native structure preview reported: " + String.join("; ", buffer.problems));
+            }
         }
     }
 

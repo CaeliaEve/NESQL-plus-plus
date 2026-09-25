@@ -183,7 +183,8 @@ final class SlotsTest {
         RecipeRow potentialRow = new RecipeRow(facts, object("owner", "fixture", "handler", "tree_farm", "key", "potential"), "fixture", 0);
         potentialRow.itemOutput(display(), 0, new ItemStack(Items.paper, 0), 10000, potential);
         require(potentialRow.outputs.size() == 1 && potentialRow.outputs.get(0).getAsJsonObject().get("amount").isJsonNull(), "Potential quantity did not clear fixed amount");
-        reject("quantity_rule", () -> Amounts.potential("forestry.yield", null, null, 0));
+        require(Amounts.potential("forestry.yield", "canBearFruit=false", "0", 0).get("nominal").getAsString().equals("0"),
+                "Zero potential quantity must remain representable");
 
         ItemStack[] outputs = new ItemStack[26]; outputs[25] = new ItemStack(Items.paper, 9);
         Set<String> captured = new java.util.HashSet<>();

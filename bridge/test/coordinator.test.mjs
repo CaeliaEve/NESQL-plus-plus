@@ -9,8 +9,20 @@ import { randomUUID, createHash } from 'node:crypto';
 import test from 'node:test';
 import { AcceptanceCoordinator, isFatalError } from '../src/coordinator.mjs';
 
+const modBytes = Buffer.from('NESQL protocol fixture');
+const modSha256 = createHash('sha256').update(modBytes).digest('hex');
+async function fixture(prefix) {
+  const instance = await mkdtemp(prefix);
+  await writeFile(path.join(instance, 'fixture.jar'), modBytes);
+  return instance;
+}
+function gameState(instance, state) {
+  return { sources: { valid: true, rows: [{ id: 'nesql-exporter', valid: true, path: path.join(instance, 'fixture.jar') }] }, ...state };
+}
+
+
 test('AcceptanceCoordinator handles 73-char IDs, keys <= 80 chars, pagination, and resume', async t => {
-  const instance = await mkdtemp(path.join(os.tmpdir(), 'nesql-coord-'));
+  const instance = await fixture(path.join(os.tmpdir(), 'nesql-coord-'));
   t.after(() => rm(instance, { recursive: true, force: true }));
   await mkdir(path.join(instance, 'nesql'));
   const token = 'a'.repeat(64);
@@ -27,13 +39,13 @@ test('AcceptanceCoordinator handles 73-char IDs, keys <= 80 chars, pagination, a
     response.setHeader('X-NESQL-Session', session);
 
     if (request.url === '/game') {
-      response.end(JSON.stringify({
+      response.end(JSON.stringify(gameState(instance, {
         ready: true,
         game: 'Minecraft 1.7.10',
         world: { folder: 'test-world', name: 'Test World' },
         exporter: '0.15.0',
         revision: 14
-      }));
+      })));
     } else if (request.url === '/checks' && request.method === 'POST') {
       requestedKeys.push(jsonBody.key);
       requestedOffsets.push(jsonBody.offset);
@@ -90,7 +102,7 @@ test('AcceptanceCoordinator handles 73-char IDs, keys <= 80 chars, pagination, a
 
   const coordinator = new AcceptanceCoordinator(instance, { pageSize: 4000 });
   const plan = {
-    world: 'test-world',
+    world: 'test-world', modSha256,
     handlers: [{ id: realHandlerId, name: 'Wiremill' }]
   };
 
@@ -112,7 +124,7 @@ test('AcceptanceCoordinator handles 73-char IDs, keys <= 80 chars, pagination, a
 });
 
 test('AcceptanceCoordinator halts whole plan on fatal error and isolates environment', async t => {
-  const instance = await mkdtemp(path.join(os.tmpdir(), 'nesql-coord-fatal-'));
+  const instance = await fixture(path.join(os.tmpdir(), 'nesql-coord-fatal-'));
   t.after(() => rm(instance, { recursive: true, force: true }));
   await mkdir(path.join(instance, 'nesql'));
   const token = 'b'.repeat(64);
@@ -125,13 +137,13 @@ test('AcceptanceCoordinator halts whole plan on fatal error and isolates environ
     response.setHeader('X-NESQL-Session', session);
 
     if (request.url === '/game') {
-      response.end(JSON.stringify({
+      response.end(JSON.stringify(gameState(instance, {
         ready: true,
         game: 'Minecraft 1.7.10',
         world: { folder: 'test-world', name: 'Test World' },
         exporter: '0.15.0',
         revision: 14
-      }));
+      })));
     } else if (request.url === '/checks' && request.method === 'POST') {
       response.end(JSON.stringify({ id: 'job-fatal', state: 'queued' }));
     } else if (request.url === '/jobs/job-fatal') {
@@ -139,7 +151,7 @@ test('AcceptanceCoordinator halts whole plan on fatal error and isolates environ
         job: {
           id: 'job-fatal',
           state: 'failed',
-          error: { code: 'world_changed', message: 'World instance was replaced during capture' }
+          error: { code: 'world_changed', message: 'World instance was replaced during capture', fatal: true, details: { type: 'com.github.dcysteine.nesql.exporter.task.Jobs$Fault', code: 'world_changed', fatal: true, suppressed: [], suppressedOmitted: 0 } }
         }
       }));
     }
@@ -156,7 +168,7 @@ test('AcceptanceCoordinator halts whole plan on fatal error and isolates environ
 
   const coordinator = new AcceptanceCoordinator(instance);
   const plan = {
-    world: 'test-world',
+    world: 'test-world', modSha256,
     handlers: [{ id: 'handler-1', name: 'Machine 1' }, { id: 'handler-2', name: 'Machine 2' }]
   };
 
@@ -171,7 +183,7 @@ test('AcceptanceCoordinator halts whole plan on fatal error and isolates environ
 });
 
 test('AcceptanceCoordinator refuses unsupported handler status without marking as passed', async t => {
-  const instance = await mkdtemp(path.join(os.tmpdir(), 'nesql-coord-unsupp-'));
+  const instance = await fixture(path.join(os.tmpdir(), 'nesql-coord-unsupp-'));
   t.after(() => rm(instance, { recursive: true, force: true }));
   await mkdir(path.join(instance, 'nesql'));
   const token = 'c'.repeat(64);
@@ -185,13 +197,13 @@ test('AcceptanceCoordinator refuses unsupported handler status without marking a
     response.setHeader('X-NESQL-Session', session);
 
     if (request.url === '/game') {
-      response.end(JSON.stringify({
+      response.end(JSON.stringify(gameState(instance, {
         ready: true,
         game: 'Minecraft 1.7.10',
         world: { folder: 'test-world', name: 'Test World' },
         exporter: '0.15.0',
         revision: 14
-      }));
+      })));
     } else if (request.url === '/checks' && request.method === 'POST') {
       const reportFile = path.join(instance, 'nesql', 'report-unsupp.json');
       const reportData = {
@@ -229,7 +241,7 @@ test('AcceptanceCoordinator refuses unsupported handler status without marking a
 
   const coordinator = new AcceptanceCoordinator(instance);
   const plan = {
-    world: 'test-world',
+    world: 'test-world', modSha256,
     handlers: [{ id: unsuppHandlerId, name: 'Unsupported Machine' }]
   };
 
@@ -240,7 +252,7 @@ test('AcceptanceCoordinator refuses unsupported handler status without marking a
 });
 
 test('AcceptanceCoordinator strictly rejects corrupted report SHA256 or mismatched bytes (C2)', async t => {
-  const instance = await mkdtemp(path.join(os.tmpdir(), 'nesql-coord-sha-'));
+  const instance = await fixture(path.join(os.tmpdir(), 'nesql-coord-sha-'));
   t.after(() => rm(instance, { recursive: true, force: true }));
   await mkdir(path.join(instance, 'nesql'));
   const token = 'd'.repeat(64);
@@ -254,13 +266,13 @@ test('AcceptanceCoordinator strictly rejects corrupted report SHA256 or mismatch
     response.setHeader('X-NESQL-Session', session);
 
     if (request.url === '/game') {
-      response.end(JSON.stringify({
+      response.end(JSON.stringify(gameState(instance, {
         ready: true,
         game: 'Minecraft 1.7.10',
         world: { folder: 'test-world', name: 'Test World' },
         exporter: '0.15.0',
         revision: 14
-      }));
+      })));
     } else if (request.url === '/checks' && request.method === 'POST') {
       const reportFile = path.join(instance, 'nesql', 'report-corrupt.json');
       await writeFile(reportFile, JSON.stringify({ rows: [{ handler: handlerId, status: 'passed', totalRecipes: 10, offset: 0, end: 10, checkedRecipes: 10, unexamined: 0, failedRecipes: [], excludedRecipes: [], failures: [] }] }));
@@ -289,7 +301,7 @@ test('AcceptanceCoordinator strictly rejects corrupted report SHA256 or mismatch
   );
 
   const coordinator = new AcceptanceCoordinator(instance);
-  const plan = { world: 'test-world', handlers: [{ id: handlerId, name: 'Corrupt Machine' }] };
+  const plan = { world: 'test-world', modSha256, handlers: [{ id: handlerId, name: 'Corrupt Machine' }] };
 
   await assert.rejects(
     async () => coordinator.runPlan(plan),
@@ -298,7 +310,7 @@ test('AcceptanceCoordinator strictly rejects corrupted report SHA256 or mismatch
 });
 
 test('AcceptanceCoordinator enforces total recipe count stability across pages (C2)', async t => {
-  const instance = await mkdtemp(path.join(os.tmpdir(), 'nesql-coord-stability-'));
+  const instance = await fixture(path.join(os.tmpdir(), 'nesql-coord-stability-'));
   t.after(() => rm(instance, { recursive: true, force: true }));
   await mkdir(path.join(instance, 'nesql'));
   const token = 'e'.repeat(64);
@@ -313,13 +325,13 @@ test('AcceptanceCoordinator enforces total recipe count stability across pages (
     response.setHeader('X-NESQL-Session', session);
 
     if (request.url === '/game') {
-      response.end(JSON.stringify({
+      response.end(JSON.stringify(gameState(instance, {
         ready: true,
         game: 'Minecraft 1.7.10',
         world: { folder: 'test-world', name: 'Test World' },
         exporter: '0.15.0',
         revision: 14
-      }));
+      })));
     } else if (request.url === '/checks' && request.method === 'POST') {
       const offset = JSON.parse(body).offset;
       const reportFile = path.join(instance, 'nesql', `report-stab-${offset}.json`);
@@ -367,7 +379,7 @@ test('AcceptanceCoordinator enforces total recipe count stability across pages (
   );
 
   const coordinator = new AcceptanceCoordinator(instance, { pageSize: 50 });
-  const plan = { world: 'test-world', handlers: [{ id: handlerId, name: 'Unstable Total Machine' }] };
+  const plan = { world: 'test-world', modSha256, handlers: [{ id: handlerId, name: 'Unstable Total Machine' }] };
 
   await assert.rejects(
     async () => coordinator.runPlan(plan),
@@ -376,7 +388,7 @@ test('AcceptanceCoordinator enforces total recipe count stability across pages (
 });
 
 test('AcceptanceCoordinator isolates recipe failures across pages and archives reports (C2)', async t => {
-  const instance = await mkdtemp(path.join(os.tmpdir(), 'nesql-coord-fail-iso-'));
+  const instance = await fixture(path.join(os.tmpdir(), 'nesql-coord-fail-iso-'));
   t.after(() => rm(instance, { recursive: true, force: true }));
   await mkdir(path.join(instance, 'nesql'));
   const token = 'f'.repeat(64);
@@ -390,13 +402,13 @@ test('AcceptanceCoordinator isolates recipe failures across pages and archives r
     response.setHeader('X-NESQL-Session', session);
 
     if (request.url === '/game') {
-      response.end(JSON.stringify({
+      response.end(JSON.stringify(gameState(instance, {
         ready: true,
         game: 'Minecraft 1.7.10',
         world: { folder: 'test-world', name: 'Test World' },
         exporter: '0.15.0',
         revision: 14
-      }));
+      })));
     } else if (request.url === '/checks' && request.method === 'POST') {
       const offset = JSON.parse(body).offset;
       const reportFile = path.join(instance, 'nesql', `report-fail-${offset}.json`);
@@ -419,6 +431,14 @@ test('AcceptanceCoordinator isolates recipe failures across pages and archives r
           failuresOmitted: 0
         }]
       };
+      const failureFiles = [];
+      for (const failure of failures) {
+        const entry = `failure-${offset}-${failure.index}.json`;
+        const detail = Buffer.from(JSON.stringify({ format: 'nesql.failure', job: `job-fail-${offset}`, target: { handler: handlerId }, ...failure }));
+        await writeFile(path.join(instance, 'nesql', entry), detail);
+        failureFiles.push({ path: entry, index: failure.index, bytes: detail.length, sha256: createHash('sha256').update(detail).digest('hex') });
+      }
+      reportData.rows[0].failureFiles = failureFiles;
       const raw = Buffer.from(JSON.stringify(reportData));
       await writeFile(reportFile, raw);
       response.end(JSON.stringify({ id: `job-fail-${offset}`, state: 'queued' }));
@@ -446,7 +466,7 @@ test('AcceptanceCoordinator isolates recipe failures across pages and archives r
   );
 
   const coordinator = new AcceptanceCoordinator(instance, { pageSize: 50 });
-  const plan = { world: 'test-world', handlers: [{ id: handlerId, name: 'Failing Machine' }] };
+  const plan = { world: 'test-world', modSha256, handlers: [{ id: handlerId, name: 'Failing Machine' }] };
 
   const checkpoint = await coordinator.runPlan(plan);
   const handlerState = checkpoint.handlers[handlerId];
@@ -457,18 +477,18 @@ test('AcceptanceCoordinator isolates recipe failures across pages and archives r
   assert.equal(checkpoint.archivedReports.length, 2, 'Must archive 2 report shards');
   assert.ok(checkpoint.archivedReports[0].archivePath);
   assert.equal(existsSync(checkpoint.archivedReports[0].archivePath), true, 'Archived report shard must exist on disk');
-  assert.equal(checkpoint.archivedReports[0].failures.length, 2);
-  assert.equal(checkpoint.archivedReports[1].failures.length, 1);
+  assert.equal(checkpoint.archivedReports[0].files.length, 2);
+  assert.equal(checkpoint.archivedReports[1].files.length, 1);
 });
 
 test('AcceptanceCoordinator restores persisted runId on reload ensuring idempotent job keys (C8)', async t => {
-  const instance = await mkdtemp(path.join(os.tmpdir(), 'nesql-coord-runid-'));
+  const instance = await fixture(path.join(os.tmpdir(), 'nesql-coord-runid-'));
   t.after(() => rm(instance, { recursive: true, force: true }));
   await mkdir(path.join(instance, 'nesql'));
 
   const fixedRunId = 'run-persistent-test-1234';
   const envFingerprint = AcceptanceCoordinator.fingerprint({
-    world: 'test-world',
+    world: 'test-world', modSha256,
     exporter: '0.15.0',
     revision: 14,
     planHash: 'abc',
@@ -502,43 +522,38 @@ test('AcceptanceCoordinator restores persisted runId on reload ensuring idempote
   assert.equal(coordinator2.runId, fixedRunId, 'runId must be restored to coordinator instance');
 });
 
-test('isFatalError aligns strictly with Checks.fatal for all categories (U8)', () => {
-  // Checks.fatal: CancellationException, InterruptedException, IOException, Error, suppressed.length != 0
-  assert.equal(isFatalError({ fatal: true }), true);
-  assert.equal(isFatalError({ type: 'java.util.concurrent.CancellationException' }), true);
-  assert.equal(isFatalError({ type: 'java.lang.InterruptedException' }), true);
-  assert.equal(isFatalError({ type: 'java.io.IOException' }), true);
-  assert.equal(isFatalError({ type: 'java.lang.OutOfMemoryError' }), true);
-  assert.equal(isFatalError({ type: 'java.lang.Error' }), true);
+test('job severity is authoritative and missing severity prevents unsafe continuation', () => {
+  assert.equal(isFatalError({ code: 'export_failed', type: 'java.io.FileNotFoundException', fatal: true }), true);
+  assert.equal(isFatalError({ code: 'recipe_capture', fatal: true }), true);
+  assert.equal(isFatalError({ code: 'recipe_capture', fatal: false }), false);
+  assert.equal(isFatalError({ code: 'export_failed', message: 'java.io.IOException: read failed' }), true);
+  assert.equal(isFatalError({ code: 'recipe_capture', fatal: false, suppressed: [{ code: 'recipe_capture', fatal: false }] }), true);
+  assert.equal(isFatalError({ code: 'recipe_capture', fatal: false, suppressedOmitted: 1 }), true);
+  assert.equal(isFatalError(undefined), true);
+});
 
-  // Checks.fatal: check_cleanup, preview_cleanup, client_*, *_changed, world_unavailable
-  assert.equal(isFatalError({ code: 'check_cleanup' }), true);
-  assert.equal(isFatalError({ code: 'preview_cleanup' }), true);
-  assert.equal(isFatalError({ code: 'world_unavailable' }), true);
-  assert.equal(isFatalError({ code: 'client_timeout' }), true);
-  assert.equal(isFatalError({ code: 'client_disconnected' }), true);
-  assert.equal(isFatalError({ code: 'world_changed' }), true);
-  assert.equal(isFatalError({ code: 'environment_changed' }), true);
-  assert.equal(isFatalError({ code: 'slot_changed' }), true);
-  assert.equal(isFatalError({ code: 'handler_changed' }), true);
-
-  // Suppressed exceptions & omitted
-  assert.equal(isFatalError({ code: 'ordinary_error', suppressed: [{ code: 'check_cleanup' }] }), true);
-  assert.equal(isFatalError({ code: 'ordinary_error', suppressedOmitted: 1 }), true);
-
-  // Cause chain traversal
-  assert.equal(isFatalError({ code: 'wrapper_error', cause: { code: 'environment_changed' } }), true);
-
-  // Non-fatal ordinary errors
-  assert.equal(isFatalError(null), false);
-  assert.equal(isFatalError(undefined), false);
-  assert.equal(isFatalError({ code: 'recipe_mismatch', message: 'Item stack count did not match expected' }), false);
-  assert.equal(isFatalError({ code: 'handler_unsupported', message: 'No loader found for handler' }), false);
-  assert.equal(isFatalError({ code: 'invalid_quantity', message: 'Tree species has zero yield' }), false);
+test('AcceptanceCoordinator archives structure failures by controller identity', async t => {
+  const instance = await fixture(path.join(os.tmpdir(), 'nesql-coord-structure-'));
+  t.after(() => rm(instance, { recursive: true, force: true }));
+  const reportDir = path.join(instance, 'nesql', 'checks');
+  await mkdir(reportDir, { recursive: true });
+  const detailsDir = path.join(reportDir, 'job-structure-details');
+  await mkdir(detailsDir, { recursive: true });
+  const detail = Buffer.from(JSON.stringify({ format: 'nesql.failure', job: 'job-structure', target: { controller: 17000 }, index: 0, error: { code: 'structure_capture' } }));
+  const detailPath = path.join(detailsDir, 'detail.json');
+  await writeFile(detailPath, detail);
+  const entry = { path: 'job-structure-details/detail.json', index: 0, bytes: detail.length, sha256: createHash('sha256').update(detail).digest('hex') };
+  const report = Buffer.from(JSON.stringify({ rows: [{ controller: 17000, type: 'example.Controller', status: 'failed', failedStructures: [17000], failureFiles: [entry] }] }));
+  const reportPath = path.join(reportDir, 'job-structure.json');
+  await writeFile(reportPath, report);
+  const coordinator = new AcceptanceCoordinator(instance);
+  const archived = await coordinator.archiveReport({ id: 'job-structure', report: { path: reportPath } }, report, [{ controller: 17000, status: 'failed', failedStructures: [17000], failureFiles: [entry] }]);
+  assert.equal(archived.files.length, 1);
+  assert.equal(existsSync(archived.files[0].archivePath), true);
 });
 
 test('AcceptanceCoordinator enforces real mod SHA256 and protocol revision (U4)', async t => {
-  const instance = await mkdtemp(path.join(os.tmpdir(), 'nesql-coord-sha256-'));
+  const instance = await fixture(path.join(os.tmpdir(), 'nesql-coord-sha256-'));
   t.after(() => rm(instance, { recursive: true, force: true }));
   await mkdir(path.join(instance, 'nesql'));
   const token = 'f'.repeat(64);
@@ -556,18 +571,19 @@ test('AcceptanceCoordinator enforces real mod SHA256 and protocol revision (U4)'
     response.setHeader('X-NESQL-Session', session);
 
     if (request.url === '/game') {
-      response.end(JSON.stringify({
+      response.end(JSON.stringify(gameState(instance, {
         ready: true,
         game: 'Minecraft 1.7.10',
         world: { folder: 'test-world', name: 'Test World' },
         exporter: '0.15.0',
         revision: 14,
         sources: {
+          valid: true,
           rows: [
-            { id: 'nesql-exporter', name: 'NESQL++', version: '0.15.0', path: dummyJarPath }
+            { id: 'nesql-exporter', valid: true, name: 'NESQL++', version: '0.15.0', path: dummyJarPath }
           ]
         }
-      }));
+      })));
     } else {
       response.statusCode = 404;
       response.end(JSON.stringify({ error: { code: 'not_found' } }));
@@ -588,7 +604,7 @@ test('AcceptanceCoordinator enforces real mod SHA256 and protocol revision (U4)'
   // Mismatched modSha256 must reject
   await assert.rejects(
     async () => coordinator.runPlan({
-      world: 'test-world',
+      world: 'test-world', modSha256,
       modSha256: '0'.repeat(64),
       handlers: []
     }),
@@ -598,7 +614,7 @@ test('AcceptanceCoordinator enforces real mod SHA256 and protocol revision (U4)'
   // Mismatched protocol revision must reject
   await assert.rejects(
     async () => coordinator.runPlan({
-      world: 'test-world',
+      world: 'test-world', modSha256,
       expectedRevision: 99,
       handlers: []
     }),
@@ -607,7 +623,7 @@ test('AcceptanceCoordinator enforces real mod SHA256 and protocol revision (U4)'
 });
 
 test('AcceptanceCoordinator routes tooling exclusions and updates summary (U2, U3)', async t => {
-  const instance = await mkdtemp(path.join(os.tmpdir(), 'nesql-coord-tooling-'));
+  const instance = await fixture(path.join(os.tmpdir(), 'nesql-coord-tooling-'));
   t.after(() => rm(instance, { recursive: true, force: true }));
   await mkdir(path.join(instance, 'nesql'));
   const token = '9'.repeat(64);
@@ -621,13 +637,13 @@ test('AcceptanceCoordinator routes tooling exclusions and updates summary (U2, U
     response.setHeader('X-NESQL-Session', session);
 
     if (request.url === '/game') {
-      response.end(JSON.stringify({
+      response.end(JSON.stringify(gameState(instance, {
         ready: true,
         game: 'Minecraft 1.7.10',
         world: { folder: 'test-world', name: 'Test World' },
         exporter: '0.15.0',
         revision: 14
-      }));
+      })));
     } else if (request.url === '/checks') {
       checksCalled++;
       response.end(JSON.stringify({ id: 'job-unexpected', state: 'queued' }));
@@ -648,7 +664,7 @@ test('AcceptanceCoordinator routes tooling exclusions and updates summary (U2, U
 
   const coordinator = new AcceptanceCoordinator(instance);
   const plan = {
-    world: 'test-world',
+    world: 'test-world', modSha256,
     handlers: [
       {
         id: 'category_profiler_exclusion_test_ProfilerRecipeHandler',

@@ -217,7 +217,7 @@ public final class Jobs implements AutoCloseable {
         public Result result;
         public Checks.Summary report;
         public JsonObject operation;
-        public Map<String, String> error;
+        public Map<String, Object> error;
         private transient Thread thread;
         private transient boolean cancelled;
 
@@ -488,10 +488,15 @@ public final class Jobs implements AutoCloseable {
                         job.finished = Instant.now().toString();
                         event(job, "cancelled", "Export stopped and temporary files closed");
                     } else {
-                        fail(job, error instanceof Fault ? ((Fault) error).code : "export_failed", error.toString());
+                        fail(job, error);
                     }
                 }
             }
+        } catch (Error error) {
+            synchronized (this) {
+                if (!job.terminal()) fail(job, error);
+            }
+            throw error;
         } finally {
             try {
                 synchronized (this) {
@@ -580,7 +585,21 @@ public final class Jobs implements AutoCloseable {
         job.error = new LinkedHashMap<>();
         job.error.put("code", code);
         job.error.put("message", message.length() <= 2000 ? message : message.substring(0, 2000));
+        // Journal recovery and unexpected termination cannot prove isolation.
+        job.error.put("fatal", true);
         event(job, "failed", message);
+    }
+
+    private static void fail(Job job, Throwable error) {
+        fail(job, error instanceof Fault ? ((Fault) error).code : "export_failed", error.toString());
+        job.error.put("type", error.getClass().getName());
+        // Preserve the bounded Java-side failure graph. The bridge must use the
+        // producer classification and cannot reconstruct inheritance or cleanup
+        // suppression from the flattened message alone.
+        job.error.put("details", Checks.failure(error));
+        // Determine severity before serializing: JS cannot reconstruct Java
+        // inheritance or suppressed cleanup failures from toString().
+        job.error.put("fatal", Checks.fatal(error));
     }
 
     private void save(Job job) throws IOException {

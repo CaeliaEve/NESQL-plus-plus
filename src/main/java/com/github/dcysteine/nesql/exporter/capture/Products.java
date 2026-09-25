@@ -9,6 +9,8 @@ import net.minecraft.item.ItemArmor;
 import net.minecraft.item.ItemStack;
 import net.minecraft.nbt.NBTBase;
 import net.minecraft.nbt.NBTTagCompound;
+import net.minecraft.inventory.IInventory;
+import net.minecraft.inventory.InventoryBasic;
 import thaumcraft.api.crafting.InfusionRecipe;
 
 import java.util.HashMap;
@@ -43,6 +45,53 @@ final class Products {
             output.setTagCompound(tag);
             return output;
         }, facts, 0);
+    }
+
+    /** Native Automagy PreserveFilterRecipe: copy filter options from one input and
+     * metadata from the later filter input, while retaining the recipe's base item. */
+    static Products preserveFilter(Object recipe, List<List<MagicRecipes.Candidate>> inputs,
+                                   int configInput, int metadataInput, Facts facts) {
+        if (configInput < 0 || metadataInput < 0 || configInput == metadataInput) {
+            throw fault("PreserveFilter requires distinct configuration and metadata inputs");
+        }
+        ItemStack base = concrete((ItemStack) invoke(recipe.getClass(), recipe, "getRecipeOutput", new Class<?>[0]));
+        Map<String, JsonObject> samples = new HashMap<>();
+        ItemStack first = null;
+        List<MagicRecipes.Candidate> configs = inputs.get(configInput);
+        List<MagicRecipes.Candidate> metadata = inputs.get(metadataInput);
+        if (configs.isEmpty() || metadata.isEmpty()) throw fault("PreserveFilter has no concrete candidates");
+        for (MagicRecipes.Candidate meta : metadata) {
+            ItemStack representative = null;
+            for (MagicRecipes.Candidate config : configs) {
+                ItemStack result = nativeFilter(recipe, base, config.item, meta.item, inputs, configInput, metadataInput);
+                if (representative == null) representative = result;
+                else if (result.getItem() != representative.getItem()
+                        || result.getItemDamage() != representative.getItemDamage()
+                        || !ItemStack.areItemStackTagsEqual(result, representative)) {
+                    throw fault("PreserveFilter configuration alternatives produce different outputs; export requires a separate branch");
+                }
+            }
+            String id = facts.item(meta.item);
+            ItemStack result = concrete(representative);
+            if (first == null) first = result;
+            samples.put(id, object("id", facts.item(result), "amount", Integer.toString(result.stackSize)));
+        }
+        JsonObject action = object("kind", "filter", "base", object("id", facts.item(base), "amount", Integer.toString(base.stackSize)),
+                "config", configInput, "metadata", metadataInput);
+        return new Products(first, action, samples, metadataInput);
+    }
+
+    private static ItemStack nativeFilter(Object recipe, ItemStack base, ItemStack configuration, ItemStack metadata,
+                                          List<List<MagicRecipes.Candidate>> inputs, int configInput, int metadataInput) {
+        InventoryBasic inventory = new InventoryBasic("Automagy PreserveFilter", false, Math.max(2, inputs.size()));
+        for (int slot = 0; slot < inputs.size(); slot++) {
+            List<MagicRecipes.Candidate> candidates = inputs.get(slot);
+            if (!candidates.isEmpty()) inventory.setInventorySlotContents(slot, candidates.get(0).item.copy());
+        }
+        inventory.setInventorySlotContents(configInput, configuration.copy());
+        inventory.setInventorySlotContents(metadataInput, metadata.copy());
+        Object output = invoke(recipe.getClass(), recipe, "getCraftingResult", new Class<?>[] {IInventory.class}, inventory);
+        return concrete((ItemStack) output);
     }
 
     static Products infusion(InfusionRecipe recipe, List<ItemStack> centers, Facts facts) {
