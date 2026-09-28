@@ -20,6 +20,61 @@ function gameState(instance, state) {
   return { sources: { valid: true, rows: [{ id: 'nesql-exporter', valid: true, path: path.join(instance, 'fixture.jar') }] }, ...state };
 }
 
+test('AcceptanceCoordinator retains and archives native handler-open errors before checking counts', async t => {
+  for (const fatal of [false, true]) {
+    const instance = await fixture(path.join(os.tmpdir(), 'nesql-open-'));
+    t.after(() => rm(instance, { recursive: true, force: true }));
+    await mkdir(path.join(instance, 'nesql'));
+    const error = { code: 'handler_unsupported', message: 'No recipe loader for: example.NativeHandler', type: 'Jobs$Fault', fatal, cause: null };
+    const raw = Buffer.from(JSON.stringify({ rows: [{ handler: 'native', status: 'failed', error }] }));
+    const reportPath = path.join(instance, 'nesql', 'report.json');
+    await writeFile(reportPath, raw);
+    const coordinator = new AcceptanceCoordinator(instance);
+    let checks = 0;
+    coordinator.client = { session: 'test-session', request: async (method, url) => {
+      if (url === '/game') return gameState(instance, { ready: true, world: { folder: 'test-world' }, exporter: '0.15.0', revision: 14 });
+      if (url === '/checks') { checks++; return { id: 'native-job' }; }
+      if (url === '/jobs/native-job') return { job: { id: 'native-job', state: 'checked', report: { path: reportPath, bytes: raw.length, sha256: digestForTest(raw) } } };
+      throw new Error(`Unexpected request ${method} ${url}`);
+    } };
+    const plan = { world: 'test-world', modSha256, handlers: [{ id: 'native', name: 'Native' }, { id: 'tool', classification: 'tooling', implementationStatus: 'excluded_justified' }] };
+    if (fatal) await assert.rejects(() => coordinator.runPlan(plan), /Fatal.*handler/i);
+    else await coordinator.runPlan(plan);
+    const checkpoint = JSON.parse(await readFile(coordinator.checkpointPath));
+    assert.deepEqual(checkpoint.handlers.native.error, error);
+    assert.equal(checkpoint.handlers.native.status, 'failed');
+    assert.equal(checkpoint.handlers.native.checked, 0);
+    assert.equal(checks, 1);
+    assert.equal(checkpoint.archivedReports.length, 1);
+    assert.deepEqual(await readFile(checkpoint.archivedReports[0].archivePath), raw);
+    assert.equal(checkpoint.handlers.tool?.status, fatal ? undefined : 'excluded');
+  }
+});
+
+function digestForTest(bytes) { return createHash('sha256').update(bytes).digest('hex'); }
+
+test('AcceptanceCoordinator dispatches the recorded singular structure route to controller checks', async t => {
+  const instance = await fixture(path.join(os.tmpdir(), 'nesql-route-'));
+  t.after(() => rm(instance, { recursive: true, force: true }));
+  await mkdir(path.join(instance, 'nesql'));
+  const raw = Buffer.from(JSON.stringify({ rows: [{ controller: 17000, status: 'passed' }] }));
+  const reportPath = path.join(instance, 'nesql', 'structure.json');
+  await writeFile(reportPath, raw);
+  const coordinator = new AcceptanceCoordinator(instance);
+  let request;
+  coordinator.client = { session: 'test-session', request: async (method, url, body) => {
+    if (url === '/game') return gameState(instance, { ready: true, world: { folder: 'test-world' }, exporter: '0.15.0', revision: 14, structures: [{ controller: 17000 }] });
+    if (url === '/checks') { request = body; return { id: 'structure-job' }; }
+    if (url === '/jobs/structure-job') return { job: { id: 'structure-job', state: 'checked', report: { path: reportPath, bytes: raw.length, sha256: digestForTest(raw) } } };
+    throw new Error(`Unexpected request ${method} ${url}`);
+  } };
+  const checkpoint = await coordinator.runPlan({ world: 'test-world', modSha256, handlers: [{ id: 'structure', name: 'Structure', classification: 'domain', route: 'domain:structure' }] });
+  assert.equal(request.domain, 'structures');
+  assert.deepEqual(request.controllers, [17000]);
+  assert.equal(request.handlers, undefined);
+  assert.equal(checkpoint.handlers.structure.status, 'passed');
+});
+
 
 test('AcceptanceCoordinator handles 73-char IDs, keys <= 80 chars, pagination, and resume', async t => {
   const instance = await fixture(path.join(os.tmpdir(), 'nesql-coord-'));

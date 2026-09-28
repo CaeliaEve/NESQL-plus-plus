@@ -223,7 +223,7 @@ export class AcceptanceCoordinator {
 
       console.log(`[Coordinator] Processing ${item.name} (${handlerId}) from offset ${state.offset}...`);
 
-      const domain = item.domain === 'structures' || item.route === 'domain:structures' || item.route?.startsWith('structure:') ? 'structures' : 'recipes';
+      const domain = item.domain === 'structures' || ['domain:structure', 'domain:structures'].includes(item.route) || item.route?.startsWith('structure:') ? 'structures' : 'recipes';
       if ((item.classification === 'domain' || item.classification === 'interactive') && domain !== 'structures') {
         // Domain and interactive work is validated by the export pipeline, not
         // by recipe pagination. Require a declared export dataset and record
@@ -403,7 +403,22 @@ export class AcceptanceCoordinator {
           break;
         }
 
+        // Opening a handler can fail before it has a recipe count. Preserve the
+        // producer's cause and severity before validating pagination fields.
+        if (row.status === 'failed' && row.error) {
+          const archive = await this.archiveReport(job, rawReport, [row]);
+          checkpoint.archivedReports.push(archive);
+          state.status = 'failed';
+          state.hasFailures = true;
+          state.error = row.error;
+          checkpoint.failures.push({ handler: handlerId, offset: state.offset, error: row.error });
+          await this.saveCheckpoint(checkpoint);
+          if (isFatalError(row.error)) throw new Error(`Fatal handler failure in ${handlerId}: ${row.error.message || 'unknown'}`);
+          break;
+        }
+
         if (row.status === 'unsupported') {
+          checkpoint.archivedReports.push(await this.archiveReport(job, rawReport, [row]));
           state.status = 'failed';
           state.error = { code: 'handler_unsupported', message: row.reason || 'Handler is unsupported' };
           checkpoint.failures.push({ handler: handlerId, offset: state.offset, error: state.error });
