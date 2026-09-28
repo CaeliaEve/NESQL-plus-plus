@@ -169,14 +169,14 @@ final class ChecksTest {
                     && row.getAsJsonArray("failedRecipes").size() == 1 && row.getAsJsonArray("failedRecipes").get(0).getAsInt() == 11,
                     "Fatal recipe mismatch continued or the report claimed the unvisited tail was checked");
             Jobs.Request range = Checks.request(object("key", "recipe-range", "world", "test-copy", "domain", "recipes", "offset", 5, "limit", 8));
-            Jobs.Job checked = await(jobs, jobs.start(range).id);
+            Jobs.Job checked = await(jobs, startAfterTerminal(jobs, range).id);
             row = readReport(scope, checked.id);
             require(checked.state.equals("checked") && checked.report.failed == 1 && attempts.get("recipe-range").size() == 8
                     && row.get("checkedRecipes").getAsInt() == 8 && row.get("unexamined").getAsInt() == 12
                     && row.getAsJsonArray("failedRecipes").size() == 2 && row.getAsJsonArray("excludedRecipes").size() == 1,
                     "Bounded diagnostic ranges lost independent failures, excluded recipes or actual coverage");
             Jobs.Request many = Checks.request(object("key", "recipe-many", "world", "test-copy", "domain", "recipes", "limit", 65));
-            Jobs.Job complete = await(jobs, jobs.start(many).id);
+            Jobs.Job complete = await(jobs, startAfterTerminal(jobs, many).id);
             row = readReport(scope, complete.id);
             require(complete.state.equals("checked") && row.getAsJsonArray("failedRecipes").size() == 65
                     && row.getAsJsonArray("failures").size() == 32 && row.getAsJsonArray("failureFiles").size() == 65,
@@ -255,6 +255,19 @@ final class ChecksTest {
                 && timing.get("runMicros").getAsString().equals(Long.toString(run))
                 && timing.get("maxMicros").getAsString().equals(Long.toString(maximum)), "Report lost observed timing values");
         phases.forEach((name, micros) -> require(result.getAsJsonObject("phases").get(name).getAsString().equals(Long.toString(micros)), "Phase timing changed"));
+    }
+
+    private static Jobs.Job startAfterTerminal(Jobs jobs, Jobs.Request request) throws Exception {
+        // A persisted terminal result can be read before execute() releases its
+        // final journal lock. Keep the real busy guard; wait for that handoff.
+        long end = System.nanoTime() + TimeUnit.SECONDS.toNanos(5);
+        while (true) {
+            try { return jobs.start(request); }
+            catch (Jobs.Fault error) {
+                if (!error.code.equals("export_busy") || System.nanoTime() >= end) throw error;
+                Thread.sleep(5);
+            }
+        }
     }
 
     private static Jobs.Job await(Jobs jobs, String id) throws Exception {
