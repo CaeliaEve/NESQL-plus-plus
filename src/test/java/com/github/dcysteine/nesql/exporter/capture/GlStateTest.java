@@ -7,9 +7,18 @@ import org.lwjgl.opengl.*;
 /** Real, invisible OpenGL context: attribute restoration must target the caller's framebuffer. */
 public final class GlStateTest {
     public static void main(String[] args) throws Exception {
-        Pbuffer context = new Pbuffer(32, 32, new PixelFormat().withDepthBits(24), null, null);
+        // Xvfb/Mesa may expose GLX window configs without LWJGL 2 Pbuffer configs.
+        // Its window lives only on the CI virtual display; local runs stay invisible.
+        boolean window = System.getenv("NESQL_GL_WINDOW") != null;
+        Pbuffer context = null;
+        if (window) {
+            Display.setDisplayMode(new DisplayMode(32, 32));
+            Display.create(new PixelFormat().withDepthBits(24));
+        } else {
+            context = new Pbuffer(32, 32, new PixelFormat().withDepthBits(24), null, null);
+        }
         try {
-            context.makeCurrent();
+            if (context != null) context.makeCurrent();
             System.out.println("OpenGL: " + GL11.glGetString(GL11.GL_VERSION) + "; " + GL11.glGetString(GL11.GL_RENDERER));
             OpenGlHelper.defaultTexUnit = GL13.GL_TEXTURE0;
             OpenGlHelper.lightmapTexUnit = GL13.GL_TEXTURE1;
@@ -86,7 +95,7 @@ public final class GlStateTest {
             require(rejected, "unchecked renderer errors cannot leak into the next capture");
             clean("after failed capture");
             System.out.println("OpenGL restoration checks passed");
-        } finally { context.destroy(); }
+        } finally { if (context != null) context.destroy(); else Display.destroy(); }
     }
 
     private static void clean(String phase) {
