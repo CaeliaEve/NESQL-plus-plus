@@ -1,5 +1,6 @@
 package com.github.dcysteine.nesql.exporter.capture;
 
+import com.github.dcysteine.nesql.exporter.task.Jobs;
 import net.minecraft.client.renderer.OpenGlHelper;
 import org.lwjgl.opengl.GL11;
 import org.lwjgl.opengl.GL13;
@@ -10,21 +11,28 @@ import org.lwjgl.opengl.GL30;
 
 /** Offscreen captures restore both fixed-function state and the bindings not covered by pushAttrib. */
 final class GlState implements AutoCloseable {
-    private final int matrix = GL11.glGetInteger(GL11.GL_MATRIX_MODE);
-    private final int texture = GL11.glGetInteger(GL13.GL_ACTIVE_TEXTURE);
-    private final int draw = GL11.glGetInteger(GL30.GL_DRAW_FRAMEBUFFER_BINDING);
-    private final int read = GL11.glGetInteger(GL30.GL_READ_FRAMEBUFFER_BINDING);
-    private final int program = GL11.glGetInteger(GL20.GL_CURRENT_PROGRAM);
-    private final int packBuffer = GL11.glGetInteger(GL21.GL_PIXEL_PACK_BUFFER_BINDING);
+    private final String location;
+    private final int matrix, texture, draw, read, program, packBuffer;
     private final int[] bindings = new int[2];
     private final int[] units = { OpenGlHelper.defaultTexUnit, OpenGlHelper.lightmapTexUnit };
 
-    GlState() {
+    GlState() { this("capture state"); }
+
+    GlState(String location) {
+        check(location, "entry");
+        this.location = location;
+        matrix = GL11.glGetInteger(GL11.GL_MATRIX_MODE);
+        texture = GL11.glGetInteger(GL13.GL_ACTIVE_TEXTURE);
+        draw = GL11.glGetInteger(GL30.GL_DRAW_FRAMEBUFFER_BINDING);
+        read = GL11.glGetInteger(GL30.GL_READ_FRAMEBUFFER_BINDING);
+        program = GL11.glGetInteger(GL20.GL_CURRENT_PROGRAM);
+        packBuffer = GL11.glGetInteger(GL21.GL_PIXEL_PACK_BUFFER_BINDING);
         for (int index = 0; index < units.length; index++) {
             OpenGlHelper.setActiveTexture(units[index]);
             bindings[index] = GL11.glGetInteger(GL11.GL_TEXTURE_BINDING_2D);
         }
         OpenGlHelper.setActiveTexture(texture);
+        check(location, "snapshot");
         GL11.glPushAttrib(GL11.GL_ALL_ATTRIB_BITS);
         GL11.glPushClientAttrib(GL11.GL_CLIENT_PIXEL_STORE_BIT | GL11.GL_CLIENT_VERTEX_ARRAY_BIT);
         GL11.glMatrixMode(GL11.GL_PROJECTION); GL11.glPushMatrix();
@@ -34,9 +42,11 @@ final class GlState implements AutoCloseable {
     @Override public void close() {
         GL11.glMatrixMode(GL11.GL_MODELVIEW); GL11.glPopMatrix();
         GL11.glMatrixMode(GL11.GL_PROJECTION); GL11.glPopMatrix();
-        GL11.glPopClientAttrib(); GL11.glPopAttrib();
+        // glPopAttrib restores draw/read buffer selections. GL_BACK from the window is
+        // invalid while our offscreen FBO is bound; restore its owner before its state.
         OpenGlHelper.func_153171_g(GL30.GL_DRAW_FRAMEBUFFER, draw);
         OpenGlHelper.func_153171_g(GL30.GL_READ_FRAMEBUFFER, read);
+        GL11.glPopClientAttrib(); GL11.glPopAttrib();
         GL20.glUseProgram(program);
         GL15.glBindBuffer(GL21.GL_PIXEL_PACK_BUFFER, packBuffer);
         for (int index = 0; index < units.length; index++) {
@@ -45,5 +55,12 @@ final class GlState implements AutoCloseable {
         }
         OpenGlHelper.setActiveTexture(texture);
         GL11.glMatrixMode(matrix);
+        check(location, "restore");
+    }
+
+    static void check(String location, String phase) {
+        int error = GL11.glGetError();
+        if (error != GL11.GL_NO_ERROR)
+            throw new Jobs.Fault("render_failed", "OpenGL error " + error + " capturing " + location + " at " + phase);
     }
 }

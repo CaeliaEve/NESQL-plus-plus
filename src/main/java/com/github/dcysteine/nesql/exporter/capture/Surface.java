@@ -26,7 +26,8 @@ final class Surface implements AutoCloseable {
     private byte[] run(int width, int height, int logicalWidth, int logicalHeight, int depth, String location, Runnable draw, boolean read) {
         Jobs.checkpoint();
         if (width < 1 || height < 1 || width > 4096 || height > 4096) throw new Jobs.Fault("texture_limit", "Invalid capture dimensions");
-        try (GlState state = new GlState()) {
+        try (GlState state = new GlState(location)) {
+            GlState.check(location, "save");
             // Growing only when necessary avoids per-recipe framebuffer and direct-buffer allocation.
             if (target == null || target.framebufferWidth < width || target.framebufferHeight < height) {
                 int capacityWidth = target == null ? width : Math.max(width, target.framebufferWidth);
@@ -52,9 +53,9 @@ final class Surface implements AutoCloseable {
             OpenGlHelper.setActiveTexture(OpenGlHelper.defaultTexUnit);
             GL11.glEnable(GL11.GL_TEXTURE_2D);
             RenderHelper.disableStandardItemLighting();
+            GlState.check(location, "setup");
             draw.run();
-            int error = GL11.glGetError();
-            if (error != GL11.GL_NO_ERROR) throw new Jobs.Fault("render_failed", "OpenGL error " + error + " capturing " + location);
+            GlState.check(location, "draw");
             if (!read) return null;
             target.bindFramebuffer(false);
             GL15.glBindBuffer(GL21.GL_PIXEL_PACK_BUFFER, 0);
@@ -65,8 +66,7 @@ final class Surface implements AutoCloseable {
             int length = width * height * 4;
             pixels.clear(); pixels.limit(length);
             GL11.glReadPixels(0, 0, width, height, GL11.GL_RGBA, GL11.GL_UNSIGNED_BYTE, pixels);
-            error = GL11.glGetError();
-            if (error != GL11.GL_NO_ERROR) throw new Jobs.Fault("render_failed", "OpenGL error " + error + " capturing " + location);
+            GlState.check(location, "read");
             byte[] copy = new byte[length];
             pixels.get(copy);
             return copy;

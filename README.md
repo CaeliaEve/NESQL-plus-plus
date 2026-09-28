@@ -73,7 +73,9 @@ node scripts/release.mjs
 
 ## 验证状态
 
-当前开发版本为 NESQL++ 0.15.4、source/catalog 修订 14；真实 GTNH 安装、完整导出、Compiler 实机编译及 NeoNEI 在线/离线验收仍需在批准的集中计划中执行。
+当前开发版本为 NESQL++ 0.15.5、source/catalog 修订 14。0.15.4 的资源/JAR 字节匹配实机试验通过，但熔炉和粉碎机的视觉导出在共同要素图标阶段失败，尚未生成本轮 Source/Catalog。
+
+0.15.5 修正离屏捕获恢复顺序：先绑定调用方的读写帧缓冲，再恢复包含读写缓冲选择的属性。否则默认画面的缓冲选择在捕获 FBO 上触发 GL_INVALID_OPERATION，并污染下一次捕获。错误检查现在注明 entry/snapshot/save/setup/draw/read/restore 检测阶段；错误仍中止捕获，不跳过图标或生成替代素材。`./gradlew glTest` 使用不可见 Pbuffer 验证真实 OpenGL 状态、重复捕获、异常恢复和像素读回；需要图形驱动，Linux CI 使用 Xvfb/Mesa。该测试不启动 Minecraft，真实游戏导出及下游在线/离线验收仍待执行。
 
 
 source/catalog 修订为 14。匹配规则属于每个输入候选；网格形状独立于截图保存，研究观察状态不进入配方内容 ID。构建变体与环境中的请求参数逐项对应。TCWands 的普通法杖组合从最终 ShapedArcaneRecipe 注册表读取；Salis 换芯/换端按部件、形态与配置惰性枚举，保留原生 NBT 变换、独立材料槽位与自行供能条件。施法手环和一次性法杖按目标子类的实际语义处理。未知 IArcaneRecipe、未核实的配方覆写和自定义 NBT 函数仍明确失败。
@@ -88,7 +90,7 @@ GT 的统一方块实体入口仅在 MTE 实现 IMTERenderer 时绘制附加几�
 
 动态视图使用 `clip` 元素引用共享 `tracks`。GT 默认、净水、装配线、太空装配、太空项目与研究站的已核实工厂使用独立窗口、物品栏和注入时钟，保存普通/分段/环形填充的原生像素步进。图层按原生顺序排列，文字覆盖层独立保存；太空项目纹理按当前配方读取，绘制后恢复共享字段。原版熔炉保留其 48 tick 箭头与火焰周期。轨迹只代表界面演示，不能作为实际机器进度；未知工厂、嵌套进度或控件覆写会报告 `view_unsupported`，其他自定义交互仍需继续适配。
 
-Java source/jobs 行为检查、真实本机 HTTP 端点、MCP SDK stdio 握手/工具调用、生产 jar 校验已通过。尚未在运行中的 GTNH 世界部署验证；不能据此宣称 GL 兼容性、全量性能或所有领域已经验收。
+Java source/jobs 行为检查、真实本机 HTTP 端点、MCP SDK stdio 握手/工具调用、生产 jar 校验已通过。以上不等于全量性能、全部 GL 渲染器或所有领域的实机验收。
 
 协议、目录和任务语义见 [docs/mcp.md](docs/mcp.md)。
 

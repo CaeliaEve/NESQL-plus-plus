@@ -88,6 +88,23 @@ tasks.named<JavaExec>("sourceTest") {
     project.findProperty("sourceFixture")?.toString()?.let { args(it) }
 }
 
+// Requires a real compatibility OpenGL context (Pbuffer); run explicitly or under Xvfb in CI.
+val glNatives by configurations.creating
+val nativePlatform = if (System.getProperty("os.name").startsWith("Windows")) "windows" else "linux"
+dependencies { glNatives("org.lwjgl.lwjgl:lwjgl-platform:2.9.1:natives-$nativePlatform") }
+val unpackGlNatives = tasks.register<Copy>("unpackGlNatives") {
+    from({ glNatives.map { zipTree(it) } })
+    into("$buildDir/gl-natives")
+}
+tasks.register<JavaExec>("glTest") {
+    group = "verification"
+    description = "Checks capture state on a real offscreen OpenGL context."
+    dependsOn("testClasses", unpackGlNatives)
+    classpath = sourceSets.test.get().runtimeClasspath + gameLibraries
+    main = "com.github.dcysteine.nesql.exporter.capture.GlStateTest"
+    systemProperty("org.lwjgl.librarypath", file("$buildDir/gl-natives").absolutePath)
+}
+
 tasks.withType<Jar> {
     archiveBaseName.set("NESQL++")
     filesMatching("mcmod.info") {
