@@ -217,6 +217,7 @@ public final class Jobs implements AutoCloseable {
         public Result result;
         public Checks.Summary report;
         public JsonObject operation;
+        public JsonObject provenance;
         public Map<String, Object> error;
         private transient Thread thread;
         private transient boolean cancelled;
@@ -240,6 +241,24 @@ public final class Jobs implements AutoCloseable {
 
         public Request request() { return job.request; }
         public String id() { return job.id; }
+
+        /** Persist before capture; failures keep the identity but cannot publish a Source. */
+        public void provenance(JsonObject environment, String session) throws IOException {
+            JsonObject value = com.github.dcysteine.nesql.exporter.source.Provenance.capture(environment, job.request, session);
+            synchronized (Jobs.this) {
+                check();
+                if (job.terminal()) throw new IllegalStateException("Job already completed");
+                if (job.provenance != null && !job.provenance.equals(value)) throw new Fault("environment_changed", "Capture provenance changed");
+                job.provenance = value;
+                save(job, false);
+            }
+        }
+
+        public JsonObject provenance() {
+            synchronized (Jobs.this) {
+                return job.provenance == null ? null : new com.google.gson.JsonParser().parse(job.provenance.toString()).getAsJsonObject();
+            }
+        }
 
         private void observe(JsonObject operation) throws IOException {
             synchronized (Jobs.this) {

@@ -30,6 +30,7 @@ public final class SourceTest {
         Path root = args.length == 0 ? Files.createTempDirectory("nesql-source-") : Paths.get(args[0]);
         Files.createDirectories(root);
         identities();
+        ProvenanceTest.run();
         ResourcesTest.run(root.resolve("resources"));
         probabilities();
         geometry();

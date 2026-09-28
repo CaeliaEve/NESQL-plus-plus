@@ -110,6 +110,7 @@ public final class Checks {
             this.record = object("format", "nesql.check", "job", context.id(), "created", Instant.now().toString(),
                     "request", new com.google.gson.Gson().toJsonTree(context.request()), "environment", environment,
                     "status", "running", "rows", rows);
+            if (context.provenance() != null) record.add("provenance", context.provenance());
             save();
         }
 

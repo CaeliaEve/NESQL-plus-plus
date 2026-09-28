@@ -40,6 +40,7 @@ final class Audit {
         });
         context.progress("check_plan", 0, 0, "Fingerprinting the diagnostic environment");
         JsonObject environment = Environment.capture(session, instance, request);
+        context.provenance(environment, session.identity());
         String fingerprint = CanonicalJson.digest(environment), locale = environment.get("locale").getAsString();
         Map<Integer, Structures.Machine> structures = new TreeMap<>();
         Map<String, Recipes.Handler> handlers = new TreeMap<>();

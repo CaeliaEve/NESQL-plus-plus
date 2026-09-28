@@ -53,3 +53,36 @@ drift and resource checks still need user-arranged live validation.
 the ordinary Java fixture. These are explicitly test inputs, not real GTNH data.
 The old diagnostic retry identity treats an absent resource selection as empty,
 so adding this capability does not invalidate previous structure/recipe history.
+
+## Capture provenance
+
+NESQL 0.15.2 records `provenance` on export jobs and diagnostics before work
+begins, and includes it in native check reports. Revision 1 contains:
+
+- `environment`: the full canonical environment digest, unchanged.
+- `runtime`: that environment with only `probes`, `settings.profile` and
+  `settings.handlers` removed. All other settings, inputs, loaded mods, resource
+  order, language and knowledge remain identity-bearing.
+- `selection`: canonical serialized request without the retry `key` or display
+  `name`. World, profile, handlers, probes and diagnostic range remain covered.
+- `session`: opaque process-local digest for the world/player/resource lifetime.
+  A reload, world exit, player replacement or new process invalidates it. Two
+  jobs in one unchanged lifetime share it; stored completed jobs retain their
+  original identity but cannot establish a new live session.
+
+Provenance supplements the Source identity; it does not change Source revision
+14 or put random session identifiers into domain records. A full export and a
+resource check can share runtime/session while retaining different complete
+environment and selection digests. This is a prerequisite for fragment recovery,
+not permission to reuse arbitrary recipe ranges or cross-restart game facts.
+
+The Compiler can now compare a resource report with a succeeded export job and
+its verified Source using `resolve --source ... --capture ... --capture-sha256 ...`.
+Both tasks must explicitly target the same world, share runtime/session, and have
+valid complete provenance. Old reports remain usable as byte observations only;
+missing provenance cannot be used to attach them to a Source.
+
+The offline fixture now produces `resources/capture.json` from the actual job
+journal and a small formal Source under `resources/datasets`. It checks persisted
+provenance, independent request scopes and a native-resource PNG alongside the
+language override. It does not exercise a live world, rendering or game reload.

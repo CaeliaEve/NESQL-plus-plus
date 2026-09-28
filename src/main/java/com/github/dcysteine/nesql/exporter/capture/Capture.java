@@ -96,6 +96,7 @@ public final class Capture implements Jobs.Task {
         List<gregtech.api.enums.Materials> materials = session.call(GtMaterials::all);
         context.progress("environment", 0, 1, "Fingerprinting loaded mods, configuration, scripts and resource packs");
         JsonObject environment = Environment.capture(session, instance, request);
+        context.provenance(environment, session.identity());
         Facts facts = new Facts(environment.get("locale").getAsString());
         Path workRoot = directory.resolve("work");
         Dataset.directory(workRoot);

@@ -17,6 +17,7 @@ public final class ClientThread implements net.minecraft.client.resources.IResou
     private volatile String reason = "The client has not ticked yet";
     private volatile long longestMicros;
     private long resources;
+    private final Epoch epoch = new Epoch();
 
     public boolean ready() { return ready && System.nanoTime() - lastTick < TimeUnit.SECONDS.toNanos(5); }
     public String reason() { return ready() ? null : ready ? "The client is not responding" : reason; }
@@ -30,7 +31,12 @@ public final class ClientThread implements net.minecraft.client.resources.IResou
         private final Object world;
         private final Object player;
         private final long generation;
-        private Session(Minecraft game) { world = game.theWorld; player = game.thePlayer; generation = resources; }
+        private final String identity;
+        private Session(Minecraft game) {
+            world = game.theWorld; player = game.thePlayer; generation = resources;
+            identity = epoch.observe(world, player);
+        }
+        public String identity() throws Exception { return call("session", () -> identity); }
         public <T> T call(Callable<T> action) throws Exception {
             return call("client", action);
         }
@@ -39,12 +45,13 @@ public final class ClientThread implements net.minecraft.client.resources.IResou
                 Minecraft game = Minecraft.getMinecraft();
                 if (game.theWorld != world || game.thePlayer != player) throw new Jobs.Fault("world_changed", "The export's world or player changed");
                 if (generation != resources) throw new Jobs.Fault("resources_changed", "Game resources were reloaded during export");
+                if (!identity.equals(epoch.observe(game.theWorld, game.thePlayer))) throw new Jobs.Fault("world_changed", "The export session ended");
                 return action.call();
             }, true, Jobs.observer());
         }
     }
 
-    @Override public void onResourceManagerReload(net.minecraft.client.resources.IResourceManager manager) { resources++; }
+    @Override public void onResourceManagerReload(net.minecraft.client.resources.IResourceManager manager) { resources++; epoch.reload(); }
 
     public void requireWorld() {
         if (!ready()) throw new Jobs.Fault("world_unavailable", reason());
@@ -97,6 +104,7 @@ public final class ClientThread implements net.minecraft.client.resources.IResou
         thread = Thread.currentThread();
         lastTick = System.nanoTime();
         Minecraft game = Minecraft.getMinecraft();
+        epoch.observe(game.theWorld, game.thePlayer);
         ready = game.theWorld != null && game.thePlayer != null && game.isSingleplayer();
         reason = game.theWorld == null || game.thePlayer == null
                 ? "Load a single-player world before exporting" : "Only local single-player export is supported";

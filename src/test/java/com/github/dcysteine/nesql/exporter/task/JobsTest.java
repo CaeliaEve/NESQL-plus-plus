@@ -15,6 +15,7 @@ public final class JobsTest {
     public static void main(String[] args) throws Exception {
         Path root = Files.createTempDirectory("nesql-jobs-");
         WorkTest.run();
+        EpochTest.run();
         Path checks = root.resolve("diagnostics"); Files.createDirectories(checks); ChecksTest.run(checks);
         CountDownLatch began = new CountDownLatch(1);
         CountDownLatch cleanup = new CountDownLatch(1);

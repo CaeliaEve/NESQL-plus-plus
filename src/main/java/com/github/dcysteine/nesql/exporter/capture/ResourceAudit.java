@@ -28,6 +28,7 @@ final class ResourceAudit {
         guard.check();
         context.progress("check_plan", 0, 1, "Fingerprinting native resource environment");
         JsonObject environment = Environment.capture(session, instance, request);
+        context.provenance(environment, session.identity());
         JsonArray rows = new JsonArray();
         for (String resource : request.check.resources) rows.add(object("resource", resource, "status", "pending"));
         Checks.Report report = new Checks.Report(instance.resolve("nesql/checks"), context, environment, rows);
