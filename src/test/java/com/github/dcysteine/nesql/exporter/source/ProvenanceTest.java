@@ -15,6 +15,7 @@ final class ProvenanceTest {
         JsonObject full = copy(data);
         full.getAsJsonObject("settings").addProperty("profile", "full");
         full.getAsJsonObject("settings").addProperty("handlers", "b");
+        full.getAsJsonObject("settings").addProperty("scope", "recipes");
         full.add("probes", array(new Probe(4, Collections.emptyMap()).json()));
         String runtime = Provenance.runtime(data);
         require(runtime.equals(Provenance.runtime(full)), "Capture scope changed the runtime identity");

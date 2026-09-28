@@ -30,6 +30,17 @@ import static com.github.dcysteine.nesql.exporter.source.Json.*;
 
 /** Explicit enumeration adapters. An unsupported handler is an error, never an empty recipe list. */
 final class Recipes {
+    enum Adapter { GT, MAGIC, FURNACE, SHAPED, SHAPELESS }
+
+    static Adapter adapter(ICraftingHandler handler) {
+        if (GtRecipes.supports(handler)) return Adapter.GT;
+        if (MagicRecipes.supports(handler)) return Adapter.MAGIC;
+        if (handler.getClass() == FurnaceRecipeHandler.class) return Adapter.FURNACE;
+        if (handler.getClass() == ShapedRecipeHandler.class) return Adapter.SHAPED;
+        if (handler.getClass() == ShapelessRecipeHandler.class) return Adapter.SHAPELESS;
+        return null;
+    }
+
     static List<Handler> handlers() {
         Map<String, Handler> result = new LinkedHashMap<>();
         List<ICraftingHandler> registered = new ArrayList<>(GuiCraftingRecipe.craftinghandlers);
@@ -49,6 +60,7 @@ final class Recipes {
         final JsonObject origin;
         final String id, name;
         final boolean supported;
+        final Adapter adapter;
         final int order;
 
         Handler(ICraftingHandler handler, int order) {
@@ -67,8 +79,8 @@ final class Recipes {
             if (key == null || key.isEmpty()) throw new Jobs.Fault("handler_identity", "NEI handler has no identity: " + handler.getClass().getName());
             origin = object("owner", owner, "handler", handler.getClass().getName(), "key", key);
             id = Identity.origin("category", origin);
-            supported = GtRecipes.supports(handler) || MagicRecipes.supports(handler)
-                    || handler instanceof FurnaceRecipeHandler || handler instanceof ShapedRecipeHandler || handler instanceof ShapelessRecipeHandler;
+            adapter = adapter(handler);
+            supported = adapter != null;
         }
 
         JsonObject describe() {
@@ -92,15 +104,15 @@ final class Recipes {
             GtRecipes gt = null;
             MagicRecipes magic = null;
             try {
-                if (handler instanceof GTNEIDefaultHandler) {
+                if (adapter == Adapter.GT) {
                     GTNEIDefaultHandler machine = (GTNEIDefaultHandler) handler;
                     handler.arecipes.addAll(machine.getCache());
                     gt = new GtRecipes(machine, views, id);
-                } else if (MagicRecipes.supports(handler)) {
+                } else if (adapter == Adapter.MAGIC) {
                     magic = new MagicRecipes(handler);
-                } else if (handler instanceof FurnaceRecipeHandler) {
+                } else if (adapter == Adapter.FURNACE) {
                     handler.loadCraftingRecipes("smelting");
-                } else if (handler.getClass() == ShapedRecipeHandler.class || handler.getClass() == ShapelessRecipeHandler.class) {
+                } else if (adapter == Adapter.SHAPED || adapter == Adapter.SHAPELESS) {
                     handler.loadCraftingRecipes("crafting");
                 } else {
                     throw new Jobs.Fault("handler_unsupported", "No recipe loader for: " + handler.getClass().getName());

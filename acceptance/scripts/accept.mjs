@@ -6,14 +6,17 @@ import { readFile, writeFile, mkdir, stat } from 'node:fs/promises';
 import path from 'node:path';
 import { fileURLToPath, pathToFileURL } from 'node:url';
 import { parseArgs, promisify } from 'node:util';
+import { selection } from './selection.mjs';
 
 const root = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..');
 const { values, positionals } = parseArgs({ options: {
   config: { type: 'string', default: path.join(root, 'acceptance.json') },
   key: { type: 'string' }, browser: { type: 'boolean', default: false },
   controllers: { type: 'string' }, handlers: { type: 'string' }, offset: { type: 'string' }, limit: { type: 'string' },
+  scope: { type: 'string' }, resources: { type: 'string' },
 }, allowPositionals: true, strict: true });
 const [command = 'prepare', argument] = positionals;
+if (values.scope !== undefined) assert.ok(command === 'start' && values.scope === 'recipes', '--scope recipes is only valid for start');
 assert.ok(['prepare', 'inspect', 'start', 'status', 'cancel', 'collect', 'verify', 'serve', 'check', 'scan', 'retry', 'report'].includes(command), 'Unknown acceptance command');
 assert.ok(positionals.length <= 2, 'Too many arguments');
 const config = JSON.parse(await readFile(values.config, 'utf8'));
@@ -127,24 +130,6 @@ async function startCheck(call, request) {
   return { job: job.id, state: job.state, domain: request.domain, diagnostic: true, request };
 }
 
-function selection(state, phase) {
-  assert.ok(['data', 'visuals', 'magic'].includes(phase), 'Choose data, visuals or magic');
-  const available = state.handlers.filter(handler => handler.supported);
-  let handlers;
-  if (phase === 'magic') handlers = available.filter(handler => handler.source.handler.startsWith('ru.timeconqueror.tcneiadditions.nei.'));
-  else {
-    const furnace = available.find(handler => handler.source.handler === 'codechicken.nei.recipe.FurnaceRecipeHandler');
-    const machines = available.filter(handler => handler.source.handler === 'gregtech.nei.GTNEIDefaultHandler');
-    const machine = machines.find(handler => handler.source.key === 'gt.recipe.macerator/gt.recipe.macerator')
-      ?? machines.find(handler => /macerat/i.test(handler.source.key)) ?? machines[0];
-    assert.ok(furnace && machine, 'The acceptance run needs the furnace and one GT handler');
-    handlers = [furnace, machine];
-  }
-  assert.ok(handlers.length > 0, 'No matching supported handlers; an empty selection would request all handlers');
-  return { phase, scope: 'selection', complete: false, selected: handlers,
-    registered: state.handlers.length, supported: available.length, unsupported: state.handlers.filter(handler => !handler.supported) };
-}
-
 async function web(catalogRoot, screenshot, keep = false) {
   const require = createRequire(path.join(config.web, 'backend/package.json'));
   const { createApp } = require(path.join(config.web, 'backend/dist/app.js'));
@@ -175,8 +160,9 @@ async function web(catalogRoot, screenshot, keep = false) {
       browser = await playwright.chromium.launch({ headless: true });
       const page = await browser.newPage({ viewport: { width: 1440, height: 1000 } });
       const errors = []; page.on('pageerror', error => errors.push(error.message));
-      await page.goto(url + (sample ? `/recipe/${sample.id}?catalog=${manifest.id}` : '/'));
-      await page.locator(sample ? '.recipe-card' : '.browser-cell').first().waitFor({ state: 'visible', timeout: 60000 });
+      await page.goto(url + (sample ? `/recipe-by-id/${sample.id}?catalog=${manifest.id}` : `/?catalog=${manifest.id}`));
+      await page.locator(sample ? `.catalog-recipe [data-recipe="${sample.id}"]` : '.native-browser-surface__fallback-item').first().waitFor({ state: 'visible', timeout: 60000 });
+      assert.equal(await page.locator('[role="alert"]').count(), 0, 'The catalog displayed an error');
       await page.screenshot({ path: screenshot, fullPage: true });
       assert.deepEqual(errors, [], 'The real catalog failed in the browser');
     }
@@ -243,23 +229,28 @@ try {
           registered: state.handlers?.length ?? 0, supported: state.handlers?.filter(handler => handler.supported).length ?? 0 };
       }
       if (command === 'start') {
-        const phase = argument ?? 'data', state = await inspect(call, true), plan = selection(state, phase);
+        const phase = argument ?? 'data', state = await inspect(call, true), plan = selection(state, phase, values.handlers);
+        if (values.scope) assert.ok(state.scopes?.includes(values.scope), 'The running game does not expose this capture scope');
         await record(phase + '-coverage.json', plan);
         let previous;
         try { previous = await json(path.join(reports, phase + '-request.json')); } catch (error) { if (error.code !== 'ENOENT') throw error; }
         const key = id(values.key ?? previous?.key ?? `accept-${phase}-${randomUUID().slice(0, 8)}`);
         const request = { key, name: 'gtnh-' + phase, world: config.world, profile: phase === 'data' ? 'data' : 'full',
           handlers: plan.selected.map(handler => handler.id).sort(), probes: [{ count: 1, channels: {} }] };
+        if (values.scope) request.scope = values.scope;
         if (previous?.key === key) assert.deepEqual(request, previous, 'Retry parameters changed; use a new --key after reviewing the new selection');
         await record(key + '-request.json', request); await record(phase + '-request.json', request);
         const job = await call('start_export', request); await record(id(job.id) + '-job.json', job);
         return { job: job.id, state: job.state, scope: 'selection', selected: plan.selected.map(handler => handler.name), registered: plan.registered };
       }
       if (command === 'scan') {
-        assert.ok(['structures', 'recipes'].includes(argument), 'scan requires structures or recipes');
+        assert.ok(['structures', 'recipes', 'resources'].includes(argument), 'scan requires structures, recipes or resources');
         await inspect(call, true, true);
         const request = { domain: argument, probes: [{ count: 1, channels: {} }] };
-        if (argument === 'structures') {
+        if (argument === 'resources') {
+          assert.ok(values.resources && values.handlers === undefined && values.controllers === undefined && values.offset === undefined && values.limit === undefined, 'Resource checks require explicit resources only');
+          request.resources = values.resources.split(',');
+        } else if (argument === 'structures') {
           assert.ok(values.handlers === undefined && values.offset === undefined && values.limit === undefined, 'Recipe options cannot select structures');
           if (values.controllers !== undefined) request.controllers = values.controllers.split(',').map(value => natural(value, 'controller', 0, 32767)).sort((a, b) => a - b);
         } else {
@@ -273,7 +264,7 @@ try {
       if (command === 'cancel') { const job = await call('cancel_export', { id: id(argument) }); return await record(id(job.id) + '-job.json', job); }
       const { job } = await call('read_job', argument ? { id: id(argument) } : {});
       assert.ok(job, 'No export job exists'); await record(id(job.id) + '-job.json', job);
-      if (command === 'status') return { id: job.id, state: job.state, stage: job.stage, completed: job.completed, total: job.total, operation: job.operation, report: job.report, error: job.error, result: job.result };
+      if (command === 'status') return { id: job.id, state: job.state, stage: job.stage, completed: job.completed, total: job.total, operation: job.operation, report: job.report, fragments: job.fragments, error: job.error, result: job.result };
       if (command === 'report') {
         const report = await checkReport(job);
         return { job: job.id, state: job.state, ...job.report, localReport: path.join(reports, job.id + '-check.json'), status: report.status };

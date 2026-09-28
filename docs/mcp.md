@@ -155,6 +155,16 @@ MagicRecipe.payment 保存允许以待替换法杖付款的配置、输入槽、
 
 图标与配方场景分别复用 framebuffer 和读回缓冲区。每次捕获恢复 GL 状态；关闭时在游戏线程释放资源。任务关闭等待最多 5 秒；如果清理仍在进行，journal 锁继续保留并报告错误，不能让另一个导出器并发写入。
 
+## 指定处理器的正式 Source
+
+0.15.4 的 `start_export` 增加可选 `scope: "recipes"`。必须指定 `world` 和非空 `handlers`，profile 只能是 `full` 或 `data`。只枚举所选处理器，连带保存引用的物品/流体、要素、文本和需要的图像/视图；不遍历整个物品浏览表、材料、电路、遗传、研究或结构。所有集合仍按契约声明，范围外集合为空，Source 永远为 `selection`。不能把它用于完整资料库覆盖验收。需要研究依赖的魔法处理器明确拒绝此 scope，常规导出入口保持不变。
+
+scope 进入请求重试身份和完整环境设置；运行身份只排除已知的请求字段（profile、handlers、scope、probes），因此同会话资源检查仍能关联。Compiler 0.14.3 验证 scope 与环境一致，并拒绝局部请求声称完整 Source。其他未知设置依然参与运行身份，不会被泛化剥离。
+
+支持判定和实际加载使用同一 Adapter 分派；未核实的原版处理器子类不再因继承关系被误标为 supported。此变动纠正能力报告，不表示新增适配了历史缺失的处理器。
+
+验收入口示例：`node scripts/accept.mjs --config <新配置> start visuals --scope recipes --handlers <inspect 中的精确ID> --key <新key>`。脚本支持 `scan resources --resources <namespace:path,...>`；资源诊断只证明字节解析，不能证明 GL 图标或完整静态替代。
+
 ## 采集分片与离线恢复
 
 0.15.3 在生产导出中为已关闭的 Source 文件保存独立分片。目录为 `nesql/captures/<job-id>`，不覆盖既有目录。`blobs/<sha256>` 保存精确字节；`parts/<逻辑路径摘要>.json` 逐文件原子保存描述符。优先与不可变的 Source 文件建立硬链接，无法链接时复制并核验，因此不要修改任一侧文件。每份 blob 写入并刷新后才记录收据；失败会中止任务，不静默放弃恢复证据。

@@ -72,3 +72,11 @@ node acceptance/scripts/accept.mjs verify <job-id> --browser
 `collect` 保存 job、source 和交接报告。`verify` 从这些报告定位数据，运行编译器的 inspect/compile/check，再检查实际 Web 包；游戏关闭后也可执行。数据阶段通过后，可使用新 key 依次运行 `start visuals` 和 `start magic`。
 
 浏览器检查覆盖这份数据的基本加载和配方展示。完整离线行为由 NeoNEI 自身的浏览器测试继续验证；一次真实数据导出成功不代表全部模组业务完成验收。
+
+## 新数据链纵向试验
+
+`start visuals --scope recipes --handlers <明确的处理器 ID> --key <新 key>` 导出正式、局部 Source，只捕获指定处理器及引用事实、原生视图和纹理。需要明确测试存档；不允许空选择、魔法处理器或将结果标为 complete。省略 scope 保留原来的共同领域采集行为。使用独立配置与报告目录，不覆盖历史验收。
+
+成功后除 `collect` / `verify --browser` 外，归档原始 job 和 `job.fragments.path` 指向的完整 manifest；按其 SHA256 使用 Compiler `assemble`，核对恢复的 Source ID 与原始结果相同。`writing` 归档不能组装，也不支持跳过任意配方范围续跑。
+
+资源诊断使用 `scan resources --resources <逻辑路径列表> --key <新 key>`。资源字节匹配与物品图标像素匹配是不同证据；只有满足 Compiler Source 关联条件时才能声明后者。

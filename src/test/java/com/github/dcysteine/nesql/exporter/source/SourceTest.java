@@ -43,6 +43,7 @@ public final class SourceTest {
         com.github.dcysteine.nesql.exporter.capture.AspectsTest.run();
         com.github.dcysteine.nesql.exporter.capture.ColorsTest.run();
         com.github.dcysteine.nesql.exporter.capture.GameTest.run();
+        com.github.dcysteine.nesql.exporter.capture.HandlersTest.run();
         sorting(root);
         Jobs.Result first = fixture(root.resolve("first"), root.resolve("datasets"));
         Jobs.Result repeated = fixture(root.resolve("repeat"), root.resolve("datasets"));

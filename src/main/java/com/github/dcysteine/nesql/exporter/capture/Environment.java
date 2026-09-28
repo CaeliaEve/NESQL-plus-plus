@@ -50,11 +50,13 @@ final class Environment {
         for (String name : snapshot.resources) resources.add(value(name));
         JsonArray probes = new JsonArray();
         for (Probe probe : request.probes) probes.add(probe.json());
-        return object("game", "Minecraft 1.7.10", "loader", "Forge " + ForgeVersion.getVersion(), "locale", snapshot.locale,
+        JsonObject environment = object("game", "Minecraft 1.7.10", "loader", "Forge " + ForgeVersion.getVersion(), "locale", snapshot.locale,
                 "mods", mods, "inputs", files, "resources", resources, "knowledge", snapshot.knowledge,
                 "probes", probes,
                 "settings", object("profile", request.profile, "handlers", String.join(",", request.handlers),
                         "iconPixels", "64", "tooltip", "advanced"));
+        if (request.scope != null) environment.getAsJsonObject("settings").addProperty("scope", request.scope);
+        return environment;
     }
 
     private static Snapshot snapshot() {

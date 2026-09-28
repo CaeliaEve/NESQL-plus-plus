@@ -86,6 +86,36 @@ public final class JobsTest {
         try (Jobs ignored = new Jobs(root.resolve("jobs"), context -> {})) { throw new AssertionError("Invalid journal parameters were restored"); }
         catch (java.io.IOException expected) { require(expected.getMessage().contains("Invalid job report"), "Wrong journal error"); }
         api(Files.createTempDirectory("nesql-api-"));
+        recipeScope(Files.createTempDirectory("nesql-scope-"));
+    }
+
+    private static void recipeScope(Path root) throws Exception {
+        com.google.gson.JsonObject body = object("key", "scope", "name", "recipes", "profile", "full", "world", "test-copy",
+                "scope", "recipes", "handlers", array("category_" + String.join("", java.util.Collections.nCopies(64, "a"))));
+        Jobs.Request request = Jobs.Request.parse(body);
+        require(request.recipeScope() && !request.complete(), "Recipe scope masqueraded as a complete export");
+        require(new Jobs.Request("default", "all", "full").complete(), "Default export lost its complete scope");
+        String id;
+        try (Jobs jobs = new Jobs(root.resolve("jobs"), context -> { throw new Jobs.Fault("fixture", "No game capture in this lifecycle test"); })) {
+            id = jobs.start(request).id;
+            long end = System.nanoTime() + TimeUnit.SECONDS.toNanos(5);
+            while (!jobs.read(id).state.equals("failed") && System.nanoTime() < end) Thread.sleep(5);
+            require(jobs.read(id).state.equals("failed"), "Fixture task did not stop");
+        }
+        try (Jobs jobs = new Jobs(root.resolve("jobs"), context -> { throw new AssertionError("Scope retry executed game work"); })) {
+            require(jobs.read(id).request.recipeScope() && jobs.start(request).id.equals(id), "Restart lost explicit scope or retry identity");
+            com.google.gson.JsonObject changed = parse(body.toString().getBytes(java.nio.charset.StandardCharsets.UTF_8)); changed.remove("scope");
+            expect("key_conflict", () -> jobs.start(Jobs.Request.parse(changed)));
+        }
+        for (String field : new String[]{"handlers", "world", "profile", "scope", "check"}) {
+            com.google.gson.JsonObject invalid = parse(body.toString().getBytes(java.nio.charset.StandardCharsets.UTF_8));
+            if (field.equals("handlers")) invalid.add(field, array());
+            else if (field.equals("world")) invalid.remove(field);
+            else if (field.equals("profile")) invalid.addProperty(field, "images");
+            else if (field.equals("scope")) invalid.addProperty(field, "anything");
+            else { invalid.addProperty("name", "check"); invalid.addProperty("profile", "data"); invalid.add("check", object("domain", "recipes")); }
+            expect("invalid_request", () -> Jobs.Request.parse(invalid));
+        }
     }
 
     private static void api(Path root) throws Exception {

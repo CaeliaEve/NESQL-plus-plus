@@ -60,6 +60,9 @@ test('stdio MCP exposes the job lifecycle and reconnects after the game restarts
   const args = { key: 'retry-one', name: 'gtnh', profile: 'full', probes: [{ count: 4, channels: { coil: 2 } }, { count: 1 }] };
   assert.equal((await call('start_export', args)).structuredContent.state, 'queued');
   assert.deepEqual(requests.at(-1).body, args);
+  const scoped = { key: 'scoped', name: 'recipes', world: 'test-copy', profile: 'full', scope: 'recipes', handlers: ['category_' + 'a'.repeat(64)] };
+  assert.equal((await call('start_export', scoped)).structuredContent.state, 'queued');
+  assert.deepEqual(requests.at(-1).body, scoped, 'MCP lost explicit source scope');
   const check = { key: 'check-once', world: 'test-copy', domain: 'structures', controllers: [17000] };
   assert.equal((await call('start_check', check)).structuredContent.id, 'check-one');
   assert.equal(requests.at(-1).path, '/checks');

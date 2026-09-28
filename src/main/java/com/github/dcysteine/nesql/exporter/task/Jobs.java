@@ -74,6 +74,7 @@ public final class Jobs implements AutoCloseable {
         public final List<Probe> probes;
         public final String world;
         public final Checks.Selection check;
+        public final String scope;
 
         public Request(String key, String name, String profile) {
             this(key, name, profile, java.util.Collections.emptyList());
@@ -88,10 +89,10 @@ public final class Jobs implements AutoCloseable {
         }
 
         public Request(String key, String name, String profile, List<String> handlers, List<Probe> probes, String world) {
-            this(key, name, profile, handlers, probes, world, null);
+            this(key, name, profile, handlers, probes, world, null, null);
         }
 
-        private Request(String key, String name, String profile, List<String> handlers, List<Probe> probes, String world, Checks.Selection check) {
+        private Request(String key, String name, String profile, List<String> handlers, List<Probe> probes, String world, Checks.Selection check, String scope) {
             identifier(key, "key");
             identifier(name, "name");
             if (!Arrays.asList("full", "data", "images").contains(profile)) {
@@ -106,6 +107,10 @@ public final class Jobs implements AutoCloseable {
             }
             this.world = world;
             this.check = check;
+            if (scope != null && (!scope.equals("recipes") || check != null || world == null || profile.equals("images"))) {
+                throw new Fault("invalid_request", "Recipe scope requires a bound export world and full or data profile");
+            }
+            this.scope = scope;
             if (check != null && (!profile.equals("data") || !name.equals("check") || world == null)) throw new Fault("invalid_request", "Checks require a bound world and data-only capture");
             if (handlers == null || handlers.size() > 512) throw new Fault("invalid_request", "Invalid handler selection");
             java.util.TreeSet<String> selected = new java.util.TreeSet<>();
@@ -116,13 +121,14 @@ public final class Jobs implements AutoCloseable {
             }
             if (profile.equals("images") && !selected.isEmpty()) throw new Fault("invalid_request", "The images profile has no recipe handlers");
             this.handlers = java.util.Collections.unmodifiableList(new ArrayList<>(selected));
+            if (recipeScope() && selected.isEmpty()) throw new Fault("invalid_request", "Recipe scope requires explicit handlers");
             if (check != null && !check.domain.equals("recipes") && !selected.isEmpty()) throw new Fault("invalid_request", "Only recipe checks accept recipe handlers");
             try { this.probes = Probe.order(probes); }
             catch (IllegalArgumentException failure) { throw new Fault("invalid_request", failure.getMessage()); }
         }
 
         public static Request parse(JsonObject body) {
-            if (body == null || !body.entrySet().stream().allMatch(entry -> Arrays.asList("key", "name", "profile", "handlers", "probes", "world", "check").contains(entry.getKey()))) {
+            if (body == null || !body.entrySet().stream().allMatch(entry -> Arrays.asList("key", "name", "profile", "handlers", "probes", "world", "check", "scope").contains(entry.getKey()))) {
                 throw new Fault("invalid_request", "Unknown export request field");
             }
             List<String> handlers = new ArrayList<>();
@@ -141,7 +147,8 @@ public final class Jobs implements AutoCloseable {
                 check = Checks.Selection.parse(body.getAsJsonObject("check"));
             }
             return new Request(string(body.get("key"), "key"), string(body.get("name"), "name"), string(body.get("profile"), "profile"), handlers, probes,
-                    !body.has("world") || body.get("world").isJsonNull() ? null : string(body.get("world"), "world"), check);
+                    !body.has("world") || body.get("world").isJsonNull() ? null : string(body.get("world"), "world"), check,
+                    !body.has("scope") || body.get("scope").isJsonNull() ? null : string(body.get("scope"), "scope"));
         }
 
         private static String string(JsonElement value, String name) {
@@ -151,8 +158,12 @@ public final class Jobs implements AutoCloseable {
 
         private boolean matches(Request other) {
             return key.equals(other.key) && name.equals(other.name) && profile.equals(other.profile) && handlers.equals(other.handlers)
-                    && probes.equals(other.probes) && java.util.Objects.equals(world, other.world) && java.util.Objects.equals(check, other.check);
+                    && probes.equals(other.probes) && java.util.Objects.equals(world, other.world) && java.util.Objects.equals(check, other.check)
+                    && java.util.Objects.equals(scope, other.scope);
         }
+
+        public boolean recipeScope() { return "recipes".equals(scope); }
+        public boolean complete() { return scope == null && profile.equals("full") && handlers.isEmpty(); }
 
         public void checkWorld(String folder) {
             if (world != null && !world.equals(folder)) throw new Fault("world_changed", "Expected save " + world + "; loaded " + folder);

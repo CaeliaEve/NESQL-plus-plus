@@ -12,11 +12,12 @@ import static com.github.dcysteine.nesql.exporter.source.Json.*;
 final class FragmentsTest {
     static void run(Path root) throws Exception {
         Files.createDirectories(root);
-        Jobs.Request request = new Jobs.Request("fragments", "fixture", "full", Collections.emptyList(),
-                Collections.singletonList(Probe.defaults()), "test-copy");
+        String handler = "category_" + String.join("", Collections.nCopies(64, "a"));
+        Jobs.Request request = Jobs.Request.parse(object("key", "fragments", "name", "fixture", "profile", "full",
+                "scope", "recipes", "handlers", array(handler), "world", "test-copy"));
         JsonObject environment = object("game", "Minecraft 1.7.10", "loader", "Forge", "locale", "en_US", "mods", array(),
                 "inputs", array(), "resources", array(), "knowledge", object(), "probes", array(Probe.defaults().json()),
-                "settings", object("profile", "full", "handlers", ""));
+                "settings", object("profile", "full", "handlers", handler, "scope", "recipes"));
         JsonObject provenance = Provenance.capture(environment, request, CanonicalJson.digest(new byte[]{1}));
         java.awt.image.BufferedImage pixels = new java.awt.image.BufferedImage(1, 1, java.awt.image.BufferedImage.TYPE_INT_ARGB);
         pixels.setRGB(0, 0, 0xff102030);

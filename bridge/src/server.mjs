@@ -34,6 +34,7 @@ export function createServer(client) {
       world: z.string().min(1).max(128).regex(/^[^/\\\x00-\x1f\x7f]+$/).refine(value => value !== '.' && value !== '..').optional()
         .describe('Expected single-player save folder from inspect_game.world.folder. A different world fails before capture. Included in retry identity.'),
       profile: z.enum(['full', 'data', 'images']).describe('The requested collection scope; only a complete dataset can become a full catalog.'),
+      scope: z.literal('recipes').optional().describe('Capture only the explicit handlers and their referenced items/fluids, aspects, texts and views. Requires handlers and world; excludes full item browsing and other domains. Always publishes selection scope. Magic handlers require research capture and are not accepted here.'),
       handlers: z.array(z.string().regex(/^category_[a-f0-9]{64}$/)).max(512).optional()
         .describe('Explicit handler selection from inspect_game. Omit for all handlers. Unsupported handlers fail the job; selecting a subset publishes a selection snapshot.'),
       probes: z.array(probe).min(1).max(16).refine(values => new Set(values.map(value =>

@@ -15,7 +15,7 @@ public final class Provenance {
         // Remove only known request fields. New settings remain identity-bearing.
         runtime.remove("probes");
         JsonObject settings = runtime.getAsJsonObject("settings");
-        if (settings != null) { settings.remove("profile"); settings.remove("handlers"); }
+        if (settings != null) { settings.remove("profile"); settings.remove("handlers"); settings.remove("scope"); }
         return CanonicalJson.digest(runtime);
     }
 
