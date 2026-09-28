@@ -586,8 +586,9 @@ export class AcceptanceCoordinator {
     await mkdir(directory, { recursive: true });
     const files = [];
     for (const row of rows) {
+      const isResource = typeof row.resource === 'string';
       const isStructure = Number.isInteger(row.controller);
-      const failures = isStructure
+      const failures = isResource ? (row.status === 'failed' ? [row.resource] : []) : isStructure
         ? (row.status === 'passed' ? [] : [
           ...(Array.isArray(row.failedStructures) ? row.failedStructures : row.status === 'failed' ? [row.controller] : []),
           ...(Array.isArray(row.unsupportedStructures) ? row.unsupportedStructures : row.status === 'unsupported' ? [row.controller] : [])
@@ -595,14 +596,15 @@ export class AcceptanceCoordinator {
         : (row.failedRecipes ?? []);
       const details = row.failureFiles ?? [];
       assert.equal(details.length, failures.length, 'Failure detail files are incomplete');
-      const pending = isStructure ? null : new Set(failures);
+      const pending = isStructure || isResource ? null : new Set(failures);
       for (const entry of details) {
-        if (!isStructure) assert.ok(pending.delete(entry.index), 'Unexpected or duplicate failure detail');
+        if (pending) assert.ok(pending.delete(entry.index), 'Unexpected or duplicate failure detail');
         const reportDirectory = path.dirname(job.report.path);
         const checked = await artifact(reportDirectory, entry, 16 * 1024 * 1024);
         const detail = JSON.parse(checked.bytes.toString('utf8'));
         assert.equal(detail.format, 'nesql.failure'); assert.equal(detail.job, job.id);
-        if (isStructure) assert.equal(detail.target.controller, row.controller);
+        if (isResource) assert.equal(detail.target.resource, row.resource);
+        else if (isStructure) assert.equal(detail.target.controller, row.controller);
         else assert.equal(detail.target.handler, row.handler);
         assert.equal(detail.index, entry.index);
         const archivePath = path.join(directory, path.basename(entry.path));

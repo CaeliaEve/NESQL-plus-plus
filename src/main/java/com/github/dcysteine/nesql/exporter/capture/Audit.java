@@ -30,6 +30,7 @@ final class Audit {
     Audit(Path instance, ClientThread client) { this.instance = instance; this.directory = instance.resolve("nesql"); this.client = client; }
 
     void run(Jobs.Context context) throws Exception {
+        if (context.request().check.domain.equals("resources")) { new ResourceAudit(instance, client).run(context); return; }
         Jobs.Request request = context.request();
         ClientThread.Session session = client.session();
         List<ItemStack> items = session.call("check readiness", () -> {

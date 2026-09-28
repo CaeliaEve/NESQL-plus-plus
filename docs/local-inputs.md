@@ -32,9 +32,11 @@ are archived with their original Java code, message, cause and severity before
 pagination validation. Recoverable failures remain failed; fatal or unknown
 severity stops the plan. They are no longer replaced by `invalid_row_total`.
 
-Compiler's offline `resources` command now imports explicitly pinned archives.
+Compiler's offline `resources` command imports explicitly pinned archives.
 It keeps every same-path candidate and records `resolution: unverified`; it does
 not yet replace NESQL rendering or attach resource bindings to Source records.
-The next integration needs native final-resource byte evidence, environment
-identity, and pixel-equivalence checks. No fresh full-game run is warranted solely
-to test this offline utility.
+NESQL 0.15.1 now supplies native byte observations through the
+[resource diagnostic](runtime-resources.md); Compiler's `resolve` matches them to
+verified loaded archive candidates. Source assembly and pixel-equivalence checks
+remain outstanding. No fresh full-game run is warranted solely to test the
+offline utilities.

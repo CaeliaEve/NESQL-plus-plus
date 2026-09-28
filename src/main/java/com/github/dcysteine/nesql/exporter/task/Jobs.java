@@ -116,7 +116,7 @@ public final class Jobs implements AutoCloseable {
             }
             if (profile.equals("images") && !selected.isEmpty()) throw new Fault("invalid_request", "The images profile has no recipe handlers");
             this.handlers = java.util.Collections.unmodifiableList(new ArrayList<>(selected));
-            if (check != null && check.domain.equals("structures") && !selected.isEmpty()) throw new Fault("invalid_request", "Structure checks do not accept recipe handlers");
+            if (check != null && !check.domain.equals("recipes") && !selected.isEmpty()) throw new Fault("invalid_request", "Only recipe checks accept recipe handlers");
             try { this.probes = Probe.order(probes); }
             catch (IllegalArgumentException failure) { throw new Fault("invalid_request", failure.getMessage()); }
         }

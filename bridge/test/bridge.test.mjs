@@ -64,6 +64,9 @@ test('stdio MCP exposes the job lifecycle and reconnects after the game restarts
   assert.equal((await call('start_check', check)).structuredContent.id, 'check-one');
   assert.equal(requests.at(-1).path, '/checks');
   assert.deepEqual(requests.at(-1).body, check);
+  const resourceCheck = { key: 'resource-once', world: 'test-copy', domain: 'resources', resources: ['demo:textures/a.png'] };
+  assert.equal((await call('start_check', resourceCheck)).structuredContent.id, 'check-one');
+  assert.deepEqual(requests.at(-1).body, resourceCheck);
   assert.equal((await call('cancel_export', { id: 'job-one' })).structuredContent.state, 'cancelling');
   assert.equal(requests.at(-1).method, 'POST');
   assert.equal((await call('read_job', { id: 'job-one' })).structuredContent.job.state, 'cancelled');

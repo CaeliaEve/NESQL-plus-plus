@@ -30,46 +30,62 @@ public final class Checks {
     public static final class Selection {
         public final String domain;
         public final List<Integer> controllers;
+        public final List<String> resources;
         public final int offset, limit;
 
-        private Selection(String domain, List<Integer> controllers, int offset, int limit) {
-            if (!Arrays.asList("structures", "recipes").contains(domain)) throw invalid("Choose structures or recipes");
+        private Selection(String domain, List<Integer> controllers, List<String> resources, int offset, int limit) {
+            if (!Arrays.asList("structures", "recipes", "resources").contains(domain)) throw invalid("Choose structures, recipes or resources");
             if (controllers.size() > 512 || new TreeSet<>(controllers).size() != controllers.size()) throw invalid("Controller ids must be unique, with at most 512 targets");
-            if (domain.equals("recipes") && !controllers.isEmpty()) throw invalid("Recipe checks do not accept controller ids");
+            if (!domain.equals("structures") && !controllers.isEmpty()) throw invalid("Only structure checks accept controller ids");
+            if (domain.equals("resources") ? resources.isEmpty() || resources.size() > 128 : !resources.isEmpty()) throw invalid("Resource checks require 1-128 explicit resources");
+            if (new TreeSet<>(resources).size() != resources.size()) throw invalid("Resource locations must be unique");
+            this.resources = Collections.unmodifiableList(new ArrayList<>(new TreeSet<>(resources)));
             this.domain = domain;
             this.controllers = Collections.unmodifiableList(new ArrayList<>(new TreeSet<>(controllers)));
             this.offset = offset; this.limit = limit;
         }
 
         public static Selection parse(JsonObject body) {
-            fields(body, "domain", "controllers", "offset", "limit");
+            fields(body, "domain", "controllers", "resources", "offset", "limit");
             JsonElement domain = body.get("domain");
             if (domain == null || !domain.isJsonPrimitive() || !domain.getAsJsonPrimitive().isString()) throw invalid("domain must be a string");
             List<Integer> controllers = new ArrayList<>();
+            List<String> resources = new ArrayList<>();
+            if (body.has("resources")) {
+                if (!body.get("resources").isJsonArray()) throw invalid("resources must be an array");
+                for (JsonElement value : body.getAsJsonArray("resources")) {
+                    if (!value.isJsonPrimitive() || !value.getAsJsonPrimitive().isString()) throw invalid("resource must be a string");
+                    try { com.github.dcysteine.nesql.exporter.source.Resources.path(value.getAsString()); }
+                    catch (IllegalArgumentException error) { throw invalid(error.getMessage()); }
+                    resources.add(value.getAsString());
+                }
+            }
             if (body.has("controllers")) {
                 if (!body.get("controllers").isJsonArray()) throw invalid("controllers must be an array");
                 for (JsonElement id : body.getAsJsonArray("controllers")) controllers.add(integer(id, "controller", 0, 32767));
             }
             int offset = body.has("offset") ? integer(body.get("offset"), "offset", 0, 1_000_000) : 0;
             int limit = body.has("limit") ? integer(body.get("limit"), "limit", 1, 4096) : 128;
-            if (domain.getAsString().equals("structures") && (offset != 0 || limit != 128)) throw invalid("Recipe ranges do not apply to structures");
-            return new Selection(domain.getAsString(), controllers, offset, limit);
+            if (!domain.getAsString().equals("recipes") && (offset != 0 || limit != 128)) throw invalid("Recipe ranges only apply to recipes");
+            return new Selection(domain.getAsString(), controllers, resources, offset, limit);
         }
 
         @Override public boolean equals(Object value) {
             if (!(value instanceof Selection)) return false;
             Selection other = (Selection) value;
-            return domain.equals(other.domain) && controllers.equals(other.controllers) && offset == other.offset && limit == other.limit;
+            return domain.equals(other.domain) && controllers.equals(other.controllers) && resourceSelection().equals(other.resourceSelection()) && offset == other.offset && limit == other.limit;
         }
-        @Override public int hashCode() { return java.util.Objects.hash(domain, controllers, offset, limit); }
+        // Gson restores pre-resource diagnostic history without this additive field.
+        private List<String> resourceSelection() { return resources == null ? Collections.emptyList() : resources; }
+        @Override public int hashCode() { return java.util.Objects.hash(domain, controllers, resourceSelection(), offset, limit); }
     }
 
     public static Jobs.Request request(JsonObject body) {
-        fields(body, "key", "world", "domain", "controllers", "handlers", "probes", "offset", "limit");
+        fields(body, "key", "world", "domain", "controllers", "handlers", "resources", "probes", "offset", "limit");
         JsonObject request = object("name", "check", "profile", "data");
         for (String field : new String[] {"key", "world", "handlers", "probes"}) if (body.has(field)) request.add(field, body.get(field));
         JsonObject selection = new JsonObject();
-        for (String field : new String[] {"domain", "controllers", "offset", "limit"}) if (body.has(field)) selection.add(field, body.get(field));
+        for (String field : new String[] {"domain", "controllers", "resources", "offset", "limit"}) if (body.has(field)) selection.add(field, body.get(field));
         request.add("check", selection);
         return Jobs.Request.parse(request);
     }
@@ -104,7 +120,7 @@ public final class Checks {
 
         /** Every failed recipe has an immutable detail file, independently of the inline preview limit. */
         public void failure(JsonObject row, int index, Throwable error) throws IOException {
-            JsonObject identity = row.has("handler") ? object("handler", row.get("handler")) : object("controller", row.get("controller"));
+            JsonObject identity = row.has("resource") ? object("resource", row.get("resource")) : row.has("handler") ? object("handler", row.get("handler")) : object("controller", row.get("controller"));
             String name = CanonicalJson.digest(identity) + "-" + index + ".json";
             String folder = context.id() + "-details";
             Path directory = path.getParent().resolve(folder);
@@ -215,7 +231,7 @@ public final class Checks {
         for (int index = 0; index < report.size(); index++) {
             context.check(); guard.check();
             JsonObject row = report.row(index); row.addProperty("status", "running"); report.save();
-            String target = row.has("controller") ? "controller " + row.get("controller").getAsInt() : row.get("handler").getAsString();
+            String target = row.has("resource") ? row.get("resource").getAsString() : row.has("controller") ? "controller " + row.get("controller").getAsInt() : row.get("handler").getAsString();
             context.progress("check_" + context.request().check.domain, index, report.size(), "Checking " + target);
             long began = System.nanoTime();
             try {

@@ -49,11 +49,14 @@ export function createServer(client) {
   }, call('GET', args => args.id === undefined ? '/jobs' : `/jobs/${args.id}`));
 
   server.registerTool('start_check', {
-    description: 'Start an isolated diagnostic sweep without exporting a dataset. Select structures by controller id, or recipe handlers with an explicit recipe range. Poll read_job: checked means the report is complete, not that all targets passed. Reports remain on local disk. Uses the same single active-job queue as exports.',
+    description: 'Start an isolated diagnostic sweep without exporting a dataset. Select structures, recipe ranges, or explicit texture/language resources. Resource checks hash bytes resolved by the native resource manager and recheck stability; they do not validate item rendering. Poll read_job: checked means the report is complete, not that all targets passed. Reports remain on local disk. Uses the same single active-job queue as exports.',
     inputSchema: {
       key: identifier,
       world: z.string().min(1).max(128).regex(/^[^/\\\x00-\x1f\x7f]+$/).refine(value => value !== '.' && value !== '..'),
-      domain: z.enum(['structures', 'recipes']),
+      domain: z.enum(['structures', 'recipes', 'resources']),
+      resources: z.array(z.string().min(1).max(4096)).min(1).max(128)
+        .refine(values => new Set(values).size === values.length).optional()
+        .describe('Explicit namespace:path resources, restricted to textures and language files. Only for resources; proves resolved bytes, not rendered item appearance.'),
       controllers: z.array(z.number().int().min(0).max(32767)).max(512).refine(values => new Set(values).size === values.length).optional()
         .describe('Structure controller ids. Omit to check every registered constructable controller. Only for structures.'),
       handlers: z.array(z.string().regex(/^category_[a-f0-9]{64}$/)).max(512).refine(values => new Set(values).size === values.length).optional()

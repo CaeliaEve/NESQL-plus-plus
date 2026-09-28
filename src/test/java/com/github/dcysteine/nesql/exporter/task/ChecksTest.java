@@ -16,7 +16,23 @@ final class ChecksTest {
     private ChecksTest() {}
 
     static void run(Path root) throws Exception {
+        Jobs.Request resources = Checks.request(object("key", "resources", "world", "test-copy", "domain", "resources",
+                "resources", array("demo:textures/z.png", "demo:lang/en_US.lang")));
+        require(resources.check.resources.equals(java.util.Arrays.asList("demo:lang/en_US.lang", "demo:textures/z.png")), "Resource targets are not canonical");
+        for (JsonObject invalid : java.util.Arrays.asList(
+                object("key", "bad", "world", "test", "domain", "resources"),
+                object("key", "bad", "world", "test", "domain", "resources", "resources", array("demo:textures/../x.png")),
+                object("key", "bad", "world", "test", "domain", "resources", "resources", array("demo:textures/x.png", "demo:textures/x.png")),
+                object("key", "bad", "world", "test", "domain", "resources", "resources", array("demo:textures/x.png"), "controllers", array(1)),
+                object("key", "bad", "world", "test", "domain", "resources", "resources", array("demo:textures/x.png"), "offset", 1),
+                object("key", "bad", "world", "test", "domain", "recipes", "resources", array("demo:textures/x.png")))) {
+            try { Checks.request(invalid); throw new AssertionError("Accepted invalid resource request"); }
+            catch (Jobs.Fault expected) { require(expected.code.equals("invalid_request"), "Wrong resource request error"); }
+        }
         Jobs.Request request = Checks.request(object("key", "sweep", "world", "test-copy", "domain", "structures", "controllers", array(4, 3, 2, 1)));
+        JsonObject historical = new com.google.gson.Gson().toJsonTree(request.check).getAsJsonObject();
+        historical.remove("resources");
+        require(request.check.equals(new com.google.gson.Gson().fromJson(historical, Checks.Selection.class)), "An additive resource selection invalidated historical retry identity");
         require(request.check.controllers.equals(java.util.Arrays.asList(1, 2, 3, 4)), "Check targets are not canonical");
         for (JsonObject invalid : java.util.Arrays.asList(
                 object("key", "bad", "domain", "structures"),

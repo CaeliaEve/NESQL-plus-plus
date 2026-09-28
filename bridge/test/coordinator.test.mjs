@@ -53,6 +53,20 @@ test('AcceptanceCoordinator retains and archives native handler-open errors befo
 
 function digestForTest(bytes) { return createHash('sha256').update(bytes).digest('hex'); }
 
+test('AcceptanceCoordinator archives resource failures using the resource identity', async t => {
+  const instance = await fixture(path.join(os.tmpdir(), 'nesql-resource-detail-'));
+  t.after(() => rm(instance, { recursive: true, force: true }));
+  const directory = path.join(instance, 'nesql', 'checks'); await mkdir(directory, { recursive: true });
+  const detail = Buffer.from(JSON.stringify({ format: 'nesql.failure', job: 'resource-job', target: { resource: 'demo:textures/a.png' }, index: 0, error: { code: 'resource_limit' } }));
+  await writeFile(path.join(directory, 'detail.json'), detail);
+  const row = { resource: 'demo:textures/a.png', status: 'failed', failureFiles: [{ path: 'detail.json', index: 0, bytes: detail.length, sha256: digestForTest(detail) }] };
+  const raw = Buffer.from(JSON.stringify({ rows: [row] }));
+  const coordinator = new AcceptanceCoordinator(instance);
+  const result = await coordinator.archiveReport({ id: 'resource-job', report: { path: path.join(directory, 'report.json') } }, raw, [row]);
+  assert.deepEqual(await readFile(result.files[0].archivePath), detail);
+  assert.deepEqual(await readFile(result.archivePath), raw);
+});
+
 test('AcceptanceCoordinator dispatches the recorded singular structure route to controller checks', async t => {
   const instance = await fixture(path.join(os.tmpdir(), 'nesql-route-'));
   t.after(() => rm(instance, { recursive: true, force: true }));
