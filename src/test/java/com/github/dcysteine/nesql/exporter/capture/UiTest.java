@@ -6,6 +6,13 @@ import com.google.gson.JsonElement;
 import com.google.gson.JsonObject;
 import com.gtnewhorizons.modularui.common.widget.ProgressBar;
 import com.gtnewhorizons.modularui.config.Config;
+import com.gtnewhorizons.modularui.api.screen.ModularWindow;
+import com.gtnewhorizons.modularui.api.math.Size;
+import com.gtnewhorizons.modularui.api.widget.Widget;
+import com.gtnewhorizons.modularui.common.widget.TextWidget;
+import cpw.mods.fml.relauncher.ReflectionHelper;
+import java.util.ArrayList;
+import java.util.List;
 
 import static com.github.dcysteine.nesql.exporter.source.Json.array;
 
@@ -14,6 +21,7 @@ public final class UiTest {
     private UiTest() {}
 
     public static void run() {
+        windows();
         JsonArray flame = Ui.progress(14, 14, 48, 7), arrow = Ui.progress(24, 16, 48, 0);
         require(duration(flame) == 48 && state(flame, 0).equals(array(array("0.0", "0.0", "1.0", "1.0")))
                 && state(flame, 47).size() == 0, "Native furnace flame did not shrink to empty");
@@ -50,6 +58,30 @@ public final class UiTest {
             try { Ui.motion(bar, time); throw new AssertionError("Invalid progress was accepted"); }
             catch (Jobs.Fault expected) { require(expected.code.equals("view_unsupported") && time[0] == .3f, "Wrong UI failure or unrestored clock"); }
         } finally { Config.smoothProgressbar = smooth; }
+    }
+
+    private static void windows() {
+        List<Widget> widgets = new ArrayList<>();
+        ModularWindow window = new ModularWindow(new Size(176, 90), widgets);
+        require(window.getAlpha() == 255, "Pinned native default must be opaque byte alpha");
+        Ui.verifyWindow(window);
+        for (int alpha : new int[] {0, 1, 128, 254, 256, -1}) {
+            ReflectionHelper.setPrivateValue(ModularWindow.class, window, alpha, "alpha");
+            try { Ui.verifyWindow(window); throw new AssertionError("Unsupported window alpha accepted: " + alpha); }
+            catch (Jobs.Fault expected) {
+                require(expected.code.equals("view_unsupported") && expected.getMessage().contains("alpha=" + alpha), "Missing observed alpha");
+            }
+            require(window.getAlpha() == alpha, "Validation changed native alpha");
+        }
+        ReflectionHelper.setPrivateValue(ModularWindow.class, window, 255, "alpha");
+        for (int i = 0; i < 4096; i++) widgets.add(new TextWidget(""));
+        Ui.verifyWindow(window);
+        widgets.add(new TextWidget(""));
+        try { Ui.verifyWindow(window); throw new AssertionError("Window budget ignored"); }
+        catch (Jobs.Fault expected) {
+            require(expected.code.equals("view_unsupported") && expected.getMessage().contains("4097"), "Missing observed widget count");
+        }
+        System.out.println("Native UI windows: byte alpha, rejected translucency and widget budget passed");
     }
 
     private static int duration(JsonArray frames) {

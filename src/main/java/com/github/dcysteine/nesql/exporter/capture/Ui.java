@@ -60,7 +60,7 @@ final class Ui implements AutoCloseable {
                 () -> time[0], offset).build();
         try {
             UIInfos.initializeWindow(Minecraft.getMinecraft().thePlayer, window);
-            if (window.getChildren().size() > 4096 || window.getAlpha() != 1) throw fault("Unsupported native UI layer state");
+            verifyWindow(window);
             List<Runnable> still = new ArrayList<>();
             Pos2d background = offset.add(frontend.getNEIProperties().recipeBackgroundOffset);
             for (IDrawable drawable : window.getBackground()) still.add(() -> at(background, () -> drawable.draw(Pos2d.ZERO, window.getSize(), 0)));
@@ -100,6 +100,13 @@ final class Ui implements AutoCloseable {
     }
 
     int width(int current) { return Math.max(current, width); }
+
+    static void verifyWindow(ModularWindow window) {
+        int widgets = window.getChildren().size(), alpha = window.getAlpha();
+        if (widgets > 4096) throw fault("Native UI exceeds its widget budget: widgets=" + widgets + "; limit=4096");
+        // ModularUI 1.2.20 returns an 8-bit alpha, not the normalized GL value.
+        if (alpha != 255) throw fault("Unsupported native UI opacity: alpha=" + alpha + "; expected=255");
+    }
     int height(int current) { return Math.max(current, height); }
     int foreground() { return layers.size() + 3; }
 
