@@ -38,12 +38,19 @@ public final class Dataset implements AutoCloseable {
     private final boolean complete;
     private boolean sealed;
     private boolean closed;
+    private boolean closing;
+    private final Fragments fragments;
     private String id;
 
     public Dataset(Path staging, String producerVersion, JsonObject environment, boolean complete) throws IOException {
+        this(staging, producerVersion, environment, complete, null);
+    }
+
+    public Dataset(Path staging, String producerVersion, JsonObject environment, boolean complete, Fragments fragments) throws IOException {
         if (environment == null) throw new IllegalArgumentException("Environment facts are required");
         this.staging = staging.toAbsolutePath().normalize();
         this.complete = complete;
+        this.fragments = fragments;
         byte[] environmentBytes = CanonicalJson.bytes(environment);
         if (environmentBytes.length > 16 * 1024 * 1024) throw new IllegalArgumentException("Environment exceeds 16 MiB");
         plain(this.staging.getParent());
@@ -53,11 +60,11 @@ public final class Dataset implements AutoCloseable {
         String fingerprint = CanonicalJson.digest(environmentBytes);
         try {
             Files.write(this.staging.resolve("environment.json"), environmentBytes, StandardOpenOption.CREATE_NEW);
+            declare("environment.json", "environment", "json", environmentBytes.length, environmentBytes.length, 1, fingerprint);
         } catch (IOException | RuntimeException error) {
             try { removeStaging(); } catch (IOException cleanup) { error.addSuppressed(cleanup); }
             throw error;
         }
-        declare("environment.json", "environment", "json", environmentBytes.length, environmentBytes.length, 1, fingerprint);
         manifest.addProperty("environment", fingerprint);
         JsonObject producer = new JsonObject();
         producer.addProperty("name", "nesql");
@@ -147,6 +154,11 @@ public final class Dataset implements AutoCloseable {
         return id;
     }
 
+    public void archive() throws IOException {
+        if (!sealed || closed) throw new IllegalStateException("Dataset is not sealed");
+        if (fragments != null) fragments.complete(manifest);
+    }
+
     /** Verify reuse and perform cleanup before the job's short atomic commit section. */
     public java.util.concurrent.Callable<Jobs.Result> prepare(Path datasets) throws IOException {
         if (!sealed || closed) throw new IllegalStateException("Dataset is not sealed");
@@ -193,7 +205,7 @@ public final class Dataset implements AutoCloseable {
         }
     }
 
-    private void declare(String path, String kind, String encoding, long bytes, long decoded, long rows, String hash) {
+    private void declare(String path, String kind, String encoding, long bytes, long decoded, long rows, String hash) throws IOException {
         if (!paths.add(path)) throw new IllegalStateException("Duplicate dataset path: " + path);
         JsonObject file = new JsonObject();
         file.addProperty("path", path);
@@ -204,6 +216,7 @@ public final class Dataset implements AutoCloseable {
         file.addProperty("rows", rows);
         file.addProperty("sha256", hash);
         files.add(file);
+        if (fragments != null && !closing) fragments.record(staging.resolve(path), file);
     }
 
     private void writable() {
@@ -309,6 +322,7 @@ public final class Dataset implements AutoCloseable {
     @Override
     public void close() throws IOException {
         if (closed) return;
+        closing = true;
         IOException failure = null;
         for (Records writer : writers) {
             try { writer.close(); }

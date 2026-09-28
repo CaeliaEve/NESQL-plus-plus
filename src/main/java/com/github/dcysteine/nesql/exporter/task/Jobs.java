@@ -218,6 +218,7 @@ public final class Jobs implements AutoCloseable {
         public Checks.Summary report;
         public JsonObject operation;
         public JsonObject provenance;
+        public com.github.dcysteine.nesql.exporter.source.Fragments.Receipt fragments;
         public Map<String, Object> error;
         private transient Thread thread;
         private transient boolean cancelled;
@@ -257,6 +258,16 @@ public final class Jobs implements AutoCloseable {
         public JsonObject provenance() {
             synchronized (Jobs.this) {
                 return job.provenance == null ? null : new com.google.gson.JsonParser().parse(job.provenance.toString()).getAsJsonObject();
+            }
+        }
+
+        public void fragments(com.github.dcysteine.nesql.exporter.source.Fragments.Receipt receipt) throws IOException {
+            synchronized (Jobs.this) {
+                if (job.request.check != null || job.terminal()) throw new IOException("This job cannot archive capture fragments");
+                String expected = directory.getParent().resolve("captures").resolve(job.id).resolve("manifest.json").toString();
+                if (!expected.equals(receipt.path)) throw new IOException("Capture fragments are outside the job directory");
+                job.fragments = receipt;
+                save(job, false);
             }
         }
 

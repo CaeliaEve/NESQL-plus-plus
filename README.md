@@ -36,7 +36,7 @@ npm --prefix bridge test
 node scripts/release.mjs
 ```
 
-普通增量构建无需重复 setup 或 clean。`build` 执行两组 Java 行为检查并生成经过 reobf 的 `build/libs/NESQL++-0.15.0.jar`。`check-jar` 检查实际产物的命令和预览世界 SRG 方法、版本替换和打包边界。`release` 要求目标目录不存在，按明确清单打包，不操作游戏目录。
+普通增量构建无需重复 setup 或 clean。`build` 执行两组 Java 行为检查并生成经过 reobf 的 `build/libs/NESQL++-0.15.3.jar`。`check-jar` 检查实际产物的命令和预览世界 SRG 方法、版本替换和打包边界。`release` 要求目标目录不存在，按明确清单打包，不操作游戏目录。
 
 可用 `NESQL_LOCAL_MAVEN_REPO` 指定本地 Maven 仓库。Forge 1.7.10 的工具链固定为 ForgeGradle 1.2.11 / Gradle 6.9.1；这里的旧版本是目标游戏的构建约束。
 
@@ -59,7 +59,7 @@ node scripts/release.mjs
 
 `--instance` 必须是明确的绝对目录。加载单人世界后，先用 `inspect_game` 确认 NEI 就绪、处理器覆盖、来源和研究注册表检查通过，再用 `start_export` 提交任务。没有 Agent 时也可执行 `/nesql`。
 
-定位运行时问题时先用 `start_check`（见[验收命令](acceptance/README.md)），无需先导出完整物品库。`checked`仅表示诊断报告生成完毕，仍需查看失败/未支持/部分检查。诊断不生成可编译数据集，正式导出检查点恢复及图像专项诊断待后续实现。
+定位运行时问题时先用 `start_check`（见[验收命令](acceptance/README.md)），无需先导出完整物品库。`checked`仅表示诊断报告生成完毕，仍需查看失败/未支持/部分检查。诊断不生成可编译数据集。完成采集后的离线恢复见 [分片记录](docs/mcp.md#采集分片与离线恢复)；任意配方范围续采及图像专项诊断仍待后续实现。
 
 跨项目的安装、导出交接和真实数据验证入口见 [真实游戏验收](acceptance/README.md)。脚本支持分别指定 NESQL、Compiler 和 NeoNEI 发布包，保留每次导出的原始记录与验收结果。
 
@@ -73,7 +73,7 @@ node scripts/release.mjs
 
 ## 验证状态
 
-当前候选为 NESQL++ 0.15.0、source/catalog 修订 14；真实 GTNH 安装、完整导出、Compiler 实机编译及 NeoNEI 在线/离线验收仍需在批准的集中计划中执行。
+当前开发版本为 NESQL++ 0.15.3、source/catalog 修订 14；真实 GTNH 安装、完整导出、Compiler 实机编译及 NeoNEI 在线/离线验收仍需在批准的集中计划中执行。
 
 
 source/catalog 修订为 14。匹配规则属于每个输入候选；网格形状独立于截图保存，研究观察状态不进入配方内容 ID。构建变体与环境中的请求参数逐项对应。TCWands 的普通法杖组合从最终 ShapedArcaneRecipe 注册表读取；Salis 换芯/换端按部件、形态与配置惰性枚举，保留原生 NBT 变换、独立材料槽位与自行供能条件。施法手环和一次性法杖按目标子类的实际语义处理。未知 IArcaneRecipe、未核实的配方覆写和自定义 NBT 函数仍明确失败。

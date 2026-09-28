@@ -32,6 +32,7 @@ public final class SourceTest {
         identities();
         ProvenanceTest.run();
         ResourcesTest.run(root.resolve("resources"));
+        FragmentsTest.run(root.resolve("fragments"));
         probabilities();
         geometry();
         com.github.dcysteine.nesql.exporter.capture.ModelsTest.run();

@@ -7,6 +7,7 @@ import com.github.dcysteine.nesql.exporter.source.CanonicalJson;
 import com.github.dcysteine.nesql.exporter.source.Dataset;
 import com.github.dcysteine.nesql.exporter.source.Identity;
 import com.github.dcysteine.nesql.exporter.source.Rows;
+import com.github.dcysteine.nesql.exporter.source.Fragments;
 import com.github.dcysteine.nesql.exporter.task.ClientThread;
 import com.github.dcysteine.nesql.exporter.task.Jobs;
 import com.google.gson.JsonArray;
@@ -101,12 +102,13 @@ public final class Capture implements Jobs.Task {
         Path workRoot = directory.resolve("work");
         Dataset.directory(workRoot);
         Path work = workRoot.resolve(context.id());
-        Images images = new Images();
-        Models models = request.profile.equals("data") ? null : session.call(Models::new);
+        Fragments fragments = new Fragments(directory.resolve("captures").resolve(context.id()), context.provenance(), request, context::fragments);
         try (Dataset dataset = new Dataset(work, Main.MOD_VERSION, environment,
-                request.profile.equals("full") && request.handlers.isEmpty())) {
-            try (Rows rows = new Rows(workRoot.resolve(context.id() + "-sort"));
-                 AutoCloseable visuals = () -> client.cleanup(() -> { try (Models owned = models) { images.close(); } })) {
+                request.profile.equals("full") && request.handlers.isEmpty(), fragments)) {
+            Images images = new Images();
+            Models models = request.profile.equals("data") ? null : session.call(Models::new);
+            try (AutoCloseable visuals = () -> client.cleanup(() -> { try (Models owned = models) { images.close(); } });
+                 Rows rows = new Rows(workRoot.resolve(context.id() + "-sort"))) {
                 Sink sink = new Sink(dataset, rows, images, session, !request.profile.equals("data"));
                 for (int index = 0; index < magic.aspectCount(); index++) {
                     final int aspect = index;
@@ -217,6 +219,8 @@ public final class Capture implements Jobs.Task {
                 }
             }
             dataset.seal();
+            session.call(() -> null);
+            dataset.archive();
             java.util.concurrent.Callable<Jobs.Result> publication = dataset.prepare(directory.resolve("datasets"));
             session.call(() -> null);
             context.publish(publication);
