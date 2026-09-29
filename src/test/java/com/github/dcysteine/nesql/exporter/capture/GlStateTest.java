@@ -94,6 +94,7 @@ public final class GlStateTest {
             }
             require(rejected, "unchecked renderer errors cannot leak into the next capture");
             clean("after failed capture");
+            IconsTest.run();
             System.out.println("OpenGL restoration checks passed");
         } finally { if (context != null) context.destroy(); else Display.destroy(); }
     }

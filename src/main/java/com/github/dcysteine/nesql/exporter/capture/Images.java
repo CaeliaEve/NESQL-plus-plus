@@ -192,7 +192,7 @@ final class Images implements AutoCloseable {
         Jobs.checkpoint();
         IIcon icon = request.item != null ? request.item.getIconIndex() : request.fluid.getFluid().getIcon(request.fluid);
         if (icon == null && request.item == null) throw new Jobs.Fault("texture_missing", "Fluid has no texture: " + request.registry);
-        return icons.capture(SIZE, SIZE, 16, 16, 100, request.registry, () -> {
+        return icon(request.registry, () -> {
             GL11.glEnable(GL12.GL_RESCALE_NORMAL);
             RenderHelper.enableGUIStandardItemLighting();
             if (request.item != null) GuiContainerManager.drawItem(0, 0, request.item);
@@ -204,6 +204,12 @@ final class Images implements AutoCloseable {
                 GuiDraw.gui.drawTexturedModelRectFromIcon(0, 0, icon, 16, 16);
             }
         });
+    }
+
+    byte[] icon(String location, Runnable draw) {
+        // NEI adds 100 to RenderItem.zLevel; the item/effect pass adds another 50.
+        // Keep the same depth envelope as pictures/scenes, including raised 3D geometry.
+        return icons.capture(SIZE, SIZE, 16, 16, 1000, location, draw);
     }
 
     private static BufferedImage decode(int width, int height, byte[] rgba) {
