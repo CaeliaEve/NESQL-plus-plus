@@ -25,6 +25,10 @@ for (const name of ['func_71517_b', 'func_71518_a', 'func_82362_a', 'func_71515_
 }
 const main = tool('javap', ['-classpath', jar, '-constants', 'com.github.dcysteine.nesql.exporter.main.Main']);
 const preview = tool('javap', ['-classpath', jar, '-p', 'com.github.dcysteine.nesql.exporter.capture.Preview$Space']);
+const magic = tool('javap', ['-classpath', jar, '-p', '-c', 'com.github.dcysteine.nesql.exporter.capture.Magic']);
+// TC4's three-argument overload always draws the dark/unknown-aspect variant.
+assert.match(magic, /iconst_0\s+\d+: invokestatic[^\n]+UtilsFX\.drawTag:\(IILthaumcraft\/api\/aspects\/Aspect;FIDIFZ\)V/,
+  'Aspect capture must explicitly select the native colored (not gray) branch');
 for (const name of ['func_147439_a', 'func_147465_d', 'func_72805_g', 'func_147438_o', 'func_147455_a', 'func_147475_p', 'func_72838_d']) {
   assert.ok(preview.includes(`${name}(`), `Preview world override is not reobfuscated: ${name}`);
 }

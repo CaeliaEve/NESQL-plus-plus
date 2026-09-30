@@ -60,7 +60,10 @@ final class Magic {
                 "color", uint(Integer.toUnsignedLong(aspect.getColor() | 0xff000000)), "components", components,
                 "discovered", known == null ? null : known.aspects.containsKey(aspect), "icon", null);
         facts.row("aspects", record);
-        facts.picture(new Facts.Picture(record, "icon", "thaumcraft:aspect/" + aspect.getTag(), () -> UtilsFX.drawTag(0, 0, aspect)));
+        // TC4's short overload forces the gray/unknown variant. Capture the native
+        // colored definition; discovered knowledge remains a separate record field.
+        facts.picture(new Facts.Picture(record, "icon", "thaumcraft:aspect/" + aspect.getTag(),
+                () -> UtilsFX.drawTag(0, 0, aspect, 0.0F, 0, 0.0D, org.lwjgl.opengl.GL11.GL_ONE_MINUS_SRC_ALPHA, 1.0F, false)));
     }
 
     Cursor research(int index) {
