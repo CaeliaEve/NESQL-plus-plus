@@ -494,8 +494,15 @@ export class AcceptanceCoordinator {
         state.excluded.push(...row.excludedRecipes);
         if (row.failures.length > 0) {
           state.hasFailures = true;
-          state.failures.push(...row.failures.map(f => ({ handler: handlerId, offset: state.offset, ...f })));
-          checkpoint.failures.push(...row.failures.map(f => ({ handler: handlerId, ...f })));
+          // Full reports and every per-recipe error have already been hash-verified and
+          // archived. Retain bounded examples here, rather than serializing all stacks
+          // twice at every checkpoint of a large failing handler.
+          const retained = row.failures.slice(0, Math.max(0, 16 - state.failures.length));
+          state.failures.push(...retained.map(f => ({ handler: handlerId, offset: state.offset, ...f })));
+          state.failureSamplesOmitted = (state.failureSamplesOmitted ?? 0) + row.failures.length - retained.length;
+          checkpoint.failures.push({ handler: handlerId, offset: state.offset,
+            error: { code: 'recipe_check_failures', message: `${row.failedRecipes.length} recipe(s) failed in this page` },
+            archivePath: archive.archivePath, sha256: archive.sha256 });
         }
         state.failuresOmitted += rowOmitted;
         if (row.status === 'failed') {

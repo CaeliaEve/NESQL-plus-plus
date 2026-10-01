@@ -50,6 +50,8 @@ public final class StudiesTest {
                     && axe.getAsJsonArray("registrations").get(1).getAsJsonObject().get("reference").getAsBoolean(),
                     "Diagnostics lost the original category or virtual reference");
             require(studies.get("@knowledge") == null && Studies.find("@knowledge") == null, "Unregistered knowledge flags were rejected");
+            require(Studies.find("Portable Node") == null && Studies.find("INFUSED_INKWELL") == null,
+                    "Recipe knowledge keys must survive without inventing research definitions");
             rejected("research_reference", () -> studies.get("MISSING"), "MISSING");
             rejected("research_key", () -> studies.get(""), "prerequisite");
 

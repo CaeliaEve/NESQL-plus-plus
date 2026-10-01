@@ -101,7 +101,10 @@ final class Studies {
 
     static ResearchItem find(String key) {
         key(key);
-        return reference(key, ResearchCategories.getResearch(key));
+        // Recipe eligibility checks the player's literal completed-key list, not
+        // registration of a research page. Keep an absent definition as a null link.
+        ResearchItem study = ResearchCategories.getResearch(key);
+        return study == null ? null : reference(key, study);
     }
 
     JsonObject describe() {

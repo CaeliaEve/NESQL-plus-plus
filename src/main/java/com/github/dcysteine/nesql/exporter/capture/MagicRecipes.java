@@ -86,6 +86,12 @@ final class MagicRecipes {
 
     int size() { return recipes.size() + (wands == null ? 0 : wands.size()); }
 
+    static ShapedArcaneRecipe shapedProjection(String research, ItemStack output, AspectList aspects) {
+        // Thaumcraft's String-row parser reads the next argument without a bounds check.
+        // Pass one String[] argument so its array-row parser terminates at the array length.
+        return new ShapedArcaneRecipe(research, output.copy(), aspects, (Object) new String[] {" "});
+    }
+
     @SuppressWarnings("unchecked")
     boolean capture(int index, RecipeRow row) {
         boolean replacement = index >= recipes.size();
@@ -166,7 +172,7 @@ final class MagicRecipes {
             for (int x = 0; x < width; x++) for (int y = 0; y < height; y++) {
                 if (!cells.get(y * width + x).isJsonNull()) positionsToSlots.add(cells.get(y * width + x).getAsInt());
             }
-            ShapedArcaneRecipe copy = new ShapedArcaneRecipe(arcane.getResearch(), output.copy(), costs(aspects), " ");
+            ShapedArcaneRecipe copy = shapedProjection(arcane.getResearch(), output, costs(aspects));
             copy.width = width; copy.height = height; copy.input = new Object[inputArr.length]; copy.setMirrored(mirror);
             for (int cell = 0; cell < inputArr.length; cell++) if (!cells.get(cell).isJsonNull()) {
                 copy.input[cell] = stacks(inputs.get(cells.get(cell).getAsInt()));

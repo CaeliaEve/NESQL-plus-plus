@@ -38,6 +38,7 @@ public final class SourceTest {
         com.github.dcysteine.nesql.exporter.capture.ModelsTest.run();
         com.github.dcysteine.nesql.exporter.capture.UiTest.run();
         com.github.dcysteine.nesql.exporter.capture.ProductsTest.run();
+        com.github.dcysteine.nesql.exporter.capture.MagicRecipesTest.run();
         com.github.dcysteine.nesql.exporter.capture.EnvironmentTest.run(root.resolve("environment"));
         com.github.dcysteine.nesql.exporter.capture.StudiesTest.run();
         com.github.dcysteine.nesql.exporter.capture.AspectsTest.run();

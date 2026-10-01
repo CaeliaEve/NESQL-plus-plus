@@ -53,6 +53,58 @@ test('AcceptanceCoordinator retains and archives native handler-open errors befo
 
 function digestForTest(bytes) { return createHash('sha256').update(bytes).digest('hex'); }
 
+test('large failed scans retain every raw detail but bound repeated checkpoint samples', async t => {
+  const instance = await fixture(path.join(os.tmpdir(), 'nesql-bounded-errors-'));
+  t.after(() => rm(instance, { recursive: true, force: true }));
+  const directory = path.join(instance, 'nesql', 'checks');
+  await mkdir(directory, { recursive: true });
+  const coordinator = new AcceptanceCoordinator(instance, { pageSize: 40 });
+  const jobs = new Map();
+  coordinator.client = { session: 'bounded', request: async (method, url, body) => {
+    if (url === '/game') return gameState(instance, { ready: true, world: { folder: 'test-world' }, exporter: '0.15.0', revision: 14 });
+    if (url === '/checks') {
+      const id = `page-${body.offset}`;
+      const failures = [], failureFiles = [];
+      for (let index = body.offset; index < body.offset + 40; index++) {
+        const error = { code: 'magic_recipe', type: 'Jobs$Fault', fatal: false, message: `index ${index}: ${'detail'.repeat(1000)}` };
+        failures.push({ index, error });
+        const raw = Buffer.from(JSON.stringify({ format: 'nesql.failure', job: id, target: { handler: 'native' }, index, error }));
+        const name = `${id}-${index}.json`;
+        await writeFile(path.join(directory, name), raw);
+        failureFiles.push({ path: name, index, bytes: raw.length, sha256: digestForTest(raw) });
+      }
+      const row = { handler: 'native', status: 'failed', totalRecipes: 80, offset: body.offset,
+        end: body.offset + 40, checkedRecipes: 40, unexamined: 40 - body.offset,
+        failedRecipes: failures.map(f => f.index), excludedRecipes: [], failures, failureFiles, failuresOmitted: 0 };
+      const raw = Buffer.from(JSON.stringify({ rows: [row] }));
+      const reportPath = path.join(directory, `${id}.json`);
+      await writeFile(reportPath, raw);
+      jobs.set(`/jobs/${id}`, { job: { id, state: 'checked', report: { path: reportPath, bytes: raw.length, sha256: digestForTest(raw) } } });
+      return { id };
+    }
+    if (jobs.has(url)) return jobs.get(url);
+    throw new Error(`Unexpected request ${method} ${url}`);
+  } };
+  const checkpoint = await coordinator.runPlan({ world: 'test-world', modSha256, handlers: [{ id: 'native' }] });
+  const state = checkpoint.handlers.native;
+  assert.equal(state.status, 'failed');
+  assert.equal(state.checked, 80);
+  assert.deepEqual(state.failed, Array.from({ length: 80 }, (_, i) => i));
+  assert.ok(state.failures.length <= 16, 'repeated full error objects must not grow with recipe count');
+  assert.equal(state.failures.length + state.failureSamplesOmitted, 80);
+  assert.equal(state.failuresOmitted, 0, 'checkpoint sampling is not producer evidence loss');
+  assert.ok(checkpoint.failures.length <= 16, 'global checkpoint must reference page archives instead of repeating every stack');
+  assert.equal(checkpoint.archivedReports.length, 2);
+  let archived = 0;
+  for (const report of checkpoint.archivedReports) for (const file of report.files) {
+    const raw = await readFile(file.archivePath);
+    assert.equal(digestForTest(raw), file.sha256);
+    assert.equal(JSON.parse(raw).index, file.index);
+    archived++;
+  }
+  assert.equal(archived, 80);
+});
+
 test('AcceptanceCoordinator archives resource failures using the resource identity', async t => {
   const instance = await fixture(path.join(os.tmpdir(), 'nesql-resource-detail-'));
   t.after(() => rm(instance, { recursive: true, force: true }));
