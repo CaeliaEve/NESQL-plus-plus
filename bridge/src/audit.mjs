@@ -8,6 +8,14 @@ import { digest } from './plan.mjs';
 // Exact, reviewed routes in capture/Recipes.java, GtRecipes.java and MagicRecipes.java.
 // A shared adapter does not imply identical category semantics or successful capture.
 const routes = new Map([
+  ...['MaceratorRecipeHandler', 'ExtractorRecipeHandler', 'CompressorRecipeHandler', 'MetalFormerRecipeHandlerCutting',
+    'MetalFormerRecipeHandlerRolling', 'MetalFormerRecipeHandlerExtruding', 'CentrifugeRecipeHandler']
+    .map(name => [`ic2.neiIntegration.core.recipehandler.${name}`,
+      { adapter: 'Ic2Recipes', registry: 'IC2 2.2.828 machine recipe registry / IRecipeInput / RecipeOutput', evidence: 'src/main/java/com/github/dcysteine/nesql/exporter/capture/Ic2Recipes.java' }]),
+  ...['SmokerRecipeHandler', 'BlastFurnaceRecipeHandler'].map(name => [`ganymedes01.etfuturum.compat.nei.${name}`,
+    { adapter: 'SmeltingRecipes', registry: 'Et Futurum 2.6.2.25 inherited smelting, overrides and blacklist', evidence: 'src/main/java/com/github/dcysteine/nesql/exporter/capture/SmeltingRecipes.java' }]),
+  ...['ExtremeShapedRecipeHandler', 'ExtremeShapelessRecipeHandler'].map(name => [`fox.spiteful.avaritia.compat.nei.${name}`,
+    { adapter: 'ExtremeRecipes', registry: 'Avaritia 1.77 ExtremeCraftingManager', evidence: 'src/main/java/com/github/dcysteine/nesql/exporter/capture/ExtremeRecipes.java' }]),
   ...['gregtech.nei.GTNEIDefaultHandler', 'bartworks.neiHandler.BioLabNEIHandler', 'bartworks.neiHandler.BioVatNEIHandler']
     .map(name => [name, { adapter: 'GtRecipes', registry: 'GTRecipe / RecipeCategory.recipeMap', evidence: 'src/main/java/com/github/dcysteine/nesql/exporter/capture/GtRecipes.java' }]),
   ...[

@@ -119,6 +119,15 @@ tasks.register<JavaExec>("nativeAeTest") {
 }
 
 // Requires a real compatibility OpenGL context (Pbuffer); run explicitly or under Xvfb in CI.
+tasks.register<JavaExec>("nativeMachinesTest") {
+    group = "verification"
+    dependsOn("testClasses")
+    classpath = sourceSets.test.get().runtimeClasspath + gameLibraries + files(project.findProperty("nativeTestJar"), project.findProperty("nativeExtraTestJar"), project.findProperty("nativeCraftingTestJar"))
+    main = "com.github.dcysteine.nesql.exporter.capture.NativeMachinesTest"
+    maxHeapSize = "256m"
+    systemProperty("nesql.nativeMachineTests", "true")
+}
+
 val glNatives by configurations.creating
 val nativePlatform = if (System.getProperty("os.name").startsWith("Windows")) "windows" else "linux"
 dependencies { glNatives("org.lwjgl.lwjgl:lwjgl-platform:2.9.1:natives-$nativePlatform") }

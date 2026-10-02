@@ -88,6 +88,13 @@ final class SlotsTest {
     private static void unregisteredDisplay() {
         ItemStack ghost = new ItemStack(new Item() {}, 3, 17);
         ItemStack paper = new ItemStack(Items.paper);
+        try {
+            GtRecipes.ingredients(ghost, false, ignored -> new ItemStack[] {paper});
+            throw new AssertionError("Unification disguised an unregistered recipe source as a valid item");
+        } catch (Jobs.Fault failure) {
+            require(failure.code.equals("unregistered_item") && failure.getMessage().contains("native source")
+                    && failure.getMessage().contains("meta=17"), "Failure did not distinguish the native source from its display expansion");
+        }
         for (boolean source : new boolean[] {false, true}) {
             RecipeRow.Ingredient ingredient = new RecipeRow.Ingredient(paper, source ? ghost : paper, 1, false, object("kind", "exact"));
             PositionedStack cached = new PositionedStack(paper, 10, 20, false);

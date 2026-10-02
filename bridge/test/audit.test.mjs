@@ -67,6 +67,22 @@ test('same handler class retains separate category keys and failure evidence', (
   assert.equal(result.groups.find(g => g.adapter === 'GtRecipes').handlers.length, 2);
 });
 
+test('new native routes are mapped without rewriting old unsupported observations', () => {
+  for (const [handler, adapter] of [
+    ['ic2.neiIntegration.core.recipehandler.MaceratorRecipeHandler', 'Ic2Recipes'],
+    ['ganymedes01.etfuturum.compat.nei.SmokerRecipeHandler', 'SmeltingRecipes'],
+    ['fox.spiteful.avaritia.compat.nei.ExtremeShapedRecipeHandler', 'ExtremeRecipes'],
+  ]) {
+    const { worklist, checkpoint } = fixture();
+    worklist.handlers[1].source.handler = handler;
+    checkpoint.handlers[id(1)].status = 'unsupported';
+    const row = audit(worklist, checkpoint).handlers[1];
+    assert.equal(row.facts.adapter, adapter);
+    assert.equal(row.observation.originalStatus, 'unsupported');
+    assert.equal(row.display.status, 'unverified');
+  }
+});
+
 test('audit CLI hashes original evidence and refuses to overwrite an existing report', async t => {
   const dir = await mkdtemp(path.join(os.tmpdir(), 'nesql-audit-'));
   t.after(() => rm(dir, { recursive: true, force: true }));

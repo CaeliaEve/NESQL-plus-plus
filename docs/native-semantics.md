@@ -76,3 +76,21 @@ Compiler's native conformance test. Tested originals:
 Normal `build` does not silently skip these as passing tests: these are explicitly
 invoked suites requiring local original artifacts. All real-game acceptance
 remains a separate export-agent step with a new immutable candidate receipt.
+
+# Additional native machine and crafting registries (0.17.0)
+
+These eleven identities have production adapters and local native conformance evidence, **not live acceptance**. Source remains revision 15; Catalog remains revision 14. Existing GT/AE2/Thaumcraft semantics are unchanged.
+
+- IC2 2.2.828-experimental: macerator, extractor, compressor, metal former cutting/rolling/extruding, thermal centrifuge. `MachineRecipeHandler.getRecipeList()` supplies the actual machine registry. Exact `RecipeInputItemStack` and `RecipeInputOreDict` predicates ignore NBT, retain input quantities and ore meta overrides. The private `CachedIORecipe` receives copies only. Unknown predicates/metadata fail explicitly. Duration and EU/t are the native unupgraded machine baselines (300/2, 200/10, 500/48); centrifuge minimum heat is retained. Other IC2 machines do not inherit this adapter.
+- Et Futurum 2.6.2.25-GTNH: smoker and blast furnace. Merge inherited furnace recipes through native `canAdd`, then custom overrides through native `ItemStackMap`, and apply the native blacklist. Avoid the handler's repeated `basecache.addAll(arecipes)` allocation. Retain 100 tick processing, output quantities and experience. Fuel is not a result. Reuse the native furnace background and flame/arrow tracks.
+- Avaritia 1.77: exact extreme shaped, shaped ore, shapeless and Forge shapeless ore recipes from `ExtremeCraftingManager`. Preserve 9x9 grids, holes, mirror flags and one-item consumption per cell. Direct Avaritia stacks with tags require those tags; ore-list branches and Forge shapeless ignore them. Empty ore predicates are impossible and excluded. Unknown overrides fail explicitly. Native layout caches receive copied stacks.
+
+`RegistryRecipes` only shares cursor lifetime/dispatch; each adapter owns its semantics. No arbitrary `TemplateRecipeHandler`, `IRecipe` or subclass gains support.
+
+Optional local conformance reuses the isolated `GameTest` bootstrap, at 256 MiB:
+
+```text
+gradlew.bat nativeMachinesTest -PnativeTestJar=build/native-tests/ic2.jar -PnativeExtraTestJar=build/native-tests/etfuturum.jar -PnativeCraftingTestJar=build/native-tests/avaritia.jar
+```
+
+Derive each test jar with `scripts/remap-native-test.py` using the same MCP mapping as existing native tests. Original SHA256: IC2 `de1d4597972be036eccd1c3b37e9980c3c9d9cdb92f52df2bf470971873893f6`; Et Futurum `4925bb676e66a43d50c84f6f8e627fdc486e062b84e5e6b963e124b24840701a`; Avaritia `ef4ad2efcbbe88dfa2673921781988781f106f52a0be4e1d80edcfeb0609f656`. Derived jars stay under ignored `build/native-tests`, never distributed or installed. Standard CI runs the existing build/bridge/GL checks; this optional suite requires the original local jars.

@@ -530,6 +530,7 @@ final class GtRecipes implements AutoCloseable {
         for (ItemStack item : alternatives) {
             Jobs.checkpoint();
             if (item == null || item.getItem() == null) throw new Jobs.Fault("empty_ingredient", "GT ingredient contains an empty source stack");
+            registeredName(item, "GT native source before unification");
             requireAmount(item.stackSize);
             boolean wildcard = Items.feather.getDamage(item) == OreDictionary.WILDCARD_VALUE;
             JsonObject rule = wildcard || !sensitive ? object("kind", "wildcard", "meta", wildcard, "nbt", !sensitive) : object("kind", "exact");
@@ -610,15 +611,20 @@ final class GtRecipes implements AutoCloseable {
 
     private static String displayKey(ItemStack stack, boolean emptyTags, String location) {
         if (stack == null || stack.getItem() == null) return "empty";
-        String registry = Item.itemRegistry.getNameForObject(stack.getItem());
-        if (registry == null || Item.itemRegistry.getObject(registry) != stack.getItem()) {
-            throw new Jobs.Fault("unregistered_item", location + "; unregistered " + itemContext(stack));
-        }
+        String registry = registeredName(stack, location);
         // This projection never changes item facts, source predicates or source amounts.
         // Nonempty tags always retain their complete typed identity, even for an NBT-ignoring input.
         net.minecraft.nbt.NBTTagCompound tag = stack.getTagCompound();
         com.google.gson.JsonElement nbt = tag == null || emptyTags && tag.hasNoTags() ? null : TypedNbt.encode(tag);
         return Identity.item(registry, Items.feather.getDamage(stack), nbt);
+    }
+
+    private static String registeredName(ItemStack stack, String location) {
+        String registry = Item.itemRegistry.getNameForObject(stack.getItem());
+        if (registry == null || Item.itemRegistry.getObject(registry) != stack.getItem()) {
+            throw new Jobs.Fault("unregistered_item", location + "; unregistered " + itemContext(stack));
+        }
+        return registry;
     }
 
     private static String itemContext(ItemStack stack) {

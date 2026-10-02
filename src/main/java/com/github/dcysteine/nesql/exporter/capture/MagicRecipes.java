@@ -85,6 +85,7 @@ final class MagicRecipes {
     }
 
     int size() { return recipes.size() + (wands == null ? 0 : wands.size()); }
+    String sourceType(int index) { return index < recipes.size() ? recipes.get(index).getClass().getName() : Wands.class.getName(); }
 
     static ShapedArcaneRecipe shapedProjection(String research, ItemStack output, AspectList aspects) {
         // Thaumcraft's String-row parser reads the next argument without a bounds check.
