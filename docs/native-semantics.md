@@ -132,3 +132,29 @@ hidden/duplicate outputs, map-order invariance, source ownership, scaled fluid
 amounts, overflow and rejection of unknown recipe implementations. Tests for the
 shared reflection boundary also ensure native cancellation, fatal faults and
 Errors retain their identity instead of becoming ordinary recipe failures.
+
+## TConstruct melting and alloying (consolidated development)
+
+The exact TConstruct 1.13.57-GTNH handlers read `Smeltery` registries, with
+Mantle 0.5.1 metadata keys. Melting consumes one item (native inventory limit),
+ignores NBT and matches exact metadata, including a literal 32767 key. NEI's
+generic wildcard expansion must not broaden that predicate. Retain fluid amount,
+NBT and melting temperature; fuel-dependent heating is not a constant duration.
+
+Exact `AlloyMix` recipes retain per-unit fluid ratios and the native maximum
+integer batch policy. `mix()` matches fluid and NBT; `SmelteryLogic` merges equal
+fluid stacks, so repeated equal ingredients cannot be represented as a normal
+matchable alloy. Such malformed recipes fail explicitly. Empty mixers are native
+NEI exclusions. Native tank projections use deep copies; no game registry amount
+is modified by display construction. No arbitrary `AlloyMix` subclass is trusted.
+Both handlers retain native backgrounds, fluid tanks and melting temperature
+text; these handlers contain no progress animation to replace. Native rendering
+still needs consolidated live validation.
+
+Run `nativeMachinesTest -PnativeFamily=tconstruct
+-PnativeTestJar=build/native-tests/tconstruct.jar
+-PnativeExtraTestJar=build/native-tests/mantle.jar`. Tests compare native mixing
+at three batches (including remainders and NBT rejection), input/output ratios,
+owned display stacks, temperature, one-item consumption and literal 32767 keys.
+Original SHA256: TConstruct `f2cb53b94f135b7523bcb7afea5ef53b9afb40c0bc034fc5ec5018ad0502bc61`;
+Mantle `6a48d327d3442235a697b1cb57447e50e136374706c7a650262a533f16edd360`.

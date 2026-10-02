@@ -17,8 +17,67 @@ import static com.github.dcysteine.nesql.exporter.source.Json.*;
 /** Selected real-jar conformance cases, sharing the existing nativeMachinesTest bootstrap. */
 final class NativeFactoriesTest {
     static void run(String family) throws Exception {
+        if (family.equals("tconstruct")) { tconstruct(); return; }
         if (!family.equals("forestry")) throw new IllegalArgumentException("Unknown native test family: " + family);
         forestry();
+    }
+    private static void tconstruct() throws Exception {
+        Class<?> smeltery = Class.forName("tconstruct.library.crafting.Smeltery");
+        TemplateRecipeHandler alloying = (TemplateRecipeHandler) Class.forName("tconstruct.plugins.nei.RecipeHandlerAlloying").newInstance();
+        require(Recipes.adapter(alloying) != null, "TConstruct alloying has no native registry adapter");
+        FluidStack water = new FluidStack(FluidRegistry.WATER, 3), lava = new FluidStack(FluidRegistry.LAVA, 5);
+        water.tag = new net.minecraft.nbt.NBTTagCompound(); water.tag.setString("grade", "pure");
+        FluidStack output = new FluidStack(FluidRegistry.WATER, 7);
+        Class<?> alloy = Class.forName("tconstruct.library.crafting.AlloyMix");
+        Object recipe = alloy.getConstructor(FluidStack.class, List.class).newInstance(output, Arrays.asList(water, lava));
+        List<FluidStack> supply = new ArrayList<>();
+        FluidStack scaledWater = water.copy(); scaledWater.amount = 10;
+        supply.add(scaledWater); supply.add(new FluidStack(FluidRegistry.LAVA, 16));
+        FluidStack mixed = (FluidStack) alloy.getMethod("mix", List.class).invoke(recipe, supply);
+        require(mixed.amount == 21 && supply.get(0).amount == 1 && supply.get(1).amount == 1, "Native alloy does not use maximum integer batches");
+        List<FluidStack> wrongTags = new ArrayList<>(Arrays.asList(new FluidStack(FluidRegistry.WATER, 3), lava.copy()));
+        require(alloy.getMethod("mix", List.class).invoke(recipe, wrongTags) == null, "Native alloy unexpectedly ignores fluid NBT");
+        RecipeRow row = row(new ItemStack(Items.paper), Collections.emptyList());
+        capture("TinkerRecipes", alloying, recipe, row);
+        require(row.inputs.size() == 2 && row.outputs.get(0).getAsJsonObject().get("amount").getAsString().equals("7"), "Alloy stoichiometry changed");
+        require(row.inputs.get(0).getAsJsonObject().getAsJsonArray("choices").get(0).getAsJsonObject().get("amount").getAsString().equals("3"), "Alloy input ratio changed");
+        String inputId = row.inputs.get(0).getAsJsonObject().getAsJsonArray("choices").get(0).getAsJsonObject().get("id").getAsString();
+        require(inputId.equals(Identity.fluid("water", TypedNbt.encode(water.tag))) && row.properties.has("tconstruct:batch"), "Alloy NBT or batch policy was lost");
+        Object tank = ((List<?>) MagicApi.invoke(alloying.arecipes.get(0).getClass(), alloying.arecipes.get(0), "getFluidTanks", new Class<?>[0])).get(0);
+        ((FluidStack) MagicApi.field(tank, "fluid")).amount = 99;
+        require(output.amount == 7 && water.amount == 3 && lava.amount == 5, "Alloy display mutated the source registry");
+        Object duplicate = alloy.getConstructor(FluidStack.class, List.class).newInstance(output, Arrays.asList(water, water.copy()));
+        try { capture("TinkerRecipes", alloying, duplicate, row(new ItemStack(Items.paper), Collections.emptyList()));
+            throw new AssertionError("Unmatchable repeated fluid accepted as an ordinary alloy"); }
+        catch (Jobs.Fault expected) { require(expected.code.equals("recipe_unsupported"), "Wrong repeated-fluid failure"); }
+        try { capture("TinkerRecipes", alloying, new Object(), row(new ItemStack(Items.paper), Collections.emptyList()));
+            throw new AssertionError("Unknown alloy implementation accepted"); }
+        catch (Jobs.Fault expected) { require(expected.code.equals("recipe_unsupported"), "Wrong unknown-alloy failure"); }
+
+        TemplateRecipeHandler melting = (TemplateRecipeHandler) Class.forName("tconstruct.plugins.nei.RecipeHandlerMelting").newInstance();
+        require(Recipes.adapter(melting) != null, "TConstruct melting has no native registry adapter");
+        ItemStack input = new ItemStack(Items.paper, 9, 2);
+        FluidStack result = new FluidStack(FluidRegistry.WATER, 144);
+        smeltery.getMethod("addMelting", ItemStack.class, net.minecraft.block.Block.class, int.class, int.class, FluidStack.class)
+                .invoke(null, input, net.minecraft.init.Blocks.stone, 0, 900, result);
+        ItemStack tagged = input.copy(); tagged.setTagInfo("ignored", new net.minecraft.nbt.NBTTagInt(1));
+        require(((FluidStack) smeltery.getMethod("getSmelteryResult", ItemStack.class).invoke(null, tagged)).amount == 144, "Native melting unexpectedly requires NBT");
+        RecipeRow melted = row(input, Collections.emptyList()); capture("TinkerRecipes", melting, input, melted);
+        com.google.gson.JsonObject choice = melted.inputs.get(0).getAsJsonObject().getAsJsonArray("choices").get(0).getAsJsonObject();
+        require(choice.get("amount").getAsString().equals("1") && choice.getAsJsonObject("rule").get("nbt").getAsBoolean()
+                && !choice.getAsJsonObject("rule").get("meta").getAsBoolean(), "Melting must consume one exact-metadata item and ignore NBT");
+        require(melted.outputs.get(0).getAsJsonObject().get("amount").getAsString().equals("144") && melted.properties.has("tconstruct:temperature"), "Melting amount/temperature was lost");
+        require(input.stackSize == 9 && result.amount == 144, "Melting changed native registry objects");
+        ItemStack exact = new ItemStack(Items.book, 1, 32767);
+        smeltery.getMethod("addMelting", ItemStack.class, net.minecraft.block.Block.class, int.class, int.class, FluidStack.class)
+                .invoke(null, exact, net.minecraft.init.Blocks.stone, 0, 800, result);
+        require(smeltery.getMethod("getSmelteryResult", ItemStack.class).invoke(null, new ItemStack(Items.book)) == null,
+                "Mantle unexpectedly expands wildcard keys");
+        RecipeRow unusual = row(exact, Collections.emptyList()); capture("TinkerRecipes", melting, exact, unusual);
+        com.google.gson.JsonObject exactChoice = unusual.inputs.get(0).getAsJsonObject().getAsJsonArray("choices").get(0).getAsJsonObject();
+        require(exactChoice.get("id").getAsString().equals(Identity.item("minecraft:book", 32767, null))
+                && !exactChoice.getAsJsonObject("rule").get("meta").getAsBoolean(), "NEI wildcard expansion broadened an exact Mantle key");
+        System.out.println("Native TConstruct: alloy stoichiometry, maximum integer batches, fluid NBT, one-item melting, exact metadata, temperature and owned display passed");
     }
     private static void forestry() throws Exception {
         String prefix = "forestry.factory.";
@@ -85,7 +144,10 @@ final class NativeFactoriesTest {
         System.out.println("Native Forestry: unit consumption, conditional NBT, exact probability, hidden outputs, cycle-scaled fluids, RF units, source ownership and unknown overrides passed");
     }
     private static void capture(TemplateRecipeHandler handler, Object source, RecipeRow row) throws Exception {
-        Method method = Class.forName("com.github.dcysteine.nesql.exporter.capture.ForestryRecipes")
+        capture("ForestryRecipes", handler, source, row);
+    }
+    private static void capture(String adapter, TemplateRecipeHandler handler, Object source, RecipeRow row) throws Exception {
+        Method method = Class.forName("com.github.dcysteine.nesql.exporter.capture." + adapter)
                 .getDeclaredMethod("capture", TemplateRecipeHandler.class, Object.class, RecipeRow.class);
         method.setAccessible(true);
         try { method.invoke(null, handler, source, row); }

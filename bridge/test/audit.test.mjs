@@ -74,6 +74,8 @@ test('new native routes are mapped without rewriting old unsupported observation
     ['fox.spiteful.avaritia.compat.nei.ExtremeShapedRecipeHandler', 'ExtremeRecipes'],
     ['forestry.factory.recipes.nei.NEIHandlerCentrifuge', 'ForestryRecipes'],
     ['forestry.factory.recipes.nei.NEIHandlerStill', 'ForestryRecipes'],
+    ['tconstruct.plugins.nei.RecipeHandlerAlloying', 'TinkerRecipes'],
+    ['tconstruct.plugins.nei.RecipeHandlerMelting', 'TinkerRecipes'],
   ]) {
     const { worklist, checkpoint } = fixture();
     worklist.handlers[1].source.handler = handler;
