@@ -72,6 +72,8 @@ test('new native routes are mapped without rewriting old unsupported observation
     ['ic2.neiIntegration.core.recipehandler.MaceratorRecipeHandler', 'Ic2Recipes'],
     ['ganymedes01.etfuturum.compat.nei.SmokerRecipeHandler', 'SmeltingRecipes'],
     ['fox.spiteful.avaritia.compat.nei.ExtremeShapedRecipeHandler', 'ExtremeRecipes'],
+    ['forestry.factory.recipes.nei.NEIHandlerCentrifuge', 'ForestryRecipes'],
+    ['forestry.factory.recipes.nei.NEIHandlerStill', 'ForestryRecipes'],
   ]) {
     const { worklist, checkpoint } = fixture();
     worklist.handlers[1].source.handler = handler;

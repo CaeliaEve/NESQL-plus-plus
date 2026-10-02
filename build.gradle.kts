@@ -122,10 +122,11 @@ tasks.register<JavaExec>("nativeAeTest") {
 tasks.register<JavaExec>("nativeMachinesTest") {
     group = "verification"
     dependsOn("testClasses")
-    classpath = sourceSets.test.get().runtimeClasspath + gameLibraries + files(project.findProperty("nativeTestJar"), project.findProperty("nativeExtraTestJar"), project.findProperty("nativeCraftingTestJar"))
+    classpath = sourceSets.test.get().runtimeClasspath + gameLibraries + files(listOfNotNull(project.findProperty("nativeTestJar"), project.findProperty("nativeExtraTestJar"), project.findProperty("nativeCraftingTestJar")))
     main = "com.github.dcysteine.nesql.exporter.capture.NativeMachinesTest"
     maxHeapSize = "256m"
     systemProperty("nesql.nativeMachineTests", "true")
+    systemProperty("nesql.nativeFamily", project.findProperty("nativeFamily")?.toString() ?: "machines")
 }
 
 val glNatives by configurations.creating

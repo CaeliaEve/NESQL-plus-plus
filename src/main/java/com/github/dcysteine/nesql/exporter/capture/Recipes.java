@@ -30,7 +30,7 @@ import static com.github.dcysteine.nesql.exporter.source.Json.*;
 
 /** Explicit enumeration adapters. An unsupported handler is an error, never an empty recipe list. */
 final class Recipes {
-    enum Adapter { GT, MAGIC, AE, IC2, SMELTING, EXTREME, FURNACE, SHAPED, SHAPELESS }
+    enum Adapter { GT, MAGIC, AE, IC2, SMELTING, EXTREME, FORESTRY, FURNACE, SHAPED, SHAPELESS }
 
     static Adapter adapter(ICraftingHandler handler) {
         if (GtRecipes.supports(handler)) return Adapter.GT;
@@ -39,6 +39,7 @@ final class Recipes {
         if (Ic2Recipes.supports(handler)) return Adapter.IC2;
         if (SmeltingRecipes.supports(handler)) return Adapter.SMELTING;
         if (ExtremeRecipes.supports(handler)) return Adapter.EXTREME;
+        if (ForestryRecipes.supports(handler)) return Adapter.FORESTRY;
         if (handler.getClass() == FurnaceRecipeHandler.class) return Adapter.FURNACE;
         if (handler.getClass() == ShapedRecipeHandler.class) return Adapter.SHAPED;
         if (handler.getClass() == ShapelessRecipeHandler.class) return Adapter.SHAPELESS;
@@ -124,6 +125,8 @@ final class Recipes {
                     registry = new SmeltingRecipes((FurnaceRecipeHandler) handler);
                 } else if (adapter == Adapter.EXTREME) {
                     registry = new ExtremeRecipes(handler);
+                } else if (adapter == Adapter.FORESTRY) {
+                    registry = new ForestryRecipes(handler);
                 } else if (adapter == Adapter.FURNACE) {
                     handler.loadCraftingRecipes("smelting");
                 } else if (adapter == Adapter.SHAPED || adapter == Adapter.SHAPELESS) {
@@ -236,6 +239,8 @@ final class Recipes {
                     for (com.google.gson.JsonElement element : Ui.furnace(facts, (FurnaceRecipeHandler) handler, source.id)) decorations.add(element);
                 } else if (registry instanceof Ic2Recipes && decorations.size() == 0) {
                     for (com.google.gson.JsonElement element : Ui.neiProgress(facts, handler, source.id, new int[][] {Ic2Recipes.progressBar(handler)})) decorations.add(element);
+                } else if (registry instanceof ForestryRecipes && decorations.size() == 0) {
+                    for (com.google.gson.JsonElement element : Ui.neiProgress(facts, handler, source.id, new int[][] {ForestryRecipes.progressBar(handler)})) decorations.add(element);
                 }
                 for (com.google.gson.JsonElement element : decorations) row.elements.add(element);
                 HandlerInfo info = GuiRecipeTab.getHandlerInfo(handler);
@@ -252,6 +257,7 @@ final class Recipes {
                 if (gt != null) gt.ui.add(facts, row, width, height, nativeRecipe);
                 facts.scene(new Facts.Scene(row.record, row.elements, width, height, gt == null ? 0 : gt.ui.foreground(), source.id, () -> {
                     if (registry instanceof Ic2Recipes) Ic2Recipes.scene(handler, () -> { handler.drawBackground(at); handler.drawForeground(at); });
+                    else if (registry instanceof ForestryRecipes) ForestryRecipes.draw(handler, at);
                     else if (gt == null) { handler.drawBackground(at); if (decorations.size() == 0) handler.drawForeground(at); }
                     else gt.foreground(at, row);
                 }));

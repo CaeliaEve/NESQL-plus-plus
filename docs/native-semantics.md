@@ -94,3 +94,41 @@ gradlew.bat nativeMachinesTest -PnativeTestJar=build/native-tests/ic2.jar -Pnati
 ```
 
 Derive each test jar with `scripts/remap-native-test.py` using the same MCP mapping as existing native tests. Original SHA256: IC2 `de1d4597972be036eccd1c3b37e9980c3c9d9cdb92f52df2bf470971873893f6`; Et Futurum `4925bb676e66a43d50c84f6f8e627fdc486e062b84e5e6b963e124b24840701a`; Avaritia `ef4ad2efcbbe88dfa2673921781988781f106f52a0be4e1d80edcfeb0609f656`. Derived jars stay under ignored `build/native-tests`, never distributed or installed. Standard CI runs the existing build/bridge/GL checks; this optional suite requires the original local jars.
+
+## Forestry factories (consolidated development, not a released/live result)
+
+Forestry 4.10.17 centrifuge and still enumerate their `RecipeManagers` registries.
+Only the exact native `CentrifugeRecipe` and `StillRecipe` implementations are
+adapted; unknown implementations fail explicitly. Owned native cache projections
+receive copied items, fluids and maps. Static foreground/tanks and the native
+progress texture are captured separately; actual GL appearance remains untested
+until the consolidated live run.
+
+- Centrifuge consumes one input in `TileCentrifuge.workCycle`, independently of
+  the display count. `ItemStackUtil.isCraftingEquivalent` ignores input NBT only
+  when the recipe's tags are absent/empty, and honors wildcard metadata. Duration
+  is `getProcessingTime`, with baseline energy `time * 160` RF. Independent output
+  rolls retain native float probabilities (not GT's 1/10000 grid); NaN/negative
+  means never, at least one means always. All products survive the nine-slot NEI
+  limit. Canonical item identity/count/probability order stabilizes recipe facts;
+  separate duplicate rolls remain separate. Display association follows native
+  descending probability so a rare hidden duplicate cannot take a guaranteed
+  duplicate's visible slot.
+- Still's API amounts are per cycle: the machine drains `input * cycles` and
+  produces `output * cycles`. Duration is cycles, baseline energy `cycles * 200`
+  RF. Retain exact fluid NBT and reject overflowing native batch arithmetic.
+  RF is a named property; the EU/t field is not reused for another energy unit.
+
+Regression command (same existing lightweight native entry point):
+
+```text
+gradlew.bat nativeMachinesTest -PnativeFamily=forestry -PnativeTestJar=build/native-tests/forestry.jar
+```
+
+Original `Forestry-4.10.17.jar` SHA256:
+`b537738e29c242726ce7f356985bfd21214f7c8948ea0526e951dbe2f419a3fd`.
+Real-jar tests cover one-item consumption, required tags, rare probability,
+hidden/duplicate outputs, map-order invariance, source ownership, scaled fluid
+amounts, overflow and rejection of unknown recipe implementations. Tests for the
+shared reflection boundary also ensure native cancellation, fatal faults and
+Errors retain their identity instead of becoming ordinary recipe failures.

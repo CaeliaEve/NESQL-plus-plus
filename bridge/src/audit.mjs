@@ -8,6 +8,8 @@ import { digest } from './plan.mjs';
 // Exact, reviewed routes in capture/Recipes.java, GtRecipes.java and MagicRecipes.java.
 // A shared adapter does not imply identical category semantics or successful capture.
 const routes = new Map([
+  ...['NEIHandlerCentrifuge', 'NEIHandlerStill'].map(name => [`forestry.factory.recipes.nei.${name}`,
+    { adapter: 'ForestryRecipes', registry: 'Forestry 4.10.17 RecipeManagers / native factory consumption', evidence: 'src/main/java/com/github/dcysteine/nesql/exporter/capture/ForestryRecipes.java' }]),
   ...['MaceratorRecipeHandler', 'ExtractorRecipeHandler', 'CompressorRecipeHandler', 'MetalFormerRecipeHandlerCutting',
     'MetalFormerRecipeHandlerRolling', 'MetalFormerRecipeHandlerExtruding', 'CentrifugeRecipeHandler']
     .map(name => [`ic2.neiIntegration.core.recipehandler.${name}`,

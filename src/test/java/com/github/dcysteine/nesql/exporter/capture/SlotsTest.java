@@ -82,6 +82,7 @@ final class SlotsTest {
         quantities(facts);
         scans(facts);
         unregisteredDisplay();
+        nativeFailures();
         System.out.println("GT slots: ordered overlaps, empty slots, input/output separation, exact output quantities and alternative-only inputs passed");
     }
 
@@ -390,6 +391,17 @@ final class SlotsTest {
         System.out.println("GT alternatives: native cached wildcard reorder, multiplicity, NBT drift, independent quantities and unchanged cache passed");
     }
 
+    private static void nativeFailures() {
+        for (Throwable failure : new Throwable[] {new java.util.concurrent.CancellationException("cancelled"),
+                new Jobs.Fault("slot_changed", "native fatal"), new LinkageError("native linkage")}) {
+            try { MagicApi.invoke(SlotsTest.class, null, "nativeFailure", new Class<?>[] {Throwable.class}, failure); throw new AssertionError("Native failure swallowed"); }
+            catch (Throwable actual) { require(actual == failure, "Native reflection masked cancellation/fatal/error: " + actual); }
+        }
+        java.io.IOException checked = new java.io.IOException("native checked exception");
+        try { MagicApi.invoke(SlotsTest.class, null, "nativeFailure", new Class<?>[] {Throwable.class}, checked); throw new AssertionError("Native checked failure swallowed"); }
+        catch (Jobs.Fault actual) { require(actual.getCause() == checked && actual.getMessage().contains("nativeFailure"), "Native checked cause lost"); }
+    }
+    private static void nativeFailure(Throwable failure) throws Throwable { throw failure; }
     private static PositionedStack display() { return new PositionedStack(new ItemStack(Items.paper), 10, 20, false); }
     private static void reject(String code, Runnable action) {
         try { action.run(); throw new AssertionError("Expected " + code); }

@@ -5,6 +5,7 @@ import cpw.mods.fml.common.Loader;
 import cpw.mods.fml.common.ModContainer;
 import java.lang.reflect.Field;
 import java.lang.reflect.Method;
+import java.lang.reflect.InvocationTargetException;
 
 /** Access only the explicitly named API members audited for the pinned magic mods. */
 final class MagicApi {
@@ -29,6 +30,13 @@ final class MagicApi {
         for (Class<?> current = owner; current != null && current != Object.class; current = current.getSuperclass()) {
             try { Method method = current.getDeclaredMethod(name, parameters); method.setAccessible(true); return method.invoke(target, arguments); }
             catch (NoSuchMethodException ignored) { }
+            catch (InvocationTargetException error) {
+                Throwable cause = error.getCause();
+                if (cause instanceof Error) throw (Error) cause;
+                if (cause instanceof RuntimeException) throw (RuntimeException) cause;
+                Jobs.Fault failure = fault("Pinned native API call failed: " + owner.getName() + "." + name + ": " + cause);
+                failure.initCause(cause); throw failure;
+            }
             catch (ReflectiveOperationException error) { throw fault("Pinned magic API call failed: " + owner.getName() + "." + name + ": " + error); }
         }
         throw fault("Missing pinned method " + owner.getName() + "." + name);
