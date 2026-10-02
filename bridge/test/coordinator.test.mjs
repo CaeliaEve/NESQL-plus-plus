@@ -53,6 +53,37 @@ test('AcceptanceCoordinator retains and archives native handler-open errors befo
 
 function digestForTest(bytes) { return createHash('sha256').update(bytes).digest('hex'); }
 
+test('commit-memory guard persists a resumable stop before dispatch and allows recovery', async t => {
+  const instance = await fixture(path.join(os.tmpdir(), 'nesql-memory-'));
+  t.after(() => rm(instance, { recursive: true, force: true }));
+  let committedBytes = '99';
+  let dispatched = 0;
+  const coordinator = new AcceptanceCoordinator(instance, {
+    readMemory: async () => ({ committedBytes, commitLimitBytes: '100' }),
+  });
+  coordinator.client = { session: 'memory-session', request: async (method, url) => {
+    if (url === '/game') return gameState(instance, { ready: true, world: { folder: 'test-world' }, exporter: '0.15.0', revision: 14 });
+    if (url === '/checks') { dispatched++; throw new Error('dispatch after recovery'); }
+    throw new Error(`Unexpected request ${method} ${url}`);
+  } };
+  const plan = { world: 'test-world', modSha256, handlers: [{ id: 'native' }],
+    memory: { minimumFreeCommitBytes: '10', maximumCommitPercent: 95 } };
+  await assert.rejects(() => coordinator.runPlan(plan), /resource_pressure/);
+  assert.equal(dispatched, 0);
+  const checkpoint = JSON.parse(await readFile(coordinator.checkpointPath));
+  assert.equal(checkpoint.resourceStop.code, 'resource_pressure');
+  assert.equal(checkpoint.resourceStop.sample.freeCommitBytes, '1');
+  assert.equal(checkpoint.handlers.native.offset, 0);
+  assert.equal(checkpoint.handlers.native.status, 'pending');
+  assert.equal(checkpoint.activeJob, null);
+  committedBytes = '40';
+  await assert.rejects(() => coordinator.runPlan(plan), /dispatch after recovery/);
+  assert.equal(dispatched, 1);
+  assert.equal(JSON.parse(await readFile(coordinator.checkpointPath)).resourceStop, null);
+  const events = (await readFile(coordinator.checkpointPath + '.resources.jsonl', 'utf8')).trim().split('\n').map(JSON.parse);
+  assert.deepEqual(events.map(event => event.sample.freeCommitBytes), ['1', '60']);
+});
+
 test('large failed scans retain every raw detail but bound repeated checkpoint samples', async t => {
   const instance = await fixture(path.join(os.tmpdir(), 'nesql-bounded-errors-'));
   t.after(() => rm(instance, { recursive: true, force: true }));

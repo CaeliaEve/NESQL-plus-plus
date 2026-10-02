@@ -1,4 +1,4 @@
-import { readFile, writeFile, rename, mkdir, stat } from 'node:fs/promises';
+import { readFile, writeFile, appendFile, rename, mkdir, stat } from 'node:fs/promises';
 import { existsSync, readFileSync, statSync } from 'node:fs';
 import { createHash } from 'node:crypto';
 import path from 'node:path';
@@ -9,6 +9,7 @@ import { promisify } from 'node:util';
 import assert from 'node:assert/strict';
 import { prepare, canonical, sha, artifact, digest } from './plan.mjs';
 import { GameClient, GameError } from './client.mjs';
+import { memoryPolicy, assessMemory, readMemory } from './resources.mjs';
 
 const execFileAsync = promisify(execFile);
 
@@ -128,6 +129,7 @@ export class AcceptanceCoordinator {
    * Run full verification for a list of handlers with automatic contiguous pagination.
    */
   async runPlan(plan, { onProgress = () => {} } = {}) {
+    memoryPolicy(plan.memory);
     const game = await this.client.request('GET', '/game');
     if (!game.ready) {
       throw new Error(`Game server is not ready: ${game.reason || 'unknown'}`);
@@ -157,7 +159,7 @@ export class AcceptanceCoordinator {
     if (foundModRow.sha256 !== undefined) assert.equal(foundModRow.sha256, actualModSha, 'Reported mod source digest differs from its file');
     assert.ok(Array.isArray(plan.handlers) && plan.handlers.length, 'A nonempty plan is required');
     assert.equal(new Set(plan.handlers.map(item => item.id)).size, plan.handlers.length, 'Duplicate plan target');
-    const planHash = digest(JSON.stringify(canonical({ handlers: plan.handlers, probes: plan.probes ?? [], dependencies: plan.dependencies ?? {}, pageSize: this.options.pageSize ?? 4096 })));
+    const planHash = digest(JSON.stringify(canonical({ handlers: plan.handlers, probes: plan.probes ?? [], dependencies: plan.dependencies ?? {}, pageSize: this.options.pageSize ?? 4096, memory: plan.memory ?? null })));
     const envFingerprint = AcceptanceCoordinator.fingerprint({
       world: actualWorld, exporter: game.exporter, revision: game.revision,
       modSha256: actualModSha, planHash, session: this.client.session,
@@ -268,6 +270,7 @@ export class AcceptanceCoordinator {
         if (checkpoint.activeJob && checkpoint.activeJob.key === key) {
           jobId = checkpoint.activeJob.id;
         } else {
+          await this.guardResources(plan, checkpoint, { stage: 'check', handler: handlerId, offset: state.offset });
           const jobResult = await this.client.request('POST', '/checks', checkRequest);
           jobId = jobResult.id;
           checkpoint.activeJob = { id: jobId, key, handlerId, offset: state.offset };
@@ -553,6 +556,7 @@ export class AcceptanceCoordinator {
   async runSourceStage(plan, checkpoint) {
     const stage = plan.stages.source;
     const request = { key: stage.key || `full-${this.runId.slice(-12)}`, name: stage.name || 'gtnh-full', profile: 'full', world: plan.world, probes: plan.probes };
+    if (checkpoint.activeExport?.key !== request.key) await this.guardResources(plan, checkpoint, { stage: 'source' });
     const started = checkpoint.activeExport?.key === request.key
       ? checkpoint.activeExport
       : await this.client.request('POST', '/jobs', request);
@@ -575,6 +579,7 @@ export class AcceptanceCoordinator {
   }
 
   async runCompilerStage(plan, checkpoint) {
+    await this.guardResources(plan, checkpoint, { stage: 'compiler' });
     const stage = plan.stages.compiler;
     const source = checkpoint.stages?.source?.result?.path;
     assert.ok(source && path.isAbsolute(source), 'Compiler stage requires a completed source export');
@@ -585,6 +590,22 @@ export class AcceptanceCoordinator {
     const compiled = await runCompiler(stage.executable, ['compile', '--input', source, '--output', output, '--report', report]);
     const checked = await runCompiler(stage.executable, ['check', '--input', output]);
     return { status: 'passed', source, output, report, inspect: inspect.value, compile: compiled.value, check: checked.value };
+  }
+
+  async guardResources(plan, checkpoint, target) {
+    if (!memoryPolicy(plan.memory)) return;
+    let result;
+    try { result = assessMemory(await (this.options.readMemory ?? readMemory)(), plan.memory); }
+    catch (error) {
+      checkpoint.resourceStop = { code: 'resource_monitor_failed', target, message: error.message, at: new Date().toISOString() };
+      await this.saveCheckpoint(checkpoint);
+      throw new Error(`resource_monitor_failed: ${error.message}`);
+    }
+    const event = { at: new Date().toISOString(), target, policy: plan.memory, ...result };
+    checkpoint.resourceStop = result.pressure ? { code: 'resource_pressure', ...event } : null;
+    await this.saveCheckpoint(checkpoint);
+    await appendFile(this.checkpointPath + '.resources.jsonl', JSON.stringify(event) + '\n');
+    if (result.pressure) throw new Error(`resource_pressure: ${result.sample.freeCommitBytes} free committed bytes; checkpoint retained, no new job started`);
   }
 
   async archiveReport(job, rawReport, rows) {

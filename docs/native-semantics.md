@@ -23,8 +23,6 @@ excludes the recipe; an impossible OR branch is removed without losing valid
 alternatives. Unknown predicates remain unsupported even inside an otherwise
 satisfiable OR. The recipe checker retains the excluded native recipe index.
 
-## Reproducing offline evidence
-
 ## AE2 crafting
 
 The exact NEIAEShapedRecipeHandler and NEIAEShapelessRecipeHandler identities
@@ -48,6 +46,17 @@ that branch and actual wildcard expansion remain live acceptance requirements.
 Local conformance is not a claim that every installed AE2 recipe passed.
 
 ## Reproducing offline evidence
+
+The acceptance coordinator optionally accepts `memory` with
+`minimumFreeCommitBytes` (positive decimal string) and `maximumCommitPercent`
+(integer 1..99). For the consolidated Windows batch use `4294967296` and `95`.
+It samples system commit before each new check/export/compile, saves the pending
+offset and a resource event, and exits nonzero if either limit is reached or
+the counters cannot be read. Re-running the same plan can resume after recovery.
+It never kills a running game job, changes the page file, or reuses a different
+game environment. This is a batch dispatch guard, not continuous monitoring or
+a proof of the previous OS Error 1450 cause. Keep the export agent's resource
+monitor running while an individual long game job is in flight.
 
 No client or world is launched. `scripts/remap-native-test.py` accepts an original
 mod jar, ForgeGradle's `srg-mcp.srg`, and a **new** derived test-jar path. It emits

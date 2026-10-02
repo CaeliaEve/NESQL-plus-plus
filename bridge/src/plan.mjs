@@ -1,4 +1,5 @@
 import assert from 'node:assert/strict';
+import { memoryPolicy } from './resources.mjs';
 import { createHash } from 'node:crypto';
 import { readFile, stat, realpath } from 'node:fs/promises';
 import path from 'node:path';
@@ -91,6 +92,7 @@ export async function prepare(configFile) {
     world: config.world, modSha256: mod.sha256, expectedExporter: config.version, expectedRevision: config.revision,
     handlers: worklist.handlers, probes: config.probes ?? [{ count: 1, channels: {} }],
     stages: stageManifest,
+    ...(memoryPolicy(config.memory) ? { memory: config.memory } : {}),
     dependencies: { packages: Object.fromEntries(Object.entries(packages).map(([name, pkg]) => [name, pkg.sha256])), worklist: digest(worklistBytes) },
   };
   return { config, plan, packages, binary: path.join(config.compiler, binary) };

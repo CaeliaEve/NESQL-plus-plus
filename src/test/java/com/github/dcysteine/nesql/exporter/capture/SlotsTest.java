@@ -81,7 +81,25 @@ final class SlotsTest {
         permutations(facts);
         quantities(facts);
         scans(facts);
+        unregisteredDisplay();
         System.out.println("GT slots: ordered overlaps, empty slots, input/output separation, exact output quantities and alternative-only inputs passed");
+    }
+
+    private static void unregisteredDisplay() {
+        ItemStack ghost = new ItemStack(new Item() {}, 3, 17);
+        ItemStack paper = new ItemStack(Items.paper);
+        for (boolean source : new boolean[] {false, true}) {
+            RecipeRow.Ingredient ingredient = new RecipeRow.Ingredient(paper, source ? ghost : paper, 1, false, object("kind", "exact"));
+            PositionedStack cached = new PositionedStack(paper, 10, 20, false);
+            cached.items = new ItemStack[] {source ? paper : ghost};
+            try { GtRecipes.displayed(7, cached, Collections.singletonList(ingredient)); throw new AssertionError("Unregistered item accepted"); }
+            catch (Jobs.Fault failure) {
+                require(failure.code.equals("unregistered_item") && failure.getMessage().contains("slot=7")
+                        && failure.getMessage().contains(source ? "source expansion alternative=0" : "cached alternative=0")
+                        && failure.getMessage().contains("meta=17") && failure.getMessage().contains(ghost.getItem().getClass().getName()),
+                        "Unregistered diagnostic lost source/cached identity: " + failure.getMessage());
+            }
+        }
     }
 
     private static void scans(Facts facts) {

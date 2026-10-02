@@ -16,6 +16,7 @@ const files = new Map([
   [`mod/${mod}`, `build/libs/${mod}`],
   ['README.md', 'README.md'],
   ['docs/mcp.md', 'docs/mcp.md'],
+  ['docs/native-semantics.md', 'docs/native-semantics.md'],
   ['bridge/package.json', 'bridge/package.json'],
   ['bridge/package-lock.json', 'bridge/package-lock.json'],
 ]);

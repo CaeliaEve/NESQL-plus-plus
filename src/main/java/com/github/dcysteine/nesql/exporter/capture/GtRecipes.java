@@ -563,14 +563,16 @@ final class GtRecipes implements AutoCloseable {
                 "wildcard".equals(ingredient.rule.get("kind").getAsString())
                         && ingredient.rule.has("nbt") && ingredient.rule.get("nbt").getAsBoolean());
         Map<String, Integer> remaining = new java.util.LinkedHashMap<>();
-        for (RecipeRow.Ingredient ingredient : ingredients) {
+        for (int index = 0; index < ingredients.size(); index++) {
+            RecipeRow.Ingredient ingredient = ingredients.get(index);
             Jobs.checkpoint();
-            remaining.merge(displayKey(ingredient.display, emptyTags), 1, Integer::sum);
+            remaining.merge(displayKey(ingredient.display, emptyTags, location + "; source expansion alternative=" + index
+                    + "; source=" + itemContext(ingredient.item)), 1, Integer::sum);
         }
         for (int index = 0; index < display.items.length; index++) {
             Jobs.checkpoint();
             ItemStack shown = display.items[index];
-            String key = displayKey(shown, emptyTags);
+            String key = displayKey(shown, emptyTags, location + "; cached alternative=" + index);
             Integer count = remaining.get(key);
             if (count == null) {
                 String expected = "none";
@@ -603,16 +605,28 @@ final class GtRecipes implements AutoCloseable {
     }
 
     private static String displayKey(ItemStack stack, boolean emptyTags) {
+        return displayKey(stack, emptyTags, "GT display");
+    }
+
+    private static String displayKey(ItemStack stack, boolean emptyTags, String location) {
         if (stack == null || stack.getItem() == null) return "empty";
         String registry = Item.itemRegistry.getNameForObject(stack.getItem());
         if (registry == null || Item.itemRegistry.getObject(registry) != stack.getItem()) {
-            throw new Jobs.Fault("unregistered_item", "GT display uses an unregistered item");
+            throw new Jobs.Fault("unregistered_item", location + "; unregistered " + itemContext(stack));
         }
         // This projection never changes item facts, source predicates or source amounts.
         // Nonempty tags always retain their complete typed identity, even for an NBT-ignoring input.
         net.minecraft.nbt.NBTTagCompound tag = stack.getTagCompound();
         com.google.gson.JsonElement nbt = tag == null || emptyTags && tag.hasNoTags() ? null : TypedNbt.encode(tag);
         return Identity.item(registry, Items.feather.getDamage(stack), nbt);
+    }
+
+    private static String itemContext(ItemStack stack) {
+        if (stack == null || stack.getItem() == null) return "empty";
+        // Do not invoke tooltip/name/render callbacks while reporting an invalid registry entry.
+        return "item class=" + stack.getItem().getClass().getName() + "; registry="
+                + Item.itemRegistry.getNameForObject(stack.getItem()) + "; meta=" + Items.feather.getDamage(stack)
+                + "; amount=" + stack.stackSize;
     }
 
     private static String describe(ItemStack stack) {
