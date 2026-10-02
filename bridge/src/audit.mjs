@@ -10,6 +10,8 @@ import { digest } from './plan.mjs';
 const routes = new Map([
   ...['CokeOven', 'BlastFurnace'].map(name => [`tonius.neiintegration.mods.railcraft.RecipeHandler${name}`,
     { adapter: 'RailRecipes', registry: 'Railcraft 9.16.33 furnace registries and native two-pass input priority', evidence: 'src/main/java/com/github/dcysteine/nesql/exporter/capture/RailRecipes.java' }]),
+  ['advsolar.client.nei.MTRecipeHandler', { adapter: 'SolarRecipes', registry: 'AdvancedSolarPanel 3.5.1 native ordered transformer records and total operation energy',
+    evidence: 'src/main/java/com/github/dcysteine/nesql/exporter/capture/SolarRecipes.java' }],
   ['micdoodle8.mods.galacticraft.core.nei.RefineryRecipeHandler', { adapter: 'RefineryRecipes',
     registry: 'Galacticraft 3.3.13 native oil-prefixed fluid conversion and fuel configuration', evidence: 'src/main/java/com/github/dcysteine/nesql/exporter/capture/RefineryRecipes.java' }],
   ['de.katzenpapst.amunra.nei.recipehandler.ARNasaWorkbenchShuttle', { adapter: 'SpaceRecipes',

@@ -30,7 +30,7 @@ import static com.github.dcysteine.nesql.exporter.source.Json.*;
 
 /** Explicit enumeration adapters. An unsupported handler is an error, never an empty recipe list. */
 final class Recipes {
-    enum Adapter { GT, MAGIC, AE, IC2, SMELTING, EXTREME, FORESTRY, TINKER, SPACE, CIRCUIT, REFINERY, RAIL, FURNACE, SHAPED, SHAPELESS }
+    enum Adapter { GT, MAGIC, AE, IC2, SMELTING, EXTREME, FORESTRY, TINKER, SPACE, CIRCUIT, REFINERY, RAIL, SOLAR, FURNACE, SHAPED, SHAPELESS }
 
     static Adapter adapter(ICraftingHandler handler) {
         if (GtRecipes.supports(handler)) return Adapter.GT;
@@ -45,6 +45,7 @@ final class Recipes {
         if (CircuitRecipes.supports(handler)) return Adapter.CIRCUIT;
         if (RefineryRecipes.supports(handler)) return Adapter.REFINERY;
         if (RailRecipes.supports(handler)) return Adapter.RAIL;
+        if (SolarRecipes.supports(handler)) return Adapter.SOLAR;
         if (handler.getClass() == FurnaceRecipeHandler.class) return Adapter.FURNACE;
         if (handler.getClass() == ShapedRecipeHandler.class) return Adapter.SHAPED;
         if (handler.getClass() == ShapelessRecipeHandler.class) return Adapter.SHAPELESS;
@@ -142,6 +143,8 @@ final class Recipes {
                     registry = new RefineryRecipes(handler);
                 } else if (adapter == Adapter.RAIL) {
                     registry = new RailRecipes(handler);
+                } else if (adapter == Adapter.SOLAR) {
+                    registry = new SolarRecipes(handler);
                 } else if (adapter == Adapter.FURNACE) {
                     handler.loadCraftingRecipes("smelting");
                 } else if (adapter == Adapter.SHAPED || adapter == Adapter.SHAPELESS) {
@@ -262,6 +265,8 @@ final class Recipes {
                     for (com.google.gson.JsonElement element : RefineryRecipes.decorations(facts, handler, source.id)) decorations.add(element);
                 } else if (registry instanceof RailRecipes && decorations.size() == 0) {
                     for (com.google.gson.JsonElement element : Ui.neiProgress(facts, handler, source.id, RailRecipes.progressBars(handler))) decorations.add(element);
+                } else if (registry instanceof SolarRecipes && decorations.size() == 0) {
+                    for (com.google.gson.JsonElement element : Ui.neiProgress(facts, handler, source.id, SolarRecipes.progressBars())) decorations.add(element);
                 }
                 for (com.google.gson.JsonElement element : decorations) row.elements.add(element);
                 HandlerInfo info = GuiRecipeTab.getHandlerInfo(handler);
@@ -282,6 +287,7 @@ final class Recipes {
                     else if (registry instanceof CircuitRecipes) CircuitRecipes.scene(handler, () -> handler.drawBackground(at));
                     else if (registry instanceof RefineryRecipes) RefineryRecipes.draw(handler);
                     else if (registry instanceof RailRecipes) RailRecipes.draw(handler);
+                    else if (registry instanceof SolarRecipes) SolarRecipes.draw(handler);
                     else if (gt == null) { handler.drawBackground(at); if (decorations.size() == 0) handler.drawForeground(at); }
                     else gt.foreground(at, row);
                 }));

@@ -88,6 +88,7 @@ test('new native routes are mapped without rewriting old unsupported observation
     ['micdoodle8.mods.galacticraft.core.nei.RefineryRecipeHandler', 'RefineryRecipes'],
     ['tonius.neiintegration.mods.railcraft.RecipeHandlerCokeOven', 'RailRecipes'],
     ['tonius.neiintegration.mods.railcraft.RecipeHandlerBlastFurnace', 'RailRecipes'],
+    ['advsolar.client.nei.MTRecipeHandler', 'SolarRecipes'],
   ]) {
     const { worklist, checkpoint } = fixture();
     worklist.handlers[1].source.handler = handler;
