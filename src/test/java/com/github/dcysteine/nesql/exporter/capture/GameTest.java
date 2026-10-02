@@ -54,6 +54,7 @@ public final class GameTest {
         PreviewTest.run();
         ValuesTest.run();
         SlotsTest.run();
+        CraftingTest.run();
     }
 
     /** Use FML's own @Optional processing in the isolated NASA test loader, without launching FML discovery. */

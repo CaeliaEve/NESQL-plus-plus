@@ -14,6 +14,32 @@ import static com.github.dcysteine.nesql.exporter.source.Json.*;
 final class Changes {
     private Changes() {}
 
+    static void map(List<JsonObject> items, List<JsonObject> recipes, List<JsonObject> categories,
+                    String texture, Function<String, String> text) {
+        JsonObject origin = object("owner", "fixture", "handler", "mapScaling", "key", "mapScaling");
+        String category = Identity.origin("category", origin);
+        NBTTagCompound tags = new NBTTagCompound(); tags.setString("owner", "retained");
+        String center = item(items, "minecraft:filled_map", 37, tags, false, "Filled map 已填充地图", texture, text);
+        tags = copy(tags); tags.setBoolean("map_is_scaling", true);
+        String output = item(items, "minecraft:filled_map", 37, tags, false, "Pending map 待完成地图样本", texture, text);
+        String paper = item(items, "minecraft:paper", 0, null, false, "Paper 纸", texture, text);
+        JsonArray inputs = array(), cells = array();
+        for (int slot = 0; slot < 9; slot++) {
+            JsonObject choice = choice(slot == 4 ? center : paper);
+            choice.add("rule", object("kind", "wildcard", "meta", slot == 4, "nbt", true));
+            inputs.add(object("kind", "item", "slot", slot, "choices", array(choice))); cells.add(value(slot));
+        }
+        categories.add(object("id", category, "source", origin, "name", text.apply("Map scaling 地图扩展"),
+                "icon", object("kind", "item", "id", center), "machines", array(), "view", null, "order", categories.size()));
+        JsonObject row = object("source", origin, "category", category, "order", 0, "inputs", inputs,
+                "outputs", array(object("slot", 0, "kind", "item", "id", output, "amount", "1", "quantity", null,
+                        "chance", Chance.of(1,1), "role", "result", "change", object("input", 4,
+                                "action", object("kind", "mapScaling"), "samples", array(stack(output))))),
+                "duration", null, "energy", null, "grid", object("width", 3, "height", 3, "cells", cells, "mirror", true),
+                "view", null, "properties", new JsonObject(), "process", object("kind", "mapScaling"), "magic", null);
+        row.addProperty("id", Identity.recipe(row)); recipes.add(row);
+    }
+
     static void runic(List<JsonObject> items, List<JsonObject> recipes, List<JsonObject> categories,
                       String texture, Function<String, String> text) {
         JsonObject origin = object("owner", "fixture", "handler", "runic", "key", "runic");

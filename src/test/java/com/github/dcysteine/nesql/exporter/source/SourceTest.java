@@ -243,6 +243,7 @@ public final class SourceTest {
         Changes.scans(items, recipes, categories, Identity.fluid("honey", null), texture, text);
         harmony(dataset, recipes, categories, stone, paper, texture, text);
         Changes.runic(items, recipes, categories, texture, text);
+        Changes.map(items, recipes, categories, texture, text);
         records(dataset, "recipes", recipes); records(dataset, "categories", categories);
         java.util.TreeMap<String, JsonObject> unique = new java.util.TreeMap<>();
         for (JsonObject view : views) unique.put(view.get("id").getAsString(), view);

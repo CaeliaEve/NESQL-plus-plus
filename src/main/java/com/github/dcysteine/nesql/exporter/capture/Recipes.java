@@ -116,6 +116,7 @@ final class Recipes {
             MagicRecipes magic = null;
             AeRecipes ae = null;
             RegistryRecipes registry = null;
+            Crafting crafting = null;
             try {
                 if (adapter == Adapter.GT) {
                     GTNEIDefaultHandler machine = (GTNEIDefaultHandler) handler;
@@ -147,7 +148,9 @@ final class Recipes {
                     registry = new SolarRecipes(handler);
                 } else if (adapter == Adapter.FURNACE) {
                     handler.loadCraftingRecipes("smelting");
-                } else if (adapter == Adapter.SHAPED || adapter == Adapter.SHAPELESS) {
+                } else if (adapter == Adapter.SHAPED) {
+                    crafting = new Crafting((ShapedRecipeHandler) handler, net.minecraft.item.crafting.CraftingManager.getInstance().getRecipeList());
+                } else if (adapter == Adapter.SHAPELESS) {
                     handler.loadCraftingRecipes("crafting");
                 } else {
                     throw new Jobs.Fault("handler_unsupported", "No recipe loader for: " + handler.getClass().getName());
@@ -162,7 +165,7 @@ final class Recipes {
                 }
                 facts.row("categories", object("id", id, "source", origin, "name", facts.text(name),
                         "icon", icon, "machines", machines, "view", null, "order", order));
-                return new Cursor(this, handler, facts, views, gt, magic, ae, registry);
+                return new Cursor(this, handler, facts, views, gt, magic, ae, registry, crafting);
             } catch (RuntimeException | Error failure) {
                 try { if (gt != null) gt.close(); }
                 catch (RuntimeException | Error cleanup) { failure.addSuppressed(cleanup); }
@@ -181,13 +184,15 @@ final class Recipes {
         private final MagicRecipes magic;
         private final AeRecipes ae;
         private final RegistryRecipes registry;
+        private final Crafting crafting;
         private final JsonArray decorations;
         private final Set<String> recipes = new HashSet<>();
 
-        Cursor(Handler source, TemplateRecipeHandler handler, Facts facts, boolean views, GtRecipes gt, MagicRecipes magic, AeRecipes ae, RegistryRecipes registry) {
+        Cursor(Handler source, TemplateRecipeHandler handler, Facts facts, boolean views, GtRecipes gt, MagicRecipes magic, AeRecipes ae, RegistryRecipes registry, Crafting crafting) {
             this.source = source; this.handler = handler; this.facts = facts; this.views = views; this.gt = gt; this.magic = magic;
             this.ae = ae;
             this.registry = registry;
+            this.crafting = crafting;
             decorations = new JsonArray();
         }
 
@@ -203,7 +208,7 @@ final class Recipes {
             catch (RuntimeException error) {
                 Jobs.Fault failure = new Jobs.Fault(error instanceof Jobs.Fault ? ((Jobs.Fault) error).code : "recipe_capture",
                         "Recipe handler '" + source.name + "'; category=" + source.id + "; index=" + index
-                                + (magic == null ? "" : "; native=" + magic.sourceType(index)) + ": " + error);
+                                + (magic != null ? "; native=" + magic.sourceType(index) : crafting != null ? "; native=" + crafting.sourceType(index) : "") + ": " + error);
                 failure.initCause(error);
                 throw failure;
             }
@@ -219,6 +224,7 @@ final class Recipes {
             else if (magic != null) { if (!magic.capture(index, row)) return; }
             else if (ae != null) { ae.capture(index, row); }
             else if (registry != null) { if (!registry.capture(index, row)) return; }
+            else if (crafting != null && crafting.capture(index, row)) { /* Native special result captured. */ }
             else {
                 boolean crafting = !(handler instanceof FurnaceRecipeHandler);
                 int slot = 0;
