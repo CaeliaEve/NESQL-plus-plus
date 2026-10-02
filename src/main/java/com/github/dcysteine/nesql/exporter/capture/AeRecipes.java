@@ -15,23 +15,37 @@ import java.util.*;
 import static com.github.dcysteine.nesql.exporter.capture.MagicApi.*;
 import static com.github.dcysteine.nesql.exporter.source.Json.*;
 
-/** AE2 rv3-beta-695: registry recipes own semantics, native caches own layout only. */
+/** Pinned AE2 and Wireless terminal recipes share matching; each owns its API and native cache. */
 final class AeRecipes {
     private static final String HANDLER = "appeng.integration.modules.NEIHelpers.NEIAE";
     private static final String RECIPE = "appeng.recipes.game.";
+    private static final String WIRELESS = "net.p455w0rd.wirelesscraftingterminal.";
+    private enum Family {
+        SHAPED(HANDLER + "ShapedRecipeHandler", RECIPE + "ShapedRecipe", "appeng.api.recipes.IIngredient", true),
+        SHAPELESS(HANDLER + "ShapelessRecipeHandler", RECIPE + "ShapelessRecipe", "appeng.api.recipes.IIngredient", false),
+        TERMINAL(WIRELESS + "integration.modules.NEIHelpers.NEIAEShapedRecipeHandler", WIRELESS + "api.recipes.game.ShapedRecipe", WIRELESS + "api.recipes.IIngredient", true);
+        final String handler, recipe, api;
+        final boolean shaped;
+        Family(String handler, String recipe, String api, boolean shaped) {
+            this.handler = handler; this.recipe = recipe; this.api = api; this.shaped = shaped;
+        }
+    }
     private final TemplateRecipeHandler handler;
     private final List<IRecipe> recipes;
 
-    static boolean supports(ICraftingHandler handler) {
-        String name = handler.getClass().getName();
-        return name.equals(HANDLER + "ShapedRecipeHandler") || name.equals(HANDLER + "ShapelessRecipeHandler");
+    static boolean supports(ICraftingHandler handler) { return family(handler) != null; }
+    private static Family family(ICraftingHandler handler) {
+        for (Family family : Family.values()) if (handler.getClass().getName().equals(family.handler)) return family;
+        return null;
     }
 
     AeRecipes(TemplateRecipeHandler handler) {
         version("appliedenergistics2", "rv3-beta-695-GTNH");
+        Family family = family(handler);
+        if (family == null) throw fault("Unadapted AE recipe handler");
+        if (family == Family.TERMINAL) version("ae2wct", "1.12.7");
         this.handler = handler;
-        String kind = handler.getClass().getName().equals(HANDLER + "ShapedRecipeHandler") ? "Shaped" : "Shapeless";
-        recipes = enumerate(type(RECIPE + kind + "Recipe"), CraftingManager.getInstance().getRecipeList());
+        recipes = enumerate(type(family.recipe), CraftingManager.getInstance().getRecipeList());
     }
 
     static List<IRecipe> enumerate(Class<?> recipeType, List<?> registry) {
@@ -50,10 +64,12 @@ final class AeRecipes {
 
     @SuppressWarnings("unchecked")
     static void capture(IRecipe source, TemplateRecipeHandler handler, RecipeRow row) {
-        boolean shaped = source.getClass().getName().equals(RECIPE + "ShapedRecipe");
-        if (!shaped && !source.getClass().getName().equals(RECIPE + "ShapelessRecipe")) {
-            throw fault("AE2 recipe overrides native matching/output semantics: " + source.getClass().getName());
+        Family family = family(handler);
+        if (family == null || !source.getClass().getName().equals(family.recipe)) {
+            throw fault("AE recipe/handler mismatch or overridden native semantics: " + source.getClass().getName());
         }
+        boolean shaped = family.shaped;
+        Class<?> api = type(family.api);
         if (!Boolean.TRUE.equals(invoke(source.getClass(), source, "isEnabled", new Class<?>[0]))) {
             throw new Jobs.Fault("slot_changed", "AE2 recipe was disabled after enumeration");
         }
@@ -73,9 +89,9 @@ final class AeRecipes {
             Object ingredient = raw[cell];
             if (ingredient == null) { cells.add(value(null)); continue; }
             cells.add(value(inputs.size()));
-            ItemStack[] stacks = stacks(ingredient);
+            ItemStack[] stacks = stacks(ingredient, api);
             inputs.add(ingredients(stacks));
-            viewInputs[cell] = viewIngredient(stacks);
+            viewInputs[cell] = viewIngredient(stacks, api);
         }
         TemplateRecipeHandler.CachedRecipe cached;
         try {
@@ -113,8 +129,7 @@ final class AeRecipes {
         handler.arecipes.clear(); handler.arecipes.add(cached);
     }
 
-    private static ItemStack[] stacks(Object ingredient) {
-        Class<?> api = type("appeng.api.recipes.IIngredient");
+    private static ItemStack[] stacks(Object ingredient, Class<?> api) {
         if (!api.isInstance(ingredient)) throw fault("No AE2 ingredient adapter for " + ingredient.getClass().getName());
         ItemStack[] raw = (ItemStack[]) invoke(api, ingredient, "getItemStackSet", new Class<?>[0]);
         if (raw == null || raw.length == 0 || raw.length > 65536) throw fault("AE2 ingredient has no finite alternatives");
@@ -125,8 +140,7 @@ final class AeRecipes {
     }
 
     /** Native cache setMaxSize mutates its offered stacks. Never hand it registry objects. */
-    private static Object viewIngredient(ItemStack[] stacks) {
-        Class<?> api = type("appeng.api.recipes.IIngredient");
+    private static Object viewIngredient(ItemStack[] stacks, Class<?> api) {
         return java.lang.reflect.Proxy.newProxyInstance(api.getClassLoader(), new Class<?>[] {api}, (proxy, method, args) -> {
             if (method.getName().equals("getItemStackSet")) return Arrays.stream(stacks).map(ItemStack::copy).toArray(ItemStack[]::new);
             if (method.getName().equals("getItemStack")) return stacks[0].copy();

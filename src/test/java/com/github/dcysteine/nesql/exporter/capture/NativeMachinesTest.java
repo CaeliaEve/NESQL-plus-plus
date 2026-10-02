@@ -18,6 +18,7 @@ public final class NativeMachinesTest {
     public static void main(String[] args) throws Exception { GameTest.run(); }
     public static void run() throws Exception {
         String family = System.getProperty("nesql.nativeFamily", "machines");
+        if (family.equals("wireless")) { NativeAeTest.run(); return; }
         if (family.equals("replaced")) { NativeReplacedTest.run(); return; }
         if (family.equals("runic")) { NativeRunicTest.run(); return; }
         if (family.equals("harmony")) { NativeHarmonyTest.run(); return; }
