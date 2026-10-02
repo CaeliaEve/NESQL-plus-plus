@@ -14,6 +14,26 @@ import static com.github.dcysteine.nesql.exporter.source.Json.*;
 final class Changes {
     private Changes() {}
 
+    static void splice(List<JsonObject> items, List<JsonObject> recipes, List<JsonObject> categories,
+                       String texture, Function<String,String> text) {
+        JsonObject origin=object("owner","fixture","handler","splice","key","splice");
+        String category=Identity.origin("category",origin);
+        String material=item(items,"fixture:splice_input",0,null,false,"Splice input 装配材料",texture,text);
+        String result=item(items,"fixture:splice_output",0,null,false,"Splice output 头颅装配产物",texture,text);
+        String axe=item(items,"fixture:splice_axe",0,null,false,"Splice axe 装配斧头",texture,text);
+        String shears=item(items,"fixture:splice_shears",0,null,false,"Splice shears 装配剪刀",texture,text);
+        categories.add(object("id",category,"source",origin,"name",text.apply("EnderIO Slice and Splice 头颅装配机"),"icon",object("kind","item","id",material),"machines",array(),"view",null,"order",categories.size()));
+        JsonArray inputs=array();
+        for(int i=0;i<4;i++){
+            JsonObject c=choice(i<2?material:i==2?axe:shears);
+            c.add("consume",object("kind",i<2?"allocated":"wear"));c.add("rule",object("kind","wildcard","meta",i>=2,"nbt",true));
+            inputs.add(object("kind","item","slot",i<2?i:i+4,"choices",array(c)));
+        }
+        JsonObject output=object("kind","item","slot",0,"id",result,"amount",null,"change",null,"role","result","chance",Chance.of(1,1),"quantity",object("kind","sharedRoll","nominal","1","threshold","1.0"));
+        JsonObject row=object("source",origin,"category",category,"order",0,"inputs",inputs,"outputs",array(output),"process",object("kind","splice","energy",2000,"slots",array(5,0)),"duration",null,"energy",null,"grid",null,"magic",null,"view",null,"properties",new JsonObject());
+        row.addProperty("id",Identity.recipe(row));recipes.add(row);
+    }
+
     static void alloy(List<JsonObject> items, List<JsonObject> recipes, List<JsonObject> categories,
                       String texture, Function<String,String> text) {
         JsonObject origin=object("owner","fixture","handler","alloy","key","alloy");
