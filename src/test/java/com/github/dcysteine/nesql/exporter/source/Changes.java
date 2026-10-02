@@ -14,6 +14,34 @@ import static com.github.dcysteine.nesql.exporter.source.Json.*;
 final class Changes {
     private Changes() {}
 
+    static void vat(List<JsonObject> items, List<JsonObject> recipes, List<JsonObject> categories,
+                    String texture, Function<String,String> text) {
+        JsonObject origin=object("owner","fixture","handler","vat","key","vat");
+        String category=Identity.origin("category",origin);
+        String left=item(items,"fixture:vat_reagent",0,null,false,"Vat reagent 储液罐反应物",texture,text);
+        String right=item(items,"fixture:vat_reagent",1,null,false,"Vat catalyst 储液罐催化物",texture,text);
+        String extra=item(items,"fixture:vat_optional",0,null,false,"Vat optional 额外材料",texture,text);
+        categories.add(object("id",category,"source",origin,"name",text.apply("EnderIO Vat 末影接口储液罐"),"icon",object("kind","item","id",left),"machines",array(),"view",null,"order",categories.size()));
+        for(int mode=0;mode<3;mode++) {
+            JsonArray inputs=array(), rules=array();
+            for(int slot=0;slot<(mode==0?2:1);slot++) {
+                JsonObject c=choice(slot==0?left:right);c.addProperty("amount",slot==0?"3":"5");
+                c.add("consume",object("kind","upto"));c.add("rule",object("kind","wildcard","meta",false,"nbt",true));
+                JsonArray alternatives=array(c);
+                if(slot==0) {JsonObject kept=choice(right);kept.add("consume",object("kind","keep"));kept.add("rule",object("kind","wildcard","meta",false,"nbt",true));alternatives.add(kept);}
+                inputs.add(object("kind","item","slot",slot,"choices",alternatives));
+            }
+            JsonObject fluid=choice(Identity.fluid("water",null));fluid.addProperty("amount","1375");
+            inputs.add(object("kind","fluid","slot",0,"choices",array(fluid)));
+            if(mode!=0) {rules.add(object("id",left,"rule",object("kind","wildcard","meta",false,"nbt",true),"amount",3));rules.add(object("id",extra,"rule",object("kind","wildcard","meta",true,"nbt",true),"amount",-1));}
+            JsonArray outputs=mode==2?array():array(object("slot",0,"kind","fluid","id",Identity.fluid("honey",null),"amount","1788","quantity",null,"chance",Chance.of(1,1),"role","result","change",null));
+            JsonObject row=object("source",origin,"category",category,"order",mode,"inputs",inputs,"outputs",outputs,
+                "process",object("kind","vat","energy",1200,"extra",rules,"zeroOutput",mode==2?Identity.fluid("honey",null):null),
+                "duration",null,"energy",null,"grid",null,"magic",null,"view",null,"properties",new JsonObject());
+            row.addProperty("id",Identity.recipe(row));recipes.add(row);
+        }
+    }
+
     static void enchanter(List<JsonObject> items, List<JsonObject> recipes, List<JsonObject> categories,
                          String texture, Function<String,String> text) {
         JsonObject origin=object("owner","fixture","handler","enchanter","key","enchanter");

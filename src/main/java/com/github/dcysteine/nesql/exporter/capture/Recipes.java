@@ -30,7 +30,7 @@ import static com.github.dcysteine.nesql.exporter.source.Json.*;
 
 /** Explicit enumeration adapters. An unsupported handler is an error, never an empty recipe list. */
 final class Recipes {
-    enum Adapter { GT, MAGIC, AE, INSCRIBER, SCRAPBOX, ENCHANTER, IC2, SMELTING, EXTREME, FORESTRY, TINKER, SPACE, CIRCUIT, REFINERY, RAIL, SOLAR, FURNACE, SHAPED, SHAPELESS }
+    enum Adapter { GT, MAGIC, AE, INSCRIBER, SCRAPBOX, ENCHANTER, VAT, IC2, SMELTING, EXTREME, FORESTRY, TINKER, SPACE, CIRCUIT, REFINERY, RAIL, SOLAR, FURNACE, SHAPED, SHAPELESS }
 
     static Adapter adapter(ICraftingHandler handler) {
         if (GtRecipes.supports(handler)) return Adapter.GT;
@@ -39,6 +39,7 @@ final class Recipes {
         if (InscriberRecipes.supports(handler)) return Adapter.INSCRIBER;
         if (ScrapboxRecipes.supports(handler)) return Adapter.SCRAPBOX;
         if (EnderEnchanterRecipes.supports(handler)) return Adapter.ENCHANTER;
+        if (VatRecipes.supports(handler)) return Adapter.VAT;
         if (Ic2Recipes.supports(handler)) return Adapter.IC2;
         if (SmeltingRecipes.supports(handler)) return Adapter.SMELTING;
         if (ExtremeRecipes.supports(handler)) return Adapter.EXTREME;
@@ -137,6 +138,8 @@ final class Recipes {
                     registry = new ScrapboxRecipes(handler);
                 } else if (adapter == Adapter.ENCHANTER) {
                     registry = new EnderEnchanterRecipes(handler);
+                } else if (adapter == Adapter.VAT) {
+                    registry = new VatRecipes(handler);
                 } else if (adapter == Adapter.SMELTING) {
                     registry = new SmeltingRecipes((FurnaceRecipeHandler) handler);
                 } else if (adapter == Adapter.EXTREME) {
@@ -314,6 +317,7 @@ final class Recipes {
                     else if (registry instanceof RefineryRecipes) RefineryRecipes.draw(handler);
                     else if (registry instanceof RailRecipes) RailRecipes.draw(handler);
                     else if (registry instanceof SolarRecipes) SolarRecipes.draw(handler);
+                    else if (registry instanceof VatRecipes) ((VatRecipes)registry).draw(index);
                     else if (registry instanceof EnderEnchanterRecipes) EnderEnchanterRecipes.scene(handler,row.record.getAsJsonObject("process").get("level").getAsInt(),
                             () -> {handler.drawBackground(at);handler.drawForeground(at);});
                     else if (gt == null) { handler.drawBackground(at); if (decorations.size() == 0) handler.drawForeground(at); }

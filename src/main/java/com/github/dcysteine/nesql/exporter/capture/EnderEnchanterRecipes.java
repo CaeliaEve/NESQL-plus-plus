@@ -3,15 +3,14 @@ package com.github.dcysteine.nesql.exporter.capture;
 import codechicken.nei.PositionedStack;
 import codechicken.nei.recipe.ICraftingHandler;
 import codechicken.nei.recipe.TemplateRecipeHandler;
+import com.github.dcysteine.nesql.exporter.capture.EnderInputs.Pattern;
 import com.github.dcysteine.nesql.exporter.task.Jobs;
 import com.google.gson.JsonArray;
 import com.google.gson.JsonObject;
 import net.minecraft.enchantment.Enchantment;
 import net.minecraft.enchantment.EnchantmentData;
 import net.minecraft.init.Items;
-import net.minecraft.item.Item;
 import net.minecraft.item.ItemStack;
-import net.minecraftforge.oredict.OreDictionary;
 import java.util.*;
 import static com.github.dcysteine.nesql.exporter.capture.MagicApi.*;
 import static com.github.dcysteine.nesql.exporter.source.Json.*;
@@ -121,27 +120,8 @@ final class EnderEnchanterRecipes implements RegistryRecipes {
             enchantment=(Enchantment)call(record,"getEnchantment");maxLevel=enchantment.getMaxLevel();
             costPerLevel=(Integer)call(record,"getCostPerLevel");
             if(maxLevel<1||maxLevel>32767)throw fault("Invalid native enchantment maximum level");
-            if(input.getClass().getName().equals(ORE)) {
-                int ore=(Integer)field(input,"oreId");
-                if(ore>=0)for(ItemStack candidate:OreDictionary.getOres(ore))patterns.add(new Pattern(candidate,candidate.getItemDamage()==32767));
-            }else patterns.add(new Pattern(item,!(Boolean)field(type(INPUT),input,"useMeta")));
+            patterns.addAll(EnderInputs.patterns(input));
         }
-    }
-    private static final class Pattern {
-        final ItemStack item;final boolean anyMeta;
-        Pattern(ItemStack source,boolean anyMeta) {
-            if(source==null||source.getItem()==null)throw fault("Invalid enchanter input example");
-            try {
-                if(source.getItem().getClass().getMethod("getDamage",ItemStack.class).getDeclaringClass()!=Item.class)
-                    throw fault("Enchanter input uses an unknown metadata getter");
-            }catch(NoSuchMethodException error){throw fault("Missing native metadata getter");}
-            item=source.copy();item.stackSize=1;item.setTagCompound(null);this.anyMeta=anyMeta;
-            if(anyMeta)item.setItemDamage(0);
-        }
-        boolean covers(Pattern other){return item.getItem()==other.item.getItem()&&(anyMeta||!other.anyMeta&&item.getItemDamage()==other.item.getItemDamage());}
-        boolean overlaps(Pattern other){return item.getItem()==other.item.getItem()&&(anyMeta||other.anyMeta||item.getItemDamage()==other.item.getItemDamage());}
-        boolean matches(ItemStack other){return item.getItem()==other.getItem()&&(anyMeta||item.getItemDamage()==other.getItemDamage());}
-        JsonObject rule(){return object("kind","wildcard","meta",anyMeta,"nbt",true);}
     }
     private static boolean matchesAny(List<Pattern> patterns,ItemStack item){for(Pattern p:patterns)if(p.matches(item))return true;return false;}
     private static final class Level {final int entry,level;Level(int entry,int level){this.entry=entry;this.level=level;}}
