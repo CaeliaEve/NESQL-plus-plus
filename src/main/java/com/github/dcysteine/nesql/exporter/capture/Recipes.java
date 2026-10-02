@@ -259,7 +259,7 @@ final class Recipes {
                 gregtech.api.util.GTRecipe nativeRecipe = gt == null ? null : ((GTNEIDefaultHandler.CachedDefaultRecipe) handler.arecipes.get(index)).mRecipe;
                 if (gt != null) gt.ui.add(facts, row, width, height, nativeRecipe);
                 facts.scene(new Facts.Scene(row.record, row.elements, width, height, gt == null ? 0 : gt.ui.foreground(), source.id, () -> {
-                    if (registry instanceof Ic2Recipes) Ic2Recipes.scene(handler, () -> { handler.drawBackground(at); handler.drawForeground(at); });
+                    if (registry instanceof Ic2Recipes) Ic2Recipes.scene(handler, () -> Ic2Recipes.draw(handler, at));
                     else if (registry instanceof ForestryRecipes) ForestryRecipes.draw(handler, at);
                     else if (gt == null) { handler.drawBackground(at); if (decorations.size() == 0) handler.drawForeground(at); }
                     else gt.foreground(at, row);

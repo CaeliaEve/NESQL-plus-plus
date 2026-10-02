@@ -85,7 +85,8 @@ final class ExtremeRecipes implements RegistryRecipes {
                     if (variant.getItem() != stack.getItem()) throw new Jobs.Fault("slot_changed", "Extreme wildcard expansion substituted an item");
                     // NEI permutations may contain different display NBT; the source predicate owns the required tags.
                     ItemStack semantic = variant.copy(); semantic.setTagCompound(stack.getTagCompound() == null ? null : (net.minecraft.nbt.NBTTagCompound) stack.getTagCompound().copy());
-                    ingredients.add(new RecipeRow.Ingredient(semantic, 1, false, object("kind", "wildcard", "meta", wildcard, "nbt", ignoreNbt)));
+                    ingredients.add(new RecipeRow.Ingredient(semantic, 1, false, wildcard || ignoreNbt
+                            ? object("kind", "wildcard", "meta", wildcard, "nbt", ignoreNbt) : object("kind", "exact")));
                 }
             }
             cells.add(value(inputs.size())); inputs.add(ingredients);

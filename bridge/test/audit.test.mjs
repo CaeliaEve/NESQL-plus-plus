@@ -70,6 +70,7 @@ test('same handler class retains separate category keys and failure evidence', (
 test('new native routes are mapped without rewriting old unsupported observations', () => {
   for (const [handler, adapter] of [
     ['ic2.neiIntegration.core.recipehandler.MaceratorRecipeHandler', 'Ic2Recipes'],
+    ['ic2.neiIntegration.core.recipehandler.OreWashingRecipeHandler', 'Ic2Recipes'],
     ['ganymedes01.etfuturum.compat.nei.SmokerRecipeHandler', 'SmeltingRecipes'],
     ['fox.spiteful.avaritia.compat.nei.ExtremeShapedRecipeHandler', 'ExtremeRecipes'],
     ['forestry.factory.recipes.nei.NEIHandlerCentrifuge', 'ForestryRecipes'],

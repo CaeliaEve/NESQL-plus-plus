@@ -158,3 +158,20 @@ at three batches (including remainders and NBT rejection), input/output ratios,
 owned display stacks, temperature, one-item consumption and literal 32767 keys.
 Original SHA256: TConstruct `f2cb53b94f135b7523bcb7afea5ef53b9afb40c0bc034fc5ec5018ad0502bc61`;
 Mantle `6a48d327d3442235a697b1cb57447e50e136374706c7a650262a533f16edd360`.
+
+## IC2 ore washing and exact-match encoding
+
+Ore washing now reads `Recipes.oreWashing` through the pinned machine handler.
+`TileEntityOreWashing` uses 500 ticks and 16 EU/t, and drains the output metadata's
+`amount` of water per operation. Water admission checks its registry ID only, so
+the fluid choice ignores NBT. A nonpositive/absent native amount consumes no water;
+it must not become a keep-one fluid requirement. Null metadata cannot operate and
+is rejected. Ordinary item predicates, multiple outputs and copied metadata reuse
+the existing reviewed IC2 adapter. Preserve native background/tank/labels and its
+20-tick progress track; do not invoke the mouse tooltip's live GuiRecipe lookup
+during offscreen rendering. Test coverage remains in `nativeMachinesTest`.
+
+The same development pass corrects required-NBT Forestry/Avaritia inputs to emit
+`kind: exact` when neither metadata nor NBT is ignored. A wildcard with both flags
+false violates the existing Compiler contract. Native matching is unchanged;
+regressions require the valid exact representation as well as native behavior.

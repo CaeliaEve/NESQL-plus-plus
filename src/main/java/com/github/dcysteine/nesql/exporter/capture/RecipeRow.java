@@ -83,9 +83,13 @@ final class RecipeRow {
     }
 
     void fluidInput(PositionedStack display, int slot, FluidStack fluid, boolean keep) {
+        fluidInput(display, slot, fluid, keep, object("kind", "exact"));
+    }
+
+    void fluidInput(PositionedStack display, int slot, FluidStack fluid, boolean keep, JsonObject rule) {
         JsonArray choices = new JsonArray();
         choices.add(object("id", facts.fluid(fluid), "amount", positive(Math.max(1, fluid.amount)),
-                "consume", object("kind", keep ? "keep" : "consume"), "returns", new JsonArray(), "rule", object("kind", "exact")));
+                "consume", object("kind", keep ? "keep" : "consume"), "returns", new JsonArray(), "rule", rule));
         inputs.add(object("slot", slot, "kind", "fluid", "choices", choices));
         slot(display, "input", "fluid", slot);
     }

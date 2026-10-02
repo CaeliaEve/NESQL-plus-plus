@@ -13,7 +13,7 @@ const routes = new Map([
   ...['NEIHandlerCentrifuge', 'NEIHandlerStill'].map(name => [`forestry.factory.recipes.nei.${name}`,
     { adapter: 'ForestryRecipes', registry: 'Forestry 4.10.17 RecipeManagers / native factory consumption', evidence: 'src/main/java/com/github/dcysteine/nesql/exporter/capture/ForestryRecipes.java' }]),
   ...['MaceratorRecipeHandler', 'ExtractorRecipeHandler', 'CompressorRecipeHandler', 'MetalFormerRecipeHandlerCutting',
-    'MetalFormerRecipeHandlerRolling', 'MetalFormerRecipeHandlerExtruding', 'CentrifugeRecipeHandler']
+    'MetalFormerRecipeHandlerRolling', 'MetalFormerRecipeHandlerExtruding', 'CentrifugeRecipeHandler', 'OreWashingRecipeHandler']
     .map(name => [`ic2.neiIntegration.core.recipehandler.${name}`,
       { adapter: 'Ic2Recipes', registry: 'IC2 2.2.828 machine recipe registry / IRecipeInput / RecipeOutput', evidence: 'src/main/java/com/github/dcysteine/nesql/exporter/capture/Ic2Recipes.java' }]),
   ...['SmokerRecipeHandler', 'BlastFurnaceRecipeHandler'].map(name => [`ganymedes01.etfuturum.compat.nei.${name}`,

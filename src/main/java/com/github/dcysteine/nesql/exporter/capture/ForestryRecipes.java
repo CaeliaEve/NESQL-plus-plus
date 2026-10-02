@@ -70,11 +70,12 @@ final class ForestryRecipes implements RegistryRecipes {
         PositionedStack display = (PositionedStack) field(cached, "inputs");
         List<RecipeRow.Ingredient> ingredients = new ArrayList<>();
         boolean wildcard = input.getItemDamage() == OreDictionary.WILDCARD_VALUE;
+        boolean ignoreNbt = input.getTagCompound() == null || input.getTagCompound().hasNoTags();
         for (ItemStack variant : display.items) {
             if (variant.getItem() != input.getItem() || !wildcard && variant.getItemDamage() != input.getItemDamage()) throw new Jobs.Fault("slot_changed", "Forestry input expansion changed its item");
             ItemStack fact = variant.copy(); fact.setTagCompound(input.getTagCompound() == null ? null : (net.minecraft.nbt.NBTTagCompound) input.getTagCompound().copy());
-            ingredients.add(new RecipeRow.Ingredient(fact, 1, false, object("kind", "wildcard", "meta", wildcard,
-                    "nbt", input.getTagCompound() == null || input.getTagCompound().hasNoTags())));
+            ingredients.add(new RecipeRow.Ingredient(fact, 1, false, wildcard || ignoreNbt
+                    ? object("kind", "wildcard", "meta", wildcard, "nbt", ignoreNbt) : object("kind", "exact")));
         }
         row.itemInput(display, 0, ingredients, false);
         List<Product> visible = new ArrayList<>(products);

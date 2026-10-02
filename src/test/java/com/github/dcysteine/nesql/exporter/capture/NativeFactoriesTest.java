@@ -96,7 +96,8 @@ final class NativeFactoriesTest {
         capture(centrifuge, source, row);
         require(row.inputs.get(0).getAsJsonObject().getAsJsonArray("choices").get(0).getAsJsonObject().get("amount").getAsString().equals("1"),
                 "Centrifuge consumed display quantity instead of one native input");
-        require(!row.inputs.get(0).getAsJsonObject().getAsJsonArray("choices").get(0).getAsJsonObject().getAsJsonObject("rule").get("nbt").getAsBoolean(), "Required Forestry NBT was lost");
+        require(row.inputs.get(0).getAsJsonObject().getAsJsonArray("choices").get(0).getAsJsonObject().getAsJsonObject("rule").get("kind").getAsString().equals("exact"),
+                "Required Forestry NBT must use the contract's exact rule, not an empty wildcard");
         require(row.outputs.size() == 12, "Native products beyond nine UI slots or duplicate rolls were lost");
         String rare = Identity.item("minecraft:paper", 0, null);
         boolean rareFound = false;

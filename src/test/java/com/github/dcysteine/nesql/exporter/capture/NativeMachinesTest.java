@@ -21,7 +21,7 @@ public final class NativeMachinesTest {
         if (!family.equals("machines")) { NativeFactoriesTest.run(family); return; }
         String prefix = "ic2.neiIntegration.core.recipehandler.";
         for (String kind : new String[] {"Macerator", "Extractor", "Compressor", "MetalFormerRecipeHandlerCutting",
-                "MetalFormerRecipeHandlerRolling", "MetalFormerRecipeHandlerExtruding", "Centrifuge"}) {
+                "MetalFormerRecipeHandlerRolling", "MetalFormerRecipeHandlerExtruding", "Centrifuge", "OreWashing"}) {
             String name = kind.contains("RecipeHandler") ? kind : kind + "RecipeHandler";
             TemplateRecipeHandler handler = (TemplateRecipeHandler) Class.forName(prefix + name).newInstance();
             require(Recipes.adapter(handler) != null, "Native IC2 handler has no adapter: " + kind);
@@ -40,7 +40,7 @@ public final class NativeMachinesTest {
             } catch (InvocationTargetException expected) { require(expected.getCause() instanceof IllegalStateException, "Scene changed draw failure"); }
             require(clock.getInt(handler) == 7, "IC2 capture did not restore its owned clock after a failure");
         }
-        // Washing and blast-furnace inputs include water/air; they must not inherit a one-input adapter.
+        // Blast-furnace inputs include air; it must not inherit a plain one-input adapter.
         require(Recipes.adapter((TemplateRecipeHandler) Class.forName(prefix + "BlastFurnaceRecipeHandler").newInstance()) == null,
                 "Blast furnace was incorrectly treated as a plain item machine");
         Class<?> inputType = Class.forName("ic2.api.recipe.RecipeInputItemStack");
@@ -75,7 +75,21 @@ public final class NativeMachinesTest {
                 (proxy, method, args) -> { throw new AssertionError("Unknown predicate should never execute"); });
         try { capture(handler, unknown, products, row(iron, output)); throw new AssertionError("Unknown native predicate was accepted"); }
         catch (Jobs.Fault expected) { require(expected.code.equals("recipe_unsupported"), "Wrong failure for unknown predicate"); }
-        System.out.println("Native IC2: seven handlers, native matching/counts, alternatives, multi-output, requirements, immutable projection, unknown predicate rejection passed");
+        TemplateRecipeHandler washing = (TemplateRecipeHandler) Class.forName(prefix + "OreWashingRecipeHandler").newInstance();
+        NBTTagCompound water = new NBTTagCompound(); water.setInteger("amount", 1000);
+        Object washingOutput = outputType.getConstructor(NBTTagCompound.class, ItemStack[].class).newInstance(water, new ItemStack[] {output, byproduct});
+        RecipeRow washed = row(iron, output, byproduct); capture(washing, input, washingOutput, washed);
+        com.google.gson.JsonObject fluidChoice = washed.inputs.get(1).getAsJsonObject().getAsJsonArray("choices").get(0).getAsJsonObject();
+        require(washed.inputs.get(1).getAsJsonObject().get("kind").getAsString().equals("fluid")
+                && fluidChoice.get("id").getAsString().equals(Identity.fluid("water", null))
+                && fluidChoice.get("amount").getAsString().equals("1000") && fluidChoice.getAsJsonObject("rule").get("nbt").getAsBoolean(),
+                "Ore washing lost native water consumption or required water NBT");
+        require(washed.record.get("duration").getAsString().equals("500") && washed.record.get("energy").getAsString().equals("16"), "Ore washing lost native power/time");
+        require(water.getInteger("amount") == 1000, "Ore washing mutated metadata");
+        water.setInteger("amount", 0);
+        RecipeRow dry = row(iron, output, byproduct); capture(washing, input, washingOutput, dry);
+        require(dry.inputs.size() == 1, "Zero-water recipe gained a fake keep-one fluid input");
+        System.out.println("Native IC2: eight handlers, native matching/counts, alternatives, multi-output, water requirements, immutable projection, unknown predicate rejection passed");
         furnaces();
         extreme();
     }
@@ -103,7 +117,7 @@ public final class NativeMachinesTest {
             require((Boolean) capture.invoke(null, recipe, handler, row), "Valid native recipe was excluded");
             require(row.inputs.size() == 3 && row.outputs.get(0).getAsJsonObject().get("amount").getAsString().equals("4"), "Avaritia lost cells or output count");
             com.google.gson.JsonObject choice = row.inputs.get(0).getAsJsonObject().getAsJsonArray("choices").get(0).getAsJsonObject();
-            require(choice.get("amount").getAsString().equals("1") && !choice.getAsJsonObject("rule").get("nbt").getAsBoolean(), "Avaritia lost conditional NBT or consumed the display stack count");
+            require(choice.get("amount").getAsString().equals("1") && choice.getAsJsonObject("rule").get("kind").getAsString().equals("exact"), "Avaritia must preserve required NBT with an exact rule and consume one item");
             if (kind.equals("Shaped")) require(row.record.getAsJsonObject("grid").getAsJsonArray("cells").get(1).isJsonNull()
                     && row.record.getAsJsonObject("grid").get("mirror").getAsBoolean(), "Avaritia grid holes/mirroring lost");
             require(tagged.stackSize == 9 && paper.stackSize == 6, "Avaritia mutated native source quantities");
@@ -115,7 +129,7 @@ public final class NativeMachinesTest {
                 RecipeRow mixedRow = row(tagged, paper, output); capture.invoke(null, mixed, handler, mixedRow);
                 require(mixedRow.inputs.get(0).getAsJsonObject().getAsJsonArray("choices").size() == 2
                         && mixedRow.inputs.get(0).getAsJsonObject().getAsJsonArray("choices").get(0).getAsJsonObject().getAsJsonObject("rule").get("nbt").getAsBoolean()
-                        && !mixedRow.inputs.get(1).getAsJsonObject().getAsJsonArray("choices").get(0).getAsJsonObject().getAsJsonObject("rule").get("nbt").getAsBoolean()
+                        && mixedRow.inputs.get(1).getAsJsonObject().getAsJsonArray("choices").get(0).getAsJsonObject().getAsJsonObject("rule").get("kind").getAsString().equals("exact")
                         && !mixedRow.record.getAsJsonObject("grid").get("mirror").getAsBoolean(), "Extreme ore groups must ignore tags while direct stacks keep required NBT");
                 Object empty = ore.getConstructor(ItemStack.class, Object[].class, int.class, int.class)
                         .newInstance(output, new Object[] {new ArrayList<>()}, 1, 1);
