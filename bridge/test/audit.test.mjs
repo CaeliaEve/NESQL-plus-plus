@@ -71,6 +71,7 @@ test('new native routes are mapped without rewriting old unsupported observation
   for (const [handler, adapter] of [
     ['ic2.neiIntegration.core.recipehandler.MaceratorRecipeHandler', 'Ic2Recipes'],
     ['ic2.neiIntegration.core.recipehandler.OreWashingRecipeHandler', 'Ic2Recipes'],
+    ['ic2.neiIntegration.core.recipehandler.BlockCutterRecipeHandler', 'Ic2Recipes'],
     ['ganymedes01.etfuturum.compat.nei.SmokerRecipeHandler', 'SmeltingRecipes'],
     ['fox.spiteful.avaritia.compat.nei.ExtremeShapedRecipeHandler', 'ExtremeRecipes'],
     ['forestry.factory.recipes.nei.NEIHandlerCentrifuge', 'ForestryRecipes'],

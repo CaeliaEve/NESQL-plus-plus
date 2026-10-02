@@ -278,3 +278,22 @@ consume-one and legacy container-return rules are reused. Coordinates use the
 shuttle's unshifted Y layout and X minus four. Unknown slot predicate classes or
 usable slots absent from the recipe fail explicitly. The native background is
 unchanged. No shuttle inventory is filled or linked to a player's live container.
+
+## IC2 block cutter
+
+The existing IC2 adapter now reads `Recipes.blockcutter`. Native base processing
+is 900 ticks at 48 EU/t. `TileEntityBlockCutter.getOutput` requires a nonempty blade
+attachment implementing `IBlockCuttingBlade`, with `gethardness() >= metadata`
+`hardness`. The attachment is not consumed and appears as an explicitly labelled
+machine requirement, not an ingredient consumption. Null metadata cannot operate;
+an absent hardness field defaults to zero exactly as native `getInteger` does.
+Item predicates, quantities, multiple outputs and layout ownership reuse the
+reviewed IC2 machine path. The pinned NEI view has a steady energy indicator and
+hardness label; it has no cycling progress bar, so capture does not invent one.
+
+The existing native machine test now checks the real `getOutput` method with an
+empty blade slot, and native blade hardness below/equal/above the threshold. A
+test-owned native blade uses its actual hardness getter and a native Forge item
+delegate without triggering ItemIC2's unrelated item/network registration. Other
+tests cover default/null metadata, time/power, immutable source and output slots.
+This does not run a game world, consume energy, or claim live registry coverage.

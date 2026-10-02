@@ -247,7 +247,7 @@ final class Recipes {
                 if ((handler.getClass() == FurnaceRecipeHandler.class || registry instanceof SmeltingRecipes) && decorations.size() == 0) {
                     for (com.google.gson.JsonElement element : Ui.furnace(facts, (FurnaceRecipeHandler) handler, source.id)) decorations.add(element);
                 } else if (registry instanceof Ic2Recipes && decorations.size() == 0) {
-                    for (com.google.gson.JsonElement element : Ui.neiProgress(facts, handler, source.id, new int[][] {Ic2Recipes.progressBar(handler)})) decorations.add(element);
+                    for (com.google.gson.JsonElement element : Ui.neiProgress(facts, handler, source.id, Ic2Recipes.progressBars(handler))) decorations.add(element);
                 } else if (registry instanceof ForestryRecipes && decorations.size() == 0) {
                     for (com.google.gson.JsonElement element : Ui.neiProgress(facts, handler, source.id, new int[][] {ForestryRecipes.progressBar(handler)})) decorations.add(element);
                 } else if (registry instanceof CircuitRecipes && decorations.size() == 0) {

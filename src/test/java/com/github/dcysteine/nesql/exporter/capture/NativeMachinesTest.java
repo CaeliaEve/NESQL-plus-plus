@@ -22,14 +22,16 @@ public final class NativeMachinesTest {
         if (family.equals("circuits")) { NativeCircuitsTest.run(); return; }
         if (!family.equals("machines")) { NativeFactoriesTest.run(family); return; }
         String prefix = "ic2.neiIntegration.core.recipehandler.";
+        require(Recipes.adapter((TemplateRecipeHandler) Class.forName(prefix + "BlockCutterRecipeHandler").newInstance()) != null,
+                "Block cutter has no native adapter");
         for (String kind : new String[] {"Macerator", "Extractor", "Compressor", "MetalFormerRecipeHandlerCutting",
-                "MetalFormerRecipeHandlerRolling", "MetalFormerRecipeHandlerExtruding", "Centrifuge", "OreWashing"}) {
+                "MetalFormerRecipeHandlerRolling", "MetalFormerRecipeHandlerExtruding", "Centrifuge", "OreWashing", "BlockCutter"}) {
             String name = kind.contains("RecipeHandler") ? kind : kind + "RecipeHandler";
             TemplateRecipeHandler handler = (TemplateRecipeHandler) Class.forName(prefix + name).newInstance();
             require(Recipes.adapter(handler) != null, "Native IC2 handler has no adapter: " + kind);
-            Method barMethod = Ic2Recipes.class.getDeclaredMethod("progressBar", TemplateRecipeHandler.class);
-            barMethod.setAccessible(true); int[] bar = (int[]) barMethod.invoke(null, handler);
-            require(Ui.progress(bar[4], bar[5], bar[6], bar[7]).size() > 1, "IC2 native progress was exported as a still image");
+            int[][] bars = Ic2Recipes.progressBars(handler);
+            require(bars.length == (kind.equals("BlockCutter") ? 0 : 1), "IC2 native progress presence changed");
+            for (int[] bar : bars) require(Ui.progress(bar[4], bar[5], bar[6], bar[7]).size() > 1, "IC2 native progress was exported as a still image");
             Field clock = Class.forName(prefix + "MachineRecipeHandler").getDeclaredField("ticks"); clock.setAccessible(true);
             clock.setInt(handler, 7);
             Method scene = Ic2Recipes.class.getDeclaredMethod("scene", TemplateRecipeHandler.class, Runnable.class); scene.setAccessible(true);
@@ -91,9 +93,57 @@ public final class NativeMachinesTest {
         water.setInteger("amount", 0);
         RecipeRow dry = row(iron, output, byproduct); capture(washing, input, washingOutput, dry);
         require(dry.inputs.size() == 1, "Zero-water recipe gained a fake keep-one fluid input");
-        System.out.println("Native IC2: eight handlers, native matching/counts, alternatives, multi-output, water requirements, immutable projection, unknown predicate rejection passed");
+        cutter(input, output, byproduct);
+        System.out.println("Native IC2: nine handlers, native matching/counts, alternatives, multi-output, water and blade requirements, immutable projection, unknown predicate rejection passed");
         furnaces();
         extreme();
+    }
+    private static void cutter(Object input, ItemStack output, ItemStack byproduct) throws Exception {
+        TemplateRecipeHandler handler = (TemplateRecipeHandler) Class.forName("ic2.neiIntegration.core.recipehandler.BlockCutterRecipeHandler").newInstance();
+        Class<?> outputType = Class.forName("ic2.api.recipe.RecipeOutput");
+        ItemStack ingredient = new ItemStack(Items.iron_ingot);
+        for (int hardness : new int[] {-1, 0, 3, 6, 9}) {
+            NBTTagCompound metadata = new NBTTagCompound(); metadata.setInteger("hardness", hardness);
+            Object products = outputType.getConstructor(NBTTagCompound.class, ItemStack[].class).newInstance(metadata, new ItemStack[] {output, byproduct});
+            RecipeRow row = row(ingredient, output, byproduct);
+            capture(handler, input, products, row);
+            require(row.record.get("duration").getAsInt() == 900 && row.record.get("energy").getAsInt() == 48,
+                    "Block cutter base time/power changed");
+            require(row.inputs.size() == 1 && row.outputs.size() == 2
+                    && row.properties.getAsJsonObject("ic2:bladeHardness").getAsJsonObject("value").get("value").getAsInt() == hardness,
+                    "Block cutter blade attachment became consumption or lost its native threshold");
+            require(metadata.getInteger("hardness") == hardness, "Block cutter display changed source metadata");
+        }
+        Object absent = outputType.getConstructor(NBTTagCompound.class, ItemStack[].class).newInstance(null, new ItemStack[] {output});
+        try { capture(handler, input, absent, row(ingredient, output)); throw new AssertionError("Metadata-free block cutter recipe accepted"); }
+        catch (Jobs.Fault expected) { require(expected.code.equals("recipe_unsupported"), "Wrong missing cutter metadata failure"); }
+        NBTTagCompound empty = new NBTTagCompound();
+        Object zero = outputType.getConstructor(NBTTagCompound.class, ItemStack[].class).newInstance(empty, new ItemStack[] {output});
+        RecipeRow defaulted = row(ingredient, output); capture(handler, input, zero, defaulted);
+        require(defaulted.properties.getAsJsonObject("ic2:bladeHardness").getAsJsonObject("value").get("value").getAsInt() == 0,
+                "Native default-zero hardness changed");
+        Class<?> machineType = Class.forName("ic2.core.block.machine.tileentity.TileEntityBlockCutter");
+        machineType.getMethod("init").invoke(null);
+        Object registry = Class.forName("ic2.api.recipe.Recipes").getField("blockcutter").get(null);
+        Method add = registry.getClass().getMethod("addRecipe", Class.forName("ic2.api.recipe.IRecipeInput"), NBTTagCompound.class, ItemStack[].class);
+        NBTTagCompound hardness = new NBTTagCompound(); hardness.setInteger("hardness", 6);
+        add.invoke(registry, input, hardness, new ItemStack[] {output});
+        Object machine = machineType.newInstance();
+        Object inputSlot = MagicApi.field(machine, "inputSlot"), cutterSlot = MagicApi.field(machine, "cutterSlot");
+        inputSlot.getClass().getMethod("put", ItemStack.class).invoke(inputSlot, new ItemStack(Items.iron_ingot, 4));
+        require(machineType.getMethod("getOutput").invoke(machine) == null, "Native cutter works without a blade");
+        // Own a native blade without ItemIC2's global item/network registration. Keep its real getter.
+        Class<?> bladeType = Class.forName("ic2.core.item.resources.ItemBlockCuttingBlade");
+        Field unsafeField = sun.misc.Unsafe.class.getDeclaredField("theUnsafe"); unsafeField.setAccessible(true);
+        Item blade = (Item) ((sun.misc.Unsafe) unsafeField.get(null)).allocateInstance(bladeType);
+        Field delegate = Item.class.getField("delegate"); delegate.setAccessible(true);
+        delegate.set(blade, new cpw.mods.fml.common.registry.RegistryDelegate.Delegate<>(blade, Item.class));
+        Field strength = bladeType.getDeclaredField("hardness"); strength.setAccessible(true);
+        cutterSlot.getClass().getMethod("put", ItemStack.class).invoke(cutterSlot, new ItemStack(blade));
+        for (int rating : new int[] {3, 6, 9}) {
+            strength.setInt(blade, rating);
+            require((machineType.getMethod("getOutput").invoke(machine) != null) == (rating >= 6), "Native blade threshold disagrees with exported requirement");
+        }
     }
     private static void extreme() throws Exception {
         String prefix = "fox.spiteful.avaritia.";

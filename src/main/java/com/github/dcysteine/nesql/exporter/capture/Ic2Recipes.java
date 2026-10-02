@@ -23,7 +23,8 @@ final class Ic2Recipes implements RegistryRecipes {
         MACERATOR("MaceratorRecipeHandler", 300, 2), EXTRACTOR("ExtractorRecipeHandler", 300, 2),
         COMPRESSOR("CompressorRecipeHandler", 300, 2), CUTTING("MetalFormerRecipeHandlerCutting", 200, 10),
         ROLLING("MetalFormerRecipeHandlerRolling", 200, 10), EXTRUDING("MetalFormerRecipeHandlerExtruding", 200, 10),
-        CENTRIFUGE("CentrifugeRecipeHandler", 500, 48), WASHING("OreWashingRecipeHandler", 500, 16);
+        CENTRIFUGE("CentrifugeRecipeHandler", 500, 48), WASHING("OreWashingRecipeHandler", 500, 16),
+        BLOCK_CUTTER("BlockCutterRecipeHandler", 900, 48);
         final String handler;
         final int ticks, energy;
         Machine(String handler, int ticks, int energy) { this.handler = HANDLERS + handler; this.ticks = ticks; this.energy = energy; }
@@ -53,15 +54,17 @@ final class Ic2Recipes implements RegistryRecipes {
         return true;
     }
 
-    static int[] progressBar(TemplateRecipeHandler handler) {
+    static int[][] progressBars(TemplateRecipeHandler handler) {
         Machine machine = machine(handler);
         if (machine == null) throw fault("Unverified IC2 progress layout");
-        if (machine == Machine.CENTRIFUGE) return new int[] {84, 10, 176, 50, 5, 30, 20, 3};
-        if (machine == Machine.WASHING) return new int[] {114, 24, 176, 117, 20, 19, 20, 0};
+        // The block cutter's native view has a steady energy indicator, no cycling progress bar.
+        if (machine == Machine.BLOCK_CUTTER) return new int[0][];
+        if (machine == Machine.CENTRIFUGE) return new int[][] {{84, 10, 176, 50, 5, 30, 20, 3}};
+        if (machine == Machine.WASHING) return new int[][] {{114, 24, 176, 117, 20, 19, 20, 0}};
         if (machine == Machine.CUTTING || machine == Machine.ROLLING || machine == Machine.EXTRUDING) {
-            return new int[] {46, 30, 177, 14, 51, 12, 20, 0};
+            return new int[][] {{46, 30, 177, 14, 51, 12, 20, 0}};
         }
-        return new int[] {74, 23, 176, 14, 25, 16, 20, 0};
+        return new int[][] {{74, 23, 176, 14, 25, 16, 20, 0}};
     }
 
     static void scene(TemplateRecipeHandler handler, Runnable draw) {
@@ -119,8 +122,13 @@ final class Ic2Recipes implements RegistryRecipes {
             // Water admission checks the fluid ID only, not its tags.
             water = Math.max(0, metadata.getInteger("amount"));
         }
+        if (machine == Machine.BLOCK_CUTTER) {
+            if (metadata == null) throw fault("IC2 block cutter has no metadata and cannot operate");
+            row.property("ic2:bladeHardness", "Installed cutting blade minimum hardness (blade is not consumed)", metadata.getInteger("hardness"));
+        }
         if (metadata != null) for (Object key : metadata.func_150296_c()) {
-            if (!(machine == Machine.CENTRIFUGE && key.equals("minHeat") || machine == Machine.WASHING && key.equals("amount")))
+            if (!(machine == Machine.CENTRIFUGE && key.equals("minHeat") || machine == Machine.WASHING && key.equals("amount")
+                    || machine == Machine.BLOCK_CUTTER && key.equals("hardness")))
                 throw fault("Unadapted IC2 recipe metadata: " + key);
         }
         row.record.addProperty("duration", Integer.toString(machine.ticks));
