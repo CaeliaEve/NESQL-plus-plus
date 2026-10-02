@@ -36,6 +36,8 @@ public final class GameTest {
         cpw.mods.fml.relauncher.ReflectionHelper.setPrivateValue(cpw.mods.fml.relauncher.FMLRelaunchLog.class, null,
                 cpw.mods.fml.relauncher.Side.CLIENT, "side");
         Bootstrap.func_151354_b();
+        if (Boolean.getBoolean("nesql.nativeFilterTests")) { NativeFilterTest.run(); return; }
+        if (Boolean.getBoolean("nesql.nativeInfusionTests")) { NativeInfusionTest.run(); return; }
         CluesTest.run();
         StructuresTest.run();
         PreviewTest.run();

@@ -88,6 +88,27 @@ tasks.named<JavaExec>("sourceTest") {
     project.findProperty("sourceFixture")?.toString()?.let { args(it) }
 }
 
+// Explicit offline native-mod suite. The caller supplies a derived SRG-to-MCP jar;
+// no installed mod or running client is changed by this task.
+tasks.register<JavaExec>("nativeFilterTest") {
+    group = "verification"
+    dependsOn("testClasses")
+    classpath = sourceSets.test.get().runtimeClasspath + gameLibraries + files(project.findProperty("nativeTestJar"))
+    main = "com.github.dcysteine.nesql.exporter.capture.NativeFilterTest"
+    maxHeapSize = "256m"
+    systemProperty("nesql.nativeFilterTests", "true")
+    systemProperty("nesql.nativeFilterFixture", file("$buildDir/native-tests/filter.json").absolutePath)
+}
+
+tasks.register<JavaExec>("nativeInfusionTest") {
+    group = "verification"
+    dependsOn("testClasses")
+    classpath = sourceSets.test.get().runtimeClasspath + gameLibraries + files(project.findProperty("nativeTestJar"))
+    main = "com.github.dcysteine.nesql.exporter.capture.NativeInfusionTest"
+    maxHeapSize = "256m"
+    systemProperty("nesql.nativeInfusionTests", "true")
+}
+
 // Requires a real compatibility OpenGL context (Pbuffer); run explicitly or under Xvfb in CI.
 val glNatives by configurations.creating
 val nativePlatform = if (System.getProperty("os.name").startsWith("Windows")) "windows" else "linux"

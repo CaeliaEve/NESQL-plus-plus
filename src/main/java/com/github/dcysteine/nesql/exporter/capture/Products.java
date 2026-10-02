@@ -51,22 +51,28 @@ final class Products {
      * metadata from the later filter input, while retaining the recipe's base item. */
     static Products preserveFilter(Object recipe, List<List<MagicRecipes.Candidate>> inputs,
                                    int configInput, int metadataInput, Facts facts) {
-        if (configInput < 0 || metadataInput < 0 || configInput == metadataInput) {
-            throw fault("PreserveFilter requires distinct configuration and metadata inputs");
+        if (configInput < 0 || (metadataInput >= 0 && metadataInput <= configInput)) {
+            throw fault("PreserveFilter metadata must follow its configuration input");
         }
         ItemStack base = concrete((ItemStack) invoke(recipe.getClass(), recipe, "getRecipeOutput", new Class<?>[0]));
         Map<String, JsonObject> samples = new HashMap<>();
         ItemStack first = null;
         List<MagicRecipes.Candidate> configs = inputs.get(configInput);
-        List<MagicRecipes.Candidate> metadata = inputs.get(metadataInput);
+        List<MagicRecipes.Candidate> metadata = metadataInput < 0 ? configs : inputs.get(metadataInput);
         if (configs.isEmpty() || metadata.isEmpty()) throw fault("PreserveFilter has no concrete candidates");
+        JsonArray configurations = new JsonArray();
+        java.util.Set<String> configurationIds = new java.util.HashSet<>();
+        for (MagicRecipes.Candidate config : configs) {
+            if (configurationIds.add(facts.item(config.item))) configurations.add(filterConfiguration(config.item));
+        }
         for (MagicRecipes.Candidate meta : metadata) {
             ItemStack representative = null;
-            for (MagicRecipes.Candidate config : configs) {
-                ItemStack result = nativeFilter(recipe, base, config.item, meta.item, inputs, configInput, metadataInput);
+            for (MagicRecipes.Candidate config : metadataInput < 0 ? Collections.singletonList(meta) : configs) {
+                ItemStack result = nativeFilter(recipe, base, config.item, metadataInput < 0 ? null : meta.item, inputs, configInput, metadataInput);
                 if (representative == null) representative = result;
                 else if (result.getItem() != representative.getItem()
                         || result.getItemDamage() != representative.getItemDamage()
+                        || result.stackSize != representative.stackSize
                         || !ItemStack.areItemStackTagsEqual(result, representative)) {
                     throw fault("PreserveFilter configuration alternatives produce different outputs; export requires a separate branch");
                 }
@@ -74,11 +80,41 @@ final class Products {
             String id = facts.item(meta.item);
             ItemStack result = concrete(representative);
             if (first == null) first = result;
-            samples.put(id, object("id", facts.item(result), "amount", Integer.toString(result.stackSize)));
+            JsonObject sample = object("id", facts.item(result), "amount", Integer.toString(result.stackSize));
+            JsonObject prior = samples.put(id, sample);
+            if (prior != null && !prior.equals(sample)) throw fault("PreserveFilter repeats an input with different native results");
         }
         JsonObject action = object("kind", "filter", "base", object("id", facts.item(base), "amount", Integer.toString(base.stackSize)),
-                "config", configInput, "metadata", metadataInput);
-        return new Products(first, action, samples, metadataInput);
+                "config", configInput, "metadata", metadataInput < 0 ? null : metadataInput, "configurations", configurations);
+        return new Products(first, action, samples, metadataInput < 0 ? configInput : metadataInput);
+    }
+
+    /** Resolve only roles shared by every candidate; mixed roles need separate recipe branches. */
+    static int[] filterRoles(List<List<MagicRecipes.Candidate>> inputs) {
+        int config = -1, metadata = -1;
+        Class<?> paper = type("tuhljin.automagy.items.ItemEnchantedPaper");
+        for (int slot = 0; slot < inputs.size(); slot++) {
+            Boolean filter = null;
+            for (MagicRecipes.Candidate choice : inputs.get(slot)) {
+                boolean accepted = (Boolean) invoke(paper, null, "stackIsFilter", new Class<?>[] {ItemStack.class}, choice.item.copy());
+                if (filter != null && filter != accepted) throw fault("PreserveFilter alternatives have different inventory roles; separate branches required");
+                filter = accepted;
+            }
+            if (Boolean.TRUE.equals(filter)) {
+                if (config < 0) config = slot;
+                else { metadata = slot; break; }
+            }
+        }
+        return new int[] {config, metadata};
+    }
+
+    static JsonObject filterConfiguration(ItemStack stack) {
+        Class<?> paper = type("tuhljin.automagy.items.ItemEnchantedPaper");
+        Object inventory = invoke(paper, null, "getFilterInventory", new Class<?>[] {ItemStack.class}, stack.copy());
+        if (inventory == null) throw fault("PreserveFilter configuration is not a native filter");
+        NBTTagCompound serialized = new NBTTagCompound();
+        invoke(inventory.getClass(), inventory, "writeCustomNBT", new Class<?>[] {NBTTagCompound.class}, serialized);
+        return TypedNbt.encode(serialized).getAsJsonObject().getAsJsonObject("value");
     }
 
     private static ItemStack nativeFilter(Object recipe, ItemStack base, ItemStack configuration, ItemStack metadata,
@@ -89,7 +125,7 @@ final class Products {
             if (!candidates.isEmpty()) inventory.setInventorySlotContents(slot, candidates.get(0).item.copy());
         }
         inventory.setInventorySlotContents(configInput, configuration.copy());
-        inventory.setInventorySlotContents(metadataInput, metadata.copy());
+        if (metadataInput >= 0) inventory.setInventorySlotContents(metadataInput, metadata.copy());
         Object output = invoke(recipe.getClass(), recipe, "getCraftingResult", new Class<?>[] {IInventory.class}, inventory);
         return concrete((ItemStack) output);
     }

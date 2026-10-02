@@ -188,25 +188,11 @@ final class MagicRecipes {
                 inputs.add(ordinary(ingredient, true));
             }
             if (source.getClass().getName().contains("PreserveFilterRecipe")) {
-                int config = -1, metadata = -1;
-                Class<?> paper = type("tuhljin.automagy.items.ItemEnchantedPaper");
-                for (int at = 0; at < inputs.size(); at++) {
-                    for (Candidate candidate : inputs.get(at)) {
-                        Object filter = invoke(paper, null, "getFilterInventory", new Class<?>[] {ItemStack.class}, candidate.item);
-                        if (filter != null) { config = at; break; }
-                    }
-                    if (config >= 0) break;
+                int[] roles = Products.filterRoles(inputs);
+                if (roles[0] >= 0) {
+                    product = Products.preserveFilter(source, inputs, roles[0], roles[1], row.facts);
+                    output = product.output;
                 }
-                for (int at = config + 1; at < inputs.size(); at++) {
-                    for (Candidate candidate : inputs.get(at)) {
-                        Object accepted = invoke(paper, null, "stackIsFilter", new Class<?>[] {ItemStack.class}, candidate.item);
-                        if (Boolean.TRUE.equals(accepted)) { metadata = at; break; }
-                    }
-                    if (metadata >= 0) break;
-                }
-                if (config < 0 || metadata < 0) throw fault("PreserveFilter has no configuration and metadata filter inputs");
-                product = Products.preserveFilter(source, inputs, config, metadata, row.facts);
-                output = product.output;
             }
             if (output == null) output = result(recipe.getRecipeOutput());
             projection = shapeless(inputs, output, aspects); kind = "arcane";
@@ -256,6 +242,9 @@ final class MagicRecipes {
                     for (ItemStack comp : recipe.getComponents()) inputs.add(ordinary(comp, true));
                 }
             }
+            // The pinned ERROR ingredient never matches. An empty required predicate
+            // excludes this recipe; impossible branches within a satisfiable OR do not.
+            if (inputs.stream().anyMatch(List::isEmpty)) return false;
             product = Products.infusion(recipe, Arrays.asList(stacks(inputs.get(0))), row.facts);
             output = product.output;
             ItemStack[] componentsCopy = new ItemStack[inputs.size() - 1];
@@ -397,7 +386,7 @@ final class MagicRecipes {
     private static List<Candidate> ingredient(Object ingredient) {
         List<Candidate> result = new ArrayList<>();
         ingredient(ingredient, result, 0);
-        if (result.isEmpty() || result.size() > 65536) throw fault("Infusion ingredient has no valid alternatives or exceeds its budget");
+        if (result.size() > 65536) throw fault("Infusion ingredient exceeds its budget");
         return result;
     }
 
@@ -405,6 +394,9 @@ final class MagicRecipes {
         Jobs.checkpoint();
         if (ingredient == null || depth > 16 || result.size() > 65536) throw fault("Infusion ingredient exceeds its budget");
         String name = ingredient.getClass().getName();
+        // getRepresentativeStacks() for this sentinel returns an ERROR fire icon,
+        // but matches() is constant false. That icon is not a crafting ingredient.
+        if (name.equals(EXT + "RecipeIngredient$5")) return;
         if (name.equals(EXT + "RecipeIngredientDefer")) {
             ingredient(invoke(ingredient.getClass(), ingredient, "get", new Class<?>[0]), result, depth + 1); return;
         }
