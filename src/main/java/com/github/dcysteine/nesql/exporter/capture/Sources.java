@@ -85,6 +85,10 @@ final class Sources {
     }
 
     JsonArray fingerprints() throws IOException {
+        return fingerprints(null);
+    }
+
+    JsonArray fingerprints(Fingerprints cache) throws IOException {
         JsonObject report = inspect();
         if (!report.getAsJsonObject("sources").get("valid").getAsBoolean()) {
             List<String> invalid = new ArrayList<>();
@@ -101,7 +105,7 @@ final class Sources {
             Jobs.checkpoint();
             String digest = hashes.get(mod.source.path);
             if (digest == null) {
-                try { digest = hash(mod.source.path); }
+                try { digest = cache == null ? hash(mod.source.path) : cache.hash(mod.source.path); }
                 catch (IOException failure) { throw new IOException("Cannot fingerprint mod " + mod.id + " at " + mod.source.path, failure); }
                 hashes.put(mod.source.path, digest);
             }

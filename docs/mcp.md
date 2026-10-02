@@ -179,6 +179,18 @@ scope 进入请求重试身份和完整环境设置；运行身份只排除已�
 
 ## 已验证与待验证
 
+### 0.16.1 吞吐与恢复
+
+配方检查使用最多 32 条、约 4 ms、4 MiB 序列化估算的协作式短批次；单个原生调用不可抢占。每条配方仍检查世界、玩家、资源代际和知识状态，错误保留原始下标。正式捕获在出现图标/原生绘制请求时结束短批次，先读取当前配方的视觉结果。PNG 编码采用单 worker、有序提交、最多 8 项/16 MiB 像素预算的流水线，大图单独处理。
+
+Windows 支持拒绝写入/删除句柄和同卷硬链接时，大于等于 256 KiB 的输入可复用已锁定内容的 SHA256；最多保留 512 个句柄，另用硬链接验证真实文件身份。小文件、跨卷或不支持该能力的平台完整重哈希；不以 mtime/大小证明内容一致。仍每页遍历输入集合并重建完整环境。任务间空闲 30 秒或 exporter 关闭时释放文件保护；运行中受保护的模组文件不能更新。缓存命中与实际读取字节记入 job.performance.inputHashes。
+
+非资源诊断报告可包含 environmentRef / handlersRef，其 path 指向 checks/shared/<sha256>.json。原件哈希覆盖精简报告；用 bridge/src/reports.mjs 的 resolveReport 逐文件核验并展开；展开对象不是原件。协调器同时归档这些依赖，能硬链接时共享字节。资源证明报告保持原有内联格式，Compiler 输入不变。
+
+协调器将变化追加至 checkpoint.json.journal（顺序号、链式摘要、已刷新记录），每 64 次更新或 8 MiB 做快照，正常结束/异常退出前刷新完整 checkpoint.json。恢复需同时保留两个文件；只有最后一个未写完的行可忽略，完整行损坏必须停止。监控用 bridge/src/checkpoint.mjs 的 readCheckpoint(file)，不启用 repairTail；只有恢复执行者在确认旧协调器已停止后才修复尾部。
+
+job.performance 提供累计 clientQueue/clientRun、environment、rowsCheck、reportWrite、pngEncode 和 assetWrite 等计时，计数与微秒均为十进制字符串。部分计时相互包含、编码与捕获可重叠，不能全部相加充当墙钟时间。Source 保持修订 15，Compiler/Web 无协议或 UI 改动。吞吐倍率等待同环境实机基准；成功分片的组装条件仍见前节，writing 不可恢复成 Source，未新增跨会话缓存或按配方下标续采。
+
 视图中的 `clip` 元素由纹理、位置、尺寸、层级和 `track` 引用构成。`tracks` 为内容寻址的共享记录，保存 `frames`；每步包含正整数 `ticks` 及互不重叠的 `[left,top,right,bottom]` 裁剪区域。坐标为 `[0,1]` 内的 float32 十进制字符串，同时裁剪源纹理和目标区域；空区域表示该步不绘制。每轨迹最多 4096 步，每步最多 16 个区域，总周期最多 72000 tick；相邻相同状态必须合并。轨迹不包含脚本，也不代表配方时长。
 
 GT 捕获使用独立窗口和注入的 200 tick 进度源，不改动全局 drawTicks。静态图层按尺寸/项目复用，背景、动态裁剪、槽位与文字覆盖层保持顺序。取消及异常路径也在客户端线程销毁拥有的窗口；不调用关闭玩家当前界面的入口。普通 GT 方块模型与附加实体模型合并后再确定隐藏状态，激光不会改变 renderer 的偏移字段或 tile 的 counter。

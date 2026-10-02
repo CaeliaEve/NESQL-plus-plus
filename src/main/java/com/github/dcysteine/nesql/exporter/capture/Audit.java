@@ -7,6 +7,7 @@ import com.github.dcysteine.nesql.exporter.source.Rows;
 import com.github.dcysteine.nesql.exporter.task.Checks;
 import com.github.dcysteine.nesql.exporter.task.ClientThread;
 import com.github.dcysteine.nesql.exporter.task.Jobs;
+import com.github.dcysteine.nesql.exporter.task.Slice;
 import com.google.gson.JsonArray;
 import com.google.gson.JsonElement;
 import com.google.gson.JsonObject;
@@ -27,7 +28,8 @@ import static com.github.dcysteine.nesql.exporter.source.Json.*;
 final class Audit {
     private final Path instance, directory;
     private final ClientThread client;
-    Audit(Path instance, ClientThread client) { this.instance = instance; this.directory = instance.resolve("nesql"); this.client = client; }
+    private final Fingerprints hashes;
+    Audit(Path instance, ClientThread client, Fingerprints hashes) { this.instance = instance; this.directory = instance.resolve("nesql"); this.client = client; this.hashes = hashes; }
 
     void run(Jobs.Context context) throws Exception {
         if (context.request().check.domain.equals("resources")) { new ResourceAudit(instance, client).run(context); return; }
@@ -39,7 +41,7 @@ final class Audit {
             return ItemList.items;
         });
         context.progress("check_plan", 0, 0, "Fingerprinting the diagnostic environment");
-        JsonObject environment = Environment.capture(session, instance, request);
+        JsonObject environment = Environment.capture(session, instance, request, hashes);
         context.provenance(environment, session.identity());
         String fingerprint = CanonicalJson.digest(environment), locale = environment.get("locale").getAsString();
         Map<Integer, Structures.Machine> structures = new TreeMap<>();
@@ -70,6 +72,7 @@ final class Audit {
         Checks.Guard guard = () -> health(session, request, items, environment);
         try {
             if (!handlers.isEmpty()) report.inventory(inventory);
+            report.compact();
             report.planning(context.timings());
             report.save();
             Checks.sweep(context, report, guard, (index, row) -> {
@@ -82,10 +85,11 @@ final class Audit {
                         if (handler == null) throw new Jobs.Fault("handler_missing", "Handler is not registered");
                         if (!handler.supported) {
                             row.addProperty("status", "unsupported"); row.addProperty("reason", "No production adapter");
-                        } else recipes(session, handler, row, locale, work.resolve("handler-" + index), context, guard, report);
+                        } else recipes(session, handler, row, locale, work.resolve("handler-" + index), context,
+                                () -> { session.check(); healthNow(request, items, environment); }, report);
                     }
             });
-            if (!fingerprint.equals(CanonicalJson.digest(Environment.capture(session, instance, request)))) {
+            if (!fingerprint.equals(CanonicalJson.digest(Environment.capture(session, instance, request, hashes)))) {
                 throw new Jobs.Fault("environment_changed", "The game environment changed during the diagnostic sweep");
             }
             context.checked(report.finish("complete", null));
@@ -98,13 +102,17 @@ final class Audit {
 
     private void health(ClientThread.Session session, Jobs.Request request, List<ItemStack> items, JsonObject environment) throws Exception {
         session.call("check environment", () -> {
+            healthNow(request, items, environment);
+            return null;
+        });
+    }
+
+    private void healthNow(Jobs.Request request, List<ItemStack> items, JsonObject environment) {
             request.checkWorld(Minecraft.getMinecraft().getIntegratedServer().getFolderName());
             if (!ItemList.loadFinished || ItemList.items != items) throw new Jobs.Fault("items_changed", "NEI item list changed during checks");
             if (!environment.get("locale").getAsString().equals(Minecraft.getMinecraft().gameSettings.language)) throw new Jobs.Fault("environment_changed", "Language changed during checks");
             String knowledge = Environment.knowledge(Minecraft.getMinecraft().thePlayer.getCommandSenderName());
             if (!knowledge.equals(environment.getAsJsonObject("knowledge").get("thaumcraft").getAsString())) throw new Jobs.Fault("environment_changed", "Player knowledge changed during checks");
-            return null;
-        });
     }
 
     private void structure(ClientThread.Session session, Jobs.Request request, Structures.Machine machine, JsonObject result, String locale, Path path, Checks.Report report) throws Exception {
@@ -136,14 +144,47 @@ final class Audit {
         try (AutoCloseable owned = () -> release("handler " + handler.id, cursor::close)) {
             try (Buffer buffer = new Buffer(path.resolve("category"))) { buffer.write(opening.drain()); result.add("categoryCounts", buffer.check()); }
             int total = session.call("handler " + handler.id + " size", cursor::size);
-            Checks.recipes(context, report, guard, result, total, index -> {
-                Facts facts = new Facts(locale);
+            java.util.ArrayDeque<Attempt> pending = new java.util.ArrayDeque<>();
+            int end = Math.min(total, context.request().check.offset + context.request().check.limit);
+            Checks.recipes(context, report, () -> {}, result, total, index -> {
+                if (pending.isEmpty()) session.call("recipe batch", () -> Slice.run(index, end, next -> {
+                    Attempt attempt = new Attempt(next);
+                    pending.add(attempt);
+                    try {
+                        ClientThread.phase("health"); guard.check();
+                        Facts facts = new Facts(locale);
+                        ClientThread.phase("recipe capture"); cursor.capture(next, facts);
+                        ClientThread.phase("health"); guard.check();
+                        ClientThread.phase("snapshot");
+                        return attempt.freeze(facts.drain());
+                    } catch (Exception | Error error) {
+                        attempt.error = error;
+                        return Checks.fatal(error) ? Long.MAX_VALUE : 0;
+                    }
+                }));
+                Attempt attempt = pending.removeFirst();
+                if (attempt.index != index) throw new IOException("Capture batch lost its recipe index");
+                if (attempt.error instanceof Exception) throw (Exception) attempt.error;
+                if (attempt.error instanceof Error) throw (Error) attempt.error;
                 try (Buffer buffer = new Buffer(path.resolve("recipe-" + index))) {
-                    session.call("recipe " + handler.id + " index=" + index, () -> { cursor.capture(index, facts); return null; });
-                    buffer.write(facts.drain());
+                    buffer.write(attempt.batch);
                     return buffer.check().has("recipes");
                 }
             });
+        }
+    }
+
+    /** Only detached JSON crosses the batch boundary; no native stack or mutable cursor state. */
+    private static final class Attempt {
+        final int index;
+        final Facts.Batch batch = new Facts.Batch();
+        Throwable error;
+        Attempt(int index) { this.index = index; }
+        long freeze(Facts.Batch source) throws IOException {
+            if (!source.scenes.isEmpty() || !source.models.isEmpty()) throw new IOException("Data checks unexpectedly requested graphics");
+            for (Facts.Icon icon : source.icons) source.records.add(new Facts.Record(icon.kind, icon.record));
+            batch.records.addAll(source.records);
+            return batch.freezeRecords();
         }
     }
 

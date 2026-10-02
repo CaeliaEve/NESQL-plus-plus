@@ -32,8 +32,13 @@ final class Environment {
     private Environment() {}
 
     static JsonObject capture(ClientThread.Session client, Path instance, Jobs.Request request) throws Exception {
+        return capture(client, instance, request, null);
+    }
+
+    static JsonObject capture(ClientThread.Session client, Path instance, Jobs.Request request, Fingerprints cache) throws Exception {
+        try (Jobs.Timing ignored = Jobs.measure("environment")) {
         Snapshot snapshot = client.call(Environment::snapshot);
-        JsonArray mods = snapshot.sources.fingerprints();
+        JsonArray mods = snapshot.sources.fingerprints(cache);
         TreeMap<String, Path> inputs = new TreeMap<>(CanonicalJson.KEY_ORDER);
         for (String directory : new String[] {"config", "scripts", "resources"}) {
             Path root = instance.resolve(directory);
@@ -45,7 +50,7 @@ final class Environment {
             collect(instance, resource, inputs);
         }
         JsonArray files = new JsonArray();
-        for (Map.Entry<String, Path> file : inputs.entrySet()) files.add(object("path", file.getKey(), "sha256", Sources.hash(file.getValue())));
+        for (Map.Entry<String, Path> file : inputs.entrySet()) files.add(object("path", file.getKey(), "sha256", cache == null ? Sources.hash(file.getValue()) : cache.hash(file.getValue())));
         JsonArray resources = new JsonArray();
         for (String name : snapshot.resources) resources.add(value(name));
         JsonArray probes = new JsonArray();
@@ -57,6 +62,7 @@ final class Environment {
                         "iconPixels", "64", "tooltip", "advanced"));
         if (request.scope != null) environment.getAsJsonObject("settings").addProperty("scope", request.scope);
         return environment;
+        }
     }
 
     private static Snapshot snapshot() {

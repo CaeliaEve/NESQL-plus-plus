@@ -16,6 +16,7 @@ final class ChecksTest {
     private ChecksTest() {}
 
     static void run(Path root) throws Exception {
+        slices();
         Jobs.Request resources = Checks.request(object("key", "resources", "world", "test-copy", "domain", "resources",
                 "resources", array("demo:textures/z.png", "demo:lang/en_US.lang")));
         require(resources.check.resources.equals(java.util.Arrays.asList("demo:lang/en_US.lang", "demo:textures/z.png")), "Resource targets are not canonical");
@@ -140,6 +141,20 @@ final class ChecksTest {
         System.out.println("Diagnostic tasks: observed work through timing reports, decimal quantities, failure/cancel reports, retry identity and publication separation passed");
     }
 
+    private static void slices() throws Exception {
+        java.util.concurrent.atomic.AtomicLong clock = new java.util.concurrent.atomic.AtomicLong();
+        java.util.List<Integer> visits = new java.util.ArrayList<>();
+        int end = Slice.run(7, 100, index -> { visits.add(index); clock.addAndGet(2_000_000); return 1; }, clock::get);
+        require(end == 9 && visits.equals(java.util.Arrays.asList(7, 8)), "A native slice ran past its time budget or changed indices");
+        require(Slice.run(0, 100, index -> 4 * 1024 * 1024, () -> 0) == 1, "A large result did not apply backpressure");
+        require(Slice.run(0, 100, index -> 1, () -> 0) == 32, "A fast slice ignored its item cap");
+        visits.clear();
+        try {
+            Slice.run(0, 100, index -> { visits.add(index); throw new java.io.IOException("stop"); }, () -> 0);
+            throw new AssertionError("Fatal slice failure disappeared");
+        } catch (java.io.IOException expected) { require(visits.equals(java.util.Collections.singletonList(0)), "A slice continued after failure"); }
+    }
+
     private static void recipes(Path root) throws Exception {
         Path scope = root.resolve("recipes");
         java.util.Map<String, java.util.List<Integer>> attempts = new java.util.HashMap<>();
@@ -148,6 +163,7 @@ final class ChecksTest {
             java.util.List<Integer> visited = new java.util.ArrayList<>(); attempts.put(key, visited);
             JsonObject row = object("handler", "fixture", "status", "pending");
             Checks.Report report = new Checks.Report(scope.resolve("checks"), context, object(), array(row));
+            report.compact();
             try {
                 Checks.sweep(context, report, () -> {}, (target, result) ->
                         Checks.recipes(context, report, () -> {}, result, key.equals("recipe-stop") ? 483 : key.equals("recipe-many") ? 65 : 20, index -> {
@@ -171,6 +187,11 @@ final class ChecksTest {
             Jobs.Request range = Checks.request(object("key", "recipe-range", "world", "test-copy", "domain", "recipes", "offset", 5, "limit", 8));
             Jobs.Job checked = await(jobs, startAfterTerminal(jobs, range).id);
             row = readReport(scope, checked.id);
+            JsonObject compact = new com.google.gson.JsonParser().parse(new String(Files.readAllBytes(java.nio.file.Paths.get(checked.report.path)), StandardCharsets.UTF_8)).getAsJsonObject();
+            require(!compact.has("environment") && compact.has("environmentRef"), "Paged report still repeats its entire environment");
+            JsonObject reference = compact.getAsJsonObject("environmentRef");
+            byte[] shared = Files.readAllBytes(scope.resolve("checks").resolve(reference.get("path").getAsString()));
+            require(shared.length == reference.get("bytes").getAsInt() && com.github.dcysteine.nesql.exporter.source.CanonicalJson.digest(shared).equals(reference.get("sha256").getAsString()), "Shared environment receipt is invalid");
             require(checked.state.equals("checked") && checked.report.failed == 1 && attempts.get("recipe-range").size() == 8
                     && row.get("checkedRecipes").getAsInt() == 8 && row.get("unexamined").getAsInt() == 12
                     && row.getAsJsonArray("failedRecipes").size() == 2 && row.getAsJsonArray("excludedRecipes").size() == 1,

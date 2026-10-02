@@ -16,6 +16,7 @@ final class WorkTest {
     private WorkTest() {}
 
     static void run() throws Exception {
+        pipeline();
         Queue<Work<?>> queue = new ConcurrentLinkedQueue<>();
         AtomicInteger calls = new AtomicInteger();
         Work<Integer> queued = new Work<>("never started", calls::incrementAndGet);
@@ -77,5 +78,26 @@ final class WorkTest {
         System.out.println("Client work: queue expiry, retained slow results, running phase/stack, original failure and safe cancellation passed");
     }
 
+    private static void pipeline() throws Exception {
+        CountDownLatch release = new CountDownLatch(1);
+        List<Integer> committed = new ArrayList<>();
+        try (Pipeline pipe = new Pipeline()) {
+            pipe.submit(8 * 1024 * 1024, () -> {
+                require(release.await(2, TimeUnit.SECONDS), "Encoding blocked the capture producer");
+                return new byte[] {1};
+            }, bytes -> committed.add((int) bytes[0]));
+            release.countDown();
+            pipe.submit(8 * 1024 * 1024, () -> new byte[] {2}, bytes -> committed.add((int) bytes[0]));
+            pipe.submit(1, () -> new byte[] {3}, bytes -> committed.add((int) bytes[0]));
+            require(committed.equals(java.util.Collections.singletonList(1)), "Pipeline byte budget did not apply ordered backpressure");
+            pipe.flush();
+            require(committed.equals(java.util.Arrays.asList(1, 2, 3)), "Background encoding reordered or lost output");
+        } finally { release.countDown(); }
+        try (Pipeline pipe = new Pipeline()) {
+            pipe.submit(1, () -> { throw new java.io.IOException("encode failed"); }, bytes -> { throw new AssertionError("Failed encoding was published"); });
+            try { pipe.flush(); throw new AssertionError("Encoding error was swallowed"); }
+            catch (java.io.IOException expected) { require(expected.getMessage().equals("encode failed"), "Encoding error was replaced"); }
+        }
+    }
     private static void require(boolean condition, String message) { if (!condition) throw new AssertionError(message); }
 }

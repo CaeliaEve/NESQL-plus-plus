@@ -115,6 +115,28 @@ public final class Checks {
         }
 
         public JsonObject row(int index) { return rows.get(index).getAsJsonObject(); }
+        public void compact() throws IOException {
+            for (String name : new String[] {"environment", "handlers"}) {
+                if (!record.has(name)) continue;
+                byte[] bytes = CanonicalJson.bytes(record.get(name));
+                if (bytes.length > REPORT_LIMIT) throw new IOException("Shared diagnostic evidence exceeds its size budget");
+                String hash = CanonicalJson.digest(bytes), relative = "shared/" + hash + ".json";
+                Path directory = path.getParent().resolve("shared"); Dataset.directory(directory);
+                Path target = path.getParent().resolve(relative);
+                if (Files.exists(target, LinkOption.NOFOLLOW_LINKS)) {
+                    Dataset.plain(target);
+                    if (Files.size(target) != bytes.length || !java.util.Arrays.equals(Files.readAllBytes(target), bytes)) throw new IOException("Shared diagnostic evidence changed");
+                } else {
+                    Path temporary = Files.createTempFile(directory, hash + "-", ".tmp");
+                    try {
+                        Files.write(temporary, bytes);
+                        Files.move(temporary, target, StandardCopyOption.ATOMIC_MOVE);
+                    } finally { Files.deleteIfExists(temporary); }
+                }
+                record.add(name + "Ref", object("path", relative, "sha256", hash, "bytes", bytes.length));
+                record.remove(name);
+            }
+        }
         public int size() { return rows.size(); }
         public void inventory(JsonArray handlers) { record.add("handlers", handlers); }
         public void planning(JsonObject timings) { record.add("planning", timings); }
@@ -155,6 +177,9 @@ public final class Checks {
         }
 
         private Summary write() throws IOException {
+            try (Jobs.Timing ignored = Jobs.measure("reportWrite")) { return writeReport(); }
+        }
+        private Summary writeReport() throws IOException {
             Summary summary = new Summary();
             summary.status = record.get("status").getAsString(); summary.total = rows.size();
             for (JsonElement element : rows) {

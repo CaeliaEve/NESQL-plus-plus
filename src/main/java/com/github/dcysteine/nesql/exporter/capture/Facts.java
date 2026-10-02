@@ -133,6 +133,16 @@ final class Facts {
         final List<Scene> scenes = new ArrayList<>();
         final List<Picture> pictures = new ArrayList<>();
         final List<Models.Draft> models = new ArrayList<>();
+        long freezeRecords() {
+            long bytes = 0;
+            for (int index = 0; index < records.size(); index++) {
+                Record record = records.get(index);
+                String json = record.value.toString(); bytes += 128L + json.length() * 3L;
+                records.set(index, new Record(record.kind, new com.google.gson.JsonParser().parse(json).getAsJsonObject()));
+            }
+            return bytes;
+        }
+        boolean hasVisuals() { return !icons.isEmpty() || !pictures.isEmpty() || !scenes.isEmpty() || !models.isEmpty(); }
     }
     static final class Record {
         final String kind; final JsonObject value;

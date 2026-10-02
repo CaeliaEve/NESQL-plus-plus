@@ -29,7 +29,7 @@ public final class Rows implements AutoCloseable {
     private final int bufferLimit;
     private final Map<String, Buffer> buffers = new TreeMap<>();
     private int sequence;
-    private boolean finished;
+    private boolean finished, created;
 
     public Rows(Path directory) throws IOException {
         this(directory, BUFFER_LIMIT);
@@ -40,7 +40,7 @@ public final class Rows implements AutoCloseable {
         this.directory = directory.toAbsolutePath().normalize();
         this.bufferLimit = bufferLimit;
         Dataset.plain(this.directory.getParent());
-        Files.createDirectory(this.directory);
+        if (Files.exists(this.directory, java.nio.file.LinkOption.NOFOLLOW_LINKS)) throw new IOException("Sort workspace already exists: " + directory);
         for (String kind : Dataset.COLLECTIONS) buffers.put(kind, new Buffer());
     }
 
@@ -78,12 +78,20 @@ public final class Rows implements AutoCloseable {
 
     /** Exercise the same bounded merge and identity checks without publishing a source. */
     public Map<String, Long> check() throws IOException {
+        try (Jobs.Timing ignored = Jobs.measure("rowsCheck")) { return checkRows(); }
+    }
+    private Map<String, Long> checkRows() throws IOException {
         if (finished) throw new IllegalStateException("Records already checked");
         finished = true;
         Map<String, Long> counts = new TreeMap<>();
         for (Map.Entry<String, Buffer> entry : buffers.entrySet()) {
             Jobs.checkpoint();
             Buffer buffer = entry.getValue();
+            if (buffer.runs.isEmpty()) {
+                if (!buffer.rows.isEmpty()) counts.put(entry.getKey(), (long) buffer.rows.size());
+                buffer.rows.clear(); buffer.bytes = 0;
+                continue;
+            }
             sort(buffer);
             long[] count = {0};
             merge(buffer.runs, row -> count[0]++);
@@ -114,6 +122,7 @@ public final class Rows implements AutoCloseable {
     private Path run() { return directory.resolve(String.format(java.util.Locale.ROOT, "run-%08d.jsonl", sequence++)); }
 
     private void spill(Buffer buffer) throws IOException {
+        if (!created) { Dataset.plain(directory.getParent()); Files.createDirectory(directory); created = true; }
         Path path = run();
         try (OutputStream output = new BufferedOutputStream(Files.newOutputStream(path, StandardOpenOption.CREATE_NEW))) {
             for (byte[] row : buffer.rows.values()) { output.write(row); output.write('\n'); }
@@ -161,6 +170,7 @@ public final class Rows implements AutoCloseable {
 
     @Override public void close() throws IOException {
         finished = true;
+        if (!created) { buffers.clear(); return; }
         Dataset.plain(directory);
         try (java.nio.file.DirectoryStream<Path> files = Files.newDirectoryStream(directory)) {
             for (Path file : files) {

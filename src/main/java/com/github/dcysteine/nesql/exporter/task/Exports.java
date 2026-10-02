@@ -57,7 +57,7 @@ public final class Exports implements AutoCloseable {
         for (Runnable action : controls.shutdownNow()) {
             ((Control<?>) action).future.completeExceptionally(new Jobs.Fault("game_stopped", "The exporter is stopping"));
         }
-        server.close();
+        try { server.close(); } finally { capture.close(); }
     }
 
     private static final class Control<T> implements Runnable {

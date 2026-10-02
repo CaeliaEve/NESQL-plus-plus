@@ -1,4 +1,4 @@
-import { readFile, writeFile, appendFile, rename, mkdir, stat } from 'node:fs/promises';
+import { readFile, writeFile, appendFile, rename, mkdir, stat, link } from 'node:fs/promises';
 import { existsSync, readFileSync, statSync } from 'node:fs';
 import { createHash } from 'node:crypto';
 import path from 'node:path';
@@ -10,6 +10,8 @@ import assert from 'node:assert/strict';
 import { prepare, canonical, sha, artifact, digest } from './plan.mjs';
 import { GameClient, GameError } from './client.mjs';
 import { memoryPolicy, assessMemory, readMemory } from './resources.mjs';
+import { resolveReport } from './reports.mjs';
+import { CheckpointLog, readCheckpoint } from './checkpoint.mjs';
 
 const execFileAsync = promisify(execFile);
 
@@ -71,15 +73,16 @@ export class AcceptanceCoordinator {
   async loadCheckpoint(currentFingerprint) {
     if (existsSync(this.checkpointPath)) {
       try {
-        const text = await readFile(this.checkpointPath, 'utf8');
-        const data = JSON.parse(text);
+        const data = await readCheckpoint(this.checkpointPath, { repairTail: true });
         if (data.fingerprint && data.fingerprint === currentFingerprint) {
           // Restore persisted runId to ensure idempotence across restarts (C8)
           this.runId = data.runId || this.runId;
+          this.journal = new CheckpointLog(this.checkpointPath, data);
           return data;
         }
         console.warn(`[Coordinator] Checkpoint environment fingerprint mismatch (${data.fingerprint} vs ${currentFingerprint}); starting fresh.`);
       } catch (err) {
+        if (existsSync(this.checkpointPath + '.journal')) throw err;
         console.warn('[Coordinator] Corrupted checkpoint, starting fresh:', err.message);
       }
     }
@@ -116,19 +119,25 @@ export class AcceptanceCoordinator {
     return summary;
   }
 
-  async saveCheckpoint(checkpoint) {
+  async saveCheckpoint(checkpoint, force = false) {
     checkpoint.updatedAt = new Date().toISOString();
     this.updateSummary(checkpoint);
-    const tempPath = this.checkpointPath + '.tmp';
     await mkdir(path.dirname(this.checkpointPath), { recursive: true });
-    await writeFile(tempPath, JSON.stringify(checkpoint, null, 2), 'utf8');
-    await rename(tempPath, this.checkpointPath);
+    this.journal ??= new CheckpointLog(this.checkpointPath);
+    await this.journal.save(checkpoint, force);
   }
 
   /**
    * Run full verification for a list of handlers with automatic contiguous pagination.
    */
   async runPlan(plan, { onProgress = () => {} } = {}) {
+    this.currentCheckpoint = null;
+    this.journal = null;
+    try { return await this.executePlan(plan, { onProgress }); }
+    finally { if (this.currentCheckpoint) await this.saveCheckpoint(this.currentCheckpoint, true); }
+  }
+
+  async executePlan(plan, { onProgress }) {
     memoryPolicy(plan.memory);
     const game = await this.client.request('GET', '/game');
     if (!game.ready) {
@@ -168,6 +177,7 @@ export class AcceptanceCoordinator {
     });
 
     const checkpoint = await this.loadCheckpoint(envFingerprint);
+    this.currentCheckpoint = checkpoint;
 
     // If an active job was interrupted, verify its status first (C8)
     if (checkpoint.activeJob) {
@@ -364,7 +374,7 @@ export class AcceptanceCoordinator {
         }
 
         // Parse row and enforce strict protocol checks (C2)
-        const reportData = JSON.parse(rawReport.toString('utf8'));
+        const reportData = await resolveReport(JSON.parse(rawReport.toString('utf8')), path.dirname(report.path));
         if (!Array.isArray(reportData.rows)) {
           state.status = 'failed';
           state.error = { code: 'invalid_report_format', message: 'Report data has no rows array' };
@@ -613,6 +623,17 @@ export class AcceptanceCoordinator {
     assert.match(job.id, /^[a-zA-Z0-9_-]{1,80}$/);
     await mkdir(directory, { recursive: true });
     const files = [];
+    const evidence = [];
+    await resolveReport(JSON.parse(rawReport.toString('utf8')), path.dirname(job.report.path), async (reference, bytes) => {
+      const archivePath = path.join(directory, reference.path);
+      await mkdir(path.dirname(archivePath), { recursive: true });
+      if (!existsSync(archivePath)) {
+        try { await link(path.join(path.dirname(job.report.path), reference.path), archivePath); }
+        catch (error) { if (error.code === 'EEXIST') throw error; await this.storeArtifact(archivePath, bytes); }
+      }
+      await this.storeArtifact(archivePath, bytes);
+      evidence.push({ ...reference, archivePath });
+    });
     for (const row of rows) {
       const isResource = typeof row.resource === 'string';
       const isStructure = Number.isInteger(row.controller);
@@ -643,7 +664,7 @@ export class AcceptanceCoordinator {
     }
     const archivePath = path.join(directory, 'report.json');
     await this.storeArtifact(archivePath, rawReport);
-    return { job: job.id, sourcePath: job.report.path, archivePath, sha256: digest(rawReport), bytes: rawReport.length, files };
+    return { job: job.id, sourcePath: job.report.path, archivePath, sha256: digest(rawReport), bytes: rawReport.length, files, evidence };
   }
 
   async storeArtifact(file, bytes) {

@@ -31,6 +31,7 @@ public final class EnvironmentTest {
     private EnvironmentTest() {}
     public static void run(Path directory) throws Exception {
         Files.createDirectories(directory);
+        protectedHashes(directory);
         Path placeholder = directory.resolve("minecraft.jar");
         Files.write(placeholder, new byte[] {1, 2, 3});
         ModMetadata metadata = new ModMetadata(); metadata.modId = "mcp"; metadata.version = "9.05";
@@ -93,6 +94,31 @@ public final class EnvironmentTest {
         mod = new InjectedModContainer(new DummyModContainer(ordinary), missing.toFile());
         try { Sources.hash(Sources.resolve(mod, java.util.Collections.emptyMap(), null).path); throw new AssertionError("Missing ordinary mod source was hidden"); }
         catch (IOException expected) { /* missing files remain an export failure */ }
+    }
+
+    private static void protectedHashes(Path directory) throws Exception {
+        Path file = directory.resolve("immutable-input.bin");
+        byte[] bytes = new byte[300 * 1024];
+        Files.write(file, bytes);
+        String first = Sources.hash(file);
+        try (Fingerprints hashes = new Fingerprints()) {
+            if (!hashes.hash(file).equals(first) || !hashes.hash(file).equals(first)) throw new AssertionError("Cached hash differs from input bytes");
+            if (System.getProperty("os.name").startsWith("Windows")) {
+                try (java.nio.channels.FileChannel writer = java.nio.channels.FileChannel.open(file, java.nio.file.StandardOpenOption.WRITE)) {
+                    throw new AssertionError("Cached input can be modified while its hash is reused");
+                } catch (IOException protectedFile) { /* deny-write lease */ }
+                try { Files.move(file, directory.resolve("replaced.bin")); throw new AssertionError("Cached input can be replaced"); }
+                catch (IOException protectedFile) { /* deny-delete lease */ }
+            }
+        }
+        bytes[0] = 7; Files.write(file, bytes);
+        try (Fingerprints hashes = new Fingerprints()) {
+            if (hashes.hash(file).equals(first)) throw new AssertionError("Closed lease kept a stale hash");
+            Path small = directory.resolve("mutable.txt"); Files.write(small, new byte[] {1});
+            String prior = hashes.hash(small); java.nio.file.attribute.FileTime time = Files.getLastModifiedTime(small);
+            Files.write(small, new byte[] {2}); Files.setLastModifiedTime(small, time);
+            if (hashes.hash(small).equals(prior)) throw new AssertionError("Unprotected same-size, same-time edit was hidden");
+        }
     }
 
     private static void coreSources(Path directory, ModContainer mcp) throws Exception {

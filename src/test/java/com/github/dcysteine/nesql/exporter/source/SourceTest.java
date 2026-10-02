@@ -460,6 +460,13 @@ public final class SourceTest {
     }
 
     private static void sorting(Path root) throws Exception {
+        Path memory = root.resolve("memory-check");
+        try (Rows rows = new Rows(memory)) {
+            rows.add("strings", object("id", "text_a", "text", "same"));
+            rows.add("strings", object("id", "text_a", "text", "same"));
+            require(rows.check().equals(java.util.Collections.singletonMap("strings", 1L)), "Memory check lost deduplication");
+            require(!Files.exists(memory), "Small diagnostic records unnecessarily touched the disk");
+        }
         String padding = String.join("", java.util.Collections.nCopies(300, "x"));
         Path staging = root.resolve("sorted"), work = root.resolve("sort-work");
         Jobs.Result result;

@@ -60,6 +60,11 @@ public final class Jobs implements AutoCloseable {
     }
 
     public interface Observer { void update(JsonObject operation) throws IOException; }
+    public interface Timing extends AutoCloseable { @Override void close(); }
+    public static Timing measure(String name) {
+        Context context = CURRENT.get(); long began = System.nanoTime();
+        return () -> { if (context != null) context.measure(name, (System.nanoTime() - began) / 1000); };
+    }
 
     static Observer observer() {
         Context context = CURRENT.get();
@@ -229,6 +234,7 @@ public final class Jobs implements AutoCloseable {
         public Checks.Summary report;
         public JsonObject operation;
         public JsonObject provenance;
+        public JsonObject performance;
         public com.github.dcysteine.nesql.exporter.source.Fragments.Receipt fragments;
         public Map<String, Object> error;
         private transient Thread thread;
@@ -252,6 +258,22 @@ public final class Jobs implements AutoCloseable {
         }
 
         public Request request() { return job.request; }
+        private void measure(String name, long micros) {
+            synchronized (Jobs.this) {
+                if (job.performance == null) job.performance = new JsonObject();
+                if (job.performance.entrySet().size() >= 32 && !job.performance.has(name)) name = "other";
+                JsonObject value = job.performance.has(name) ? job.performance.getAsJsonObject(name) : new JsonObject();
+                value.addProperty("calls", Long.toString(value.has("calls") ? value.get("calls").getAsLong() + 1 : 1));
+                value.addProperty("micros", Long.toString(value.has("micros") ? value.get("micros").getAsLong() + micros : micros));
+                job.performance.add(name, value);
+            }
+        }
+        public void metric(String name, JsonObject value) {
+            synchronized (Jobs.this) {
+                if (job.performance == null) job.performance = new JsonObject();
+                job.performance.add(name, value);
+            }
+        }
         public String id() { return job.id; }
 
         /** Persist before capture; failures keep the identity but cannot publish a Source. */
@@ -289,6 +311,7 @@ public final class Jobs implements AutoCloseable {
                 if ((state.equals("done") || state.equals("failed")) && !id.equals(observed)) {
                     observed = id;
                     long waiting = operation.get("queueMicros").getAsLong(), running = operation.get("runMicros").getAsLong();
+                    measure("clientQueue", waiting); measure("clientRun", running);
                     String name = operation.get("name").getAsString();
                     if (timings.size() >= 64 && !timings.containsKey(name)) name = "other";
                     long[] total = timings.computeIfAbsent(name, key -> new long[4]);

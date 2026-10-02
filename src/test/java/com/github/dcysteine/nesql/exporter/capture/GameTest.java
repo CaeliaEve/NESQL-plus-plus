@@ -36,6 +36,11 @@ public final class GameTest {
         cpw.mods.fml.relauncher.ReflectionHelper.setPrivateValue(cpw.mods.fml.relauncher.FMLRelaunchLog.class, null,
                 cpw.mods.fml.relauncher.Side.CLIENT, "side");
         Bootstrap.func_151354_b();
+        Facts.Batch batch = new Facts.Batch();
+        com.google.gson.JsonObject nativeRecord = com.github.dcysteine.nesql.exporter.source.Json.object("id", "fixture", "value", 1);
+        batch.records.add(new Facts.Record("recipes", nativeRecord));
+        batch.freezeRecords(); nativeRecord.addProperty("value", 2);
+        if (batch.records.get(0).value.get("value").getAsInt() != 1) throw new AssertionError("Advancing a native cursor changed an earlier batch");
         if (Boolean.getBoolean("nesql.nativeFilterTests")) { NativeFilterTest.run(); return; }
         if (Boolean.getBoolean("nesql.nativeInfusionTests")) { NativeInfusionTest.run(); return; }
         if (Boolean.getBoolean("nesql.nativeAeTests")) { NativeAeTest.run(); return; }

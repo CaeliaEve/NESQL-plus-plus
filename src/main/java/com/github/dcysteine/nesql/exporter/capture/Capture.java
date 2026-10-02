@@ -10,6 +10,8 @@ import com.github.dcysteine.nesql.exporter.source.Rows;
 import com.github.dcysteine.nesql.exporter.source.Fragments;
 import com.github.dcysteine.nesql.exporter.task.ClientThread;
 import com.github.dcysteine.nesql.exporter.task.Jobs;
+import com.github.dcysteine.nesql.exporter.task.Pipeline;
+import com.github.dcysteine.nesql.exporter.task.Slice;
 import com.google.gson.JsonArray;
 import com.google.gson.JsonElement;
 import com.google.gson.JsonObject;
@@ -34,14 +36,16 @@ import java.util.TreeMap;
 import static com.github.dcysteine.nesql.exporter.source.Json.*;
 
 /** One source pipeline shared by MCP and the in-game command. No database or legacy exporter is involved. */
-public final class Capture implements Jobs.Task {
+public final class Capture implements Jobs.Task, AutoCloseable {
     private final Path instance, directory;
     private final ClientThread client;
+    private final Fingerprints hashes;
 
     public Capture(Path instance, ClientThread client) {
         this.instance = instance.toAbsolutePath().normalize();
         this.directory = this.instance.resolve("nesql");
         this.client = client;
+        this.hashes = new Fingerprints(this.directory);
     }
 
     public JsonObject inspect() {
@@ -74,7 +78,14 @@ public final class Capture implements Jobs.Task {
     }
 
     @Override public void run(Jobs.Context context) throws Exception {
-        if (context.request().check != null) { new Audit(instance, client).run(context); return; }
+        hashes.begin();
+        try { capture(context); } finally { context.metric("inputHashes", hashes.statistics()); hashes.end(); }
+    }
+
+    @Override public void close() throws IOException { hashes.close(); }
+
+    private void capture(Jobs.Context context) throws Exception {
+        if (context.request().check != null) { new Audit(instance, client, hashes).run(context); return; }
         ClientThread.Session session = client.session();
         Jobs.Request request = context.request();
         session.call(() -> { request.checkWorld(net.minecraft.client.Minecraft.getMinecraft().getIntegratedServer().getFolderName()); return null; });
@@ -100,7 +111,7 @@ public final class Capture implements Jobs.Task {
         Magic magic = session.call(Magic::new);
         List<gregtech.api.enums.Materials> materials = request.recipeScope() ? java.util.Collections.emptyList() : session.call(GtMaterials::all);
         context.progress("environment", 0, 1, "Fingerprinting loaded mods, configuration, scripts and resource packs");
-        JsonObject environment = Environment.capture(session, instance, request);
+        JsonObject environment = Environment.capture(session, instance, request, hashes);
         context.provenance(environment, session.identity());
         Facts facts = new Facts(environment.get("locale").getAsString());
         Path workRoot = directory.resolve("work");
@@ -112,8 +123,8 @@ public final class Capture implements Jobs.Task {
             Images images = new Images();
             Models models = request.profile.equals("data") || request.recipeScope() ? null : session.call(Models::new);
             try (AutoCloseable visuals = () -> client.cleanup(() -> { try (Models owned = models) { images.close(); } });
-                 Rows rows = new Rows(workRoot.resolve(context.id() + "-sort"))) {
-                Sink sink = new Sink(dataset, rows, images, session, !request.profile.equals("data"));
+                 Rows rows = new Rows(workRoot.resolve(context.id() + "-sort"));
+                 Sink sink = new Sink(dataset, rows, images, session, !request.profile.equals("data"))) {
                 for (int index = 0; index < magic.aspectCount(); index++) {
                     final int aspect = index;
                     session.call(() -> { magic.aspect(aspect, facts); return null; });
@@ -208,18 +219,27 @@ public final class Capture implements Jobs.Task {
                         sink.write(facts.drain());
                         int size = session.call(cursor::size);
                         context.progress("recipes", 0, size, handler.name);
-                        for (int index = 0; index < size; index++) {
-                            final int recipe = index;
-                            session.call("recipe " + handler.id + " index=" + index, () -> { cursor.capture(recipe); return null; });
-                            sink.write(facts.drain());
-                            if ((index + 1) % 64 == 0 || index + 1 == size) context.progress("recipes", index + 1, size, handler.name);
+                        for (int index = 0; index < size;) {
+                            final int begin = index;
+                            List<Facts.Batch> captured = new ArrayList<>();
+                            index = session.call("recipe batch", () -> Slice.run(begin, size, recipe -> {
+                                session.check();
+                                cursor.capture(recipe);
+                                session.check();
+                                Facts.Batch batch = facts.drain(); captured.add(batch);
+                                // Rendering closures may depend on the cursor's current recipe.
+                                // Finish those visuals before advancing it again.
+                                return batch.hasVisuals() ? Long.MAX_VALUE : batch.freezeRecords();
+                            }));
+                            for (Facts.Batch batch : captured) sink.write(batch);
+                            if (index / 64 != begin / 64 || index == size) context.progress("recipes", index, size, handler.name);
                         }
                     } finally { client.cleanup(cursor::close); }
                 }
                 context.progress("records", 0, 1, "Sorting records, checking duplicate identities and writing bounded shards");
                 rows.write(dataset);
                 context.progress("verify", 0, 1, "Checking that the game environment did not change during capture");
-                JsonObject current = Environment.capture(session, instance, request);
+                JsonObject current = Environment.capture(session, instance, request, hashes);
                 if (!CanonicalJson.digest(environment).equals(CanonicalJson.digest(current))) {
                     throw new Jobs.Fault("environment_changed", "Mods, resources, configuration or player knowledge changed during export");
                 }
@@ -272,13 +292,14 @@ public final class Capture implements Jobs.Task {
         sink.write(facts.drain());
     }
 
-    private static final class Sink {
+    private static final class Sink implements AutoCloseable {
         final Dataset dataset;
         final Rows rows;
         final Images images;
         final ClientThread.Session client;
         final boolean textures;
         final Map<Object, String> paints = new java.util.HashMap<>();
+        final Pipeline encoding = new Pipeline();
 
         Sink(Dataset dataset, Rows rows, Images images, ClientThread.Session client, boolean textures) {
             this.dataset = dataset; this.rows = rows; this.images = images; this.client = client; this.textures = textures;
@@ -299,13 +320,12 @@ public final class Capture implements Jobs.Task {
                 String id = Identity.content("model", record); record.addProperty("id", id);
                 rows.add("models", record); model.appearance.addProperty("model", id);
             }
-            if (textures) for (Facts.Picture picture : batch.pictures) picture.record.addProperty(picture.field, asset(images.picture(picture, client)));
+            if (textures) for (Facts.Picture picture : batch.pictures) asset(images.picture(picture, client), id -> picture.record.addProperty(picture.field, id));
             for (Facts.Icon icon : batch.icons) {
-                if (textures) icon.record.addProperty("icon", asset(images.capture(icon, client)));
-                rows.add(icon.kind, icon.record);
+                if (textures) asset(images.capture(icon, client), id -> icon.record.addProperty("icon", id));
             }
             for (Facts.Scene scene : batch.scenes) {
-                String background = asset(images.scene(scene, client));
+                asset(images.scene(scene, client), background -> {
                 JsonArray elements = new JsonArray();
                 elements.add(object("kind", "sprite", "asset", background, "x", 0, "y", 0,
                         "width", scene.width, "height", scene.height, "z", scene.z));
@@ -315,21 +335,40 @@ public final class Capture implements Jobs.Task {
                 view.addProperty("id", id);
                 scene.recipe.addProperty("view", id);
                 rows.add("views", view);
+                });
             }
+            encoding.flush();
+            for (Facts.Icon icon : batch.icons) rows.add(icon.kind, icon.record);
             for (Facts.Record record : batch.records) rows.add(record.kind, record.value);
         }
 
-        String asset(Images.Image image) throws IOException {
+        String asset(Images.Image image) throws Exception {
+            String[] result = new String[1];
+            asset(image, id -> result[0] = id); encoding.flush();
+            return result[0];
+        }
+
+        interface Asset { void accept(String id) throws IOException; }
+        void asset(Images.Image image, Asset target) throws Exception {
             Jobs.checkpoint();
+            encoding.submit((long) image.pixels.getWidth() * image.pixels.getHeight() * 4, () -> {
+            try (Jobs.Timing ignored = Jobs.measure("pngEncode")) {
             ByteArrayOutputStream output = new ByteArrayOutputStream();
             if (!ImageIO.write(image.pixels, "png", output)) throw new IOException("PNG encoder is unavailable");
-            String path = dataset.asset(output.toByteArray(), "png");
+            return output.toByteArray();
+            }
+            }, bytes -> {
+            try (Jobs.Timing ignored = Jobs.measure("assetWrite")) {
+            String path = dataset.asset(bytes, "png");
             JsonObject asset = object("path", path, "width", image.pixels.getWidth(), "height", image.pixels.getHeight(),
                     "frames", image.frames, "interpolate", false, "source", object("kind", image.kind, "location", image.location));
             String id = Identity.content("asset", asset);
             asset.addProperty("id", id);
             rows.add("assets", asset);
-            return id;
+            target.accept(id);
+            }
+            });
         }
+        @Override public void close() { encoding.close(); }
     }
 }

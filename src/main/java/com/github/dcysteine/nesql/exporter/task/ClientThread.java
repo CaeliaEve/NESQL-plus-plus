@@ -42,12 +42,17 @@ public final class ClientThread implements net.minecraft.client.resources.IResou
         }
         public <T> T call(String name, Callable<T> action) throws Exception {
             return ClientThread.this.call(name, () -> {
-                Minecraft game = Minecraft.getMinecraft();
-                if (game.theWorld != world || game.thePlayer != player) throw new Jobs.Fault("world_changed", "The export's world or player changed");
-                if (generation != resources) throw new Jobs.Fault("resources_changed", "Game resources were reloaded during export");
-                if (!identity.equals(epoch.observe(game.theWorld, game.thePlayer))) throw new Jobs.Fault("world_changed", "The export session ended");
+                check();
                 return action.call();
             }, true, Jobs.observer());
+        }
+        /** Used between entries of a native slice; it never queues another tick. */
+        public void check() {
+            if (Thread.currentThread() != thread) throw new IllegalStateException("Session checks require the client thread");
+            Minecraft game = Minecraft.getMinecraft();
+            if (game.theWorld != world || game.thePlayer != player) throw new Jobs.Fault("world_changed", "The export's world or player changed");
+            if (generation != resources) throw new Jobs.Fault("resources_changed", "Game resources were reloaded during export");
+            if (!identity.equals(epoch.observe(game.theWorld, game.thePlayer))) throw new Jobs.Fault("world_changed", "The export session ended");
         }
     }
 

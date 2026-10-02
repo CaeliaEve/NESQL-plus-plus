@@ -8,6 +8,41 @@ import { once } from 'node:events';
 import { randomUUID, createHash } from 'node:crypto';
 import test from 'node:test';
 import { AcceptanceCoordinator, isFatalError } from '../src/coordinator.mjs';
+import { resolveReport } from '../src/reports.mjs';
+import { CheckpointLog, readCheckpoint } from '../src/checkpoint.mjs';
+
+test('checkpoint journal recovers durable deltas and ignores only an unfinished final write', async t => {
+  const directory = await mkdtemp(path.join(os.tmpdir(), 'nesql-journal-'));
+  t.after(() => rm(directory, { recursive: true, force: true }));
+  const file = path.join(directory, 'checkpoint.json'), log = new CheckpointLog(file);
+  const state = { handlers: { one: { offset: 0 } }, activeJob: null };
+  await log.save(state, true);
+  state.handlers.one.offset = 512; state.activeJob = 'next';
+  await log.save(state);
+  assert.equal(JSON.parse(await readFile(file)).handlers.one.offset, 0, 'Every update still rewrites the whole snapshot');
+  await writeFile(file + '.journal', '{"unfinished":', { flag: 'a' });
+  const recovered = await readCheckpoint(file, { repairTail: true });
+  assert.equal(recovered.handlers.one.offset, 512); assert.equal(recovered.activeJob, 'next');
+  const resumed = new CheckpointLog(file, recovered);
+  recovered.handlers.one.offset = 1024; await resumed.save(recovered, true);
+  assert.equal((await readCheckpoint(file)).handlers.one.offset, 1024);
+  assert.equal((await readFile(file + '.journal')).length, 0);
+});
+
+test('compact reports resolve only hash-verified shared evidence and preserve their raw identity', async t => {
+  const directory = await mkdtemp(path.join(os.tmpdir(), 'nesql-shared-'));
+  t.after(() => rm(directory, { recursive: true, force: true }));
+  await mkdir(path.join(directory, 'shared'));
+  const bytes = Buffer.from('{"locale":"en_US"}'), sha256 = digestForTest(bytes);
+  const reference = { path: `shared/${sha256}.json`, bytes: bytes.length, sha256 };
+  await writeFile(path.join(directory, reference.path), bytes);
+  const raw = { environmentRef: reference, provenance: { environment: sha256 }, rows: [] };
+  const resolved = await resolveReport(raw, directory);
+  assert.deepEqual(resolved.environment, { locale: 'en_US' });
+  assert.equal(raw.environment, undefined);
+  await writeFile(path.join(directory, reference.path), '{"locale":"zh_CN"}');
+  await assert.rejects(() => resolveReport(raw, directory), /hash|digest|SHA|mismatch/i);
+});
 
 const modBytes = Buffer.from('NESQL protocol fixture');
 const modSha256 = createHash('sha256').update(modBytes).digest('hex');

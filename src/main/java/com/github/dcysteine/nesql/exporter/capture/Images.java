@@ -4,6 +4,7 @@ import codechicken.lib.gui.GuiDraw;
 import codechicken.nei.guihook.GuiContainerManager;
 import com.github.dcysteine.nesql.exporter.task.ClientThread;
 import com.github.dcysteine.nesql.exporter.task.Jobs;
+import com.github.dcysteine.nesql.exporter.task.Slice;
 import com.google.gson.JsonArray;
 import cpw.mods.fml.relauncher.ReflectionHelper;
 import net.minecraft.client.renderer.RenderHelper;
@@ -65,12 +66,13 @@ final class Images implements AutoCloseable {
     }
 
     Image capture(Facts.Icon request, ClientThread.Session client) throws Exception {
-        Plan plan = client.call(() -> plan(request));
-        if (plan == null) {
-            byte[] rgba = client.call(() -> render(request));
-            return new Image(decode(SIZE, SIZE, rgba), new JsonArray(), "capture", request.registry);
-        }
-        return animation(plan, client);
+        Captured captured = client.call("icon capture", () -> {
+            Plan plan = plan(request);
+            return plan == null ? new Captured(null, render(request)) : new Captured(plan, null);
+        });
+        return captured.plan == null
+                ? new Image(decode(SIZE, SIZE, captured.rgba), new JsonArray(), "capture", request.registry)
+                : animation(captured.plan, client);
     }
 
     Image sprite(TextureAtlasSprite sprite, ClientThread.Session client) throws Exception {
@@ -126,16 +128,21 @@ final class Images implements AutoCloseable {
         BufferedImage image = new BufferedImage(width, height, BufferedImage.TYPE_INT_ARGB);
         int index = 0;
         Map<Integer, Integer> positions = new LinkedHashMap<>();
-        for (int frame : plan.frames) {
+        while (index < plan.frames.size()) {
             Jobs.checkpoint();
-            // Sprite arrays may contain holes; copy only the frames referenced by the timeline.
-            int[] colors = client.call(() -> {
+            List<int[]> copied = new ArrayList<>();
+            final int begin = index;
+            client.call("animation frames", () -> Slice.run(begin, plan.frames.size(), next -> {
+                int frame = plan.frames.get(next);
                 int[][] levels = plan.sprite.getFrameTextureData(frame);
                 if (levels == null || levels.length == 0 || levels[0] == null || levels[0].length != plan.width * plan.height) {
                     throw new Jobs.Fault("animation_missing", "Sprite frame is unavailable: " + plan.location + "/" + frame);
                 }
-                return levels[0].clone();
-            });
+                copied.add(levels[0].clone());
+                return levels[0].length * 4L;
+            }));
+            for (int[] colors : copied) {
+            int frame = plan.frames.get(index);
             for (int pixel = 0; pixel < colors.length; pixel++) {
                 int color = colors[pixel];
                 int red = ((color >>> 16) & 255) * ((plan.tint >>> 16) & 255) / 255;
@@ -146,6 +153,7 @@ final class Images implements AutoCloseable {
             image.setRGB((index % columns) * plan.width, (index / columns) * plan.height,
                     plan.width, plan.height, colors, 0, plan.width);
             positions.put(frame, index++);
+            }
         }
         JsonArray timeline = new JsonArray();
         for (int[] step : plan.timeline) {
@@ -225,6 +233,10 @@ final class Images implements AutoCloseable {
 
     @Override public void close() { try (GlState state = new GlState()) { icons.close(); scenes.close(); } }
 
+    private static final class Captured {
+        final Plan plan; final byte[] rgba;
+        Captured(Plan plan, byte[] rgba) { this.plan = plan; this.rgba = rgba; }
+    }
     private static final class Plan {
         final TextureAtlasSprite sprite;
         final int width, height, tint;
