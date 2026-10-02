@@ -14,6 +14,29 @@ import static com.github.dcysteine.nesql.exporter.source.Json.*;
 final class Changes {
     private Changes() {}
 
+    static void enchanter(List<JsonObject> items, List<JsonObject> recipes, List<JsonObject> categories,
+                         String texture, Function<String,String> text) {
+        JsonObject origin=object("owner","fixture","handler","enchanter","key","enchanter");
+        String category=Identity.origin("category",origin);
+        String book=item(items,"minecraft:writable_book",0,null,false,"Book and Quill 书与笔",texture,text);
+        String material=item(items,"fixture:enchanter_material",4,null,false,"Enchanter material 附魔材料",texture,text);
+        categories.add(object("id",category,"source",origin,"name",text.apply("EnderIO Enchanter 末影接口附魔器"),"icon",object("kind","item","id",book),"machines",array(),"view",null,"order",categories.size()));
+        for(int level:new int[]{1,2,5}) {
+            NBTTagCompound tag=new NBTTagCompound(),ench=new NBTTagCompound();NBTTagList list=new NBTTagList();
+            ench.setShort("id",(short)16);ench.setShort("lvl",(short)level);list.appendTag(ench);tag.setTag("StoredEnchantments",list);
+            String output=item(items,"minecraft:enchanted_book",0,tag,false,"Enchanted Book 附魔书 "+level,texture,text);
+            JsonObject bookChoice=choice(book),materialChoice=choice(material);
+            bookChoice.add("rule",object("kind","wildcard","meta",true,"nbt",true));
+            materialChoice.add("rule",object("kind","wildcard","meta",false,"nbt",true));materialChoice.addProperty("amount",Integer.toString(3*level));
+            JsonObject row=object("source",origin,"category",category,"order",level-1,
+                "inputs",array(object("slot",0,"kind","item","choices",array(bookChoice)),object("slot",1,"kind","item","choices",array(materialChoice))),
+                "outputs",array(object("slot",0,"kind","item","id",output,"amount","1","quantity",null,"chance",Chance.of(1,1),"role","result","change",null)),
+                "process",object("kind","enchanter","level",level,"maxLevel",5,"itemsPerLevel",3,"cost",7+2*level*level),
+                "duration",null,"energy",null,"grid",null,"magic",null,"view",null,"properties",new JsonObject());
+            row.addProperty("id",Identity.recipe(row));recipes.add(row);
+        }
+    }
+
     static void inscriber(List<JsonObject> items, List<JsonObject> recipes, List<JsonObject> categories,
                           String texture, Function<String, String> text) {
         JsonObject origin = object("owner", "fixture", "handler", "inscriber", "key", "inscriber");
