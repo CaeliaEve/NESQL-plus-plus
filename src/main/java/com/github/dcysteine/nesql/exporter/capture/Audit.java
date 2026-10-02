@@ -141,7 +141,12 @@ final class Audit {
         Dataset.directory(path);
         Facts opening = new Facts(locale);
         Recipes.Cursor cursor = session.call("handler " + handler.id + " open", () -> handler.open(opening, false));
-        try (AutoCloseable owned = () -> release("handler " + handler.id, cursor::close)) {
+        try (AutoCloseable owned = () -> release("handler " + handler.id, () -> {
+            try {
+                JsonObject evidence = cursor.exclusions();
+                if (!evidence.entrySet().isEmpty()) result.add("exclusionEvidence", evidence);
+            } finally { cursor.close(); }
+        })) {
             try (Buffer buffer = new Buffer(path.resolve("category"))) { buffer.write(opening.drain()); result.add("categoryCounts", buffer.check()); }
             int total = session.call("handler " + handler.id + " size", cursor::size);
             java.util.ArrayDeque<Attempt> pending = new java.util.ArrayDeque<>();

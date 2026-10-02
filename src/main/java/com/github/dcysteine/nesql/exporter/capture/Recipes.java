@@ -187,6 +187,7 @@ final class Recipes {
         private final Crafting crafting;
         private final JsonArray decorations;
         private final Set<String> recipes = new HashSet<>();
+        private final JsonObject exclusions = new JsonObject();
 
         Cursor(Handler source, TemplateRecipeHandler handler, Facts facts, boolean views, GtRecipes gt, MagicRecipes magic, AeRecipes ae, RegistryRecipes registry, Crafting crafting) {
             this.source = source; this.handler = handler; this.facts = facts; this.views = views; this.gt = gt; this.magic = magic;
@@ -197,6 +198,8 @@ final class Recipes {
         }
 
         int size() { return registry != null ? registry.size() : ae != null ? ae.size() : magic == null ? handler.numRecipes() : magic.size(); }
+
+        JsonObject exclusions() { return new com.google.gson.JsonParser().parse(exclusions.toString()).getAsJsonObject(); }
 
         void capture(int index) {
             capture(index, facts);
@@ -218,7 +221,15 @@ final class Recipes {
             Jobs.checkpoint();
             RecipeRow row = new RecipeRow(facts, source.origin, source.id, index);
             if (gt != null) {
-                for (RecipeRow branch : gt.capture((GTNEIDefaultHandler.CachedDefaultRecipe) handler.arecipes.get(index), row)) emit(index, branch, facts);
+                GTNEIDefaultHandler.CachedDefaultRecipe cached = (GTNEIDefaultHandler.CachedDefaultRecipe) handler.arecipes.get(index);
+                JsonObject proof = Replaced.inspect(cached.mRecipe, source.origin.get("key").getAsString());
+                if (proof != null) {
+                    if (exclusions.entrySet().size() >= 128 && !exclusions.has(Integer.toString(index)))
+                        throw new Jobs.Fault("recipe_exclusion_limit", "Too many obsolete-input exclusions in " + source.id);
+                    exclusions.add(Integer.toString(index), proof);
+                    return;
+                }
+                for (RecipeRow branch : gt.capture(cached, row)) emit(index, branch, facts);
                 return;
             }
             else if (magic != null) { if (!magic.capture(index, row)) return; }

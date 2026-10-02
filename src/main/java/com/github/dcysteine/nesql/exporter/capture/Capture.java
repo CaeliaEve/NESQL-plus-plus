@@ -212,6 +212,7 @@ public final class Capture implements Jobs.Task, AutoCloseable {
                                 "Captured structure definitions: " + (index + 1) + "/" + machines.size());
                     }
                 }
+                JsonObject recipeExclusions = new JsonObject();
                 for (Recipes.Handler handler : handlers) {
                     context.progress("recipes", 0, 0, "Opening recipe handler: " + handler.name);
                     Recipes.Cursor cursor = session.call("handler " + handler.id + " open", () -> handler.open(facts, !request.profile.equals("data")));
@@ -234,7 +235,17 @@ public final class Capture implements Jobs.Task, AutoCloseable {
                             for (Facts.Batch batch : captured) sink.write(batch);
                             if (index / 64 != begin / 64 || index == size) context.progress("recipes", index, size, handler.name);
                         }
-                    } finally { client.cleanup(cursor::close); }
+                    } finally {
+                        client.cleanup(() -> {
+                            try {
+                                JsonObject evidence = cursor.exclusions();
+                                if (!evidence.entrySet().isEmpty()) {
+                                    recipeExclusions.add(handler.id, evidence);
+                                    context.metric("recipeExclusions", new com.google.gson.JsonParser().parse(recipeExclusions.toString()).getAsJsonObject());
+                                }
+                            } finally { cursor.close(); }
+                        });
+                    }
                 }
                 context.progress("records", 0, 1, "Sorting records, checking duplicate identities and writing bounded shards");
                 rows.write(dataset);
