@@ -30,13 +30,14 @@ import static com.github.dcysteine.nesql.exporter.source.Json.*;
 
 /** Explicit enumeration adapters. An unsupported handler is an error, never an empty recipe list. */
 final class Recipes {
-    enum Adapter { GT, MAGIC, AE, INSCRIBER, IC2, SMELTING, EXTREME, FORESTRY, TINKER, SPACE, CIRCUIT, REFINERY, RAIL, SOLAR, FURNACE, SHAPED, SHAPELESS }
+    enum Adapter { GT, MAGIC, AE, INSCRIBER, SCRAPBOX, IC2, SMELTING, EXTREME, FORESTRY, TINKER, SPACE, CIRCUIT, REFINERY, RAIL, SOLAR, FURNACE, SHAPED, SHAPELESS }
 
     static Adapter adapter(ICraftingHandler handler) {
         if (GtRecipes.supports(handler)) return Adapter.GT;
         if (MagicRecipes.supports(handler)) return Adapter.MAGIC;
         if (AeRecipes.supports(handler)) return Adapter.AE;
         if (InscriberRecipes.supports(handler)) return Adapter.INSCRIBER;
+        if (ScrapboxRecipes.supports(handler)) return Adapter.SCRAPBOX;
         if (Ic2Recipes.supports(handler)) return Adapter.IC2;
         if (SmeltingRecipes.supports(handler)) return Adapter.SMELTING;
         if (ExtremeRecipes.supports(handler)) return Adapter.EXTREME;
@@ -131,6 +132,8 @@ final class Recipes {
                     registry = new Ic2Recipes(handler);
                 } else if (adapter == Adapter.INSCRIBER) {
                     registry = new InscriberRecipes(handler);
+                } else if (adapter == Adapter.SCRAPBOX) {
+                    registry = new ScrapboxRecipes(handler);
                 } else if (adapter == Adapter.SMELTING) {
                     registry = new SmeltingRecipes((FurnaceRecipeHandler) handler);
                 } else if (adapter == Adapter.EXTREME) {

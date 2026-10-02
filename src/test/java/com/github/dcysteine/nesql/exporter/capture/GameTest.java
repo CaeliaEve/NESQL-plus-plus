@@ -21,7 +21,7 @@ public final class GameTest {
             java.io.PrintStream out = System.out, err = System.err;
             try (LaunchClassLoader loader = new LaunchClassLoader(urls)) {
                 Thread.currentThread().setContextClassLoader(loader);
-                if ("tconstruct".equals(System.getProperty("nesql.nativeFamily")))
+                if ("tconstruct".equals(System.getProperty("nesql.nativeFamily")) || "scrapbox".equals(System.getProperty("nesql.nativeFamily")))
                     loader.registerTransformer("cpw.mods.fml.common.asm.transformers.EventSubscriptionTransformer");
                 if ("inscriber".equals(System.getProperty("nesql.nativeFamily")))
                     loader.registerTransformer(GameTest.class.getName() + "$NbtListAccess");
