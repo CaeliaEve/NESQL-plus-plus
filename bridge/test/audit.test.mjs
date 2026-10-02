@@ -80,6 +80,8 @@ test('new native routes are mapped without rewriting old unsupported observation
     ['tconstruct.plugins.nei.RecipeHandlerCastingTable', 'TinkerRecipes'],
     ['tconstruct.plugins.nei.RecipeHandlerCastingBasin', 'TinkerRecipes'],
     ['micdoodle8.mods.galacticraft.core.nei.BuggyRecipeHandler', 'SpaceRecipes'],
+    ['micdoodle8.mods.galacticraft.core.nei.CircuitFabricatorRecipeHandler', 'CircuitRecipes'],
+    ['de.katzenpapst.amunra.nei.recipehandler.ARCircuitFab', 'CircuitRecipes'],
   ]) {
     const { worklist, checkpoint } = fixture();
     worklist.handlers[1].source.handler = handler;

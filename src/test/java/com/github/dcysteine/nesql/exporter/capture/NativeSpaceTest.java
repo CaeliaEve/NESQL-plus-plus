@@ -18,6 +18,8 @@ final class NativeSpaceTest {
         cpw.mods.fml.relauncher.ReflectionHelper.setPrivateValue(cpw.mods.fml.common.ModAPIManager.class, cpw.mods.fml.common.ModAPIManager.INSTANCE,
                 Collections.emptyMap(), "apiContainers");
         nativeLayouts();
+        require(Recipes.adapter((TemplateRecipeHandler) Class.forName("micdoodle8.mods.galacticraft.core.nei.CircuitFabricatorRecipeHandler").newInstance()) != null,
+                "Circuit fabricator has no native registry adapter");
         Class<?> rocket = Class.forName("galaxyspace.core.nei.RocketRecipeHandler");
         for (int tier = 1; tier <= 8; tier++) {
             TemplateRecipeHandler handler = (TemplateRecipeHandler) rocket.getConstructor(int.class, int.class, int.class).newInstance(tier, -12, 176);

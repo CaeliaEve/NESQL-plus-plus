@@ -19,6 +19,7 @@ public final class NativeMachinesTest {
     public static void run() throws Exception {
         String family = System.getProperty("nesql.nativeFamily", "machines");
         if (family.equals("space")) { NativeSpaceTest.run(); return; }
+        if (family.equals("circuits")) { NativeCircuitsTest.run(); return; }
         if (!family.equals("machines")) { NativeFactoriesTest.run(family); return; }
         String prefix = "ic2.neiIntegration.core.recipehandler.";
         for (String kind : new String[] {"Macerator", "Extractor", "Compressor", "MetalFormerRecipeHandlerCutting",

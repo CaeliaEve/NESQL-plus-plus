@@ -239,3 +239,31 @@ not replace the NASA predicates. No game world, GL or full initialized registry
 coverage is claimed. Original JAR SHA256:
 - Galacticraft: `e382339878a3dea2ab9ccb359bc37096f129802fff4e3a88de8db9fb7e1d4fa9`
 - GalaxySpace: `bb0ccf7f54cd73cee83ea8a8ce9e63e1d20ba754a5fb4ebb342d1e81498b7ca8`
+
+## Galacticraft / AmunRa circuit fabricator
+
+`CircuitRecipes` snapshots the actual `CircuitFabricatorRecipes` registry in its
+native encounter order. Five fixed inputs use exact item/metadata (including a
+literal 32767), ignore NBT/count, and retain required empty slots. Only the first
+entry for a matching tuple can operate. AmunRa's category is selected by its
+native `RecipeHelper` registration object references after precedence is applied;
+it never exports unregistered combinations from the NEI grouped display. The GC
+category covers the full runtime machine registry, including add-on recipes.
+Actual slot admission is checked before capture. Removed registrations remain
+absent; unknown AmunRa registration classes fail explicitly.
+
+`TileEntityCircuitFabricator.compressItems` consumes one per occupied input and
+does not return containers. Output NBT/count is retained, including quick-mode
+wafer metadata 13 => 5 and 14 => 2. Duration is 300 ticks. The native hard-mode
+energy extraction setting (20/40 gJ per tick) is an explicitly labelled property,
+not an EU quantity. Owned snapshots and display copies do not mutate the registry.
+The native background is captured with its clock at zero and restored on error;
+three clipped texture layers retain the actual 70-tick width/texture-phase cycle.
+
+`nativeMachinesTest -PnativeFamily=circuits` with Galacticraft in `nativeTestJar`
+and AmunRa in `nativeExtraTestJar` verifies native matching, actual machine
+consumption/quick output on a fresh inventory, precedence, AmunRa linkage, owned
+stacks, empty slots, admission, and every animation tick. No world or GL context
+is used. Full runtime coverage/visual acceptance is still pending the unified
+export. AmunRa 0.8.2 original JAR SHA256:
+`bcd0ca636d545a0f361f6583fd667bd40ca4b79198fc06d1552038310a7b1978`.
