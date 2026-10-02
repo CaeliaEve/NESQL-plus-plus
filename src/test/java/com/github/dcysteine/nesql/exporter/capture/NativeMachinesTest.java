@@ -18,6 +18,7 @@ public final class NativeMachinesTest {
     public static void main(String[] args) throws Exception { GameTest.run(); }
     public static void run() throws Exception {
         String family = System.getProperty("nesql.nativeFamily", "machines");
+        if (family.equals("ender-machines")) { NativeEnderMachinesTest.run(); return; }
         if (family.equals("vat")) { NativeVatTest.run(); return; }
         if (family.equals("enchanter")) { NativeEnchanterTest.run(); return; }
         if (family.equals("scrapbox")) { NativeScrapboxTest.run(); return; }

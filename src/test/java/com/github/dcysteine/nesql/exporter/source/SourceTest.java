@@ -247,6 +247,7 @@ public final class SourceTest {
         Changes.inscriber(items, recipes, categories, texture, text);
         Changes.enchanter(items, recipes, categories, texture, text);
         Changes.vat(items, recipes, categories, texture, text);
+        Changes.alloy(items, recipes, categories, texture, text);
         records(dataset, "recipes", recipes); records(dataset, "categories", categories);
         java.util.TreeMap<String, JsonObject> unique = new java.util.TreeMap<>();
         for (JsonObject view : views) unique.put(view.get("id").getAsString(), view);
