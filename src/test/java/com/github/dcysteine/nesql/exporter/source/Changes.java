@@ -14,6 +14,31 @@ import static com.github.dcysteine.nesql.exporter.source.Json.*;
 final class Changes {
     private Changes() {}
 
+    static void sag(List<JsonObject> items, List<JsonObject> recipes, List<JsonObject> categories,
+                    String texture, Function<String,String> text) {
+        JsonObject origin=object("owner","fixture","handler","sag","key","sag");
+        String category=Identity.origin("category",origin);
+        String material=item(items,"fixture:sag_input",0,null,false,"SAG input 磨粉材料",texture,text);
+        String result=item(items,"fixture:sag_output",0,null,false,"SAG output 磨粉产物",texture,text);
+        String ball=item(items,"fixture:sag_ball",0,null,false,"SAG ball 研磨珠",texture,text);
+        String prior=item(items,"fixture:sag_input",1,null,false,"SAG earlier 前序材料",texture,text);
+        categories.add(object("id",category,"source",origin,"name",text.apply("EnderIO SAG Mill 磨粉机"),"icon",object("kind","item","id",material),"machines",array(),"view",null,"order",categories.size()));
+        JsonArray inputs=array();
+        for(int i=0;i<2;i++){
+            JsonObject c=choice(i==0?material:ball);c.add("rule",object("kind","wildcard","meta",i==0,"nbt",true));c.add("consume",object("kind",i==0?"allocated":"reserve"));
+            inputs.add(object("kind","item","slot",i,"choices",array(c)));
+        }
+        JsonObject ballCase=object("id",ball,"rule",object("kind","wildcard","meta",false,"nbt",true));
+        JsonObject priorCase=object("id",prior,"rule",object("kind","wildcard","meta",false,"nbt",true));
+        JsonObject process=object("kind","sag","energy",1000,"slot",-1,"bonus",true,
+            "earlier",array(object("amount","2","choices",array(priorCase))),
+            "balls",array(object("choices",array(ballCase),"grinding","2.5","chance","2.0","power","0.5","duration",10000)),
+            "blocked",array(priorCase),"oreBlocked",array(priorCase));
+        JsonObject output=object("kind","item","slot",0,"id",result,"amount",null,"change",null,"role","result","chance",Chance.of(1,1),"quantity",object("kind","grinding","nominal","2","threshold","0.5"));
+        JsonObject row=object("source",origin,"category",category,"order",0,"inputs",inputs,"outputs",array(output),"process",process,"duration",null,"energy",null,"grid",null,"magic",null,"view",null,"properties",new JsonObject());
+        row.addProperty("id",Identity.recipe(row));recipes.add(row);
+    }
+
     static void splice(List<JsonObject> items, List<JsonObject> recipes, List<JsonObject> categories,
                        String texture, Function<String,String> text) {
         JsonObject origin=object("owner","fixture","handler","splice","key","splice");

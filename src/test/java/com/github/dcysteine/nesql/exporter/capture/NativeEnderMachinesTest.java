@@ -16,7 +16,82 @@ final class NativeEnderMachinesTest {
     private static final String ROOT="crazypants.enderio.machine.";
     static void run() throws Exception {
         Object loader=cpw.mods.fml.common.Loader.instance();Field named=loader.getClass().getDeclaredField("namedMods");named.setAccessible(true);Object previous=named.get(loader);
-        try {named.set(loader,Collections.emptyMap());alloy();splice();}finally{named.set(loader,previous);}
+        try {named.set(loader,Collections.emptyMap());alloy();splice();sag();}finally{named.set(loader,previous);}
+    }
+    @SuppressWarnings("unchecked") private static void sag() throws Exception {
+        TemplateRecipeHandler handler=(TemplateRecipeHandler)type("crazypants.enderio.nei.SagMillRecipeHandler").newInstance();
+        require(Recipes.adapter(handler)!=null,"Missing EnderIO SAG adapter");
+        Class<?> input=type(ROOT+"recipe.RecipeInput"),output=type(ROOT+"recipe.RecipeOutput"),raw=type(ROOT+"recipe.Recipe"),bonus=type(ROOT+"recipe.RecipeBonusType");
+        Object in=input.getConstructor(ItemStack.class).newInstance(new ItemStack(Items.paper));
+        Object ins=Array.newInstance(input,1);Array.set(ins,0,in);
+        Object outs=Array.newInstance(output,2);
+        Array.set(outs,0,output.getConstructor(ItemStack.class,float.class).newInstance(new ItemStack(Items.gold_ingot),0.5f));
+        Array.set(outs,1,output.getConstructor(ItemStack.class,float.class).newInstance(new ItemStack(Items.diamond),0f));
+        Object recipe=raw.getConstructor(ins.getClass(),outs.getClass(),int.class,bonus).newInstance(ins,outs,1000,Enum.valueOf((Class)bonus,"MULTIPLY_OUTPUT"));
+        Object ballInput=input.getConstructor(ItemStack.class).newInstance(new ItemStack(Items.flint));
+        Object ball=type(ROOT+"crusher.GrindingBall").getConstructor(input,float.class,float.class,float.class,int.class).newInstance(ballInput,2.5f,2f,0.5f,10000);
+        Object manager=invoke(type(ROOT+"crusher.CrusherRecipeManager"),null,"getInstance",new Class<?>[0]);
+        List<Object> recipes=(List<Object>)field(manager,"recipes"),balls=(List<Object>)field(manager,"balls"),excludes=(List<Object>)field(manager,"ballExcludes");
+        List<Object> priorRecipes=new ArrayList<>(recipes),priorBalls=new ArrayList<>(balls),priorExcludes=new ArrayList<>(excludes);
+        Set<Object> excluded=(Set<Object>)field(manager,"excludedStacks");Set<Object> priorExcluded=new HashSet<>(excluded);
+        try {
+            recipes.clear();recipes.add(recipe);balls.clear();balls.add(ball);excludes.clear();excluded.clear();
+            Class<?> adapter=type("com.github.dcysteine.nesql.exporter.capture.SagRecipes");
+            Constructor<?> factory=adapter.getDeclaredConstructor(TemplateRecipeHandler.class,List.class,List.class,List.class);factory.setAccessible(true);
+            RegistryRecipes cursor=(RegistryRecipes)factory.newInstance(handler,recipes,balls,excludes);RecipeRow row=row();
+            require(cursor.capture(0,row),"SAG registry row absent");
+            require(row.inputs.size()==2&&row.inputs.get(1).getAsJsonObject().getAsJsonArray("choices").get(0).getAsJsonObject().getAsJsonObject("consume").get("kind").getAsString().equals("reserve"),"Grinding-ball stock became a mandatory per-recipe ingredient");
+            require(row.record.getAsJsonObject("process").getAsJsonArray("balls").get(0).getAsJsonObject().get("grinding").getAsString().equals("2.5"),"Ball parameters lost");
+            require(excluded.isEmpty(),"Capture mutated the native exclusion cache");
+            // Skip unrelated client sound initialization; exercise the real task methods on owned inventory.
+            Field access=sun.misc.Unsafe.class.getDeclaredField("theUnsafe");access.setAccessible(true);
+            Object tile=((sun.misc.Unsafe)access.get(null)).allocateInstance(type(ROOT+"crusher.TileCrusher"));
+            assign(tile,"inventory",new ItemStack[6]);
+            assign(tile,"slotDefinition",type(ROOT+"SlotDefinition").getConstructor(int.class,int.class).newInstance(2,4));
+            assign(tile,"random",new Random(){@Override public float nextFloat(){return 0.25f;}});
+            ((ItemStack[])field(tile,"inventory"))[0]=new ItemStack(Items.paper);
+            Field gb=tile.getClass().getDeclaredField("gb");gb.setAccessible(true);gb.set(tile,ball);
+            Object machine=type(ROOT+"crusher.CrusherMachineRecipe").newInstance();
+            Object task=invoke(tile.getClass(),tile,"createTask",new Class<?>[]{type(ROOT+"IMachineRecipe"),float.class},machine,0.75f);
+            require((Float)invoke(task.getClass(),task,"getChance",new Class<?>[0])==0.375f,"Initial ball chance multiplier not applied");
+            require((Float)invoke(task.getClass(),task,"getRequiredEnergy",new Class<?>[0])==500f,"Initial ball power multiplier not applied");
+            require(((Object[])invoke(task.getClass(),task,"getCompletedResult",new Class<?>[0])).length==1,"Shared output cutoff changed");
+            assign(tile,"currentTask",task);
+            invoke(tile.getClass(),tile,"taskComplete",new Class<?>[0]);
+            ItemStack[] inventory=(ItemStack[])field(tile,"inventory");
+            require(inventory[2]!=null&&inventory[2].getItem()==Items.gold_ingot&&inventory[2].stackSize==3&&inventory[3]==null,
+                "Completion failed to reuse the task roll for three correlated passes");
+            // Deprecated getOreID selects the first wildcard registration before exact metadata.
+            net.minecraftforge.oredict.OreDictionary.registerOre("dustSagFirst",new ItemStack(Items.cookie,1,0));
+            net.minecraftforge.oredict.OreDictionary.registerOre("blockSagWildcard",new ItemStack(Items.cookie,1,32767));
+            Object dyeInput=input.getConstructor(ItemStack.class).newInstance(new ItemStack(Items.cookie,1,0));
+            balls.add(ball.getClass().getConstructor(input,float.class,float.class,float.class,int.class).newInstance(dyeInput,1f,1f,1f,1000));
+            ((ItemStack[])field(tile,"inventory"))[1]=new ItemStack(Items.cookie,1,0);
+            int firstOre=net.minecraftforge.oredict.OreDictionary.getOreID(new ItemStack(Items.cookie,1,0));
+            require(firstOre>=0&&net.minecraftforge.oredict.OreDictionary.getOreName(firstOre).equals("blockSagWildcard"),"Unexpected isolated first ore: "+firstOre);
+            task=invoke(tile.getClass(),tile,"createTask",new Class<?>[]{type(ROOT+"IMachineRecipe"),float.class},machine,0.75f);
+            require((Float)invoke(task.getClass(),task,"getChance",new Class<?>[0])==0.75f,"Stock-slot ore exclusion ignored");
+            int before=excluded.size();cursor=(RegistryRecipes)factory.newInstance(handler,recipes,balls,excludes);row=row();cursor.capture(0,row);
+            require(row.record.getAsJsonObject("process").getAsJsonArray("oreBlocked").size()>0,"Native wildcard-priority exclusion absent");
+            require(excluded.size()==before,"Static ore exclusion capture called native mutating cache");
+            inventory[1]=null;
+            for(String mode:Arrays.asList("NONE","CHANCE_ONLY")){
+                Object single=raw.getConstructor(ins.getClass(),outs.getClass(),int.class,bonus).newInstance(ins,outs,1000,Enum.valueOf((Class)bonus,mode));
+                recipes.clear();recipes.add(single);
+                cursor=(RegistryRecipes)factory.newInstance(handler,recipes,balls,excludes);row=row();cursor.capture(0,row);
+                require(!row.record.getAsJsonObject("process").get("bonus").getAsBoolean(),"Non-multiplying recipe gained repetitions");
+                task=invoke(tile.getClass(),tile,"createTask",new Class<?>[]{type(ROOT+"IMachineRecipe"),float.class},machine,0.75f);
+                require((Float)invoke(task.getClass(),task,"getChance",new Class<?>[0])==0.375f,"Non-multiplying bonus suppressed initial chance multiplier");
+            }
+            Object largerInput=input.getConstructor(ItemStack.class).newInstance(new ItemStack(Items.paper,2));
+            Object earlierInputs=Array.newInstance(input,1);Array.set(earlierInputs,0,largerInput);
+            Object earlierRecipe=raw.getConstructor(ins.getClass(),outs.getClass(),int.class,bonus).newInstance(earlierInputs,outs,2000,Enum.valueOf((Class)bonus,"NONE"));
+            recipes.clear();recipes.add(earlierRecipe);recipes.add(recipe);
+            cursor=(RegistryRecipes)factory.newInstance(handler,recipes,balls,excludes);row=row();cursor.capture(1,row);
+            require(row.record.getAsJsonObject("process").getAsJsonArray("earlier").get(0).getAsJsonObject().get("amount").getAsString().equals("2"),"Ordered quantity-sensitive selector lost");
+            sagGate(handler);
+            System.out.println("EnderIO SAG: native task chance/energy, stock-slot exclusions, ball table and shared outputs passed");
+        } finally {recipes.clear();recipes.addAll(priorRecipes);balls.clear();balls.addAll(priorBalls);excludes.clear();excludes.addAll(priorExcludes);excluded.clear();excluded.addAll(priorExcluded);}
     }
     private static void splice() throws Exception {
         TemplateRecipeHandler handler=(TemplateRecipeHandler)type("crazypants.enderio.nei.SliceAndSpliceRecipeHandler").newInstance();
@@ -141,4 +216,23 @@ final class NativeEnderMachinesTest {
     }
     @SuppressWarnings("unchecked") private static RecipeRow row(){Facts facts=new Facts("en_US");for(Object registered:Item.itemRegistry){Item item=(Item)registered;((Set<String>)field(facts,"items")).add(Identity.item(Item.itemRegistry.getNameForObject(item),0,TypedNbt.encode(null)));}return new RecipeRow(facts,object("owner","fixture","handler","alloy","key","alloy"),"fixture",0);}
     private static void require(boolean value,String message){if(!value)throw new AssertionError(message);}
+    private static void assign(Object target,String name,Object value)throws Exception {
+        for(Class<?> c=target.getClass();c!=null;c=c.getSuperclass())try {Field f=c.getDeclaredField(name);f.setAccessible(true);f.set(target,value);return;}catch(NoSuchFieldException ignored){}
+        throw new NoSuchFieldException(name);
+    }
+    @SuppressWarnings("unchecked") private static void sagGate(TemplateRecipeHandler handler)throws Exception {
+        Object loader=cpw.mods.fml.common.Loader.instance();Field named=loader.getClass().getDeclaredField("namedMods");named.setAccessible(true);Object mods=named.get(loader);
+        cpw.mods.fml.common.ModContainer mod=(cpw.mods.fml.common.ModContainer)Proxy.newProxyInstance(NativeEnderMachinesTest.class.getClassLoader(),new Class<?>[]{cpw.mods.fml.common.ModContainer.class},(proxy,method,args)->{
+            if(method.getName().equals("getVersion"))return "2.9.28";throw new AssertionError("Unexpected mod query");});
+        Map<Object,Object> registry=(Map<Object,Object>)field(field(type(ROOT+"MachineRecipeRegistry"),null,"instance"),"machineRecipes");
+        Object key=field(field(type("crazypants.enderio.ModObject"),null,"blockSagMill"),"unlocalisedName"),prior=registry.get(key);
+        Map<String,Object> selectors=new LinkedHashMap<>();selectors.put("crusher",type(ROOT+"crusher.CrusherMachineRecipe").newInstance());
+        try {
+            named.set(loader,Collections.singletonMap("EnderIO",mod));registry.put(key,selectors);
+            require(new SagRecipes(handler).size()==2,"Native SAG registry gate rejected valid selector");
+            selectors.put("unknown",new Object());
+            try {new SagRecipes(handler);throw new AssertionError("Unknown SAG selector ignored");}
+            catch(com.github.dcysteine.nesql.exporter.task.Jobs.Fault expected){require(expected.code.equals("recipe_unsupported"),"Wrong selector error");}
+        } finally {named.set(loader,mods);if(prior==null)registry.remove(key);else registry.put(key,prior);}
+    }
 }
