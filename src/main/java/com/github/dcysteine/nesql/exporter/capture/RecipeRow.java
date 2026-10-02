@@ -146,8 +146,12 @@ final class RecipeRow {
 
     private void slot(PositionedStack display, String direction, String kind, int slot) {
         if (display == null) return; // Semantic output omitted by the native UI.
+        slot(direction, kind, slot, display.relx, display.rely);
+    }
+
+    void slot(String direction, String kind, int slot, int x, int y) {
         elements.add(object("kind", "slot", "direction", direction, "substance", kind, "slot", slot,
-                "x", display.relx, "y", display.rely, "width", 16, "height", 16, "z", 1));
+                "x", x, "y", y, "width", 16, "height", 16, "z", 1));
     }
 
     void property(String key, String label, Object value) {

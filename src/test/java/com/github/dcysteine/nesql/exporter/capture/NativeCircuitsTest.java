@@ -119,7 +119,88 @@ final class NativeCircuitsTest {
         catch (IllegalStateException expected) { require(expected.getMessage().equals("test"), "Wrong scene failure"); }
         require(clock.getInt(handler) == 42, "Native UI clock leaked after failure");
         NativeSpaceTest.amunra();
+        refinery();
         System.out.println("Native circuits: GC/AmunRa routes, fixed/empty inputs, native quick mode, encounter precedence, consume-one/no returns, ownership and 70-tick animation passed");
+    }
+    private static void refinery() throws Exception {
+        Class<?> core = type(GC + "core.GalacticraftCore"), config = type(GC + "core.util.ConfigManagerCore");
+        for (String name : new String[] {"oil", "oil_fixture", "water_fixture", "fuel", "fuelgc"})
+            if (!net.minecraftforge.fluids.FluidRegistry.isFluidRegistered(name))
+                net.minecraftforge.fluids.FluidRegistry.registerFluid(new net.minecraftforge.fluids.Fluid(name));
+        net.minecraftforge.fluids.Fluid oil = net.minecraftforge.fluids.FluidRegistry.getFluid("oil");
+        core.getField("fluidOil").set(null, oil);
+        Class<?> machineType = type(GC + "core.tile.TileEntityRefinery");
+        TemplateRecipeHandler handler = (TemplateRecipeHandler) type(GC + "core.nei.RefineryRecipeHandler").newInstance();
+        for (boolean old : new boolean[] {false, true}) {
+            String fuelName = old ? "fuelgc" : "fuel";
+            config.getField("useOldFuelFluidID").setBoolean(null, old);
+            config.getField("hardMode").setBoolean(null, old);
+            core.getField("fluidFuel").set(null, net.minecraftforge.fluids.FluidRegistry.getFluid(fuelName));
+            Object machine = machineType.newInstance();
+            Field metadata = net.minecraft.tileentity.TileEntity.class.getDeclaredField("blockMetadata"); metadata.setAccessible(true); metadata.setInt(machine, 0);
+            net.minecraftforge.fluids.FluidTank input = (net.minecraftforge.fluids.FluidTank) field(machine, "oilTank");
+            net.minecraftforge.fluids.FluidTank output = (net.minecraftforge.fluids.FluidTank) field(machine, "fuelTank");
+            input.setFluid(null);
+            net.minecraftforge.fluids.FluidStack offered = new net.minecraftforge.fluids.FluidStack(net.minecraftforge.fluids.FluidRegistry.getFluid("oil_fixture"), 3);
+            offered.tag = new net.minecraft.nbt.NBTTagCompound(); offered.tag.setString("batch", "native");
+            require((Integer) invoke(machineType, machine, "fill", new Class<?>[] {net.minecraftforge.common.util.ForgeDirection.class, net.minecraftforge.fluids.FluidStack.class, boolean.class},
+                    net.minecraftforge.common.util.ForgeDirection.NORTH, offered, true) == 3, "Native refinery rejected an oil-prefixed fluid");
+            require(input.getFluid().getFluid() == oil && input.getFluid().tag == null, "Native alternate oil was not normalized");
+            invoke(machineType, machine, "smeltItem", new Class<?>[0]);
+            require(input.getFluidAmount() == 2 && output.getFluidAmount() == 1 && output.getFluid().getFluid().getName().equals(fuelName),
+                    "Native refinery did not consume/produce exactly one mB");
+            output.setFluid(new net.minecraftforge.fluids.FluidStack(output.getFluid().getFluid(), output.getCapacity()));
+            invoke(machineType, machine, "smeltItem", new Class<?>[0]);
+            require(input.getFluidAmount() == 2 && !(Boolean) invoke(machineType, machine, "canProcess", new Class<?>[0]), "Full tank consumed more oil");
+            require(offered.amount == 3 && offered.tag.getString("batch").equals("native"), "Refinery modified offered fluid");
+            require((Integer) invoke(machineType, machine, "fill", new Class<?>[] {net.minecraftforge.common.util.ForgeDirection.class, net.minecraftforge.fluids.FluidStack.class, boolean.class},
+                    net.minecraftforge.common.util.ForgeDirection.NORTH, new net.minecraftforge.fluids.FluidStack(net.minecraftforge.fluids.FluidRegistry.getFluid("water_fixture"), 1), true) == 0,
+                    "Native refinery accepted a non-oil fluid");
+            require(Recipes.adapter(handler) != null, "Refinery has no native adapter");
+            Class<?> adapter = type("com.github.dcysteine.nesql.exporter.capture.RefineryRecipes");
+            Constructor<?> constructor = adapter.getDeclaredConstructor(TemplateRecipeHandler.class); constructor.setAccessible(true);
+            RegistryRecipes cursor = (RegistryRecipes) constructor.newInstance(handler);
+            int expected = (int) net.minecraftforge.fluids.FluidRegistry.getRegisteredFluids().keySet().stream().filter(name -> name.startsWith("oil")).count();
+            require(cursor.size() == expected, "Refinery did not enumerate exact native prefix acceptance");
+            for (int index = 0; index < cursor.size(); index++) {
+                RecipeRow row = new RecipeRow(new Facts("en_US"), object("owner", "GalacticraftCore", "handler", "native", "key", "refinery"), "category_test", index);
+                require(cursor.capture(index, row), "Refinery skipped an admitted oil");
+                JsonObject choice = row.inputs.get(0).getAsJsonObject().getAsJsonArray("choices").get(0).getAsJsonObject();
+                require(row.inputs.size() == 1 && row.inputs.get(0).getAsJsonObject().get("kind").getAsString().equals("fluid")
+                        && choice.get("amount").getAsString().equals("1") && choice.getAsJsonObject("rule").get("nbt").getAsBoolean(),
+                        "Refinery invented consumed containers or lost fluid matching");
+                require(row.outputs.get(0).getAsJsonObject().get("id").getAsString().equals(Identity.fluid(fuelName, null))
+                        && row.outputs.get(0).getAsJsonObject().get("amount").getAsString().equals("1")
+                        && row.record.get("duration").getAsString().equals("2"), "Refinery conversion differs from native processing");
+                require(row.properties.getAsJsonObject("galacticraft:energyPerTick").getAsJsonObject("value").get("value").getAsInt() == (old ? 90 : 60)
+                        && row.properties.getAsJsonObject("galacticraft:startupDelay").getAsJsonObject("value").get("value").getAsInt() == 1,
+                        "Refinery lost native power mode or startup delay");
+                require(row.elements.size() == 2 && row.elements.get(0).getAsJsonObject().get("x").getAsInt() == 2
+                        && row.elements.get(1).getAsJsonObject().get("x").getAsInt() == 148, "Refinery changed its native slot layout");
+            }
+        }
+        Field clock = handler.getClass().getDeclaredField("ticksPassed"); clock.setAccessible(true);
+        for (int layer = 0; layer < 3; layer++) {
+            clock.setInt(handler, 0); int tick = 0, visible = 0;
+            for (com.google.gson.JsonElement entry : RefineryRecipes.progress(layer)) {
+                JsonObject frame = entry.getAsJsonObject(); JsonArray areas = frame.getAsJsonArray("areas");
+                for (int step = 0; step < frame.get("ticks").getAsInt(); step++, tick++) {
+                    int phase = clock.getInt(handler) % 144;
+                    boolean left = phase > 40 && phase < 104;
+                    boolean shown = layer == 0 ? left : layer == 1 ? !left && phase < 124 : phase > 0;
+                    require((areas.size() > 0) == shown, "Refinery layer visibility differs from the native clock");
+                    if (shown) { visible++; if (layer == 2) require(Math.abs(areas.get(0).getAsJsonArray().get(2).getAsFloat() - phase / 144f) < .00001,
+                            "Refinery progress width changed"); }
+                    handler.onUpdate();
+                }
+            }
+            require(tick == 72 && visible == (layer == 2 ? 71 : 31), "Refinery animation period or phase boundaries changed");
+        }
+        core.getField("fluidFuel").set(null, net.minecraftforge.fluids.FluidRegistry.getFluid("fuel"));
+        try { new RefineryRecipes(handler); throw new AssertionError("Inconsistent fuel configuration accepted"); }
+        catch (Jobs.Fault expected) { require(expected.code.equals("recipe_unsupported"), "Wrong inconsistent-refinery failure"); }
+        config.getField("useOldFuelFluidID").setBoolean(null, false); config.getField("hardMode").setBoolean(null, false);
+        System.out.println("Native refinery: fluid prefix admission, normalization, old/new fuel IDs, one-mB conversion, capacity and input ownership passed");
     }
     @SuppressWarnings("unchecked")
     private static RecipeRow row(ItemStack[] inputs, ItemStack output) {

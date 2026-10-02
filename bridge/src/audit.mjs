@@ -8,6 +8,8 @@ import { digest } from './plan.mjs';
 // Exact, reviewed routes in capture/Recipes.java, GtRecipes.java and MagicRecipes.java.
 // A shared adapter does not imply identical category semantics or successful capture.
 const routes = new Map([
+  ['micdoodle8.mods.galacticraft.core.nei.RefineryRecipeHandler', { adapter: 'RefineryRecipes',
+    registry: 'Galacticraft 3.3.13 native oil-prefixed fluid conversion and fuel configuration', evidence: 'src/main/java/com/github/dcysteine/nesql/exporter/capture/RefineryRecipes.java' }],
   ['de.katzenpapst.amunra.nei.recipehandler.ARNasaWorkbenchShuttle', { adapter: 'SpaceRecipes',
     registry: 'AmunRa 0.8.2 RecipeHelper NASA registry and shuttle slots', evidence: 'src/main/java/com/github/dcysteine/nesql/exporter/capture/SpaceRecipes.java' }],
   ...['micdoodle8.mods.galacticraft.core.nei.CircuitFabricatorRecipeHandler', 'de.katzenpapst.amunra.nei.recipehandler.ARCircuitFab']

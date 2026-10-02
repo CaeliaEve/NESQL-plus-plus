@@ -85,6 +85,7 @@ test('new native routes are mapped without rewriting old unsupported observation
     ['de.katzenpapst.amunra.nei.recipehandler.ARNasaWorkbenchShuttle', 'SpaceRecipes'],
     ['micdoodle8.mods.galacticraft.core.nei.CircuitFabricatorRecipeHandler', 'CircuitRecipes'],
     ['de.katzenpapst.amunra.nei.recipehandler.ARCircuitFab', 'CircuitRecipes'],
+    ['micdoodle8.mods.galacticraft.core.nei.RefineryRecipeHandler', 'RefineryRecipes'],
   ]) {
     const { worklist, checkpoint } = fixture();
     worklist.handlers[1].source.handler = handler;

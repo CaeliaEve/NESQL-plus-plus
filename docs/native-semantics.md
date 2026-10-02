@@ -317,3 +317,25 @@ test-owned native blade uses its actual hardness getter and a native Forge item
 delegate without triggering ItemIC2's unrelated item/network registration. Other
 tests cover default/null metadata, time/power, immutable source and output slots.
 This does not run a game world, consume energy, or claim live registry coverage.
+
+## Galacticraft refinery
+
+The exact Galacticraft 3.3.13-GTNH refinery handler exports the machine's tank
+conversion instead of treating the NEI filled-canister illustration as an item
+recipe. `TileEntityRefinery.fill` admits registered fluid keys beginning with
+case-sensitive `oil`; foreign oil becomes the native oil fluid. The converter
+consumes one mB and creates one mB of the configured `fuel`/`fuelgc`, discarding
+input fluid NBT. It needs output tank space and an enabled machine. Base cadence
+is two ticks, with one initial startup tick; the native extraction setting is
+60/90 gJ/t in normal/hard mode. Inconsistent native/configured fuel identities
+fail explicitly. Inventory filling/emptying is a separate native transfer step,
+so this recipe does not consume, discard, or invent returns for canisters.
+
+Fluid slots use the original NEI positions (2,3) and (148,3). The original base
+quad and three synchronized overlays reproduce the actual 72-tick animation,
+including both valve phases and the growing central strip. The source handler's
+clock is not changed. Native conformance extends the existing GC/AmunRa suite:
+actual fluid admission and smelting, capacity rejection, both fuel modes, input
+ownership, and the original `onUpdate` clock versus every exported animation
+frame. This evidence is local; full installed-registry and GL export acceptance
+remain part of the unified live run.
