@@ -267,3 +267,14 @@ stacks, empty slots, admission, and every animation tick. No world or GL context
 is used. Full runtime coverage/visual acceptance is still pending the unified
 export. AmunRa 0.8.2 original JAR SHA256:
 `bcd0ca636d545a0f361f6583fd667bd40ca4b79198fc06d1552038310a7b1978`.
+
+The same native test family also covers AmunRa's shuttle. `SpaceRecipes` reads
+`RecipeHelper.getAllRecipesFor(ARItems.shuttleItem)`, verifies exact native NASA
+recipes, and constructs the owned 21-input `ContainerSchematicShuttle`. Its
+`ItemDamagePair` predicates require exact metadata (and compare blocks for block
+items); a slot with an empty type set permits any item but does not remove an
+explicit recipe-empty condition. The existing native matcher, precedence,
+consume-one and legacy container-return rules are reused. Coordinates use the
+shuttle's unshifted Y layout and X minus four. Unknown slot predicate classes or
+usable slots absent from the recipe fail explicitly. The native background is
+unchanged. No shuttle inventory is filled or linked to a player's live container.

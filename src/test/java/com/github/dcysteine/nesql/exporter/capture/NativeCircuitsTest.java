@@ -23,6 +23,8 @@ final class NativeCircuitsTest {
         TemplateRecipeHandler handler = (TemplateRecipeHandler) type(GC + "core.nei.CircuitFabricatorRecipeHandler").newInstance();
         TemplateRecipeHandler amunra = (TemplateRecipeHandler) type("de.katzenpapst.amunra.nei.recipehandler.ARCircuitFab").newInstance();
         require(Recipes.adapter(handler) != null && Recipes.adapter(amunra) != null, "Missing circuit adapters");
+        require(Recipes.adapter((TemplateRecipeHandler) type("de.katzenpapst.amunra.nei.recipehandler.ARNasaWorkbenchShuttle").newInstance()) != null,
+                "AmunRa shuttle has no native adapter");
         Class<?> registryType = type(GC + "api.recipe.CircuitFabricatorRecipes");
         Map<ItemStack[], ItemStack> registry = (Map<ItemStack[], ItemStack>) field(registryType, null, "recipes");
         ItemStack paper = new ItemStack(Items.paper, 17, 32767);
@@ -116,6 +118,7 @@ final class NativeCircuitsTest {
         try { CircuitRecipes.scene(handler, () -> { require((Integer) field(handler, "ticksPassed") == 0, "Scene has baked-in progress"); throw new IllegalStateException("test"); }); }
         catch (IllegalStateException expected) { require(expected.getMessage().equals("test"), "Wrong scene failure"); }
         require(clock.getInt(handler) == 42, "Native UI clock leaked after failure");
+        NativeSpaceTest.amunra();
         System.out.println("Native circuits: GC/AmunRa routes, fixed/empty inputs, native quick mode, encounter precedence, consume-one/no returns, ownership and 70-tick animation passed");
     }
     @SuppressWarnings("unchecked")

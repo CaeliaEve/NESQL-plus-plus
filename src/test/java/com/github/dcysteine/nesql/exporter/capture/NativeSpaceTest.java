@@ -104,10 +104,49 @@ final class NativeSpaceTest {
         require(inventory.getStackInSlot(1).stackSize == 3, "Native NASA consumption is not one item per occupied slot");
         System.out.println("Native NASA: 11 identities, exact/empty slots, native wildcard intersection, one-item consumption, output amount and owned views passed");
     }
-    private static void nativeLayouts() throws Exception {
+    @SuppressWarnings("unchecked")
+    static void amunra() throws Exception {
+        String prefix = "de.katzenpapst.amunra.";
+        Class<?> helper = Class.forName(prefix + "crafting.RecipeHelper");
+        net.minecraft.item.Item shuttle = (net.minecraft.item.Item) Class.forName(prefix + "item.ItemShuttle").getConstructor(String.class).newInstance("nesqlShuttle");
+        net.minecraft.item.Item.itemRegistry.addObject(30001, "nesql:shuttle", shuttle);
+        Class.forName(prefix + "item.ARItems").getField("shuttleItem").set(null, shuttle);
+        HashMap<Integer, ItemStack> input = new HashMap<>();
+        for (int slot = 1; slot <= 21; slot++) input.put(slot, slot == 1 ? new ItemStack(Items.paper, 17, 2) : null);
+        ItemStack output = new ItemStack(shuttle, 1, 3);
+        helper.getMethod("addNasaWorkbenchRecipe", ItemStack.class, HashMap.class).invoke(null, output, input);
+        Object recipe = ((List<?>) helper.getMethod("getAllRecipesFor", net.minecraft.item.Item.class).invoke(null, shuttle)).get(0);
+        net.minecraft.entity.player.InventoryPlayer inventory = new net.minecraft.entity.player.InventoryPlayer(emptyPlayer());
+        net.minecraft.inventory.Container container = (net.minecraft.inventory.Container) Class.forName(prefix + "inventory.schematic.ContainerSchematicShuttle")
+                .getConstructor(net.minecraft.entity.player.InventoryPlayer.class, int.class, int.class, int.class).newInstance(inventory, 0, 0, 0);
+        SpaceRecipes.Layout layout = new SpaceRecipes.Layout(container, 0);
+        require(layout.slots.size() == 21 && layout.output.xDisplayPosition == 142 && layout.output.yDisplayPosition == 96, "Native shuttle layout changed");
+        require(layout.slots.get(1).isItemValid(new ItemStack(Items.paper, 1, 2)) && !layout.slots.get(1).isItemValid(new ItemStack(Items.paper, 1, 32767)),
+                "Native ItemDamagePair slot restrictions changed");
+        require(layout.slots.get(21).isItemValid(new ItemStack(Items.diamond)), "Empty native type set is not an unrestricted slot");
+        TemplateRecipeHandler handler = (TemplateRecipeHandler) Class.forName(prefix + "nei.recipehandler.ARNasaWorkbenchShuttle").newInstance();
+        RecipeRow row = row(new ItemStack(Items.paper, 1, 2), output);
+        require(SpaceRecipes.capture(handler, recipe, layout, row), "Usable native shuttle recipe rejected");
+        require(row.inputs.size() == 1 && row.inputs.get(0).getAsJsonObject().getAsJsonArray("choices").size() == 1
+                && row.properties.getAsJsonObject("galacticraft:emptySlots").getAsJsonObject("value").getAsJsonArray("values").size() == 20,
+                "Shuttle exact slot or empty positions lost");
+        require(row.elements.get(0).getAsJsonObject().get("x").getAsInt() == 44 && row.elements.get(0).getAsJsonObject().get("y").getAsInt() == 18,
+                "Native shuttle crop changed");
+        require(!SpaceRecipes.shadowed(Collections.emptyList(), recipe, layout) && SpaceRecipes.shadowed(Collections.singletonList(recipe), recipe, layout),
+                "Shuttle native precedence lost");
+        input.remove(21);
+        try { SpaceRecipes.capture(handler, recipe, layout, row(new ItemStack(Items.paper, 1, 2), output)); throw new AssertionError("Unconstrained shuttle slot accepted"); }
+        catch (Jobs.Fault expected) { require(expected.code.equals("recipe_unsupported"), "Wrong shuttle predicate failure"); }
+        require(input.get(1).stackSize == 17 && inventory.getStackInSlot(0) == null, "Shuttle capture changed native or player inventory");
+        System.out.println("Native AmunRa shuttle: 21-slot container, exact ItemDamagePair restrictions, explicit empty slots and owned layout passed");
+    }
+    private static net.minecraft.entity.player.EntityPlayer emptyPlayer() throws Exception {
         Field access = sun.misc.Unsafe.class.getDeclaredField("theUnsafe"); access.setAccessible(true);
-        net.minecraft.entity.player.EntityPlayer player = (net.minecraft.entity.player.EntityPlayer) ((sun.misc.Unsafe) access.get(null))
+        return (net.minecraft.entity.player.EntityPlayer) ((sun.misc.Unsafe) access.get(null))
                 .allocateInstance(net.minecraft.entity.player.EntityPlayerMP.class);
+    }
+    private static void nativeLayouts() throws Exception {
+        net.minecraft.entity.player.EntityPlayer player = emptyPlayer();
         List<String> names = new ArrayList<>();
         for (int tier = 1; tier <= 8; tier++) names.add("galaxyspace.core.inventory.container.rocket.ContainerSchematicTier" + tier + "Rocket");
         names.add("micdoodle8.mods.galacticraft.core.inventory.ContainerBuggyBench");

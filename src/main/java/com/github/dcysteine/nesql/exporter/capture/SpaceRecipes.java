@@ -21,6 +21,7 @@ import static com.github.dcysteine.nesql.exporter.source.Json.*;
 final class SpaceRecipes implements RegistryRecipes {
     private static final String GC = "micdoodle8.mods.galacticraft.";
     private static final String GS = "galaxyspace.core.";
+    private static final String AR = "de.katzenpapst.amunra.";
     private static final String RECIPE = GC + "core.recipe.NasaWorkbenchRecipe";
     private final TemplateRecipeHandler handler;
     private final List<Object> recipes;
@@ -33,7 +34,7 @@ final class SpaceRecipes implements RegistryRecipes {
             return tier >= 1 && tier <= 8 && handler.getHandlerId().equals(GS + "nei.rocket.RocketT" + tier + "RecipeHandler");
         }
         return name.equals(GC + "core.nei.BuggyRecipeHandler") || name.equals(GC + "planets.mars.nei.CargoRocketRecipeHandler")
-                || name.equals(GC + "planets.asteroids.nei.AstroMinerRecipeHandler");
+                || name.equals(GC + "planets.asteroids.nei.AstroMinerRecipeHandler") || name.equals(AR + "nei.recipehandler.ARNasaWorkbenchShuttle");
     }
 
     SpaceRecipes(TemplateRecipeHandler handler) {
@@ -41,17 +42,25 @@ final class SpaceRecipes implements RegistryRecipes {
         if (!supports(handler)) throw fault("Unknown NASA handler");
         this.handler = handler;
         boolean galaxy = handler.getClass().getName().equals(GS + "nei.RocketRecipeHandler");
+        boolean shuttle = handler.getClass().getName().equals(AR + "nei.recipehandler.ARNasaWorkbenchShuttle");
         int tier = galaxy ? (Integer) field(handler, "tier") : 0;
         if (galaxy) version("GalaxySpace", "1.1.121-GTNH");
         String registry = galaxy ? GS + "recipe.RocketRecipes" : GC + "api.GalacticraftRegistry";
         String getter = galaxy ? "getRocketT" + tier + "Recipes" : handler.getClass().getName().contains("Buggy")
                 ? "getBuggyBenchRecipes" : handler.getClass().getName().contains("Cargo") ? "getCargoRocketRecipes" : "getAstroMinerRecipes";
-        List<?> registered = (List<?>) invoke(type(registry), null, getter, new Class<?>[0]);
+        List<?> registered;
+        if (shuttle) {
+            version("GalacticraftAmunRa", "0.8.2");
+            registered = (List<?>) invoke(type(AR + "crafting.RecipeHelper"), null, "getAllRecipesFor", new Class<?>[] {Item.class},
+                    field(type(AR + "item.ARItems"), null, "shuttleItem"));
+        } else registered = (List<?>) invoke(type(registry), null, getter, new Class<?>[0]);
+        if (registered == null) throw fault("NASA native registry is unavailable");
         if (registered.size() > 262144) throw fault("NASA registry exceeds its budget");
         recipes = new ArrayList<>(registered);
         // Constructors query this registry with an empty matrix: reject unknown executable predicates first.
         for (Object recipe : recipes) { Jobs.checkpoint(); audit(recipe); }
-        String container = galaxy ? GS + "inventory.container.rocket.ContainerSchematicTier" + tier + "Rocket"
+        String container = shuttle ? AR + "inventory.schematic.ContainerSchematicShuttle"
+                : galaxy ? GS + "inventory.container.rocket.ContainerSchematicTier" + tier + "Rocket"
                 : handler.getClass().getName().contains("Buggy") ? GC + "core.inventory.ContainerBuggyBench"
                 : handler.getClass().getName().contains("Cargo") ? GC + "planets.mars.inventory.ContainerSchematicCargoRocket"
                 : GC + "planets.asteroids.inventory.ContainerSchematicAstroMiner";
@@ -60,7 +69,7 @@ final class SpaceRecipes implements RegistryRecipes {
         Container owned = (Container) TinkerRecipes.construct(type(container),
                 new Class<?>[] {InventoryPlayer.class, int.class, int.class, int.class},
                 new InventoryPlayer(Minecraft.getMinecraft().thePlayer), 0, 0, 0);
-        layout = new Layout(owned, galaxy ? 4 - (Integer) field(handler, "y") : 16);
+        layout = new Layout(owned, shuttle ? 0 : galaxy ? 4 - (Integer) field(handler, "y") : 16);
     }
 
     public int size() { return recipes.size(); }
@@ -196,7 +205,13 @@ final class SpaceRecipes implements RegistryRecipes {
                 } else if (slot.inventory == matrix) {
                     if (!Arrays.asList(GS + "inventory.slot.SlotSchematic", GS + "inventory.slot.SlotSchematicChest",
                             GC + "core.inventory.SlotBuggyBench", GC + "planets.mars.inventory.SlotSchematicCargoRocket",
-                            GC + "planets.asteroids.inventory.SlotSchematicAstroMiner").contains(name)) throw fault("Unadapted NASA slot: " + name);
+                            GC + "planets.asteroids.inventory.SlotSchematicAstroMiner", AR + "inventory.schematic.SlotSchematicShuttle").contains(name))
+                        throw fault("Unadapted NASA slot: " + name);
+                    if (name.equals(AR + "inventory.schematic.SlotSchematicShuttle")) {
+                        for (Object item : (Object[]) field(slot, "validItem"))
+                            if (item == null || !item.getClass().getName().equals(AR + "item.ItemDamagePair"))
+                                throw fault("Unadapted shuttle slot item predicate");
+                    }
                     if (slots.put(slot.getSlotIndex(), slot) != null) throw fault("Duplicate NASA input slot");
                 } else if (!(slot.inventory instanceof InventoryPlayer) || slot.getClass() != Slot.class)
                     throw fault("Unexpected NASA inventory binding");
