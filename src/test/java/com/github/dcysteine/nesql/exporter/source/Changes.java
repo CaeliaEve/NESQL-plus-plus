@@ -14,6 +14,33 @@ import static com.github.dcysteine.nesql.exporter.source.Json.*;
 final class Changes {
     private Changes() {}
 
+    static void inscriber(List<JsonObject> items, List<JsonObject> recipes, List<JsonObject> categories,
+                          String texture, Function<String, String> text) {
+        JsonObject origin = object("owner", "fixture", "handler", "inscriber", "key", "inscriber");
+        String category = Identity.origin("category", origin);
+        String center = item(items,"fixture:inscriber_input",0,null,false,"Inscriber input 压印材料",texture,text);
+        String top = item(items,"fixture:inscriber_top",0,null,false,"Inscriber top 上模板",texture,text);
+        String bottom = item(items,"fixture:inscriber_bottom",0,null,false,"Inscriber bottom 下模板",texture,text);
+        String name = item(items,"fixture:name_press",0,null,false,"Name press 命名模板",texture,text);
+        String output = item(items,"fixture:processor",0,null,false,"Inscriber output 压印产物",texture,text);
+        categories.add(object("id",category,"source",origin,"name",text.apply("Inscriber 压印器"),"icon",object("kind","item","id",center),"machines",array(),"view",null,"order",categories.size()));
+        for(int mode=0;mode<3;mode++) {
+            JsonArray inputs=array();
+            for(int slot=0;slot<3;slot++) {
+                if(mode==2&&slot!=2)continue;
+                JsonObject choice=choice(slot==0?top:slot==1?bottom:center);
+                choice.add("rule",object("kind","ae"));
+                choice.add("consume",object("kind",mode==0&&slot!=2?"keep":"consume"));
+                inputs.add(object("kind","item","slot",slot,"choices",array(choice)));
+            }
+            JsonObject row=object("source",origin,"category",category,"order",mode,"inputs",inputs,
+                "outputs",array(object("slot",0,"kind","item","id",output,"amount","3","quantity",null,"chance",Chance.of(1,1),"role","result","change",null)),
+                "duration",null,"energy",null,"grid",null,"magic",null,"view",null,"properties",new JsonObject(),
+                "process",object("kind","inscriber","mode",mode==0?"inscribe":"press","top",mode==2?null:top,"bottom",bottom,"namePress",name));
+            row.addProperty("id",Identity.recipe(row)); recipes.add(row);
+        }
+    }
+
     static void map(List<JsonObject> items, List<JsonObject> recipes, List<JsonObject> categories,
                     String texture, Function<String, String> text) {
         JsonObject origin = object("owner", "fixture", "handler", "mapScaling", "key", "mapScaling");

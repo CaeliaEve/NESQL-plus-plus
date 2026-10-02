@@ -23,6 +23,8 @@ public final class GameTest {
                 Thread.currentThread().setContextClassLoader(loader);
                 if ("tconstruct".equals(System.getProperty("nesql.nativeFamily")))
                     loader.registerTransformer("cpw.mods.fml.common.asm.transformers.EventSubscriptionTransformer");
+                if ("inscriber".equals(System.getProperty("nesql.nativeFamily")))
+                    loader.registerTransformer(GameTest.class.getName() + "$NbtListAccess");
                 if ("space".equals(System.getProperty("nesql.nativeFamily")) || "circuits".equals(System.getProperty("nesql.nativeFamily")))
                     loader.registerTransformer(GameTest.class.getName() + "$OptionalApis");
                 try { loader.loadClass(GameTest.class.getName()).getMethod("run").invoke(null); }
@@ -55,6 +57,21 @@ public final class GameTest {
         ValuesTest.run();
         SlotsTest.run();
         CraftingTest.run();
+    }
+
+    /** The isolated dev jar lacks pack access transforms. Expose only the list field read by native AE2. */
+    public static final class NbtListAccess implements net.minecraft.launchwrapper.IClassTransformer {
+        @Override public byte[] transform(String name, String transformedName, byte[] bytes) {
+            if (bytes == null || !name.equals("net.minecraft.nbt.NBTTagList")) return bytes;
+            org.objectweb.asm.tree.ClassNode node = new org.objectweb.asm.tree.ClassNode();
+            new org.objectweb.asm.ClassReader(bytes).accept(node, 0);
+            for (Object value : node.fields) {
+                org.objectweb.asm.tree.FieldNode field = (org.objectweb.asm.tree.FieldNode) value;
+                if (field.name.equals("tagList")) field.access = (field.access & ~6) | 1;
+            }
+            org.objectweb.asm.ClassWriter writer = new org.objectweb.asm.ClassWriter(0);
+            node.accept(writer); return writer.toByteArray();
+        }
     }
 
     /** Use FML's own @Optional processing in the isolated NASA test loader, without launching FML discovery. */
