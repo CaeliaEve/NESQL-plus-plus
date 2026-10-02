@@ -14,6 +14,39 @@ import static com.github.dcysteine.nesql.exporter.source.Json.*;
 final class Changes {
     private Changes() {}
 
+    static void runic(List<JsonObject> items, List<JsonObject> recipes, List<JsonObject> categories,
+                      String texture, Function<String, String> text) {
+        JsonObject origin = object("owner", "fixture", "handler", "runic", "key", "runic");
+        String category = Identity.origin("category", origin);
+        NBTTagCompound tags = new NBTTagCompound(); tags.setInteger("RS.HARDEN", 3); tags.setString("owner", "kept");
+        String center = item(items, "fixture:runic_armor", 7, tags, true, "Runic armor 符文护甲", texture, text);
+        tags = copy(tags); tags.setByte("RS.HARDEN", (byte) 4);
+        String output = item(items, "fixture:runic_armor", 7, tags, true, "Runic armor upgraded 符文护甲升级", texture, text);
+        String diamond = item(items, "minecraft:diamond", 0, null, false, "Diamond 钻石", texture, text);
+        String resource = item(items, "Thaumcraft:ItemResource", 14, null, false, "Runic component 符文材料", texture, text);
+        JsonArray inputs = new JsonArray(), costs = new JsonArray();
+        String[] ids = {center, diamond, resource};
+        for (int slot = 0; slot < ids.length; slot++) {
+            JsonObject choice = choice(ids[slot]);
+            choice.add("rule", slot == 0 ? object("kind", "wildcard", "meta", true, "nbt", true)
+                    : object("kind", "infusion", "template", ids[slot], "ores", array()));
+            if (slot == 2) { choice.addProperty("amount", "4"); choice.add("consume", object("kind", "pedestals")); }
+            inputs.add(object("kind", "item", "slot", slot, "choices", array(choice)));
+        }
+        for (String key : new String[] {"tutamen", "praecantatio", "potentia"}) costs.add(object("aspect",
+                Identity.origin("aspect", object("owner", "Thaumcraft", "handler", "thaumcraft.api.aspects.Aspect", "key", key)),
+                "amount", key.equals("potentia") ? "256" : "128"));
+        categories.add(object("id", category, "source", origin, "name", text.apply("Runic 符文注魔"),
+                "icon", object("kind", "item", "id", center), "machines", array(), "view", null, "order", categories.size()));
+        JsonObject row = object("source", origin, "category", category, "order", 0, "inputs", inputs,
+                "outputs", array(object("slot", 0, "kind", "item", "id", output, "amount", "1", "quantity", null,
+                        "chance", Chance.of(1,1), "role", "result", "change", object("input", 0, "action", object("kind", "runic"), "samples", array(stack(output))))),
+                "duration", null, "energy", null, "grid", null, "view", null, "properties", new JsonObject(),
+                "process", object("kind", "runic", "charge", 3), "magic", object("kind", "infusion", "central", 0, "instability", 6,
+                        "aspects", costs, "research", array(object("key", "RUNICAUGMENTATION", "id", null, "completed", null)), "payment", null, "creative", false));
+        row.addProperty("id", Identity.recipe(row)); recipes.add(row);
+    }
+
     static void scans(List<JsonObject> items, List<JsonObject> recipes, List<JsonObject> categories,
                       String honey, String texture, Function<String, String> text) {
         JsonObject origin = object("owner", "fixture", "handler", "fixture:scanner", "key", "scanner");

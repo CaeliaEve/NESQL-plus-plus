@@ -242,6 +242,7 @@ public final class SourceTest {
         Changes.fixture(items, recipes, categories, views, paper, texture, text);
         Changes.scans(items, recipes, categories, Identity.fluid("honey", null), texture, text);
         harmony(dataset, recipes, categories, stone, paper, texture, text);
+        Changes.runic(items, recipes, categories, texture, text);
         records(dataset, "recipes", recipes); records(dataset, "categories", categories);
         java.util.TreeMap<String, JsonObject> unique = new java.util.TreeMap<>();
         for (JsonObject view : views) unique.put(view.get("id").getAsString(), view);
@@ -286,6 +287,12 @@ public final class SourceTest {
                     "discovered", index == 0 ? null : index == 1));
         }
         Dataset.Records aspectRows = dataset.records("aspects");
+        for (String key : new String[] {"tutamen", "praecantatio", "potentia"}) {
+            JsonObject source = object("owner", "Thaumcraft", "handler", "thaumcraft.api.aspects.Aspect", "key", key);
+            String id = Identity.origin("aspect", source);
+            aspects.put(id, object("id", id, "source", source, "name", text.apply(key), "description", text.apply(key),
+                    "color", uint(0xffb8a455L), "components", array(), "icon", image, "discovered", null));
+        }
         for (JsonObject aspect : aspects.values()) aspectRows.write(aspect);
         JsonObject base = object("owner", "fixture", "handler", "research", "key", "BASICS");
         String baseId = Identity.origin("research", base);

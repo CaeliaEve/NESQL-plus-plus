@@ -19,6 +19,8 @@ import thaumcraft.api.crafting.InfusionRecipe;
 import thaumcraft.api.crafting.ShapedArcaneRecipe;
 import thaumcraft.api.crafting.ShapelessArcaneRecipe;
 import thaumcraft.common.items.wands.ItemWandCasting;
+import thaumcraft.common.lib.crafting.InfusionRunicAugmentRecipe;
+import thaumcraft.common.config.ConfigItems;
 
 import java.lang.reflect.Constructor;
 import java.util.ArrayList;
@@ -52,6 +54,7 @@ final class MagicRecipes {
     private final List<Object> displayedCosts;
     private final Wands wands;
     private final boolean creative;
+    private List<Candidate> runicDiamond, runicResource;
 
     static boolean supports(ICraftingHandler handler) { return family(handler) != null; }
     private static Family family(ICraftingHandler handler) {
@@ -74,7 +77,9 @@ final class MagicRecipes {
         } catch (ReflectiveOperationException error) { throw fault(error.toString()); }
         List<IArcaneRecipe> replacements = new ArrayList<>();
         for (Object recipe : ThaumcraftApi.getCraftingRecipes()) {
-            if (family.recipe.isInstance(recipe)) recipes.add(recipe);
+            if (family == Family.INFUSION && recipe instanceof InfusionRunicAugmentRecipe)
+                recipes.addAll(Runic.expand((InfusionRunicAugmentRecipe) recipe));
+            else if (family.recipe.isInstance(recipe)) recipes.add(recipe);
             else if (Wands.supports(recipe)) { if (family == Family.SHAPELESS) replacements.add((IArcaneRecipe) recipe); }
             else if (family == Family.SHAPED && recipe instanceof IArcaneRecipe && !(recipe instanceof ShapelessArcaneRecipe)) {
                 recipes.add(recipe);
@@ -107,6 +112,7 @@ final class MagicRecipes {
         JsonObject payment = null;
         String kind;
         Integer central = null, instability = null;
+        Runic.Sample runic = null;
         if (replacement) {
             Wands.Result result = wands.capture(index - recipes.size(), row.facts);
             if (result == null) return false;
@@ -204,6 +210,26 @@ final class MagicRecipes {
             inputs.add(ordinary(recipe.catalyst, false));
             projection = new CrucibleRecipe(recipe.key, output.copy(), new ArrayList<>(Arrays.asList(stacks(inputs.get(0)))), costs(aspects));
             kind = "crucible";
+        } else if (source instanceof Runic) {
+            Runic nativeRecipe = (Runic) source;
+            runic = Runic.sample(nativeRecipe.recipe, nativeRecipe.center);
+            inputs.add(java.util.Collections.singletonList(new Candidate(nativeRecipe.center.copy(),
+                    object("kind", "wildcard", "meta", true, "nbt", true))));
+            ItemStack diamond = new ItemStack(Items.diamond), resource = new ItemStack(ConfigItems.itemResource, 1, 14);
+            if (runicDiamond == null) {
+                runicDiamond = Runic.component(diamond, row.facts); runicResource = Runic.component(resource, row.facts);
+            }
+            inputs.add(runicDiamond); inputs.add(runicResource);
+            aspects = runic.aspects; instability = runic.instability; central = 0; kind = "infusion";
+            addResearch(research, nativeRecipe.recipe.getResearch());
+            product = Products.observe(java.util.Collections.singletonList(nativeRecipe.center), object("kind", "runic"),
+                    input -> (ItemStack) nativeRecipe.recipe.getRecipeOutput(input.copy()), row.facts);
+            output = product.output;
+            row.record.add("process", object("kind", "runic", "charge", runic.charge));
+            // A compact native projection of the two component groups. The repeated group is
+            // explicitly typed as pedestal multiplicity; it is never a stack of crafting items.
+            projection = new InfusionRecipe(nativeRecipe.recipe.getResearch(), output.copy(), instability,
+                    costs(aspects), nativeRecipe.center.copy(), new ItemStack[] {diamond, resource});
         } else {
             if (!(source instanceof InfusionRecipe)) {
                 throw new Jobs.Fault("recipe_unsupported", "Not an infusion recipe: " + source.getClass().getName());
@@ -301,6 +327,7 @@ final class MagicRecipes {
         if (result == null) throw fault("Native view has no result slot");
         row.itemOutput(result, 0, output, 10000);
         if (product != null) product.attach(row);
+        if (runic != null) Runic.finish(row, inputs, runic);
         return true;
     }
 
