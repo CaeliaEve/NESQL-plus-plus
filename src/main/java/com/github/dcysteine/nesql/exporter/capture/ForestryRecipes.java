@@ -91,8 +91,7 @@ final class ForestryRecipes implements RegistryRecipes {
         for (Product product : products) {
             row.itemOutput(positions.get(product), slot++, product.item, 10000);
             float rate = product.rate; // Native getProducts: >=1 always; NaN/<=0 never; otherwise nextFloat < rate.
-            float effective = Float.isNaN(rate) || rate <= 0 ? 0 : Math.min(1, rate);
-            row.outputs.get(row.outputs.size() - 1).getAsJsonObject().add("chance", Chance.decimal(effective, 1));
+            row.outputs.get(row.outputs.size() - 1).getAsJsonObject().add("chance", Chance.nextFloat(rate, false));
         }
         requirements(row, time, 160);
         handler.arecipes.clear(); handler.arecipes.add(cached);

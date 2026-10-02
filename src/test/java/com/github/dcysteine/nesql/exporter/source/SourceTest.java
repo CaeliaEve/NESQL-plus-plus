@@ -460,6 +460,21 @@ public final class SourceTest {
         require(Chance.decimal(0.3f, 1).equals(object("numerator", "3", "denominator", "10")), "Bee rate lost its decimal precision");
         require(Chance.decimal(7.5f, 100).equals(object("numerator", "3", "denominator", "40")), "Mutation percentage was treated as a unit fraction");
         require(Chance.of(0, 10000).equals(object("numerator", "0", "denominator", "1")), "Zero probability was not reduced");
+        require(Chance.nextFloat(0.1f, false).equals(Chance.of(838861, 8388608)), "Native float threshold became a decimal rate");
+        require(Chance.nextFloat(0, true).equals(Chance.of(1, 16777216)), "Inclusive zero must retain its one possible random sample");
+        require(Chance.nextFloat(Float.MIN_VALUE, false).equals(Chance.of(1, 16777216)), "A positive subnormal still accepts a zero random sample");
+        for (float threshold : new float[] {Float.NaN, Float.NEGATIVE_INFINITY, -Float.MIN_VALUE, -0f, 0f, .25f, Math.nextDown(1f), 1f, Float.POSITIVE_INFINITY}) {
+            for (boolean inclusive : new boolean[] {false, true}) {
+                JsonObject fraction = Chance.nextFloat(threshold, inclusive);
+                long successes = Long.parseLong(fraction.get("numerator").getAsString()) * (16777216L / Long.parseLong(fraction.get("denominator").getAsString()));
+                for (long sample : new long[] {0, successes - 1, successes, 16777215}) if (sample >= 0 && sample < 16777216) {
+                    // Exercise the actual JDK conversion from next(24), including both sides of the transition.
+                    final int bits = (int) sample;
+                    float random = new java.util.Random() { @Override protected int next(int width) { if (width != 24) throw new AssertionError("Wrong random width"); return bits; } }.nextFloat();
+                    require((inclusive ? random <= threshold : random < threshold) == (sample < successes), "Native random threshold boundary changed");
+                }
+            }
+        }
         for (float invalid : new float[] {Float.NaN, Float.POSITIVE_INFINITY, -0.1f, 1.1f}) {
             try { Chance.decimal(invalid, 1); }
             catch (IllegalArgumentException expected) { continue; }

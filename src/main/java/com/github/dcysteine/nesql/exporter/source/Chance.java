@@ -6,7 +6,7 @@ import java.math.BigInteger;
 
 import static com.github.dcysteine.nesql.exporter.source.Json.object;
 
-/** Reduced probabilities. Decimal game rates retain their declared decimal precision. */
+/** Reduced probabilities. Declared rates and native random thresholds have distinct meanings. */
 public final class Chance {
     private Chance() {}
 
@@ -31,5 +31,15 @@ public final class Chance {
         else numerator = numerator.multiply(BigInteger.TEN.pow(-decimal.scale()));
         BigInteger divisor = numerator.gcd(denominator);
         return of(numerator.divide(divisor).longValueExact(), denominator.divide(divisor).longValueExact());
+    }
+
+    /** Exact fraction of Random.nextFloat's 2^24 possible values satisfying < or <=. */
+    public static JsonObject nextFloat(float threshold, boolean inclusive) {
+        if (Float.isNaN(threshold) || threshold < 0) return of(0, 1);
+        if (threshold >= 1) return of(1, 1);
+        long samples = 1L << 24;
+        double scaled = (double) threshold * samples; // Float -> double and power-of-two scaling are exact.
+        long accepted = inclusive ? (long) Math.floor(scaled) + 1 : (long) Math.ceil(scaled);
+        return of(accepted, samples);
     }
 }
