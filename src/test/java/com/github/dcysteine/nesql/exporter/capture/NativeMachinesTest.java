@@ -23,6 +23,20 @@ public final class NativeMachinesTest {
             String name = kind.contains("RecipeHandler") ? kind : kind + "RecipeHandler";
             TemplateRecipeHandler handler = (TemplateRecipeHandler) Class.forName(prefix + name).newInstance();
             require(Recipes.adapter(handler) != null, "Native IC2 handler has no adapter: " + kind);
+            Method barMethod = Ic2Recipes.class.getDeclaredMethod("progressBar", TemplateRecipeHandler.class);
+            barMethod.setAccessible(true); int[] bar = (int[]) barMethod.invoke(null, handler);
+            require(Ui.progress(bar[4], bar[5], bar[6], bar[7]).size() > 1, "IC2 native progress was exported as a still image");
+            Field clock = Class.forName(prefix + "MachineRecipeHandler").getDeclaredField("ticks"); clock.setAccessible(true);
+            clock.setInt(handler, 7);
+            Method scene = Ic2Recipes.class.getDeclaredMethod("scene", TemplateRecipeHandler.class, Runnable.class); scene.setAccessible(true);
+            try {
+                scene.invoke(null, handler, (Runnable) () -> {
+                    require(((Integer) MagicApi.field(handler, "ticks")) == 20, "IC2 foreground did not use the native steady-state clock");
+                    throw new IllegalStateException("draw interrupted");
+                });
+                throw new AssertionError("Scene swallowed a draw failure");
+            } catch (InvocationTargetException expected) { require(expected.getCause() instanceof IllegalStateException, "Scene changed draw failure"); }
+            require(clock.getInt(handler) == 7, "IC2 capture did not restore its owned clock after a failure");
         }
         // Washing and blast-furnace inputs include water/air; they must not inherit a one-input adapter.
         require(Recipes.adapter((TemplateRecipeHandler) Class.forName(prefix + "BlastFurnaceRecipeHandler").newInstance()) == null,
@@ -141,6 +155,27 @@ public final class NativeMachinesTest {
             require(row.outputs.get(0).getAsJsonObject().get("amount").getAsString().equals("3"), "Et Futurum override result/count was lost");
             require(apple.stackSize == 11 && result.stackSize == 3, "Smelting layout mutated registered recipe stacks");
             ((Map<?, ?>) registry.getClass().getField("smeltingList").get(registry)).clear();
+            // Native wildcard lookup precedes exact entries; a specific blacklist still wins.
+            ItemStack any = new ItemStack(Items.paper, 1, OreDictionary.WILDCARD_VALUE);
+            ItemStack first = new ItemStack(Items.paper, 1, 0), second = new ItemStack(Items.paper, 1, 1);
+            List<ItemStack> previous = new ArrayList<>(codechicken.nei.ItemList.itemMap.get(Items.paper));
+            try {
+                codechicken.nei.ItemList.itemMap.replaceValues(Items.paper, Arrays.asList(first, second));
+                add.invoke(registry, any, result, 0.5f);
+                add.invoke(registry, second, new ItemStack(Items.gold_ingot), 0.5f);
+                registry.getClass().getMethod("removeRecipe", ItemStack.class).invoke(registry, first);
+                List<Map.Entry<ItemStack, ItemStack>> expanded = (List<Map.Entry<ItemStack, ItemStack>>) enumerate.invoke(null, registry, Collections.emptyMap());
+                require(expanded.size() == 1 && expanded.get(0).getKey().getItemDamage() == 1,
+                        "Wildcard smelting retained a blacklisted subtype or duplicated a native key");
+                ItemStack nativeOutput = (ItemStack) registry.getClass().getMethod("getSmeltingResult", ItemStack.class).invoke(registry, second.copy());
+                require(ItemStack.areItemStacksEqual(nativeOutput, expanded.get(0).getValue()), "Smelting disagrees with native wildcard precedence");
+                RecipeRow exact = row(second, result); capture.invoke(null, handler, expanded.get(0), registry, exact);
+                require(!exact.inputs.get(0).getAsJsonObject().getAsJsonArray("choices").get(0).getAsJsonObject().getAsJsonObject("rule").get("meta").getAsBoolean(),
+                        "Filtered smelting candidate must not regain wildcard metadata matching");
+            } finally {
+                codechicken.nei.ItemList.itemMap.replaceValues(Items.paper, previous);
+                ((Map<?, ?>) registry.getClass().getField("smeltingList").get(registry)).clear();
+            }
         }
         System.out.println("Native Et Futurum: overrides, blacklist, exact output counts, duration, immutable layout passed");
     }

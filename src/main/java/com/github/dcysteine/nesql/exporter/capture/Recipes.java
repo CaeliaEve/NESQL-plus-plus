@@ -234,6 +234,8 @@ final class Recipes {
             if (views) {
                 if ((handler.getClass() == FurnaceRecipeHandler.class || registry instanceof SmeltingRecipes) && decorations.size() == 0) {
                     for (com.google.gson.JsonElement element : Ui.furnace(facts, (FurnaceRecipeHandler) handler, source.id)) decorations.add(element);
+                } else if (registry instanceof Ic2Recipes && decorations.size() == 0) {
+                    for (com.google.gson.JsonElement element : Ui.neiProgress(facts, handler, source.id, new int[][] {Ic2Recipes.progressBar(handler)})) decorations.add(element);
                 }
                 for (com.google.gson.JsonElement element : decorations) row.elements.add(element);
                 HandlerInfo info = GuiRecipeTab.getHandlerInfo(handler);
@@ -249,7 +251,8 @@ final class Recipes {
                 gregtech.api.util.GTRecipe nativeRecipe = gt == null ? null : ((GTNEIDefaultHandler.CachedDefaultRecipe) handler.arecipes.get(index)).mRecipe;
                 if (gt != null) gt.ui.add(facts, row, width, height, nativeRecipe);
                 facts.scene(new Facts.Scene(row.record, row.elements, width, height, gt == null ? 0 : gt.ui.foreground(), source.id, () -> {
-                    if (gt == null) { handler.drawBackground(at); if (decorations.size() == 0) handler.drawForeground(at); }
+                    if (registry instanceof Ic2Recipes) Ic2Recipes.scene(handler, () -> { handler.drawBackground(at); handler.drawForeground(at); });
+                    else if (gt == null) { handler.drawBackground(at); if (decorations.size() == 0) handler.drawForeground(at); }
                     else gt.foreground(at, row);
                 }));
             }

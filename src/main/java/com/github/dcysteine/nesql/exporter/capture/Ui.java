@@ -182,8 +182,12 @@ final class Ui implements AutoCloseable {
     }
 
     static JsonArray furnace(Facts facts, FurnaceRecipeHandler handler, String location) {
-        JsonArray elements = new JsonArray();
         int[][] bars = {{51, 25, 176, 0, 14, 14, 48, 7}, {74, 23, 176, 14, 24, 16, 48, 0}};
+        return neiProgress(facts, handler, location, bars);
+    }
+
+    static JsonArray neiProgress(Facts facts, codechicken.nei.recipe.TemplateRecipeHandler handler, String location, int[][] bars) {
+        JsonArray elements = new JsonArray();
         for (int[] bar : bars) {
             JsonObject element = object("kind", "clip", "asset", null, "x", bar[0], "y", bar[1], "width", bar[4], "height", bar[5],
                     "z", 0, "track", facts.track(progress(bar[4], bar[5], bar[6], bar[7])));

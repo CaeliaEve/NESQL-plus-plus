@@ -5,6 +5,7 @@ import codechicken.nei.recipe.FurnaceRecipeHandler;
 import codechicken.nei.recipe.ICraftingHandler;
 import com.github.dcysteine.nesql.exporter.task.Jobs;
 import net.minecraft.item.ItemStack;
+import net.minecraft.item.Item;
 import net.minecraft.item.crafting.FurnaceRecipes;
 import net.minecraftforge.oredict.OreDictionary;
 import java.util.*;
@@ -34,22 +35,42 @@ final class SmeltingRecipes implements RegistryRecipes {
 
     @SuppressWarnings("unchecked")
     static List<Map.Entry<ItemStack, ItemStack>> enumerate(Object registry, Map<ItemStack, ItemStack> furnace) {
-        Map<ItemStack, ItemStack> combined;
-        try { combined = (Map<ItemStack, ItemStack>) type(PREFIX + "core.utils.ItemStackMap").newInstance(); }
-        catch (ReflectiveOperationException error) { throw new Jobs.Fault("recipe_unsupported", "Et Futurum item map is unavailable: " + error); }
+        Map<ItemStack, ItemStack> custom = (Map<ItemStack, ItemStack>) field(registry, "smeltingList");
+        Map<Item, List<Map.Entry<ItemStack, ItemStack>>> inherited = new IdentityHashMap<>();
+        List<ItemStack> keys = new ArrayList<>();
         for (Map.Entry<ItemStack, ItemStack> recipe : furnace.entrySet()) {
             Jobs.checkpoint();
-            if ((Boolean) invoke(registry.getClass(), registry, "canAdd", new Class<?>[] {ItemStack.class, ItemStack.class}, recipe.getKey(), recipe.getValue())) {
-                combined.put(recipe.getKey(), recipe.getValue());
-            }
+            keys.add(recipe.getKey());
+            inherited.computeIfAbsent(recipe.getKey().getItem(), ignored -> new ArrayList<>()).add(recipe);
         }
-        combined.putAll((Map<ItemStack, ItemStack>) field(registry, "smeltingList"));
+        keys.addAll(custom.keySet());
         Object blacklist = field(registry, "smeltingBlacklist");
         List<Map.Entry<ItemStack, ItemStack>> result = new ArrayList<>();
-        for (Map.Entry<ItemStack, ItemStack> recipe : combined.entrySet()) {
+        Map<Item, Set<Integer>> seen = new IdentityHashMap<>();
+        for (ItemStack key : keys) {
             Jobs.checkpoint();
-            if (!(Boolean) invoke(blacklist.getClass(), blacklist, "contains", new Class<?>[] {ItemStack.class}, recipe.getKey())) {
-                result.add(new AbstractMap.SimpleImmutableEntry<>(recipe.getKey().copy(), recipe.getValue().copy()));
+            ItemStack[] candidates = key.getItemDamage() == OreDictionary.WILDCARD_VALUE
+                    ? new PositionedStack(key.copy(), 0, 0, true).items : new ItemStack[] {key};
+            if (candidates.length == 0 || candidates.length > 65536) throw new Jobs.Fault("recipe_unsupported", "Et Futurum input has no bounded expansion");
+            for (ItemStack candidate : candidates) {
+                Jobs.checkpoint();
+                if (candidate.getItem() != key.getItem() || candidate.getItemDamage() == OreDictionary.WILDCARD_VALUE) {
+                    throw new Jobs.Fault("slot_changed", "Et Futurum wildcard expansion changed its item or retained wildcard metadata");
+                }
+                ItemStack input = candidate.copy(); input.stackSize = 1;
+                if (!seen.computeIfAbsent(input.getItem(), ignored -> new HashSet<>()).add(input.getItemDamage())) continue;
+                if ((Boolean) invoke(blacklist.getClass(), blacklist, "contains", new Class<?>[] {ItemStack.class}, input.copy())) continue;
+                // Resolve each concrete candidate in native order, without mutating the runtime result caches.
+                ItemStack output = custom.get(input);
+                if (output == null) {
+                    for (Map.Entry<ItemStack, ItemStack> entry : inherited.getOrDefault(input.getItem(), Collections.emptyList())) {
+                        if (entry.getKey().getItemDamage() == input.getItemDamage() || entry.getKey().getItemDamage() == OreDictionary.WILDCARD_VALUE) {
+                            output = entry.getValue(); break;
+                        }
+                    }
+                    if (output == null || !(Boolean) invoke(registry.getClass(), registry, "canAdd", new Class<?>[] {ItemStack.class, ItemStack.class}, input.copy(), output.copy())) continue;
+                }
+                result.add(new AbstractMap.SimpleImmutableEntry<>(input, output.copy()));
             }
         }
         return result;

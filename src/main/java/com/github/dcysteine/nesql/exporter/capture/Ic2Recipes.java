@@ -50,6 +50,30 @@ final class Ic2Recipes implements RegistryRecipes {
         return true;
     }
 
+    static int[] progressBar(TemplateRecipeHandler handler) {
+        Machine machine = machine(handler);
+        if (machine == null) throw fault("Unverified IC2 progress layout");
+        if (machine == Machine.CENTRIFUGE) return new int[] {84, 10, 176, 50, 5, 30, 20, 3};
+        if (machine == Machine.CUTTING || machine == Machine.ROLLING || machine == Machine.EXTRUDING) {
+            return new int[] {46, 30, 177, 14, 51, 12, 20, 0};
+        }
+        return new int[] {74, 23, 176, 14, 25, 16, 20, 0};
+    }
+
+    static void scene(TemplateRecipeHandler handler, Runnable draw) {
+        // At tick 20 native energy/heat indicators are full and the cycling progress is empty.
+        // Capture that native foreground, then animate only its progress texture in the catalog.
+        Class<?> owner = type(HANDLERS + "MachineRecipeHandler");
+        try {
+            java.lang.reflect.Field clock = owner.getDeclaredField("ticks"); clock.setAccessible(true);
+            int previous = clock.getInt(handler);
+            try { clock.setInt(handler, 20); draw.run(); }
+            finally { clock.setInt(handler, previous); }
+        } catch (ReflectiveOperationException error) {
+            Jobs.Fault failure = fault("Cannot preserve native IC2 UI clock"); failure.initCause(error); throw failure;
+        }
+    }
+
     @SuppressWarnings("unchecked")
     static void capture(TemplateRecipeHandler handler, Object input, Object output, RecipeRow row) {
         Machine machine = machine(handler);
