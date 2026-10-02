@@ -8,6 +8,9 @@ import { digest } from './plan.mjs';
 // Exact, reviewed routes in capture/Recipes.java, GtRecipes.java and MagicRecipes.java.
 // A shared adapter does not imply identical category semantics or successful capture.
 const routes = new Map([
+  ...['core.nei.BuggyRecipeHandler', 'planets.mars.nei.CargoRocketRecipeHandler', 'planets.asteroids.nei.AstroMinerRecipeHandler']
+    .map(name => [`micdoodle8.mods.galacticraft.${name}`,
+      { adapter: 'SpaceRecipes', registry: 'Galacticraft 3.3.13 native NASA registries and physical slots', evidence: 'src/main/java/com/github/dcysteine/nesql/exporter/capture/SpaceRecipes.java' }]),
   ...['RecipeHandlerAlloying', 'RecipeHandlerMelting', 'RecipeHandlerCastingTable', 'RecipeHandlerCastingBasin'].map(name => [`tconstruct.plugins.nei.${name}`,
     { adapter: 'TinkerRecipes', registry: 'TConstruct 1.13.57 Smeltery registries / Mantle exact metadata keys', evidence: 'src/main/java/com/github/dcysteine/nesql/exporter/capture/TinkerRecipes.java' }]),
   ...['NEIHandlerCentrifuge', 'NEIHandlerStill'].map(name => [`forestry.factory.recipes.nei.${name}`,
@@ -53,7 +56,10 @@ export function audit(worklist, checkpoint) {
         && !row.hasFailures && !row.error, `Incomplete passed observation ${item.id}`);
     }
     summary.total++; summary[status]++;
-    const route = routes.get(item.source.handler);
+    const route = item.source.handler === 'galaxyspace.core.nei.RocketRecipeHandler'
+      && /^galaxyspace\.core\.nei\.rocket\.RocketT[1-8]RecipeHandler$/.test(item.source.key)
+      ? { adapter: 'SpaceRecipes', registry: 'GalaxySpace 1.1.121 RocketRecipes and physical workbench slots', evidence: 'src/main/java/com/github/dcysteine/nesql/exporter/capture/SpaceRecipes.java' }
+      : routes.get(item.source.handler);
     const facts = route ? { status: 'code_mapped', ...route }
       : { status: 'unverified', adapter: null, registry: null, evidence: null };
     const groupKey = route?.adapter ?? `review:${item.source.handler}`;

@@ -203,3 +203,39 @@ and exact moulds, unchanged source objects, a real registered Iguana callback th
 consumes the mould, and refusal to run any callback when an unknown listener is
 present. Iguana original SHA256:
 `a46788d0d3d94e1c0d455dd937b42cd80434d894fa07da4671fbebffe42c975a`.
+
+## NASA workbenches (Galacticraft 3.3.13 / GalaxySpace 1.1.121)
+
+`SpaceRecipes` reads GalaxySpace `RocketRecipes` for tiers 1–8 and
+`GalacticraftRegistry` for buggy, cargo rocket and Astro Miner. Only the exact
+`NasaWorkbenchRecipe` implementation is admitted. Native `matches` ignores count
+and NBT, requires explicit null slots empty, and accepts metadata 32767 on the
+**offered** stack, not on the recipe template. Each predicate is intersected with
+the native physical slot's `isItemValid`: ordinary GalaxySpace slots enforce exact
+item/meta, cargo slots have disabled positions, and chest slots restrict grades.
+Source counts are not consumption: `SlotRocketBenchResult` consumes one item per
+occupied slot and returns `new ItemStack(item.getContainerItem())`. It does not
+use Forge's stack-sensitive container getter. Unadapted stack-sensitive container
+presence callbacks fail explicitly. Exact first-match shadowing is excluded;
+wildcard alternatives with conditional earlier-recipe overlap fail explicitly.
+
+An empty owned native container supplies slot indices/coordinates and predicates.
+All registry recipe classes are checked before its constructor can query them.
+Its player inventory is fresh; the capture never installs the container, populates
+its matrix, clicks, closes it, or invokes its pickup/network methods. Inaccessible
+or unconstrained usable slots fail instead of being silently discarded. Native
+indices remain input slot numbers; required empty positions are retained in
+`galacticraft:emptySlots`. The native NEI background is preserved and cropped
+coordinates come from the real workbench. This also avoids GalaxySpace's native
+NEI chest-list aliasing: that display list is not the source of crafting facts.
+
+Existing `nativeMachinesTest -PnativeFamily=space` takes
+`-PnativeTestJar=build/native-tests/galacticraft.jar` and
+`-PnativeExtraTestJar=build/native-tests/galaxyspace.jar`. It covers all eleven
+native container constructors, slot counts, matcher boundaries, consume-one,
+container return, output counts and display ownership. The isolated loader uses
+FML's own annotation parser/`ModAPITransformer` for absent optional APIs; it does
+not replace the NASA predicates. No game world, GL or full initialized registry
+coverage is claimed. Original JAR SHA256:
+- Galacticraft: `e382339878a3dea2ab9ccb359bc37096f129802fff4e3a88de8db9fb7e1d4fa9`
+- GalaxySpace: `bb0ccf7f54cd73cee83ea8a8ce9e63e1d20ba754a5fb4ebb342d1e81498b7ca8`

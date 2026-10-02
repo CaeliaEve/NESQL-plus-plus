@@ -79,6 +79,7 @@ test('new native routes are mapped without rewriting old unsupported observation
     ['tconstruct.plugins.nei.RecipeHandlerMelting', 'TinkerRecipes'],
     ['tconstruct.plugins.nei.RecipeHandlerCastingTable', 'TinkerRecipes'],
     ['tconstruct.plugins.nei.RecipeHandlerCastingBasin', 'TinkerRecipes'],
+    ['micdoodle8.mods.galacticraft.core.nei.BuggyRecipeHandler', 'SpaceRecipes'],
   ]) {
     const { worklist, checkpoint } = fixture();
     worklist.handlers[1].source.handler = handler;
@@ -87,6 +88,13 @@ test('new native routes are mapped without rewriting old unsupported observation
     assert.equal(row.facts.adapter, adapter);
     assert.equal(row.observation.originalStatus, 'unsupported');
     assert.equal(row.display.status, 'unverified');
+  }
+  for (const tier of [0, 1, 8, 9]) {
+    const { worklist, checkpoint } = fixture();
+    worklist.handlers[1].source.handler = 'galaxyspace.core.nei.RocketRecipeHandler';
+    worklist.handlers[1].source.key = `galaxyspace.core.nei.rocket.RocketT${tier}RecipeHandler`;
+    const row = audit(worklist, checkpoint).handlers[1];
+    assert.equal(row.facts.adapter, tier === 1 || tier === 8 ? 'SpaceRecipes' : null);
   }
 });
 
