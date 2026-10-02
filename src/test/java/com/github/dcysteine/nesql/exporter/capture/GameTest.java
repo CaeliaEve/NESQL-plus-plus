@@ -25,6 +25,8 @@ public final class GameTest {
                     loader.registerTransformer("cpw.mods.fml.common.asm.transformers.EventSubscriptionTransformer");
                 if ("inscriber".equals(System.getProperty("nesql.nativeFamily")))
                     loader.registerTransformer(GameTest.class.getName() + "$NbtListAccess");
+                if ("soul".equals(System.getProperty("nesql.nativeFamily")))
+                    loader.registerTransformer(GameTest.class.getName() + "$EnderRegistry");
                 if ("space".equals(System.getProperty("nesql.nativeFamily")) || "circuits".equals(System.getProperty("nesql.nativeFamily")))
                     loader.registerTransformer(GameTest.class.getName() + "$OptionalApis");
                 try { loader.loadClass(GameTest.class.getName()).getMethod("run").invoke(null); }
@@ -71,6 +73,26 @@ public final class GameTest {
             }
             org.objectweb.asm.ClassWriter writer = new org.objectweb.asm.ClassWriter(0);
             node.accept(writer); return writer.toByteArray();
+        }
+    }
+
+    /** Only replace mod startup/registry initialization. Native item, recipe and XP methods stay intact. */
+    public static final class EnderRegistry implements net.minecraft.launchwrapper.IClassTransformer {
+        @Override public byte[] transform(String name,String transformedName,byte[] bytes) {
+            boolean holder=name.equals("crazypants.enderio.EnderIO"), config=name.equals("crazypants.enderio.machine.spawner.PoweredSpawnerConfig");
+            if(bytes==null||!holder&&!config)return bytes;
+            org.objectweb.asm.tree.ClassNode node=new org.objectweb.asm.tree.ClassNode();
+            new org.objectweb.asm.ClassReader(bytes).accept(node,0);
+            if(holder){
+                node.superName="java/lang/Object";node.interfaces.clear();node.methods.clear();
+                java.util.Set<String> retained=new java.util.HashSet<>(Arrays.asList("DOMAIN","itemSoulVessel","itemBrokenSpawner","blockPoweredSpawner","fluidXpJuice","itemMaterial","itemFrankenSkull","itemEnderface"));
+                node.fields.removeIf(value->!retained.contains(((org.objectweb.asm.tree.FieldNode)value).name));
+                for(Object value:node.fields){org.objectweb.asm.tree.FieldNode f=(org.objectweb.asm.tree.FieldNode)value;f.access=9;if(f.name.equals("DOMAIN"))f.value="enderio";}
+            }else{
+                node.methods.removeIf(value->((org.objectweb.asm.tree.MethodNode)value).name.equals("<clinit>"));
+                for(Object value:node.fields){org.objectweb.asm.tree.FieldNode f=(org.objectweb.asm.tree.FieldNode)value;if(f.name.equals("instance"))f.access=9;}
+            }
+            org.objectweb.asm.ClassWriter writer=new org.objectweb.asm.ClassWriter(0);node.accept(writer);return writer.toByteArray();
         }
     }
 

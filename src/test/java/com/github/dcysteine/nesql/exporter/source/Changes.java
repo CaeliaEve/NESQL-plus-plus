@@ -14,6 +14,32 @@ import static com.github.dcysteine.nesql.exporter.source.Json.*;
 final class Changes {
     private Changes() {}
 
+    static void soul(List<JsonObject> items,List<JsonObject> recipes,List<JsonObject> categories,String texture,Function<String,String> text){
+        JsonObject origin=object("owner","fixture","handler","soul","key","soul");String category=Identity.origin("category",origin);
+        String vessel=item(items,"fixture:soul_vial",0,null,false,"Soul vial 灵魂瓶",texture,text);
+        NBTTagCompound zombie=new NBTTagCompound();zombie.setString("id","Zombie");
+        NBTTagCompound sheep=new NBTTagCompound();sheep.setString("id","Sheep");
+        String zv=item(items,"fixture:soul_vial",0,zombie,false,"Zombie soul 僵尸灵魂",texture,text),sv=item(items,"fixture:soul_vial",0,sheep,false,"Sheep soul 绵羊灵魂",texture,text);
+        String product=item(items,"fixture:soul_product",0,null,false,"Soul bound product 灵魂绑定产物",texture,text);
+        String base=item(items,"fixture:soul_spawner",0,null,false,"Broken spawner 破损刷怪笼",texture,text);
+        NBTTagCompound ztag=new NBTTagCompound();ztag.setString("mobType","Zombie");NBTTagCompound stag=new NBTTagCompound();stag.setString("mobType","Sheep");
+        String zo=item(items,"fixture:soul_spawner",0,ztag,false,"Zombie bound spawner 僵尸刷怪笼",texture,text),so=item(items,"fixture:soul_spawner",0,stag,false,"Sheep bound spawner 绵羊刷怪笼",texture,text);
+        categories.add(object("id",category,"source",origin,"name",text.apply("EnderIO Soul Binder 灵魂绑定机"),"icon",object("kind","item","id",vessel),"machines",array(),"view",null,"order",categories.size()));
+        for(int n=0;n<2;n++){
+            boolean spawner=n==1;
+            JsonObject filter=object("vessel",vessel,"names",spawner?array(null,"Forbidden"):array(null,"Zombie"),"exclude",spawner);
+            JsonArray choices=array();for(String id:spawner?new String[]{zv,sv}:new String[]{vessel,zv}){JsonObject c=choice(id);c.add("rule",object("kind","soul","filter",filter));choices.add(c);}
+            JsonObject material=choice(spawner?base:vessel);material.add("rule",object("kind","wildcard","meta",spawner,"nbt",true));
+            JsonArray inputs=array(object("kind","item","slot",0,"choices",choices),object("kind","item","slot",1,"choices",array(material)));
+            JsonArray outputs=array();
+            outputs.add(object("kind","item","slot",0,"id",vessel,"amount",spawner?"1":null,"change",null,"role","result","chance",Chance.of(1,1),"quantity",spawner?null:object("kind","soul","nominal","1")));
+            outputs.add(object("kind","item","slot",1,"id",spawner?zo:product,"amount",spawner?"1":null,"change",spawner?object("input",0,"action",object("kind","soul","base",base),"samples",array(object("id",zo,"amount","1"),object("id",so,"amount","1"))):null,"role","result","chance",Chance.of(1,1),"quantity",spawner?null:object("kind","soul","nominal","2")));
+            JsonArray earlier=spawner?array(object("soul",object("vessel",vessel,"names",array(null,"Zombie"),"exclude",false),"material",object("id",vessel,"rule",object("kind","wildcard","meta",false,"nbt",true)))):array();
+            JsonObject row=object("source",origin,"category",category,"order",n,"inputs",inputs,"outputs",outputs,"process",object("kind","soul","energy",1000,"levels",16,"experience",272,"capacity",825,"drains",spawner,"spawner",spawner,"earlier",earlier),"duration",null,"energy",null,"grid",null,"magic",null,"view",null,"properties",new JsonObject());
+            row.addProperty("id",Identity.recipe(row));recipes.add(row);
+        }
+    }
+
     static void sag(List<JsonObject> items, List<JsonObject> recipes, List<JsonObject> categories,
                     String texture, Function<String,String> text) {
         JsonObject origin=object("owner","fixture","handler","sag","key","sag");
