@@ -8,7 +8,7 @@ import { digest } from './plan.mjs';
 // Exact, reviewed routes in capture/Recipes.java, GtRecipes.java and MagicRecipes.java.
 // A shared adapter does not imply identical category semantics or successful capture.
 const routes = new Map([
-  ...['RecipeHandlerAlloying', 'RecipeHandlerMelting'].map(name => [`tconstruct.plugins.nei.${name}`,
+  ...['RecipeHandlerAlloying', 'RecipeHandlerMelting', 'RecipeHandlerCastingTable', 'RecipeHandlerCastingBasin'].map(name => [`tconstruct.plugins.nei.${name}`,
     { adapter: 'TinkerRecipes', registry: 'TConstruct 1.13.57 Smeltery registries / Mantle exact metadata keys', evidence: 'src/main/java/com/github/dcysteine/nesql/exporter/capture/TinkerRecipes.java' }]),
   ...['NEIHandlerCentrifuge', 'NEIHandlerStill'].map(name => [`forestry.factory.recipes.nei.${name}`,
     { adapter: 'ForestryRecipes', registry: 'Forestry 4.10.17 RecipeManagers / native factory consumption', evidence: 'src/main/java/com/github/dcysteine/nesql/exporter/capture/ForestryRecipes.java' }]),

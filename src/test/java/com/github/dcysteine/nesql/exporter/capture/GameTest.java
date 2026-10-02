@@ -21,6 +21,8 @@ public final class GameTest {
             java.io.PrintStream out = System.out, err = System.err;
             try (LaunchClassLoader loader = new LaunchClassLoader(urls)) {
                 Thread.currentThread().setContextClassLoader(loader);
+                if ("tconstruct".equals(System.getProperty("nesql.nativeFamily")))
+                    loader.registerTransformer("cpw.mods.fml.common.asm.transformers.EventSubscriptionTransformer");
                 try { loader.loadClass(GameTest.class.getName()).getMethod("run").invoke(null); }
                 catch (java.lang.reflect.InvocationTargetException error) {
                     if (error.getCause() instanceof Error) throw (Error) error.getCause();

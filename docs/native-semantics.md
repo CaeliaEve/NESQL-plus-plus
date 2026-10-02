@@ -175,3 +175,31 @@ The same development pass corrects required-NBT Forestry/Avaritia inputs to emit
 `kind: exact` when neither metadata nor NBT is ignored. A wildcard with both flags
 false violates the existing Compiler contract. Native matching is unchanged;
 regressions require the valid exact representation as well as native behavior.
+
+## TConstruct table and basin casting
+
+Read the native table/basin `LiquidCasting` registry, reject unknown recipe
+subclasses, and retain exact fluid/NBT, cooling time, output quantity and mould
+consumption. A wildcard mould ignores NBT/count in the native early match branch;
+an ordinary exact mould needs exactly one item because the machine's slot limit
+is one. `ignoreNBT` preserves metadata. Null mould with `ignoreNBT` and nonpositive
+cooling time cannot complete natively and are excluded. The empty-mould condition
+is explicit for cast-free recipes. Preserve native layouts and fluid flow artwork.
+
+The native machine posts `SmelteryCastEvent` (may deny) and `SmelteryCastedEvent`
+(may change consumption/output). Capture runs the actual active listener snapshot
+on deep copied recipe/event data, after validating **every** callback. Allow only
+the reviewed TConstruct `WeaponryHandler.weaponryPartCast` and Iguana 2.6.6
+`PartRestrictionHandler.onPartCasting` / `CastHandler.onCasted`. Verify the exact
+target class and FML's Method-to-generated-wrapper cache, not a method-name string
+alone. Unknown callbacks fail before any listener runs. Callback Errors/faults
+propagate normally. Original recipes, stacks and global event registration remain
+unchanged. Full initialized material restrictions still need real-game acceptance.
+
+The existing TConstruct native test command now additionally takes
+`-PnativeCraftingTestJar=build/native-tests/iguana.jar`. Its isolated classloader
+uses FML's native event transformer. Tests cover both casting layouts, wildcard
+and exact moulds, unchanged source objects, a real registered Iguana callback that
+consumes the mould, and refusal to run any callback when an unknown listener is
+present. Iguana original SHA256:
+`a46788d0d3d94e1c0d455dd937b42cd80434d894fa07da4671fbebffe42c975a`.

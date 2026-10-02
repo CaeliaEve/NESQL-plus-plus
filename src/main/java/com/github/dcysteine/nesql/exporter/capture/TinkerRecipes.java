@@ -21,14 +21,23 @@ final class TinkerRecipes implements RegistryRecipes {
 
     static boolean supports(ICraftingHandler handler) {
         String name = handler.getClass().getName();
-        return name.equals(HANDLERS + "RecipeHandlerAlloying") || name.equals(HANDLERS + "RecipeHandlerMelting");
+        return name.equals(HANDLERS + "RecipeHandlerAlloying") || name.equals(HANDLERS + "RecipeHandlerMelting")
+                || name.equals(HANDLERS + "RecipeHandlerCastingTable") || name.equals(HANDLERS + "RecipeHandlerCastingBasin");
     }
+    private static boolean casting(TemplateRecipeHandler handler) { return handler.getClass().getName().equals(HANDLERS + "RecipeHandlerCastingTable")
+            || handler.getClass().getName().equals(HANDLERS + "RecipeHandlerCastingBasin"); }
     private static boolean alloying(TemplateRecipeHandler handler) { return handler.getClass().getName().equals(HANDLERS + "RecipeHandlerAlloying"); }
     TinkerRecipes(TemplateRecipeHandler handler) {
         version("TConstruct", "1.13.57-GTNH");
         version("Mantle", "0.5.1");
         this.handler = handler;
-        if (alloying(handler)) recipes.addAll((List<?>) invoke(type(CRAFTING + "Smeltery"), null, "getAlloyList", new Class<?>[0]));
+        if (casting(handler)) {
+            if (cpw.mods.fml.common.Loader.isModLoaded("IguanaTweaksTConstruct")) version("IguanaTweaksTConstruct", "2.6.6");
+            Object registry = invoke(type("tconstruct.library.TConstructRegistry"), null,
+                    handler.getClass().getName().endsWith("Table") ? "getTableCasting" : "getBasinCasting", new Class<?>[0]);
+            if (registry == null || !registry.getClass().getName().equals(CRAFTING + "LiquidCasting")) throw fault("Missing or unadapted casting registry");
+            recipes.addAll((List<?>) invoke(registry.getClass(), registry, "getCastingRecipes", new Class<?>[0]));
+        } else if (alloying(handler)) recipes.addAll((List<?>) invoke(type(CRAFTING + "Smeltery"), null, "getAlloyList", new Class<?>[0]));
         else for (Object key : ((Map<?, ?>) invoke(type(CRAFTING + "Smeltery"), null, "getSmeltingList", new Class<?>[0])).keySet()) {
             Jobs.checkpoint();
             if (!key.getClass().getName().equals("mantle.utils.ItemMetaWrapper")) throw fault("Unadapted melting key: " + key.getClass().getName());
@@ -41,6 +50,7 @@ final class TinkerRecipes implements RegistryRecipes {
 
     static boolean capture(TemplateRecipeHandler handler, Object recipe, RecipeRow row) {
         if (!supports(handler)) throw fault("Unknown TConstruct recipe handler");
+        if (casting(handler)) return TinkerCasting.capture(handler, recipe, row);
         if (alloying(handler)) return alloy(handler, recipe, row);
         if (!(recipe instanceof ItemStack)) throw fault("Invalid TConstruct melting source");
         melting(handler, (ItemStack) recipe, row); return true;
@@ -101,7 +111,7 @@ final class TinkerRecipes implements RegistryRecipes {
         if (fluid.getFluid() == null || fluid.amount <= 0) throw fault("Invalid native TConstruct fluid amount");
         return fluid.copy();
     }
-    private static Object construct(Class<?> owner, Class<?>[] parameters, Object... arguments) {
+    static Object construct(Class<?> owner, Class<?>[] parameters, Object... arguments) {
         try { return owner.getConstructor(parameters).newInstance(arguments); }
         catch (InvocationTargetException error) {
             Throwable cause = error.getCause();

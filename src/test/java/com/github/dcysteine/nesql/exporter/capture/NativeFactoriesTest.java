@@ -77,7 +77,68 @@ final class NativeFactoriesTest {
         com.google.gson.JsonObject exactChoice = unusual.inputs.get(0).getAsJsonObject().getAsJsonArray("choices").get(0).getAsJsonObject();
         require(exactChoice.get("id").getAsString().equals(Identity.item("minecraft:book", 32767, null))
                 && !exactChoice.getAsJsonObject("rule").get("meta").getAsBoolean(), "NEI wildcard expansion broadened an exact Mantle key");
+        casting();
         System.out.println("Native TConstruct: alloy stoichiometry, maximum integer batches, fluid NBT, one-item melting, exact metadata, temperature and owned display passed");
+    }
+    private static void casting() throws Exception {
+        Class<?> recipeType = Class.forName("tconstruct.library.crafting.CastingRecipe");
+        Constructor<?> constructor = recipeType.getConstructor(ItemStack.class, FluidStack.class, ItemStack.class, boolean.class,
+                int.class, Class.forName("tconstruct.library.client.FluidRenderProperties"), boolean.class);
+        ItemStack cast = new ItemStack(Items.paper); cast.setTagInfo("owner", new net.minecraft.nbt.NBTTagString("required"));
+        ItemStack result = new ItemStack(Items.diamond, 3);
+        FluidStack fluid = new FluidStack(FluidRegistry.LAVA, 144);
+        for (String kind : new String[] {"Table", "Basin"}) {
+            TemplateRecipeHandler handler = (TemplateRecipeHandler) Class.forName("tconstruct.plugins.nei.RecipeHandlerCasting" + kind).newInstance();
+            require(Recipes.adapter(handler) != null, "TConstruct casting " + kind + " has no native adapter");
+            Object recipe = constructor.newInstance(result, fluid, cast, false, 80, null, false);
+            require(!(Boolean) recipeType.getMethod("matches", FluidStack.class, ItemStack.class).invoke(recipe, fluid, new ItemStack(Items.paper)), "Native casting lost required NBT");
+            RecipeRow row = row(cast, Collections.singletonList(result)); capture("TinkerRecipes", handler, recipe, row);
+            com.google.gson.JsonObject choice = row.inputs.get(0).getAsJsonObject().getAsJsonArray("choices").get(0).getAsJsonObject();
+            require(choice.getAsJsonObject("rule").get("kind").getAsString().equals("exact")
+                    && choice.getAsJsonObject("consume").get("kind").getAsString().equals("keep"), "Casting changed exact reusable mould semantics");
+            require(row.record.get("duration").getAsString().equals("80") && row.outputs.get(0).getAsJsonObject().get("amount").getAsString().equals("3"), "Casting lost cooling time/result count");
+            handler.arecipes.get(0).getResult().items[0].stackSize = 99;
+            require(result.stackSize == 3 && fluid.amount == 144 && cast.stackSize == 1, "Casting mutated native recipes");
+        }
+        Item pattern = (Item) Class.forName("tconstruct.smeltery.items.MetalPattern").getConstructor(String.class, String.class).newInstance("cast", "test");
+        Item.itemRegistry.addObject(30001, "nesqltest:cast", pattern);
+        ItemStack patternStack = new ItemStack(pattern);
+        Object recipe = constructor.newInstance(patternStack, fluid, cast, false, 80, null, false);
+        Class<?> eventType = Class.forName("tconstruct.library.event.SmelteryCastedEvent$CastingTable");
+        cpw.mods.fml.common.eventhandler.Event event = (cpw.mods.fml.common.eventhandler.Event) eventType
+                .getConstructor(recipeType, ItemStack.class).newInstance(recipe, patternStack.copy());
+        Object target = Class.forName("iguanaman.iguanatweakstconstruct.tweaks.handlers.CastHandler").newInstance();
+        cpw.mods.fml.common.eventhandler.ASMEventHandler listener = new cpw.mods.fml.common.eventhandler.ASMEventHandler(target,
+                target.getClass().getMethod("onCasted", eventType), null);
+        int bus = (Integer) MagicApi.field(cpw.mods.fml.common.eventhandler.EventBus.class, net.minecraftforge.common.MinecraftForge.EVENT_BUS, "busID");
+        event.getListenerList().register(bus, cpw.mods.fml.common.eventhandler.EventPriority.NORMAL, listener);
+        try {
+            TemplateRecipeHandler handler = (TemplateRecipeHandler) Class.forName("tconstruct.plugins.nei.RecipeHandlerCastingTable").newInstance();
+            RecipeRow row = row(cast, Collections.singletonList(patternStack)); capture("TinkerRecipes", handler, recipe, row);
+            require(row.inputs.get(0).getAsJsonObject().getAsJsonArray("choices").get(0).getAsJsonObject().getAsJsonObject("consume")
+                    .get("kind").getAsString().equals("consume"), "Registered Iguana cast-consumption event was ignored");
+            require(!(Boolean) MagicApi.field(recipe, "consumeCast"), "Casting event mutated the original recipe");
+            final int[] invoked = {0};
+            cpw.mods.fml.common.eventhandler.IEventListener unknown = ignored -> invoked[0]++;
+            event.getListenerList().register(bus, cpw.mods.fml.common.eventhandler.EventPriority.LOW, unknown);
+            try {
+                Method dispatch = Class.forName("com.github.dcysteine.nesql.exporter.capture.TinkerCasting")
+                        .getDeclaredMethod("dispatch", cpw.mods.fml.common.eventhandler.Event.class); dispatch.setAccessible(true);
+                try { dispatch.invoke(null, event); throw new AssertionError("Unknown casting listener was executed"); }
+                catch (InvocationTargetException expected) { require(expected.getCause() instanceof Jobs.Fault, "Wrong unknown-listener failure"); }
+                require(invoked[0] == 0 && !(Boolean) MagicApi.field(event, "consumeCast"),
+                        "Casting callbacks ran before the entire listener snapshot was validated");
+            } finally { cpw.mods.fml.common.eventhandler.ListenerList.unregisterAll(bus, unknown); }
+        } finally { cpw.mods.fml.common.eventhandler.ListenerList.unregisterAll(bus, listener); }
+        TemplateRecipeHandler table = (TemplateRecipeHandler) Class.forName("tconstruct.plugins.nei.RecipeHandlerCastingTable").newInstance();
+        ItemStack wildcardCast = cast.copy(); wildcardCast.setItemDamage(32767); wildcardCast.stackSize = 8;
+        Object wildcard = constructor.newInstance(result, fluid, wildcardCast, true, 80, null, false);
+        require((Boolean) recipeType.getMethod("matches", FluidStack.class, ItemStack.class).invoke(wildcard, fluid, new ItemStack(Items.paper)),
+                "Native wildcard cast should ignore both source count and tags");
+        RecipeRow expanded = row(cast, Collections.singletonList(result)); capture("TinkerRecipes", table, wildcard, expanded);
+        require(expanded.inputs.get(0).getAsJsonObject().getAsJsonArray("choices").get(0).getAsJsonObject().getAsJsonObject("rule")
+                .get("nbt").getAsBoolean(), "Wildcard casting retained an invalid NBT requirement");
+        System.out.println("Native casting: table/basin, exact and wildcard moulds, copied output, actual Iguana consumption callback, unknown-listener refusal passed");
     }
     private static void forestry() throws Exception {
         String prefix = "forestry.factory.";

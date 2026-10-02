@@ -77,6 +77,8 @@ test('new native routes are mapped without rewriting old unsupported observation
     ['forestry.factory.recipes.nei.NEIHandlerStill', 'ForestryRecipes'],
     ['tconstruct.plugins.nei.RecipeHandlerAlloying', 'TinkerRecipes'],
     ['tconstruct.plugins.nei.RecipeHandlerMelting', 'TinkerRecipes'],
+    ['tconstruct.plugins.nei.RecipeHandlerCastingTable', 'TinkerRecipes'],
+    ['tconstruct.plugins.nei.RecipeHandlerCastingBasin', 'TinkerRecipes'],
   ]) {
     const { worklist, checkpoint } = fixture();
     worklist.handlers[1].source.handler = handler;
