@@ -23,6 +23,8 @@ public final class UiTest {
     public static void run() {
         windows();
         JsonArray flame = Ui.progress(14, 14, 48, 7), arrow = Ui.progress(24, 16, 48, 0);
+        require(Ui.progress(14, 14, 100, 11).equals(Ui.progress(14, 14, 100, 7)),
+                "NEI direction 11 must retain its native reversed direction-3 alias");
         require(duration(flame) == 48 && state(flame, 0).equals(array(array("0.0", "0.0", "1.0", "1.0")))
                 && state(flame, 47).size() == 0, "Native furnace flame did not shrink to empty");
         require(state(arrow, 0).size() == 0 && state(arrow, 24).equals(array(array("0.0", "0.0", "0.5", "1.0"))), "Native furnace arrow has the wrong pixel step");

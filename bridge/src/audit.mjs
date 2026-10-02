@@ -8,6 +8,8 @@ import { digest } from './plan.mjs';
 // Exact, reviewed routes in capture/Recipes.java, GtRecipes.java and MagicRecipes.java.
 // A shared adapter does not imply identical category semantics or successful capture.
 const routes = new Map([
+  ...['CokeOven', 'BlastFurnace'].map(name => [`tonius.neiintegration.mods.railcraft.RecipeHandler${name}`,
+    { adapter: 'RailRecipes', registry: 'Railcraft 9.16.33 furnace registries and native two-pass input priority', evidence: 'src/main/java/com/github/dcysteine/nesql/exporter/capture/RailRecipes.java' }]),
   ['micdoodle8.mods.galacticraft.core.nei.RefineryRecipeHandler', { adapter: 'RefineryRecipes',
     registry: 'Galacticraft 3.3.13 native oil-prefixed fluid conversion and fuel configuration', evidence: 'src/main/java/com/github/dcysteine/nesql/exporter/capture/RefineryRecipes.java' }],
   ['de.katzenpapst.amunra.nei.recipehandler.ARNasaWorkbenchShuttle', { adapter: 'SpaceRecipes',

@@ -169,6 +169,11 @@ public final class SourceTest {
         java.util.List<JsonObject> recipes = new java.util.ArrayList<>(), categories = new java.util.ArrayList<>(), views = new java.util.ArrayList<>();
         String aspect = Identity.origin("aspect", object("owner", "fixture", "handler", "aspects", "key", "fire"));
         String research = Identity.origin("research", object("owner", "fixture", "handler", "research", "key", "BASICS"));
+        JsonObject priorNbt = object("type", "compound", "value", object("priority", object("type", "int", "value", "1")));
+        String prior = Identity.item("minecraft:stone", 0, priorNbt);
+        items.add(object("id", prior, "registry", "minecraft:stone", "meta", 0, "nbt", priorNbt,
+                "name", text.apply("Priority reference 前序匹配"), "tooltip", new JsonArray(), "stackLimit", 64,
+                "durability", 0, "tools", new JsonObject(), "tags", new JsonArray(), "icon", texture, "order", null, "aspects", new JsonArray()));
         String[] kinds = {"machine", "arcane", "shapeless", "crucible", "infusion"};
         String[] names = {"Fixture machine", "Arcane 奥术合成", "Shapeless 无序奥术", "Crucible 坩埚炼金", "Infusion 注魔"};
         for (int order = 0; order < kinds.length; order++) {
@@ -184,7 +189,9 @@ public final class SourceTest {
             else {
                 choices.add(object("id", item, "amount", "7", "consume", object("kind", "consume"), "returns", new JsonArray(),
                         "rule", object("kind", "without_tags", "keys", array("frypanKill"))));
-                choices.add(object("id", item, "amount", "1", "consume", object("kind", "keep"), "returns", new JsonArray(), "rule", object("kind", "exact")));
+                choices.add(object("id", item, "amount", "1", "consume", object("kind", "keep"), "returns", new JsonArray(),
+                        "rule", object("kind", "except", "base", object("kind", "wildcard", "meta", false, "nbt", true),
+                                "exclude", array(object("id", prior, "rule", object("kind", "exact"))))));
             }
             inputs.add(object("slot", 0, "kind", "item", "choices", choices));
             outputs.add(object("slot", 0, "kind", machine ? "fluid" : "item", "id", machine ? water : paper,

@@ -201,7 +201,7 @@ final class Ui implements AutoCloseable {
     }
 
     static JsonArray progress(int width, int height, int ticks, int direction) {
-        if (width <= 0 || height <= 0 || ticks <= 0 || ticks > 4096 || direction < 0 || direction > 7) throw fault("Invalid native NEI progress parameters");
+        if (width <= 0 || height <= 0 || ticks <= 0 || ticks > 4096 || direction < 0) throw fault("Invalid native NEI progress parameters");
         return frames(ticks, tick -> {
             float p = tick / (float) ticks;
             if (direction > 3) p = 1 - p;
