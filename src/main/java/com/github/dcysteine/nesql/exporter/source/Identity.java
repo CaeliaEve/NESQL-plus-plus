@@ -72,6 +72,7 @@ public final class Identity {
             magic = cost;
         }
         key.add("magic", magic);
+        if (record.has("process") && !record.get("process").isJsonNull()) key.add("process", record.get("process"));
         return "recipe_" + CanonicalJson.digest(key);
     }
 

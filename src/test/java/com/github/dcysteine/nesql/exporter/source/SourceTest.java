@@ -111,13 +111,18 @@ public final class SourceTest {
             }) items.add(object("id", Identity.item(sample[0], 0, null), "registry", sample[0], "meta", 0, "nbt", null,
                     "name", text.apply(sample[1]), "tooltip", new JsonArray(), "stackLimit", 64, "durability", 0,
                     "tools", new JsonObject(), "tags", new JsonArray(), "icon", asset, "order", null, "aspects", new JsonArray()));
-            records(dataset, "fluids", new java.util.ArrayList<>(Arrays.asList(object("id", water, "registry", "water", "nbt", JsonNull.INSTANCE,
+            java.util.List<JsonObject> fluids = new java.util.ArrayList<>(Arrays.asList(object("id", water, "registry", "water", "nbt", JsonNull.INSTANCE,
                     "name", text.apply("Water"), "temperature", 300, "density", 1000, "viscosity", 1000,
                     "luminosity", 0, "gaseous", false, "icon", asset),
                     object("id", crystal, "registry", "Liquid Crystal", "nbt", null, "name", text.apply("Liquid Crystal 流体样本"),
                             "temperature", 300, "density", 1000, "viscosity", 1000, "luminosity", 0, "gaseous", false, "icon", asset),
                     object("id", Identity.fluid("honey", null), "registry", "honey", "nbt", null, "name", text.apply("Honey 蜂蜜"),
-                            "temperature", 300, "density", 1000, "viscosity", 1000, "luminosity", 0, "gaseous", false, "icon", asset))));
+                            "temperature", 300, "density", 1000, "viscosity", 1000, "luminosity", 0, "gaseous", false, "icon", asset)));
+        for (String name : new String[]{"hydrogen", "helium", "rawstarmatter", "molten.spacetime"}) {
+            fluids.add(object("id",Identity.fluid(name,null),"registry",name,"nbt",null,
+                    "name",text.apply(name),"temperature",300,"density",1000,"viscosity",1000,"luminosity",0,"gaseous",false,"icon",asset));
+        }
+            records(dataset,"fluids",fluids);
             JsonObject origin = object("owner", "fixture", "handler", "fixture:machine", "key", "machine");
             recipes(dataset, stone, paper, water, asset, text, items);
             for (JsonObject item : items) if (!item.has("armor")) item.addProperty("armor", false);
@@ -236,10 +241,36 @@ public final class SourceTest {
         }
         Changes.fixture(items, recipes, categories, views, paper, texture, text);
         Changes.scans(items, recipes, categories, Identity.fluid("honey", null), texture, text);
+        harmony(dataset, recipes, categories, stone, paper, texture, text);
         records(dataset, "recipes", recipes); records(dataset, "categories", categories);
         java.util.TreeMap<String, JsonObject> unique = new java.util.TreeMap<>();
         for (JsonObject view : views) unique.put(view.get("id").getAsString(), view);
         records(dataset, "views", new java.util.ArrayList<>(unique.values()));
+    }
+
+    private static void harmony(Dataset dataset, java.util.List<JsonObject> recipes, java.util.List<JsonObject> categories,
+                                String trigger, String product, String icon, java.util.function.Function<String,String> text) throws Exception {
+        JsonObject origin=object("owner","fixture","handler","harmony","key","planet");
+        String category=Identity.origin("category",origin);
+        categories.add(object("id",category,"name",text.apply("Harmony 鸿蒙之眼"),"source",origin,
+                "icon",object("kind","item","id",trigger),"machines",array(),"view",null,"order",categories.size()));
+        for (int mode=0;mode<2;mode++) {
+            JsonArray inputs=array(object("slot",0,"kind","item","choices",array(object("id",trigger,"amount","1",
+                    "consume",object("kind","keep"),"returns",array(),"rule",object("kind","wildcard","meta",true,"nbt",true)))));
+            String[] names=mode==0 ? new String[]{"hydrogen","helium"} : new String[]{"rawstarmatter"};
+            for(int at=0;at<names.length;at++) inputs.add(object("slot",mode==0?at:2,"kind","fluid","choices",array(object(
+                    "id",Identity.fluid(names[at],null),"amount",mode==0?"1000000000":"99200","consume",object("kind","buffer"),
+                    "returns",array(),"rule",object("kind","wildcard","meta",false,"nbt",true)))));
+            JsonArray outputs=array(object("slot",0,"kind","item","id",product,"amount",null,"change",null,"role","result",
+                    "chance",Chance.of(1,1),"quantity",object("kind","harmony","outcome","success","nominal","9007199254740993")),
+                    object("slot",0,"kind","fluid","id",Identity.fluid("molten.spacetime",null),"amount",null,"change",null,"role","result",
+                    "chance",Chance.of(1,1),"quantity",object("kind","harmony","outcome","failure","nominal","57600")));
+            JsonObject recipe=object("source",origin,"category",category,"inputs",inputs,"outputs",outputs,"duration",null,"energy",null,
+                    "grid",null,"magic",null,"view",null,"order",mode,"properties",new JsonObject(),
+                    "process",object("kind","harmony","mode",mode==0?"single":"parallel","hydrogen","1000000000","helium","1000000000",
+                            "ticks","360000","startEu","123456789012345","outputEu","234567890123456","chance","0.95","rocketTier",1,"compressionTier",1));
+            recipe.addProperty("id",Identity.recipe(recipe));recipes.add(recipe);
+        }
     }
 
     private static void magic(Dataset dataset, String item, String image, java.util.function.Function<String, String> text) throws Exception {
