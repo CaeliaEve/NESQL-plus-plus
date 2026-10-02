@@ -38,6 +38,7 @@ public final class GameTest {
         Bootstrap.func_151354_b();
         if (Boolean.getBoolean("nesql.nativeFilterTests")) { NativeFilterTest.run(); return; }
         if (Boolean.getBoolean("nesql.nativeInfusionTests")) { NativeInfusionTest.run(); return; }
+        if (Boolean.getBoolean("nesql.nativeAeTests")) { NativeAeTest.run(); return; }
         CluesTest.run();
         StructuresTest.run();
         PreviewTest.run();

@@ -30,11 +30,12 @@ import static com.github.dcysteine.nesql.exporter.source.Json.*;
 
 /** Explicit enumeration adapters. An unsupported handler is an error, never an empty recipe list. */
 final class Recipes {
-    enum Adapter { GT, MAGIC, FURNACE, SHAPED, SHAPELESS }
+    enum Adapter { GT, MAGIC, AE, FURNACE, SHAPED, SHAPELESS }
 
     static Adapter adapter(ICraftingHandler handler) {
         if (GtRecipes.supports(handler)) return Adapter.GT;
         if (MagicRecipes.supports(handler)) return Adapter.MAGIC;
+        if (AeRecipes.supports(handler)) return Adapter.AE;
         if (handler.getClass() == FurnaceRecipeHandler.class) return Adapter.FURNACE;
         if (handler.getClass() == ShapedRecipeHandler.class) return Adapter.SHAPED;
         if (handler.getClass() == ShapelessRecipeHandler.class) return Adapter.SHAPELESS;
@@ -103,6 +104,7 @@ final class Recipes {
             }
             GtRecipes gt = null;
             MagicRecipes magic = null;
+            AeRecipes ae = null;
             try {
                 if (adapter == Adapter.GT) {
                     GTNEIDefaultHandler machine = (GTNEIDefaultHandler) handler;
@@ -110,6 +112,8 @@ final class Recipes {
                     gt = new GtRecipes(machine, views, id);
                 } else if (adapter == Adapter.MAGIC) {
                     magic = new MagicRecipes(handler);
+                } else if (adapter == Adapter.AE) {
+                    ae = new AeRecipes(handler);
                 } else if (adapter == Adapter.FURNACE) {
                     handler.loadCraftingRecipes("smelting");
                 } else if (adapter == Adapter.SHAPED || adapter == Adapter.SHAPELESS) {
@@ -127,7 +131,7 @@ final class Recipes {
                 }
                 facts.row("categories", object("id", id, "source", origin, "name", facts.text(name),
                         "icon", icon, "machines", machines, "view", null, "order", order));
-                return new Cursor(this, handler, facts, views, gt, magic);
+                return new Cursor(this, handler, facts, views, gt, magic, ae);
             } catch (RuntimeException | Error failure) {
                 try { if (gt != null) gt.close(); }
                 catch (RuntimeException | Error cleanup) { failure.addSuppressed(cleanup); }
@@ -144,15 +148,17 @@ final class Recipes {
         private final boolean views;
         private final GtRecipes gt;
         private final MagicRecipes magic;
+        private final AeRecipes ae;
         private final JsonArray decorations;
         private final Set<String> recipes = new HashSet<>();
 
-        Cursor(Handler source, TemplateRecipeHandler handler, Facts facts, boolean views, GtRecipes gt, MagicRecipes magic) {
+        Cursor(Handler source, TemplateRecipeHandler handler, Facts facts, boolean views, GtRecipes gt, MagicRecipes magic, AeRecipes ae) {
             this.source = source; this.handler = handler; this.facts = facts; this.views = views; this.gt = gt; this.magic = magic;
+            this.ae = ae;
             decorations = new JsonArray();
         }
 
-        int size() { return magic == null ? handler.numRecipes() : magic.size(); }
+        int size() { return ae != null ? ae.size() : magic == null ? handler.numRecipes() : magic.size(); }
 
         void capture(int index) {
             capture(index, facts);
@@ -177,6 +183,7 @@ final class Recipes {
                 return;
             }
             else if (magic != null) { if (!magic.capture(index, row)) return; }
+            else if (ae != null) { ae.capture(index, row); }
             else {
                 boolean crafting = !(handler instanceof FurnaceRecipeHandler);
                 int slot = 0;
@@ -216,7 +223,7 @@ final class Recipes {
                 }
                 for (com.google.gson.JsonElement element : decorations) row.elements.add(element);
                 HandlerInfo info = GuiRecipeTab.getHandlerInfo(handler);
-                int at = magic == null ? index : 0;
+                int at = magic == null && ae == null ? index : 0;
                 int width = info.getWidth(), height = handler.getRecipeHeight(at);
                 if (gt != null) { width = gt.ui.width(width); height = gt.ui.height(height); }
                 for (com.google.gson.JsonElement element : row.elements) {

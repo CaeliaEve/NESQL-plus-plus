@@ -109,6 +109,15 @@ tasks.register<JavaExec>("nativeInfusionTest") {
     systemProperty("nesql.nativeInfusionTests", "true")
 }
 
+tasks.register<JavaExec>("nativeAeTest") {
+    group = "verification"
+    dependsOn("testClasses")
+    classpath = sourceSets.test.get().runtimeClasspath + gameLibraries + files(project.findProperty("nativeTestJar"))
+    main = "com.github.dcysteine.nesql.exporter.capture.NativeAeTest"
+    maxHeapSize = "256m"
+    systemProperty("nesql.nativeAeTests", "true")
+}
+
 // Requires a real compatibility OpenGL context (Pbuffer); run explicitly or under Xvfb in CI.
 val glNatives by configurations.creating
 val nativePlatform = if (System.getProperty("os.name").startsWith("Windows")) "windows" else "linux"

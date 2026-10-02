@@ -25,6 +25,30 @@ satisfiable OR. The recipe checker retains the excluded native recipe index.
 
 ## Reproducing offline evidence
 
+## AE2 crafting
+
+The exact NEIAEShapedRecipeHandler and NEIAEShapelessRecipeHandler identities
+read enabled recipes from CraftingManager in the native registry order. The
+pinned ShapedRecipe/ShapelessRecipe implementations supply ingredient sets and
+matching semantics; arbitrary subclasses are rejected. Each cell consumes one
+item, ignores NBT as the native matcher does, and retains wildcard metadata.
+Grid holes, dimensions, the mirror flag, shapeless identity, native output count
+and crafting container returns are retained. Native NEI caches supply layout.
+
+Those caches call setMaxSize on their inputs, so their recipe projection and
+ingredient arrays are independent copies. The offline regression checks two
+input alternatives and source immutability, as well as enabled filtering,
+mirroring enabled/disabled, holes, NBT matching and output counts.
+
+Run `nativeAeTest -PnativeTestJar=<derived-AE2.jar>`. Original
+appliedenergistics2-rv3-beta-695-GTNH.jar SHA256:
+`1601d33565f40478a073327ab50f76a127063b8917e3a192e302d54e0ac70a44`.
+The colored-cable preference requires AE2's fully initialized API/block registry;
+that branch and actual wildcard expansion remain live acceptance requirements.
+Local conformance is not a claim that every installed AE2 recipe passed.
+
+## Reproducing offline evidence
+
 No client or world is launched. `scripts/remap-native-test.py` accepts an original
 mod jar, ForgeGradle's `srg-mcp.srg`, and a **new** derived test-jar path. It emits
 an original/mapping/derived SHA256 receipt. Derived jars remain under ignored
