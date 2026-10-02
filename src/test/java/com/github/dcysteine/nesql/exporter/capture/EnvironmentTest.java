@@ -101,7 +101,8 @@ public final class EnvironmentTest {
         byte[] bytes = new byte[300 * 1024];
         Files.write(file, bytes);
         String first = Sources.hash(file);
-        try (Fingerprints hashes = new Fingerprints()) {
+        // A hard-link witness must share the input's volume, including explicit fixture output paths.
+        try (Fingerprints hashes = new Fingerprints(directory)) {
             if (!hashes.hash(file).equals(first) || !hashes.hash(file).equals(first)) throw new AssertionError("Cached hash differs from input bytes");
             if (System.getProperty("os.name").startsWith("Windows")) {
                 try (java.nio.channels.FileChannel writer = java.nio.channels.FileChannel.open(file, java.nio.file.StandardOpenOption.WRITE)) {
@@ -112,7 +113,7 @@ public final class EnvironmentTest {
             }
         }
         bytes[0] = 7; Files.write(file, bytes);
-        try (Fingerprints hashes = new Fingerprints()) {
+        try (Fingerprints hashes = new Fingerprints(directory)) {
             if (hashes.hash(file).equals(first)) throw new AssertionError("Closed lease kept a stale hash");
             Path small = directory.resolve("mutable.txt"); Files.write(small, new byte[] {1});
             String prior = hashes.hash(small); java.nio.file.attribute.FileTime time = Files.getLastModifiedTime(small);

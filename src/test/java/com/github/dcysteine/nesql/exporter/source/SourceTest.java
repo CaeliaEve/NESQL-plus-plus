@@ -182,7 +182,8 @@ public final class SourceTest {
             if (!machine) choices.add(object("id", item, "amount", "1", "consume", object("kind", "consume"), "returns", new JsonArray(),
                     "rule", object("kind", "ore", "name", "paper", "exclusive", true)));
             else {
-                choices.add(object("id", item, "amount", "7", "consume", object("kind", "consume"), "returns", new JsonArray(), "rule", object("kind", "exact")));
+                choices.add(object("id", item, "amount", "7", "consume", object("kind", "consume"), "returns", new JsonArray(),
+                        "rule", object("kind", "without_tags", "keys", array("frypanKill"))));
                 choices.add(object("id", item, "amount", "1", "consume", object("kind", "keep"), "returns", new JsonArray(), "rule", object("kind", "exact")));
             }
             inputs.add(object("slot", 0, "kind", "item", "choices", choices));

@@ -78,7 +78,67 @@ final class NativeFactoriesTest {
         require(exactChoice.get("id").getAsString().equals(Identity.item("minecraft:book", 32767, null))
                 && !exactChoice.getAsJsonObject("rule").get("meta").getAsBoolean(), "NEI wildcard expansion broadened an exact Mantle key");
         casting();
+        drying();
         System.out.println("Native TConstruct: alloy stoichiometry, maximum integer batches, fluid NBT, one-item melting, exact metadata, temperature and owned display passed");
+    }
+    private static void drying() throws Exception {
+        Class<?> registry = Class.forName("tconstruct.library.crafting.DryingRackRecipes");
+        Class<?> type = Class.forName("tconstruct.library.crafting.DryingRackRecipes$DryingRecipe");
+        Constructor<?> constructor = type.getDeclaredConstructor(ItemStack.class, int.class, ItemStack.class);
+        constructor.setAccessible(true);
+        Method matches = type.getMethod("matches", ItemStack.class);
+        ItemStack input = new ItemStack(Items.water_bucket, 1, 32767), output = new ItemStack(Items.diamond, 3);
+        input.setTagInfo("owner", new net.minecraft.nbt.NBTTagString("required"));
+        Object recipe = constructor.newInstance(input, 123, output);
+        ItemStack offered = input.copy(); offered.setTagInfo("frypanKill", new net.minecraft.nbt.NBTTagByte((byte) 1));
+        require((Boolean) matches.invoke(recipe, offered) && offered.getTagCompound().hasKey("frypanKill"),
+                "Native drying should strip only frypanKill on a copy");
+        offered.setTagInfo("extra", new net.minecraft.nbt.NBTTagInt(1));
+        require(!(Boolean) matches.invoke(recipe, offered), "Native drying unexpectedly accepts other extra NBT");
+        offered = input.copy(); offered.stackSize = 2;
+        require(!(Boolean) matches.invoke(recipe, offered), "Native drying ignores input quantity");
+        offered = input.copy(); offered.setItemDamage(0);
+        require(!(Boolean) matches.invoke(recipe, offered), "Native drying treats 32767 as a wildcard");
+        ItemStack plain = new ItemStack(Items.paper), empty = plain.copy();
+        empty.setTagCompound(new net.minecraft.nbt.NBTTagCompound());
+        Object plainRecipe = constructor.newInstance(plain, 40, output);
+        Object emptyRecipe = constructor.newInstance(empty, 40, output);
+        require((Boolean) matches.invoke(plainRecipe, empty) && !(Boolean) matches.invoke(emptyRecipe, empty),
+                "Native drying empty-compound normalization changed");
+        TemplateRecipeHandler handler = (TemplateRecipeHandler) Class.forName("tconstruct.plugins.nei.RecipeHandlerDryingRack").newInstance();
+        require(Recipes.adapter(handler) != null, "Drying rack has no native registry adapter");
+        Field recipes = registry.getField("recipes"); Object previous = recipes.get(null);
+        ArrayList<Object> entries = new ArrayList<>(); entries.add(recipe); entries.add(plainRecipe); entries.add(emptyRecipe);
+        recipes.set(null, entries);
+        try {
+            RecipeRow row = row(input, Collections.singletonList(output)); capture("TinkerRecipes", handler, recipe, row);
+            com.google.gson.JsonObject choice = row.inputs.get(0).getAsJsonObject().getAsJsonArray("choices").get(0).getAsJsonObject();
+            require(choice.getAsJsonObject("rule").get("kind").getAsString().equals("without_tags")
+                    && choice.getAsJsonObject("rule").getAsJsonArray("keys").toString().equals("[\"frypanKill\"]"), "Drying widened NBT matching");
+            require(choice.get("amount").getAsString().equals("1") && choice.getAsJsonArray("returns").size() == 0
+                    && choice.getAsJsonObject("consume").get("kind").getAsString().equals("consume"), "Drying invented container returns");
+            require(choice.get("id").getAsString().equals(Identity.item("minecraft:water_bucket", 32767, TypedNbt.encode(input.getTagCompound())))
+                    && row.record.get("duration").getAsString().equals("123")
+                    && row.outputs.get(0).getAsJsonObject().get("amount").getAsString().equals("3"), "Drying changed metadata, timing or fixed yield");
+            require(handler.arecipes.get(0).getIngredient().relx == 44 && handler.arecipes.get(0).getResult().relx == 98,
+                    "Native drying slot positions changed");
+            handler.arecipes.get(0).getIngredient().items[0].getTagCompound().setString("owner", "mutated");
+            handler.arecipes.get(0).getResult().items[0].stackSize = 99;
+            require(output.stackSize == 3 && input.getTagCompound().getString("owner").equals("required"), "Drying display mutated registry facts");
+            ItemStack oversized = input.copy(); oversized.stackSize = 2;
+            ItemStack stripped = input.copy(); stripped.setTagInfo("frypanKill", new net.minecraft.nbt.NBTTagByte((byte) 0));
+            for (Object impossible : Arrays.asList(emptyRecipe, constructor.newInstance(oversized, 40, output), constructor.newInstance(stripped, 40, output),
+                    constructor.newInstance(input, 0, output), constructor.newInstance(input, 1, plain))) {
+                entries.add(impossible);
+                require(!TinkerRecipes.capture(handler, impossible, row(input, Collections.singletonList(output))),
+                        "Drying exported an unreachable or shadowed recipe");
+            }
+            // Even a zero-time first match blocks later recipes; never search for the first usable match.
+            entries.clear(); entries.add(constructor.newInstance(plain, 0, output)); entries.add(plainRecipe);
+            require(!TinkerRecipes.capture(handler, plainRecipe, row(plain, Collections.singletonList(output))),
+                    "Drying bypassed the native first-match blocker");
+        } finally { recipes.set(null, previous); }
+        System.out.println("Native drying: selective NBT removal, exact count/meta, unreachable templates, precedence, duration and owned display passed");
     }
     private static void casting() throws Exception {
         Class<?> recipeType = Class.forName("tconstruct.library.crafting.CastingRecipe");

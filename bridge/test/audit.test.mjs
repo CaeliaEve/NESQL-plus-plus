@@ -80,6 +80,7 @@ test('new native routes are mapped without rewriting old unsupported observation
     ['tconstruct.plugins.nei.RecipeHandlerMelting', 'TinkerRecipes'],
     ['tconstruct.plugins.nei.RecipeHandlerCastingTable', 'TinkerRecipes'],
     ['tconstruct.plugins.nei.RecipeHandlerCastingBasin', 'TinkerRecipes'],
+    ['tconstruct.plugins.nei.RecipeHandlerDryingRack', 'TinkerRecipes'],
     ['micdoodle8.mods.galacticraft.core.nei.BuggyRecipeHandler', 'SpaceRecipes'],
     ['de.katzenpapst.amunra.nei.recipehandler.ARNasaWorkbenchShuttle', 'SpaceRecipes'],
     ['micdoodle8.mods.galacticraft.core.nei.CircuitFabricatorRecipeHandler', 'CircuitRecipes'],

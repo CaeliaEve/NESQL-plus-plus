@@ -6,6 +6,7 @@ import codechicken.nei.recipe.TemplateRecipeHandler;
 import com.github.dcysteine.nesql.exporter.task.Jobs;
 import net.minecraft.item.Item;
 import net.minecraft.item.ItemStack;
+import net.minecraft.nbt.NBTTagCompound;
 import net.minecraftforge.fluids.FluidStack;
 import java.lang.reflect.InvocationTargetException;
 import java.util.*;
@@ -22,16 +23,19 @@ final class TinkerRecipes implements RegistryRecipes {
     static boolean supports(ICraftingHandler handler) {
         String name = handler.getClass().getName();
         return name.equals(HANDLERS + "RecipeHandlerAlloying") || name.equals(HANDLERS + "RecipeHandlerMelting")
-                || name.equals(HANDLERS + "RecipeHandlerCastingTable") || name.equals(HANDLERS + "RecipeHandlerCastingBasin");
+                || name.equals(HANDLERS + "RecipeHandlerCastingTable") || name.equals(HANDLERS + "RecipeHandlerCastingBasin")
+                || name.equals(HANDLERS + "RecipeHandlerDryingRack");
     }
     private static boolean casting(TemplateRecipeHandler handler) { return handler.getClass().getName().equals(HANDLERS + "RecipeHandlerCastingTable")
             || handler.getClass().getName().equals(HANDLERS + "RecipeHandlerCastingBasin"); }
     private static boolean alloying(TemplateRecipeHandler handler) { return handler.getClass().getName().equals(HANDLERS + "RecipeHandlerAlloying"); }
+    private static boolean drying(TemplateRecipeHandler handler) { return handler.getClass().getName().equals(HANDLERS + "RecipeHandlerDryingRack"); }
     TinkerRecipes(TemplateRecipeHandler handler) {
         version("TConstruct", "1.13.57-GTNH");
         version("Mantle", "0.5.1");
         this.handler = handler;
-        if (casting(handler)) {
+        if (drying(handler)) recipes.addAll(dryingRecipes());
+        else if (casting(handler)) {
             if (cpw.mods.fml.common.Loader.isModLoaded("IguanaTweaksTConstruct")) version("IguanaTweaksTConstruct", "2.6.6");
             Object registry = invoke(type("tconstruct.library.TConstructRegistry"), null,
                     handler.getClass().getName().endsWith("Table") ? "getTableCasting" : "getBasinCasting", new Class<?>[0]);
@@ -46,14 +50,63 @@ final class TinkerRecipes implements RegistryRecipes {
         if (recipes.size() > 262144) throw fault("TConstruct registry exceeds its budget");
     }
     public int size() { return recipes.size(); }
-    public boolean capture(int index, RecipeRow row) { return capture(handler, recipes.get(index), row); }
+    public boolean capture(int index, RecipeRow row) { return drying(handler) ? dry(handler, recipes.get(index), row, recipes) : capture(handler, recipes.get(index), row); }
 
     static boolean capture(TemplateRecipeHandler handler, Object recipe, RecipeRow row) {
         if (!supports(handler)) throw fault("Unknown TConstruct recipe handler");
+        if (drying(handler)) return dry(handler, recipe, row, dryingRecipes());
         if (casting(handler)) return TinkerCasting.capture(handler, recipe, row);
         if (alloying(handler)) return alloy(handler, recipe, row);
         if (!(recipe instanceof ItemStack)) throw fault("Invalid TConstruct melting source");
         melting(handler, (ItemStack) recipe, row); return true;
+    }
+
+    private static List<?> dryingRecipes() {
+        List<?> entries = new ArrayList<>((List<?>) field(type(CRAFTING + "DryingRackRecipes"), null, "recipes"));
+        if (entries.size() > 262144) throw fault("Drying registry exceeds its budget");
+        for (Object entry : entries) {
+            Jobs.checkpoint();
+            if (entry == null || !entry.getClass().getName().equals(CRAFTING + "DryingRackRecipes$DryingRecipe"))
+                throw fault("Unadapted drying recipe implementation");
+        }
+        return entries;
+    }
+
+    private static boolean dry(TemplateRecipeHandler handler, Object recipe, RecipeRow row, List<?> entries) {
+        if (!entries.contains(recipe)) throw fault("Drying recipe is not registered");
+        ItemStack source = (ItemStack) field(recipe, "input");
+        // The rack holds one item. The native predicate includes count and literal metadata.
+        if (source == null || source.getItem() == null || source.stackSize != 1) return false;
+        NBTTagCompound nbt = source.getTagCompound();
+        // Removing frypanKill from the offered stack can never produce either template.
+        if (nbt != null && (nbt.hasNoTags() || nbt.hasKey("frypanKill"))) return false;
+        for (Object prior : entries) {
+            if (prior == recipe) break;
+            Jobs.checkpoint();
+            if (ItemStack.areItemStacksEqual((ItemStack) field(prior, "input"), source)) return false;
+        }
+        int time = (Integer) field(recipe, "time");
+        if (time <= 0) return false; // maxTime <= 0 disables DryingRackLogic, including later matches.
+        ItemStack output = (ItemStack) field(recipe, "result");
+        if (output == null || output.getItem() == null || output.stackSize <= 0) throw fault("Invalid native drying result");
+        // The native cached recipe stores its arguments by reference; supply an owned projection.
+        Class<?> recipeType = type(CRAFTING + "DryingRackRecipes$DryingRecipe");
+        Object projection;
+        try {
+            java.lang.reflect.Constructor<?> constructor = recipeType.getDeclaredConstructor(ItemStack.class, int.class, ItemStack.class);
+            constructor.setAccessible(true); projection = constructor.newInstance(source.copy(), time, output.copy());
+        } catch (ReflectiveOperationException error) {
+            Jobs.Fault failure = fault("Cannot project native drying recipe"); failure.initCause(error); throw failure;
+        }
+        TemplateRecipeHandler.CachedRecipe cached = (TemplateRecipeHandler.CachedRecipe) construct(type(HANDLERS + "RecipeHandlerDryingRack$CachedDryingRackRecipe"),
+                new Class<?>[] {handler.getClass(), recipeType}, handler, projection);
+        // PositionedStack normally expands 32767; this registry matches it literally.
+        PositionedStack position = cached.getIngredient(); position.items = new ItemStack[] {source.copy()}; position.item = position.items[0];
+        row.itemInput(position, 0, Collections.singletonList(new RecipeRow.Ingredient(source.copy(), 1, false,
+                object("kind", "without_tags", "keys", array("frypanKill")))), false);
+        row.itemOutput(cached.getResult(), 0, output.copy(), 10000);
+        row.record.addProperty("duration", Integer.toString(time));
+        replace(handler, cached); return true;
     }
 
     private static boolean alloy(TemplateRecipeHandler handler, Object recipe, RecipeRow row) {

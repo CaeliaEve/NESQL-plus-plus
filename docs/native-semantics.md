@@ -1,8 +1,28 @@
 # Consolidated repair: native magic semantics
 
-Development version 0.16.0 writes source revision 15. It requires Compiler and
-contract package 0.15.0 (catalog revision 14). This source version change is not
+Development version 0.18.0 writes source revision 16. It requires Compiler and
+contract package 0.16.0 (catalog revision 15). This source version change is not
 a game installation or a declaration that all adapters are complete.
+
+## Selective NBT matching and the drying rack
+
+`without_tags` removes only a sorted, nonempty set of root keys from the offered
+stack, normalizes an empty offered compound to null, then compares all remaining
+NBT against the unmodified reference. Registry and metadata are exact. Reference
+NBT containing a removed key or an empty compound is unreachable and rejected.
+This is distinct from `tags` (allow extra fields) and `wildcard` (ignore all NBT).
+Exact item identities and the stored typed NBT are unchanged. Older source/catalog
+revisions are rejected explicitly; historical exports retain their old toolchain.
+
+TConstruct 1.13.57-GTNH's `DryingRackRecipes` uses this rule with `frypanKill`.
+The native rack accepts one item and compares literal metadata, including 32767.
+Only the first matching registry entry applies, including a zero-time entry that
+blocks later ones. Nonpositive duration, unreachable NBT templates, and counts
+other than one cannot operate and are omitted. Result count/NBT and positive
+duration are preserved, without container returns. NEI receives owned copies at
+its original input/output positions, with no wildcard expansion or invented
+progress animation. The existing TConstruct native test family exercises these
+rules against the actual remapped JAR. Full runtime coverage remains unverified.
 
 ## PreserveFilter
 

@@ -16,8 +16,8 @@ const routes = new Map([
   ...['core.nei.BuggyRecipeHandler', 'planets.mars.nei.CargoRocketRecipeHandler', 'planets.asteroids.nei.AstroMinerRecipeHandler']
     .map(name => [`micdoodle8.mods.galacticraft.${name}`,
       { adapter: 'SpaceRecipes', registry: 'Galacticraft 3.3.13 native NASA registries and physical slots', evidence: 'src/main/java/com/github/dcysteine/nesql/exporter/capture/SpaceRecipes.java' }]),
-  ...['RecipeHandlerAlloying', 'RecipeHandlerMelting', 'RecipeHandlerCastingTable', 'RecipeHandlerCastingBasin'].map(name => [`tconstruct.plugins.nei.${name}`,
-    { adapter: 'TinkerRecipes', registry: 'TConstruct 1.13.57 Smeltery registries / Mantle exact metadata keys', evidence: 'src/main/java/com/github/dcysteine/nesql/exporter/capture/TinkerRecipes.java' }]),
+  ...['RecipeHandlerAlloying', 'RecipeHandlerMelting', 'RecipeHandlerCastingTable', 'RecipeHandlerCastingBasin', 'RecipeHandlerDryingRack'].map(name => [`tconstruct.plugins.nei.${name}`,
+    { adapter: 'TinkerRecipes', registry: 'TConstruct 1.13.57 native crafting registries and machine predicates', evidence: 'src/main/java/com/github/dcysteine/nesql/exporter/capture/TinkerRecipes.java' }]),
   ...['NEIHandlerCentrifuge', 'NEIHandlerStill'].map(name => [`forestry.factory.recipes.nei.${name}`,
     { adapter: 'ForestryRecipes', registry: 'Forestry 4.10.17 RecipeManagers / native factory consumption', evidence: 'src/main/java/com/github/dcysteine/nesql/exporter/capture/ForestryRecipes.java' }]),
   ...['MaceratorRecipeHandler', 'ExtractorRecipeHandler', 'CompressorRecipeHandler', 'MetalFormerRecipeHandlerCutting',
