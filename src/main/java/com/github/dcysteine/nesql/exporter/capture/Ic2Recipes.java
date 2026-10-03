@@ -135,15 +135,7 @@ final class Ic2Recipes implements RegistryRecipes {
         row.record.addProperty("energy", Integer.toString(machine.energy));
         Class<?> api = type(API + "IRecipeInput");
         // The layout receives only owned copies. In particular, ore-dictionary stacks are shared by IC2.
-        Object projection = Proxy.newProxyInstance(api.getClassLoader(), new Class<?>[] {api}, (proxy, method, args) -> {
-            if (method.getName().equals("getAmount")) return (int) ingredients.get(0).amount;
-            if (method.getName().equals("getInputs")) {
-                List<ItemStack> copies = new ArrayList<>();
-                for (RecipeRow.Ingredient ingredient : ingredients) copies.add(ingredient.item.copy());
-                return copies;
-            }
-            throw fault("Unexpected IC2 layout predicate call: " + method.getName());
-        });
+        Object projection = projection(ingredients);
         TemplateRecipeHandler.CachedRecipe cached;
         try {
             Class<?> resultType = type(API + "RecipeOutput");
@@ -165,7 +157,20 @@ final class Ic2Recipes implements RegistryRecipes {
         handler.arecipes.clear(); handler.arecipes.add(cached);
     }
 
-    private static List<RecipeRow.Ingredient> ingredients(Object input) {
+    static Object projection(List<RecipeRow.Ingredient> ingredients) {
+        Class<?> api = type(API + "IRecipeInput");
+        return Proxy.newProxyInstance(api.getClassLoader(), new Class<?>[] {api}, (proxy, method, args) -> {
+            if (method.getName().equals("getAmount")) return (int) ingredients.get(0).amount;
+            if (method.getName().equals("getInputs")) {
+                List<ItemStack> copies = new ArrayList<>();
+                for (RecipeRow.Ingredient ingredient : ingredients) copies.add(ingredient.item.copy());
+                return copies;
+            }
+            throw fault("Unexpected IC2 layout predicate call: " + method.getName());
+        });
+    }
+
+    static List<RecipeRow.Ingredient> ingredients(Object input) {
         if (input == null) throw fault("Missing IC2 input predicate");
         String name = input.getClass().getName();
         boolean ore = name.equals(API + "RecipeInputOreDict");
