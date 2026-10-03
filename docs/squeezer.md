@@ -1,7 +1,7 @@
 # Forestry Squeezer capture
 
-Development 0.37.0 writes Source 34 for Compiler/contracts 0.34.0 and Catalog
-33. This is a local implementation checkpoint, not a game release or a claim of
+Development 0.38.0 writes Source 35 for Compiler/contracts 0.35.0 and Catalog
+34. This is a local implementation checkpoint, not a game release or a claim of
 complete Forestry coverage.
 
 The production router recognizes Forestry 4.10.17's exact NEI Squeezer handler.
@@ -32,10 +32,27 @@ periods (native modulo by zero), negative periods and cycles outside the motion
 contract budget remain explicit `view_unsupported`; they are not clamped to a
 different animation. Semantic-only capture still retains signed work parameters.
 
-Dynamic `IFluidContainerItem` callbacks remain explicit `recipe_unsupported`
-suffix entries. They are not executed during fixed-registry enumeration and
-cannot be counted as completed recipes. Callback adapters, Still source
-reservation/selection and Centrifuge pending-product lifecycle remain open.
+Dynamic `IFluidContainerItem` entries now have `{registry, kind}` descriptors:
+
+- `noFluid`: exact EnderStorage 1.7.7 `ItemEnderStorage.getFluid` always returns
+  null, so no container rule or drain callback can run.
+- `forge`: both getFluid/drain methods are inherited from Forge's
+  `ItemFluidContainer`, and no container key can match that item registry.
+- `ic2`: pinned IC2 2.2.828-experimental fluid cell, sprayer or fluid-armor
+  implementations preserve item identity when drained, and have no matching
+  container key. Their read still creates an empty NBT root on the offered
+  original. This changes stock condensation and must precede ordinary selection.
+- `unsupported`: unknown overrides, unpinned versions or potentially matching
+  dynamic container rules remain explicit `recipe_unsupported` suffix entries.
+
+Method declaring owners and exact IC2/EnderStorage classes are checked without
+executing callbacks. The disjoint proof covers stack, Item and expanded ore
+keys, including metadata/NBT variants conservatively. Every batch recomputes
+the proof with the rule snapshot. These proofs remove impossible container
+branches; they do not implement general dynamic fluid draining. Fixed Forge
+entries never substitute for a dynamic item. Retained recipes return before
+any read side effects. Still source reservation/selection, Centrifuge lifecycle
+and other callback families remain open.
 
 Verification extends existing source/jobs/native-Forestry runners: ordinary and
 fixed native records, signed/zero/null projection, input-slot preservation,

@@ -41,6 +41,7 @@ public final class GameTest {
             return;
         }
         Loader.injectData("7", "99", "40", "1614", "1.7.10", "9.05", new java.io.File("."), Collections.emptyList());
+        cpw.mods.fml.relauncher.ReflectionHelper.setPrivateValue(Loader.class,Loader.instance(),new java.util.HashMap<String,cpw.mods.fml.common.ModContainer>(),"namedMods");
         cpw.mods.fml.relauncher.ReflectionHelper.setPrivateValue(cpw.mods.fml.relauncher.FMLRelaunchLog.class, null,
                 cpw.mods.fml.relauncher.Side.CLIENT, "side");
         Bootstrap.func_151354_b();

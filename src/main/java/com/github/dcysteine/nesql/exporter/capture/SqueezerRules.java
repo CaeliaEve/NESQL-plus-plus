@@ -71,9 +71,10 @@ final class SqueezerRules {
             if(fixed.put(key,row)!=null)throw fault("Duplicate fixed container identity");
         }
         for(JsonObject row:fixed.values())filled.add(row);
-        TreeSet<String> callbacks=new TreeSet<>();
-        for(Object raw:Item.itemRegistry)if(raw instanceof IFluidContainerItem)callbacks.add(registered((Item)raw));
-        for(String name:callbacks)dynamic.add(new JsonPrimitive(name));
+        TreeMap<String,Item> callbacks=new TreeMap<>();
+        for(Object raw:Item.itemRegistry)if(raw instanceof IFluidContainerItem)callbacks.put(registered((Item)raw),(Item)raw);
+        SqueezerCallbacks policy=new SqueezerCallbacks(rules);
+        for(Map.Entry<String,Item> callback:callbacks.entrySet())dynamic.add(policy.describe(callback.getKey(),callback.getValue()));
         JsonObject value=object("ordinary",ordinary,"containers",rules,"filled",filled,"dynamic",dynamic);
         if(CanonicalJson.bytes(value).length>16*1024*1024)throw fault("Squeezer rule snapshot exceeds 16 MiB");
         return value;

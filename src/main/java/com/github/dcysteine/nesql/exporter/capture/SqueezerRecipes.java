@@ -30,7 +30,10 @@ final class SqueezerRecipes implements RegistryRecipes {
         if(!supports(handler))throw new Jobs.Fault("handler_unsupported","Not a native Forestry squeezer");
         this.handler=handler;this.rules=rules;entries=rules.entries();
         JsonObject context=rules.context();program=Identity.content("program",object("kind","forestrySqueezer","rules",context));
-        for(JsonElement callback:context.getAsJsonArray("dynamic"))callbacks.add(callback.getAsString());
+        for(JsonElement value:context.getAsJsonArray("dynamic")){
+            JsonObject callback=value.getAsJsonObject();
+            if(callback.get("kind").getAsString().equals("unsupported"))callbacks.add(callback.get("registry").getAsString());
+        }
     }
     public int size(){return entries.size()+callbacks.size();}
     public String program(Facts facts){return rules.publish(facts);}

@@ -134,7 +134,7 @@ final class NativeSqueezerTest {
         if(!program.equals(invoke(type,snapshot,"publish",new Class<?>[]{Facts.class},facts))||!facts.drain().records.isEmpty())throw new AssertionError("Same rule context emitted twice");
         JsonObject invalid=(JsonObject)invoke(type,snapshot,"context",new Class<?>[0]);
         char[] oversized=new char[900001];Arrays.fill(oversized,'x');
-        invalid.getAsJsonArray("dynamic").add(new JsonPrimitive(new String(oversized)));
+        invalid.getAsJsonArray("dynamic").add(object("registry",new String(oversized),"kind","unsupported"));
         Facts failed=new Facts("en_US");
         for(int attempt=0;attempt<2;attempt++){
             try{failed.squeezerProgram(invalid);throw new AssertionError("Failed program was remembered as published");}
@@ -229,7 +229,8 @@ final class NativeSqueezerTest {
             for(JsonElement value:row.elements){JsonObject element=value.getAsJsonObject();if(!element.get("direction").getAsString().equals("input"))continue;int slot=element.get("slot").getAsInt();if(element.get("x").getAsInt()!=12+slot%3*18||element.get("y").getAsInt()!=10+slot/3*18)throw new AssertionError("Squeezer compacted native UI holes");}
             row.finish();records.add(row.record);
         }
-        if(adapter.size()!=size+context.getAsJsonArray("dynamic").size())throw new AssertionError("Dynamic squeezer coverage was silently omitted");
+        int unsupported=0;for(JsonElement value:context.getAsJsonArray("dynamic"))if(value.getAsJsonObject().get("kind").getAsString().equals("unsupported"))unsupported++;
+        if(adapter.size()!=size+unsupported)throw new AssertionError("Dynamic squeezer coverage was silently omitted");
         if(adapter.size()>size){try{adapter.capture(size,new RecipeRow(new Facts("en_US"),object(),"category_test",size));throw new AssertionError("Dynamic callback was declared supported");}catch(com.github.dcysteine.nesql.exporter.task.Jobs.Fault e){if(!e.code.equals("recipe_unsupported"))throw e;}}
         JsonArray itemRows=new JsonArray(),fluidRows=new JsonArray();for(JsonObject row:items.values())itemRows.add(row);for(JsonObject row:fluids.values())fluidRows.add(row);
         Files.write(Paths.get("build/native-tests/"+filename),CanonicalJson.bytes(object("program",context,"programId",program,"items",itemRows,"fluids",fluidRows,"recipes",records)));
@@ -255,7 +256,7 @@ final class NativeSqueezerTest {
             if(value.filledContainer.getItem() instanceof IFluidContainerItem)continue;
             filled.add(object("filled",stacks(array(value.filledContainer)).get(0),"empty",stacks(array(value.emptyContainer)).get(0),"fluid",fluidJson(value.fluid)));
         }
-        for(Object item:Item.itemRegistry)if(item instanceof IFluidContainerItem)dynamic.add(new JsonPrimitive(Item.itemRegistry.getNameForObject((Item)item)));
+        for(Object item:Item.itemRegistry)if(item instanceof IFluidContainerItem)dynamic.add(object("registry",Item.itemRegistry.getNameForObject((Item)item),"kind","unsupported"));
         ItemStack[] offered=copy(stock);ISqueezerRecipe selected=null;
         boolean keep=retained!=null&&(Integer)invoke(type(UTIL),null,"containsSets",new Class<?>[]{ItemStack[].class,ItemStack[].class,boolean.class,boolean.class},retained.getResources(),offered,true,false)>0;
         if(keep)selected=retained;

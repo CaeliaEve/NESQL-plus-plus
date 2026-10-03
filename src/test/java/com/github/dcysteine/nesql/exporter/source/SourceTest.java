@@ -260,7 +260,7 @@ public final class SourceTest {
         java.util.List<JsonObject> chunks = new java.util.ArrayList<>();
         JsonObject rule = object("time",3,"requirements",array(object("registry","minecraft:paper","meta",0,"amount",1,"nbt",null,"ores",array("paper"))),
                 "fluid",object("registry","water","amount",100,"nbt",null),"remnant",null,"chance","00000000");
-        String program=Programs.squeezer(object("ordinary",array(rule),"containers",array(),"filled",array(),"dynamic",array()),chunks::add);
+        String program=Programs.squeezer(object("ordinary",array(rule),"containers",array(),"filled",array(),"dynamic",array(object("registry","fixture:empty_reader","kind","noFluid"))),chunks::add);
         JsonObject sharedOrigin=object("owner","fixture","handler","fixture:sharedRules","key","sharedRules");
         categories.add(object("id",Identity.origin("category",sharedOrigin),"source",sharedOrigin,"name",text.apply("Shared machine rules 共享规则"),
                 "icon",null,"machines",array(),"view",null,"order",categories.size(),"program",program));

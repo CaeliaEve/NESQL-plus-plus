@@ -30,7 +30,7 @@ final class ProgramsTest {
         try{Programs.squeezer(rules,row->{});throw new AssertionError("Unknown program section accepted");}
         catch(IllegalArgumentException expected){}
         char[] large=new char[65500];Arrays.fill(large,'x');JsonArray callbacks=new JsonArray();
-        for(int i=0;i<32;i++)callbacks.add(new JsonPrimitive(new String(large)));
+        for(int i=0;i<32;i++)callbacks.add(object("registry",new String(large)+i,"kind","unsupported"));
         List<JsonObject> bounded=new ArrayList<>();
         Programs.squeezer(object("ordinary",array(),"containers",array(),"filled",array(),"dynamic",callbacks),bounded::add);
         int restoredCallbacks=0;
