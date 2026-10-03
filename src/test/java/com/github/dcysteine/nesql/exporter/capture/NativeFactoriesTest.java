@@ -5,6 +5,7 @@ import com.github.dcysteine.nesql.exporter.source.Chance;
 import com.github.dcysteine.nesql.exporter.source.Identity;
 import com.github.dcysteine.nesql.exporter.source.TypedNbt;
 import com.github.dcysteine.nesql.exporter.task.Jobs;
+import com.google.gson.JsonObject;
 import net.minecraft.init.Items;
 import net.minecraft.item.Item;
 import net.minecraft.item.ItemStack;
@@ -232,8 +233,15 @@ final class NativeFactoriesTest {
                         "Invisible rare roll took the guaranteed duplicate's native display slot");
         }
         require(rareFound, "Rare native product was lost");
-        require(row.record.get("duration").getAsString().equals("23") && row.record.get("energy").isJsonNull()
-                && row.properties.has("forestry:energyRF"), "Native RF or processing time was misrepresented as EU");
+        require(row.record.get("duration").isJsonNull() && row.record.get("energy").isJsonNull()
+                && row.properties.has("forestry:energyRF") && row.properties.has("forestry:workSteps")
+                && row.properties.has("forestry:stepTicks"), "Native work steps were presented as fixed game ticks");
+        require(propertyNumber(row,"forestry:workSteps")==23 && propertyNumber(row,"forestry:stepTicks")==5
+                && propertyNumber(row,"forestry:energyRF")==3680, "Forestry work units or unscaled RF changed");
+        Object largeTime=Class.forName(prefix+"recipes.CentrifugeRecipe").getConstructor(int.class,ItemStack.class,Map.class)
+                .newInstance(Integer.MAX_VALUE,input,products);
+        RecipeRow overflowTime=row(input,products.keySet());capture(centrifuge,largeTime,overflowTime);
+        require(propertyNumber(overflowTime,"forestry:energyRF")==-160,"Forestry replaced native signed RF multiplication with a long product");
         List<Map.Entry<ItemStack, Float>> reversed = new ArrayList<>(products.entrySet()); Collections.reverse(reversed);
         Map<ItemStack, Float> reordered = new LinkedHashMap<>();
         for (Map.Entry<ItemStack, Float> entry : reversed) reordered.put(entry.getKey(), entry.getValue());
@@ -258,8 +266,15 @@ final class NativeFactoriesTest {
         RecipeRow distilled = new RecipeRow(facts, object("owner", "Forestry", "handler", "native", "key", "still"), "category_test", 0);
         capture(still, recipe, distilled);
         require(distilled.inputs.get(0).getAsJsonObject().getAsJsonArray("choices").get(0).getAsJsonObject().get("amount").getAsString().equals("77")
-                && distilled.outputs.get(0).getAsJsonObject().get("amount").getAsString().equals("21"), "Still did not multiply native fluid units by cycles");
-        require(distilled.record.get("duration").getAsString().equals("7"), "Still native time changed");
+                && distilled.outputs.get(0).getAsJsonObject().get("amount").isJsonNull(), "Still falsely guarantees the whole batch despite tank truncation");
+        JsonObject yield = distilled.outputs.get(0).getAsJsonObject().getAsJsonObject("quantity");
+        require(yield.get("kind").getAsString().equals("potential")
+                && yield.get("stat").getAsString().equals("forestry:stillTankSpace")
+                && yield.get("nominal").getAsString().equals("21"), "Still lost its space-limited nominal batch");
+        require(distilled.record.get("duration").isJsonNull() && distilled.properties.has("forestry:workSteps")
+                && distilled.properties.has("forestry:stepTicks"), "Still work steps were presented as fixed game ticks");
+        require(propertyNumber(distilled,"forestry:workSteps")==7 && propertyNumber(distilled,"forestry:stepTicks")==5
+                && propertyNumber(distilled,"forestry:energyRF")==1400, "Still work units or RF parameter changed");
         require(water.amount == 11 && lava.amount == 3 && water.tag.getString("batch").equals("required"), "Still mutated native fluid stacks");
         Object overflow = Class.forName(prefix + "recipes.StillRecipe").getConstructor(int.class, FluidStack.class, FluidStack.class).newInstance(Integer.MAX_VALUE, water, lava);
         try { capture(still, overflow, distilled); throw new AssertionError("Overflowing native batch accepted"); }
@@ -285,4 +300,5 @@ final class NativeFactoriesTest {
         return new RecipeRow(facts, object("owner", "Forestry", "handler", "native", "key", "centrifuge"), "category_test", 0);
     }
     private static void require(boolean value, String message) { if (!value) throw new AssertionError(message); }
+    private static long propertyNumber(RecipeRow row,String key){return row.properties.getAsJsonObject(key).getAsJsonObject("value").get("value").getAsLong();}
 }

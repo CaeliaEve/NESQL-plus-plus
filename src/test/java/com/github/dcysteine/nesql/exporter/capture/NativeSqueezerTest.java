@@ -159,11 +159,11 @@ final class NativeSqueezerTest {
     private static ISqueezerRecipe recipe(int time,ItemStack[] inputs,FluidStack fluid,ItemStack remnant,float chance)throws Exception{
         return (ISqueezerRecipe)type("forestry.factory.recipes.SqueezerRecipe").getConstructor(int.class,ItemStack[].class,FluidStack.class,ItemStack.class,float.class).newInstance(time,inputs,fluid,remnant,chance);
     }
-    private static JsonElement recipeJson(ISqueezerRecipe recipe){
+    static JsonElement recipeJson(ISqueezerRecipe recipe){
         return recipe==null?JsonNull.INSTANCE:object("time",recipe.getProcessingTime(),"requirements",stacks(recipe.getResources()),"fluid",fluidJson(recipe.getFluidOutput()),
             "remnant",stacks(array(recipe.getRemnants())).get(0),"chance",String.format(Locale.ROOT,"%08x",Float.floatToRawIntBits(recipe.getRemnantsChance())));
     }
-    private static JsonElement fluidJson(FluidStack fluid){return fluid==null?JsonNull.INSTANCE:object("registry",fluid.getFluid().getName(),"amount",fluid.amount,"nbt",TypedNbt.encode(fluid.tag));}
+    static JsonElement fluidJson(FluidStack fluid){return fluid==null?JsonNull.INSTANCE:object("registry",fluid.getFluid().getName(),"amount",fluid.amount,"nbt",TypedNbt.encode(fluid.tag));}
     private static void check(String name, ItemStack[] requirements, ItemStack[] stock, int direct, int ore, boolean removed, long remaining) {
         ItemStack[] wanted=copy(requirements),offered=copy(stock);
         int nativeDirect=(Integer)invoke(type(UTIL),null,"containsSets",new Class<?>[]{ItemStack[].class,ItemStack[].class,boolean.class,boolean.class},wanted,offered,false,false);
@@ -182,7 +182,7 @@ final class NativeSqueezerTest {
     private static ItemStack withCount(ItemStack item,int count){ItemStack value=item.copy();value.stackSize=count;return value;}
     private static ItemStack[] array(ItemStack... values){return values;}
     private static ItemStack[] copy(ItemStack[] values){return Arrays.stream(values).map(v->v==null?null:v.copy()).toArray(ItemStack[]::new);}
-    private static JsonArray stacks(ItemStack[] values){
+    static JsonArray stacks(ItemStack[] values){
         JsonArray result=new JsonArray();
         for(ItemStack value:values){
             if(value==null){result.add(JsonNull.INSTANCE);continue;}

@@ -102,10 +102,14 @@ final class ForestryRecipes implements RegistryRecipes {
         FluidStack input = fluid(source.getInput()), output = fluid(source.getOutput());
         try { input.amount = Math.multiplyExact(input.amount, cycles); output.amount = Math.multiplyExact(output.amount, cycles); }
         catch (ArithmeticException overflow) { throw fault("Native still batch overflows a fluid amount"); }
-        // The owned visual projection displays the actual batch, not the API's per-cycle units.
+        // The native UI shows the nominal batch. TileStill.hasWork checks only
+        // one output unit; workCycle fills the whole batch and discards overflow.
         Object projection = construct(PREFIX + "StillRecipe", new Class<?>[] {int.class, FluidStack.class, FluidStack.class}, cycles, input.copy(), output.copy());
         TemplateRecipeHandler.CachedRecipe cached = cached(handler, "Still", IStillRecipe.class, projection);
-        row.fluidInput(null, 0, input, false); row.fluidOutput(null, 0, output);
+        row.fluidInput(null, 0, input, false);
+        row.fluidOutput(null, 0, output, object("kind", "potential", "stat", "forestry:stillTankSpace",
+                "condition", "Limited by compatible product tank space at completion; excess fluid is lost",
+                "nominal", Integer.toString(output.amount)));
         requirements(row, cycles, 200);
         handler.arecipes.clear(); handler.arecipes.add(cached);
     }
@@ -124,9 +128,12 @@ final class ForestryRecipes implements RegistryRecipes {
     }
 
     private static void requirements(RecipeRow row, int time, int rfPerTick) {
-        row.record.addProperty("duration", Integer.toString(time));
-        // Recipe.energy is EU/t. Keep native RF in an explicitly named property.
-        row.property("forestry:energyRF", "Base energy (RF)", (long) time * rfPerTick);
+        // TilePowered advances its counter every five game ticks, then applies
+        // speed, difficulty and power multipliers. A recipe time is not a fixed
+        // tick duration, nor is the raw RF parameter an EU/t rate.
+        row.property("forestry:workSteps", "Base work steps", time);
+        row.property("forestry:stepTicks", "Game ticks per work step", 5);
+        row.property("forestry:energyRF", "Energy parameter before difficulty (RF)", time * rfPerTick);
     }
     private static ItemStack item(ItemStack value) { if (value == null || value.getItem() == null || value.stackSize <= 0) throw fault("Invalid native factory item"); return value.copy(); }
     private static FluidStack fluid(FluidStack value) { if (value == null || value.getFluid() == null || value.amount <= 0) throw fault("Invalid native factory fluid"); return value.copy(); }
