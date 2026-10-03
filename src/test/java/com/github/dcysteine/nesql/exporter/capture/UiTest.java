@@ -28,6 +28,28 @@ public final class UiTest {
         require(duration(flame) == 48 && state(flame, 0).equals(array(array("0.0", "0.0", "1.0", "1.0")))
                 && state(flame, 47).size() == 0, "Native furnace flame did not shrink to empty");
         require(state(arrow, 0).size() == 0 && state(arrow, 24).equals(array(array("0.0", "0.0", "0.5", "1.0"))), "Native furnace arrow has the wrong pixel step");
+        for(int direction=0;direction<8;direction++) {
+            JsonArray longCycle=Ui.progress(43,18,72000,direction);
+            require(duration(longCycle)==72000&&longCycle.size()<=44,"Long native progress was truncated or expanded per tick");
+            int at=0;
+            for(JsonElement frame:longCycle) {
+                int span=frame.getAsJsonObject().get("ticks").getAsInt();
+                for(int tick:new int[]{at,at+span-1}) {
+                    float p=tick/72000f;if(direction>3)p=1-p;
+                    int size=direction%2==0?43:18, pixels=(int)(p*size);
+                    JsonArray areas=state(longCycle,tick);
+                    if(pixels==0)require(areas.size()==0,"Native empty progress has pixels");
+                    else {
+                        JsonArray rect=areas.get(0).getAsJsonArray();
+                        float extent=direction%2==0?rect.get(2).getAsFloat()-rect.get(0).getAsFloat():rect.get(3).getAsFloat()-rect.get(1).getAsFloat();
+                        require(Math.abs(extent*size-pixels)<.0001f,"Long progress changed native float rounding");
+                    }
+                }
+                at+=span;
+            }
+        }
+        for(int invalid:new int[]{0,-5,72001})try{Ui.progress(43,18,invalid,0);throw new AssertionError("Unrepresentable native period accepted");}
+            catch(Jobs.Fault expected){require(expected.code.equals("view_unsupported"),"Wrong invalid-period error");}
         boolean smooth = Config.smoothProgressbar;
         float[] time = {.3f};
         try {

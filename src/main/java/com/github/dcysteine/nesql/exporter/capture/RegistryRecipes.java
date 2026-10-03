@@ -6,6 +6,8 @@ interface RegistryRecipes {
     boolean capture(int index, RecipeRow row);
     /** Publish one shared rule context, referenced by its category. */
     default String program(Facts facts) { return null; }
+    /** Check shared registry drift once per game-thread capture batch. */
+    default void verify() {}
     /** Optional bounded proof for a non-exportable native entry, retained in jobs/checks. */
     default com.google.gson.JsonObject exclusion(int index) { return null; }
     /** Handler-wide native disable evidence also exists when its recipe list is empty. */

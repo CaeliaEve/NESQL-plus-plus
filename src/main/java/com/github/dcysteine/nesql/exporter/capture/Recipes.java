@@ -51,7 +51,7 @@ final class Recipes {
         if (RefiningRecipes.supports(handler)) return Adapter.BUILDCRAFT;
         if (SmeltingRecipes.supports(handler)) return Adapter.SMELTING;
         if (ExtremeRecipes.supports(handler)) return Adapter.EXTREME;
-        if (ForestryRecipes.supports(handler)) return Adapter.FORESTRY;
+        if (ForestryRecipes.supports(handler) || SqueezerRecipes.supports(handler)) return Adapter.FORESTRY;
         if (TinkerRecipes.supports(handler)) return Adapter.TINKER;
         if (SpaceRecipes.supports(handler)) return Adapter.SPACE;
         if (CircuitRecipes.supports(handler)) return Adapter.CIRCUIT;
@@ -168,7 +168,7 @@ final class Recipes {
                 } else if (adapter == Adapter.EXTREME) {
                     registry = new ExtremeRecipes(handler);
                 } else if (adapter == Adapter.FORESTRY) {
-                    registry = new ForestryRecipes(handler);
+                    registry = SqueezerRecipes.supports(handler) ? new SqueezerRecipes(handler) : new ForestryRecipes(handler);
                 } else if (adapter == Adapter.TINKER) {
                     registry = new TinkerRecipes(handler);
                 } else if (adapter == Adapter.SPACE) {
@@ -244,6 +244,7 @@ final class Recipes {
         }
 
         int size() { return registry != null ? registry.size() : ae != null ? ae.size() : magic == null ? handler.numRecipes() : magic.size(); }
+        void verify() { if (registry != null) registry.verify(); }
 
         JsonObject exclusions() { return new com.google.gson.JsonParser().parse(exclusions.toString()).getAsJsonObject(); }
 
@@ -356,6 +357,7 @@ final class Recipes {
                     for (com.google.gson.JsonElement element : Ui.neiProgress(facts, handler, source.id, ((SoulRecipes)registry).progressBars())) decorations.add(element);
                 }
                 for (com.google.gson.JsonElement element : decorations) row.elements.add(element);
+                if(registry instanceof SqueezerRecipes)for(com.google.gson.JsonElement element:((SqueezerRecipes)registry).decorations(facts))row.elements.add(element);
                 HandlerInfo info = GuiRecipeTab.getHandlerInfo(handler);
                 int at = magic == null && ae == null && registry == null ? index : 0;
                 int width = info.getWidth(), height = handler.getRecipeHeight(at);
@@ -380,6 +382,7 @@ final class Recipes {
                     else if (registry instanceof IntegrationRecipes) IntegrationRecipes.draw(handler,row.record.getAsJsonObject("process").getAsJsonObject("rule").get("energy").getAsInt());
                     else if (registry instanceof RefiningRecipes) RefiningRecipes.draw(handler, at);
                     else if (registry instanceof ForestryRecipes) ForestryRecipes.draw(handler, at);
+                    else if (registry instanceof SqueezerRecipes) SqueezerRecipes.draw(handler, at);
                     else if (registry instanceof CircuitRecipes) CircuitRecipes.scene(handler, () -> handler.drawBackground(at));
                     else if (registry instanceof RefineryRecipes) RefineryRecipes.draw(handler);
                     else if (registry instanceof RailRecipes) RailRecipes.draw(handler);

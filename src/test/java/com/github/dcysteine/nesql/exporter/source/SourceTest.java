@@ -265,6 +265,11 @@ public final class SourceTest {
         categories.add(object("id",Identity.origin("category",sharedOrigin),"source",sharedOrigin,"name",text.apply("Shared machine rules 共享规则"),
                 "icon",null,"machines",array(),"view",null,"order",categories.size(),"program",program));
         records(dataset,"programs",chunks);
+        JsonObject squeezed=object("source",sharedOrigin,"category",Identity.origin("category",sharedOrigin),"order",0,"inputs",array(object("kind","item","slot",0,"choices",array(object("id",paper,"amount","1","rule",object("kind","forestry"),"consume",object("kind","allocated"),"returns",array())))),
+                "outputs",array(object("kind","fluid","slot",0,"id",water,"amount",null,"quantity",object("kind","squeezer","nominal","100"),"chance",Chance.of(1,1),"role","result","change",null)),
+                "process",object("kind","forestrySqueezer","program",program,"selector",object("kind","ordinary","index",0),"time",3,"chance",Chance.of(0,1)),
+                "duration",null,"energy",null,"grid",null,"magic",null,"view",null,"properties",object());
+        squeezed.addProperty("id",Identity.recipe(squeezed));recipes.add(squeezed);
         records(dataset, "recipes", recipes); records(dataset, "categories", categories);
         java.util.TreeMap<String, JsonObject> unique = new java.util.TreeMap<>();
         for (JsonObject view : views) unique.put(view.get("id").getAsString(), view);

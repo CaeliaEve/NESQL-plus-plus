@@ -225,6 +225,7 @@ public final class Capture implements Jobs.Task, AutoCloseable {
                             List<Facts.Batch> captured = new ArrayList<>();
                             index = session.call("recipe batch", () -> Slice.run(begin, size, recipe -> {
                                 session.check();
+                                if(recipe==begin)cursor.verify();
                                 cursor.capture(recipe);
                                 session.check();
                                 Facts.Batch batch = facts.drain(); captured.add(batch);

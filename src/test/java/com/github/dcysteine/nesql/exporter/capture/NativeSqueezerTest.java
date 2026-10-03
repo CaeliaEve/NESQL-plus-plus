@@ -148,6 +148,13 @@ final class NativeSqueezerTest {
         Object signedCursor=invoke(type,signedSnapshot,"entries",new Class<?>[0]);
         ISqueezerRecipe signedCopy=(ISqueezerRecipe)invoke(signedCursor.getClass(),signedCursor,"recipe",new Class<?>[]{int.class},0);
         if(!recipeJson(signedCopy).equals(recipeJson(unusual)))throw new AssertionError("Squeezer cursor normalized signed/zero fields or null holes");
+        RegistryRecipes signedAdapter=adapter(signedSnapshot,signedCursor,(codechicken.nei.recipe.TemplateRecipeHandler)type("forestry.factory.recipes.nei.NEIHandlerSqueezer").newInstance(),
+            (JsonObject)invoke(type,signedSnapshot,"context",new Class<?>[0]),"squeezer-signed-adapter-records.json");
+        signedAdapter.verify();unusual.getResources()[2].stackSize--;
+        try{signedAdapter.verify();throw new AssertionError("Production batch verification ignored native drift");}
+        catch(com.github.dcysteine.nesql.exporter.task.Jobs.Fault failure){if(!failure.code.equals("recipe_changed"))throw failure;}
+        finally{unusual.getResources()[2].stackSize++;}
+        signedAdapter.verify();
         ISqueezerRecipe first=recipes.iterator().next();int original=first.getResources()[0].stackSize;first.getResources()[0].stackSize++;
         try{invoke(type,snapshot,"checkUnchanged",new Class<?>[0]);throw new AssertionError("Squeezer ignored registry amount mutation");}
         catch(com.github.dcysteine.nesql.exporter.task.Jobs.Fault failure){if(!failure.code.equals("recipe_changed"))throw failure;}
@@ -194,6 +201,44 @@ final class NativeSqueezerTest {
         if(first.relx!=12||first.rely!=10||field(cached,"tank")==null)throw new AssertionError("Squeezer native input/tank projection changed");
         Files.write(Paths.get("build/native-tests/forestry-entry-observations.json"),CanonicalJson.bytes(object("program",context,"entries",observations)));
         System.out.println("Native Forestry cursor: "+nativeRecipes.size()+" ordinary + "+fixed+" fixed variants, exact native lookup, owned copies and native cached layout passed");
+        adapter(snapshot,cursor,handler,context,"squeezer-adapter-records.json");
+    }
+    @SuppressWarnings("unchecked")
+    private static RegistryRecipes adapter(Object snapshot,Object cursor,codechicken.nei.recipe.TemplateRecipeHandler handler,JsonObject context,String filename)throws Exception{
+        if(Recipes.adapter(handler)==null)throw new AssertionError("Squeezer has no production router");
+        Class<?> adapterType=type("com.github.dcysteine.nesql.exporter.capture.SqueezerRecipes");
+        java.lang.reflect.Constructor<?> constructor=adapterType.getDeclaredConstructor(codechicken.nei.recipe.TemplateRecipeHandler.class,snapshot.getClass());constructor.setAccessible(true);
+        RegistryRecipes adapter=(RegistryRecipes)constructor.newInstance(handler,snapshot);
+        int size=(Integer)invoke(cursor.getClass(),cursor,"size",new Class<?>[0]);
+        Facts opening=new Facts("en_US");String program=adapter.program(opening);
+        JsonArray records=new JsonArray();Map<String,JsonObject> items=new TreeMap<>(),fluids=new TreeMap<>();
+        for(int index=0;index<size;index++){
+            ISqueezerRecipe nativeRecipe=(ISqueezerRecipe)invoke(cursor.getClass(),cursor,"recipe",new Class<?>[]{int.class},index);
+            Facts facts=new Facts("en_US");
+            for(ItemStack stack:nativeRecipe.getResources())if(stack!=null)known(stack,facts,items);
+            if(nativeRecipe.getRemnants()!=null)known(nativeRecipe.getRemnants(),facts,items);
+            FluidStack fluid=nativeRecipe.getFluidOutput();
+            if(fluid!=null){String id=com.github.dcysteine.nesql.exporter.source.Identity.fluid(fluid.getFluid().getName(),TypedNbt.encode(fluid.tag));((Set<String>)field(facts,"fluids")).add(id);JsonObject value=fluidJson(fluid).getAsJsonObject();value.addProperty("id",id);fluids.put(id,value);}
+            RecipeRow row=new RecipeRow(facts,object("owner","Forestry","handler","fixture","key","squeezer"),"category_test",index);
+            if(!adapter.capture(index,row))throw new AssertionError("Squeezer dropped an ordinary/fixed entry");
+            JsonObject process=row.record.getAsJsonObject("process");
+            if(process==null||!process.get("program").getAsString().equals(program))throw new AssertionError("Squeezer process lost shared identity");
+            if(row.inputs.size()!=Arrays.stream(nativeRecipe.getResources()).filter(Objects::nonNull).count()||row.outputs.size()!=(fluid==null?0:1)+(nativeRecipe.getRemnants()==null?0:1))throw new AssertionError("Squeezer projection lost native rows");
+            for(JsonElement value:row.inputs){JsonObject input=value.getAsJsonObject();int slot=input.get("slot").getAsInt();if(!input.getAsJsonArray("choices").get(0).getAsJsonObject().get("amount").getAsString().equals(Integer.toString(nativeRecipe.getResources()[slot].stackSize)))throw new AssertionError("Squeezer changed native signed input count");}
+            for(JsonElement input:row.inputs){JsonObject c=input.getAsJsonObject().getAsJsonArray("choices").get(0).getAsJsonObject();if(!c.getAsJsonObject("rule").get("kind").getAsString().equals("forestry")||!c.getAsJsonObject("consume").get("kind").getAsString().equals("allocated"))throw new AssertionError("Squeezer flattened native stock allocation");}
+            for(JsonElement value:row.elements){JsonObject element=value.getAsJsonObject();if(!element.get("direction").getAsString().equals("input"))continue;int slot=element.get("slot").getAsInt();if(element.get("x").getAsInt()!=12+slot%3*18||element.get("y").getAsInt()!=10+slot/3*18)throw new AssertionError("Squeezer compacted native UI holes");}
+            row.finish();records.add(row.record);
+        }
+        if(adapter.size()!=size+context.getAsJsonArray("dynamic").size())throw new AssertionError("Dynamic squeezer coverage was silently omitted");
+        if(adapter.size()>size){try{adapter.capture(size,new RecipeRow(new Facts("en_US"),object(),"category_test",size));throw new AssertionError("Dynamic callback was declared supported");}catch(com.github.dcysteine.nesql.exporter.task.Jobs.Fault e){if(!e.code.equals("recipe_unsupported"))throw e;}}
+        JsonArray itemRows=new JsonArray(),fluidRows=new JsonArray();for(JsonObject row:items.values())itemRows.add(row);for(JsonObject row:fluids.values())fluidRows.add(row);
+        Files.write(Paths.get("build/native-tests/"+filename),CanonicalJson.bytes(object("program",context,"programId",program,"items",itemRows,"fluids",fluidRows,"recipes",records)));
+        System.out.println("Native squeezer production rows: "+records.size()+" shared-program recipes; callback coverage remains explicit");
+        return adapter;
+    }
+    @SuppressWarnings("unchecked") private static void known(ItemStack stack,Facts facts,Map<String,JsonObject> rows){
+        String id=com.github.dcysteine.nesql.exporter.source.Identity.item(Item.itemRegistry.getNameForObject(stack.getItem()),Items.feather.getDamage(stack),TypedNbt.encode(stack.getTagCompound()));
+        ((Set<String>)field(facts,"items")).add(id);JsonObject value=SqueezerRules.stack(stack);value.addProperty("id",id);rows.put(id,value);
     }
     private static void select(JsonArray observations,String name,ItemStack[] stock,ISqueezerRecipe retained,Class<?> managerType,Set<ISqueezerRecipe> recipes,Map<Object,Object> containers){
         JsonArray ordinary=new JsonArray(),rules=new JsonArray(),filled=new JsonArray(),dynamic=new JsonArray();

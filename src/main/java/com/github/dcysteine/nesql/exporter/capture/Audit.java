@@ -157,6 +157,7 @@ final class Audit {
                     pending.add(attempt);
                     try {
                         ClientThread.phase("health"); guard.check();
+                        if(next==index)cursor.verify();
                         Facts facts = new Facts(locale);
                         ClientThread.phase("recipe capture"); cursor.capture(next, facts);
                         ClientThread.phase("health"); guard.check();

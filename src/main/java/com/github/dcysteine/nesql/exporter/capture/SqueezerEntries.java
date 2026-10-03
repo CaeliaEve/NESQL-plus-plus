@@ -1,6 +1,7 @@
 package com.github.dcysteine.nesql.exporter.capture;
 
 import codechicken.nei.recipe.TemplateRecipeHandler;
+import codechicken.nei.PositionedStack;
 import com.github.dcysteine.nesql.exporter.task.Jobs;
 import com.google.gson.*;
 import forestry.api.recipes.ISqueezerRecipe;
@@ -62,8 +63,20 @@ final class SqueezerEntries {
     TemplateRecipeHandler.CachedRecipe cached(TemplateRecipeHandler handler,int index){
         if(!handler.getClass().getName().equals(PREFIX+"nei.NEIHandlerSqueezer"))throw fault("Wrong squeezer handler");
         try{
-            return (TemplateRecipeHandler.CachedRecipe)type(handler.getClass().getName()+"$CachedSqueezerRecipe")
-                .getConstructor(handler.getClass(),ISqueezerRecipe.class,boolean.class).newInstance(handler,recipe(index),true);
+            ISqueezerRecipe source=recipe(index);
+            ItemStack[] original=source.getResources();
+            ItemStack[] visible=Arrays.stream(original).filter(Objects::nonNull).toArray(ItemStack[]::new);
+            // Native stock ignores null holes, but NEI's constructor rejects them.
+            // Construct its same positioned stacks, then restore the original grid
+            // coordinates. The owned source and rule selector retain every hole.
+            TemplateRecipeHandler.CachedRecipe cached=(TemplateRecipeHandler.CachedRecipe)type(handler.getClass().getName()+"$CachedSqueezerRecipe")
+                .getConstructor(handler.getClass(),ISqueezerRecipe.class,boolean.class).newInstance(handler,copy(source,visible),true);
+            @SuppressWarnings("unchecked") List<PositionedStack> positions=(List<PositionedStack>)field(cached,"inputs");
+            int display=0;
+            for(int slot=0;slot<original.length;slot++)if(original[slot]!=null){
+                PositionedStack position=positions.get(display++);position.relx=12+slot%3*18;position.rely=10+slot/3*18;
+            }
+            return cached;
         }catch(ReflectiveOperationException error){Jobs.Fault failure=fault("Cannot construct owned native squeezer layout");failure.initCause(error);throw failure;}
     }
 
@@ -74,6 +87,9 @@ final class SqueezerEntries {
     private static ISqueezerRecipe copy(ISqueezerRecipe source){
         ItemStack[] original=source.getResources(),inputs=original==null?null:new ItemStack[original.length];
         if(inputs!=null)for(int i=0;i<inputs.length;i++)inputs[i]=original[i]==null?null:original[i].copy();
+        return copy(source,inputs);
+    }
+    private static ISqueezerRecipe copy(ISqueezerRecipe source,ItemStack[] inputs){
         FluidStack output=source.getFluidOutput();ItemStack remnant=source.getRemnants();
         try{
             return (ISqueezerRecipe)type(PREFIX+"SqueezerRecipe").getConstructor(int.class,ItemStack[].class,FluidStack.class,ItemStack.class,float.class)

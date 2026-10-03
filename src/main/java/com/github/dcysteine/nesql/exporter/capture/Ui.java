@@ -201,8 +201,9 @@ final class Ui implements AutoCloseable {
     }
 
     static JsonArray progress(int width, int height, int ticks, int direction) {
-        if (width <= 0 || height <= 0 || ticks <= 0 || ticks > 4096 || direction < 0) throw fault("Invalid native NEI progress parameters");
-        return frames(ticks, tick -> {
+        if (width <= 0 || height <= 0 || width > 4096 || height > 4096 || ticks <= 0 || ticks > 72000 || direction < 0)
+            throw fault("Invalid native NEI progress parameters: " + width + "x" + height + ", ticks=" + ticks + ", direction=" + direction);
+        IntFunction<JsonArray> sample = tick -> {
             float p = tick / (float) ticks;
             if (direction > 3) p = 1 - p;
             int axis = direction % 4, size = axis % 2 == 0 ? width : height;
@@ -216,7 +217,25 @@ final class Ui implements AutoCloseable {
                 default: throw fault("Unknown native NEI progress direction");
             }
             return areas;
-        });
+        };
+        // Pixel extent is monotone over one NEI cycle. Locate each transition
+        // using the native float expression, preserving rounding without walking
+        // tens of thousands of identical ticks on the client thread.
+        JsonArray result = new JsonArray();
+        for (int start = 0; start < ticks;) {
+            Jobs.checkpoint();
+            JsonArray areas = sample.apply(start);
+            int low = start + 1, high = ticks;
+            while (low < high) {
+                int middle = low + (high - low) / 2;
+                if (sample.apply(middle).equals(areas)) low = middle + 1;
+                else high = middle;
+            }
+            result.add(object("ticks", low - start, "areas", areas));
+            if (result.size() > 4096) throw fault("Native NEI progress exceeds frame budget");
+            start = low;
+        }
+        return result;
     }
 
     private static JsonArray frames(int ticks, IntFunction<JsonArray> sample) {
