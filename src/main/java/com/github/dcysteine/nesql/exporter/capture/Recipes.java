@@ -30,7 +30,7 @@ import static com.github.dcysteine.nesql.exporter.source.Json.*;
 
 /** Explicit enumeration adapters. An unsupported handler is an error, never an empty recipe list. */
 final class Recipes {
-    enum Adapter { GT, MAGIC, AE, INSCRIBER, SCRAPBOX, ENCHANTER, VAT, ASSEMBLY, SAG, SOUL, IC2, CANNER, SMELTING, EXTREME, FORESTRY, TINKER, SPACE, CIRCUIT, REFINERY, RAIL, ROLLING, DISABLED, SOLAR, FURNACE, SHAPED, SHAPELESS }
+    enum Adapter { GT, MAGIC, AE, INSCRIBER, SCRAPBOX, ENCHANTER, VAT, ASSEMBLY, BUILDCRAFT, SAG, SOUL, IC2, CANNER, SMELTING, EXTREME, FORESTRY, TINKER, SPACE, CIRCUIT, REFINERY, RAIL, ROLLING, DISABLED, SOLAR, FURNACE, SHAPED, SHAPELESS }
 
     static Adapter adapter(ICraftingHandler handler) {
         if (GtRecipes.supports(handler)) return Adapter.GT;
@@ -45,6 +45,7 @@ final class Recipes {
         if (SoulRecipes.supports(handler)) return Adapter.SOUL;
         if (Ic2Recipes.supports(handler)) return Adapter.IC2;
         if (CannerRecipes.supports(handler)) return Adapter.CANNER;
+        if (BuildcraftRecipes.supports(handler)) return Adapter.BUILDCRAFT;
         if (SmeltingRecipes.supports(handler)) return Adapter.SMELTING;
         if (ExtremeRecipes.supports(handler)) return Adapter.EXTREME;
         if (ForestryRecipes.supports(handler)) return Adapter.FORESTRY;
@@ -140,6 +141,8 @@ final class Recipes {
                     registry = new Ic2Recipes(handler);
                 } else if (adapter == Adapter.CANNER) {
                     registry = new CannerRecipes(handler);
+                } else if (adapter == Adapter.BUILDCRAFT) {
+                    registry = new BuildcraftRecipes(handler);
                 } else if (adapter == Adapter.INSCRIBER) {
                     registry = new InscriberRecipes(handler);
                 } else if (adapter == Adapter.SCRAPBOX) {
@@ -320,6 +323,8 @@ final class Recipes {
                     for (com.google.gson.JsonElement element : Ui.neiProgress(facts, handler, source.id, Ic2Recipes.progressBars(handler))) decorations.add(element);
                 } else if (registry instanceof CannerRecipes && decorations.size() == 0) {
                     for (com.google.gson.JsonElement element : Ui.neiProgress(facts, handler, source.id, CannerRecipes.progressBars(handler))) decorations.add(element);
+                } else if (registry instanceof BuildcraftRecipes && decorations.size() == 0) {
+                    for (com.google.gson.JsonElement element : Ui.neiProgress(facts, handler, source.id, BuildcraftRecipes.progressBars())) decorations.add(element);
                 } else if (registry instanceof ForestryRecipes && decorations.size() == 0) {
                     for (com.google.gson.JsonElement element : Ui.neiProgress(facts, handler, source.id, new int[][] {ForestryRecipes.progressBar(handler)})) decorations.add(element);
                 } else if (registry instanceof CircuitRecipes && decorations.size() == 0) {
@@ -344,6 +349,7 @@ final class Recipes {
                 int at = magic == null && ae == null && registry == null ? index : 0;
                 int width = info.getWidth(), height = handler.getRecipeHeight(at);
                 if (registry instanceof CannerRecipes) { width = Math.max(width, 140); height = Math.max(height, CannerRecipes.height(handler)); }
+                if (registry instanceof BuildcraftRecipes) { width = Math.max(width,166); height = Math.max(height,96); }
                 if (gt != null) { width = gt.ui.width(width); height = gt.ui.height(height); }
                 for (com.google.gson.JsonElement element : row.elements) {
                     JsonObject position = element.getAsJsonObject();
@@ -356,6 +362,7 @@ final class Recipes {
                 facts.scene(new Facts.Scene(row.record, row.elements, width, height, gt == null ? 0 : gt.ui.foreground(), source.id, () -> {
                     if (registry instanceof Ic2Recipes) Ic2Recipes.scene(handler, () -> Ic2Recipes.draw(handler, at));
                     else if (registry instanceof CannerRecipes) CannerRecipes.scene(handler, () -> CannerRecipes.draw(handler, at));
+                    else if (registry instanceof BuildcraftRecipes) BuildcraftRecipes.draw(handler, at);
                     else if (registry instanceof ForestryRecipes) ForestryRecipes.draw(handler, at);
                     else if (registry instanceof CircuitRecipes) CircuitRecipes.scene(handler, () -> handler.drawBackground(at));
                     else if (registry instanceof RefineryRecipes) RefineryRecipes.draw(handler);

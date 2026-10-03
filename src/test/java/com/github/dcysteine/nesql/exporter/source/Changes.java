@@ -455,6 +455,23 @@ final class Changes {
         }
     }
 
+    static void buildcraft(List<JsonObject> recipes, List<JsonObject> categories, Function<String,String> text) {
+        String stone=Identity.item("minecraft:stone",0,null), paper=Identity.item("minecraft:paper",0,null);
+        JsonObject origin=object("owner","fixture","handler","fixture:buildcraft","key","assembly");
+        String category=Identity.origin("category",origin);
+        categories.add(object("id",category,"source",origin,"name",text.apply("BuildCraft Assembly 激光装配台"),"icon",object("kind","item","id",stone),"machines",array(),"view",null,"order",categories.size()));
+        JsonObject first=choice(stone), second=choice(paper), last=choice(paper);
+        for(JsonObject c:Arrays.asList(first,second,last)) {
+            c.add("rule",object("kind","buildcraft","wildcard",c==second,"subtypes",c==first));
+            c.add("consume",object("kind","allocated"));c.addProperty("amount",c==last?"1":"3");
+        }
+        JsonObject recipe=object("source",origin,"category",category,"order",0,
+            "inputs",array(object("kind","item","slot",0,"choices",array(first,second)),object("kind","item","slot",1,"choices",array(last))),
+            "outputs",array(object("kind","item","slot",0,"id",paper,"amount","2","quantity",null,"change",null,"role","result","chance",Chance.of(1,1))),
+            "process",object("kind","buildcraftAssembly","energy",700),"duration",null,"energy",null,"grid",null,"magic",null,"view",null,"properties",object());
+        recipe.addProperty("id",Identity.recipe(recipe));recipes.add(recipe);
+    }
+
     private static JsonObject choice(String id) {
         return object("id", id, "amount", "1", "rule", object("kind", "exact"), "consume", object("kind", "consume"), "returns", new JsonArray());
     }
