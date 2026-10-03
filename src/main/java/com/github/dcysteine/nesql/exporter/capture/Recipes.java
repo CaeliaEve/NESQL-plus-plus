@@ -30,7 +30,7 @@ import static com.github.dcysteine.nesql.exporter.source.Json.*;
 
 /** Explicit enumeration adapters. An unsupported handler is an error, never an empty recipe list. */
 final class Recipes {
-    enum Adapter { GT, MAGIC, AE, INSCRIBER, SCRAPBOX, ENCHANTER, VAT, ASSEMBLY, SAG, SOUL, IC2, SMELTING, EXTREME, FORESTRY, TINKER, SPACE, CIRCUIT, REFINERY, RAIL, ROLLING, SOLAR, FURNACE, SHAPED, SHAPELESS }
+    enum Adapter { GT, MAGIC, AE, INSCRIBER, SCRAPBOX, ENCHANTER, VAT, ASSEMBLY, SAG, SOUL, IC2, SMELTING, EXTREME, FORESTRY, TINKER, SPACE, CIRCUIT, REFINERY, RAIL, ROLLING, ROCK, SOLAR, FURNACE, SHAPED, SHAPELESS }
 
     static Adapter adapter(ICraftingHandler handler) {
         if (GtRecipes.supports(handler)) return Adapter.GT;
@@ -53,6 +53,7 @@ final class Recipes {
         if (RefineryRecipes.supports(handler)) return Adapter.REFINERY;
         if (RailRecipes.supports(handler)) return Adapter.RAIL;
         if (RollingRecipes.supports(handler)) return Adapter.ROLLING;
+        if (RockRecipes.supports(handler)) return Adapter.ROCK;
         if (SolarRecipes.supports(handler)) return Adapter.SOLAR;
         if (handler.getClass() == FurnaceRecipeHandler.class) return Adapter.FURNACE;
         if (handler.getClass() == ShapedRecipeHandler.class) return Adapter.SHAPED;
@@ -168,6 +169,8 @@ final class Recipes {
                     registry = new RailRecipes(handler);
                 } else if (adapter == Adapter.ROLLING) {
                     registry = new RollingRecipes(handler);
+                } else if (adapter == Adapter.ROCK) {
+                    registry = new RockRecipes(handler);
                 } else if (adapter == Adapter.SOLAR) {
                     registry = new SolarRecipes(handler);
                 } else if (adapter == Adapter.FURNACE) {
@@ -258,7 +261,17 @@ final class Recipes {
             }
             else if (magic != null) { if (!magic.capture(index, row)) return; }
             else if (ae != null) { ae.capture(index, row); }
-            else if (registry != null) { if (!registry.capture(index, row)) return; }
+            else if (registry != null) {
+                if (!registry.capture(index, row)) {
+                    JsonObject proof = registry.exclusion(index);
+                    if (proof != null) {
+                        if (exclusions.entrySet().size() >= 4096 && !exclusions.has(Integer.toString(index)))
+                            throw new Jobs.Fault("recipe_exclusion_limit", "Registry exclusion proof budget exceeded in " + source.id);
+                        exclusions.add(Integer.toString(index), proof);
+                    }
+                    return;
+                }
+            }
             else if (crafting != null && crafting.capture(index, row)) { /* Native special result captured. */ }
             else {
                 boolean crafting = !(handler instanceof FurnaceRecipeHandler);

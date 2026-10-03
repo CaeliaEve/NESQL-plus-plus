@@ -24,12 +24,44 @@ final class NativeRailTest {
             require(Recipes.adapter((TemplateRecipeHandler) Class.forName(prefix + name).newInstance()) != null,
                     "Missing native rolling machine adapter: " + name);
         NativeRollingTest.run();
+        disabledRock();
         for (String name : new String[] {"CokeOven", "BlastFurnace"}) {
             TemplateRecipeHandler handler = (TemplateRecipeHandler) Class.forName(prefix + name).newInstance();
             require(Recipes.adapter(handler) != null, "Missing native Railcraft adapter: " + name);
             verify(handler, name.equals("CokeOven"));
         }
         System.out.println("Native Railcraft: two-pass priority, subtype/wildcard metadata, exact/ignored NBT, synthetic presence, unit input, fluids, timing and owned projections passed");
+    }
+    private static void disabledRock() throws Exception {
+        java.lang.reflect.Field flag = Class.forName("mods.railcraft.common.util.misc.Game").getField("isGTNH");
+        boolean previous = flag.getBoolean(null);
+        try {
+            TemplateRecipeHandler handler = (TemplateRecipeHandler) Class.forName("tonius.neiintegration.mods.railcraft.RecipeHandlerRockCrusher").newInstance();
+            flag.setBoolean(null, false);
+            require(Recipes.adapter(handler) == null, "Enabled rock crusher was claimed without an active-machine adapter");
+            flag.setBoolean(null, true);
+            require(Recipes.adapter(handler) != null, "Native GTNH-disabled rock crusher has no evidence route");
+            // Getters would be side effects; the native machine is disabled before any recipe access.
+            Object nativeRecipe = java.lang.reflect.Proxy.newProxyInstance(handler.getClass().getClassLoader(),
+                    new Class<?>[] {Class.forName("mods.railcraft.api.crafting.IRockCrusherRecipe")},
+                    (proxy, method, args) -> { throw new AssertionError("Disabled recipe method executed: " + method); });
+            RockRecipes registry = new RockRecipes(handler, Arrays.asList(null, nativeRecipe));
+            require(registry.size() == 1, "Disabled NEI enumeration changed null omission");
+            Recipes.Handler source = new Recipes.Handler(handler, 0);
+            Facts facts = new Facts("en_US");
+            try (Recipes.Cursor cursor = new Recipes.Cursor(source,handler,facts,false,null,null,null,registry,null)) {
+                cursor.capture(0);
+                require(facts.drain().records.isEmpty(), "Disabled machine emitted recipe facts");
+                JsonObject proof = cursor.exclusions().getAsJsonObject("0");
+                require(proof.get("reason").getAsString().equals("native_machine_disabled") && proof.get("value").getAsBoolean(),
+                        "Disabled-machine evidence was lost at the diagnostic/export cursor");
+                proof.addProperty("value",false);
+                require(cursor.exclusions().getAsJsonObject("0").get("value").getAsBoolean(), "Caller mutated stored exclusion evidence");
+                flag.setBoolean(null,false);
+                try { cursor.capture(0); throw new AssertionError("Changed native flag silently retained a stale exclusion"); }
+                catch (Jobs.Fault expected) { require(expected.code.equals("environment_changed"), "Native guard drift must stop the job"); }
+            }
+        } finally { flag.setBoolean(null, previous); }
     }
     @SuppressWarnings("unchecked")
     private static void verify(TemplateRecipeHandler handler, boolean coke) throws Exception {

@@ -4,4 +4,6 @@ package com.github.dcysteine.nesql.exporter.capture;
 interface RegistryRecipes {
     int size();
     boolean capture(int index, RecipeRow row);
+    /** Optional bounded proof for a non-exportable native entry, retained in jobs/checks. */
+    default com.google.gson.JsonObject exclusion(int index) { return null; }
 }
