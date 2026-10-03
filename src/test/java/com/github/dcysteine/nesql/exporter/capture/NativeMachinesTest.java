@@ -19,6 +19,7 @@ public final class NativeMachinesTest {
     public static void run() throws Exception {
         String family = System.getProperty("nesql.nativeFamily", "machines");
         if (family.equals("canner")) { NativeCannerTest.run(); return; }
+        if (family.equals("blast")) { NativeBlastTest.run(); return; }
         if (family.equals("compression")) { NativeCompressionTest.run(); return; }
         if (family.equals("buildcraft")) { NativeBuildcraftTest.run(); NativeRefiningTest.run(); return; }
         if (family.equals("soul")) { NativeSoulTest.run(); return; }
@@ -60,7 +61,7 @@ public final class NativeMachinesTest {
             require(clock.getInt(handler) == 7, "IC2 capture did not restore its owned clock after a failure");
         }
         // Blast-furnace inputs include air; it must not inherit a plain one-input adapter.
-        require(Recipes.adapter((TemplateRecipeHandler) Class.forName(prefix + "BlastFurnaceRecipeHandler").newInstance()) == null,
+        require(Recipes.adapter((TemplateRecipeHandler) Class.forName(prefix + "BlastFurnaceRecipeHandler").newInstance()) != Recipes.Adapter.IC2,
                 "Blast furnace was incorrectly treated as a plain item machine");
         Class<?> inputType = Class.forName("ic2.api.recipe.RecipeInputItemStack");
         Class<?> oreType = Class.forName("ic2.api.recipe.RecipeInputOreDict");

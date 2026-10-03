@@ -487,6 +487,22 @@ final class Changes {
         recipe.addProperty("id",Identity.recipe(recipe));recipes.add(recipe);
     }
 
+    static void blast(List<JsonObject> recipes,List<JsonObject> categories,Function<String,String> text) {
+        String stone=Identity.item("minecraft:stone",0,null),paper=Identity.item("minecraft:paper",0,null);
+        JsonObject origin=object("owner","fixture","handler","fixture:blast","key","blast");String category=Identity.origin("category",origin);
+        categories.add(object("id",category,"source",origin,"name",text.apply("IC2 Blast Furnace 高炉"),"icon",object("kind","item","id",stone),"machines",array(),"view",null,"order",categories.size()));
+        JsonObject primary=choice(stone),air=choice(paper);primary.addProperty("amount","4");
+        primary.add("rule",object("kind","wildcard","meta",false,"nbt",true));air.add("rule",object("kind","untagged","meta",true));
+        for(JsonObject c:Arrays.asList(primary,air))c.add("consume",object("kind","staged"));
+        air.add("returns",array(object("kind","item","id",stone,"amount","1")));
+        JsonObject recipe=object("source",origin,"category",category,"order",0,
+            "inputs",array(object("kind","item","slot",0,"choices",array(primary)),object("kind","item","slot",1,"choices",array(air))),
+            "outputs",array(object("kind","item","slot",0,"id",paper,"amount","2","quantity",null,"change",null,"role","result","chance",Chance.of(1,1)),
+                object("kind","item","slot",1,"id",stone,"amount",null,"quantity",object("kind","potential","stat","ic2:slagSpace","nominal","3"),"change",null,"role","result","chance",Chance.of(1,1))),
+            "process",object("kind","ic2Blast","heat",50000),"duration",null,"energy",null,"grid",null,"magic",null,"view",null,"properties",object());
+        recipe.addProperty("id",Identity.recipe(recipe));recipes.add(recipe);
+    }
+
     private static JsonObject choice(String id) {
         return object("id", id, "amount", "1", "rule", object("kind", "exact"), "consume", object("kind", "consume"), "returns", new JsonArray());
     }
