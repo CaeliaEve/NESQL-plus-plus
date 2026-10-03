@@ -65,7 +65,14 @@ final class Facts {
 
     String squeezerProgram(JsonObject rules) {
         String id = Identity.content("program", object("kind", "forestrySqueezer", "rules", rules));
-        if (programs.add(id)) com.github.dcysteine.nesql.exporter.source.Programs.squeezer(rules, record -> row("programs", record));
+        if (!programs.contains(id)) {
+            // Chunk validation can fail after earlier sections. Publish only a
+            // complete context, and never memoize an unsuccessful attempt.
+            List<JsonObject> records = new ArrayList<>();
+            com.github.dcysteine.nesql.exporter.source.Programs.squeezer(rules, records::add);
+            for (JsonObject record : records) row("programs", record);
+            programs.add(id);
+        }
         return id;
     }
 

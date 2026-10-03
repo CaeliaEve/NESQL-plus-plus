@@ -33,6 +33,7 @@ final class SqueezerRules {
         context=snapshot();fingerprint=CanonicalJson.digest(context);
     }
     JsonObject context(){return new JsonParser().parse(context.toString()).getAsJsonObject();}
+    SqueezerEntries entries(){checkUnchanged();SqueezerEntries result=new SqueezerEntries(recipes,containers,context);checkUnchanged();return result;}
     String publish(Facts facts){checkUnchanged();return facts.squeezerProgram(context);}
     void checkUnchanged(){
         if(!fingerprint.equals(CanonicalJson.digest(snapshot())))throw new Jobs.Fault("recipe_changed","Squeezer rules or fluid/ore registry changed during capture");

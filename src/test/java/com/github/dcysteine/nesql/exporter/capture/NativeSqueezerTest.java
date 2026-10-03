@@ -132,7 +132,22 @@ final class NativeSqueezerTest {
         for(Facts.Record row:batch.records){if(!row.kind.equals("programs"))throw new AssertionError("Unexpected rule fact");chunks.add(row.value);}
         if(chunks.size()!=4)throw new AssertionError("Shared rules lost a section");
         if(!program.equals(invoke(type,snapshot,"publish",new Class<?>[]{Facts.class},facts))||!facts.drain().records.isEmpty())throw new AssertionError("Same rule context emitted twice");
+        JsonObject invalid=(JsonObject)invoke(type,snapshot,"context",new Class<?>[0]);
+        char[] oversized=new char[900001];Arrays.fill(oversized,'x');
+        invalid.getAsJsonArray("dynamic").add(new JsonPrimitive(new String(oversized)));
+        Facts failed=new Facts("en_US");
+        for(int attempt=0;attempt<2;attempt++){
+            try{failed.squeezerProgram(invalid);throw new AssertionError("Failed program was remembered as published");}
+            catch(IllegalArgumentException expected){}
+            if(!failed.drain().records.isEmpty())throw new AssertionError("Failed shared program leaked partial facts");
+        }
         Files.write(Paths.get("build/native-tests/forestry-program-chunks.json"),CanonicalJson.bytes(chunks));
+        entries(snapshot, recipes);
+        ISqueezerRecipe unusual=recipe(-7,array(null,stack(Items.paper,0),stack(Items.iron_ingot,-2)),new FluidStack(FluidRegistry.WATER,0),stack(Items.paper,0),Float.NaN);
+        Object signedSnapshot=constructor.newInstance(Arrays.asList(unusual),containers);
+        Object signedCursor=invoke(type,signedSnapshot,"entries",new Class<?>[0]);
+        ISqueezerRecipe signedCopy=(ISqueezerRecipe)invoke(signedCursor.getClass(),signedCursor,"recipe",new Class<?>[]{int.class},0);
+        if(!recipeJson(signedCopy).equals(recipeJson(unusual)))throw new AssertionError("Squeezer cursor normalized signed/zero fields or null holes");
         ISqueezerRecipe first=recipes.iterator().next();int original=first.getResources()[0].stackSize;first.getResources()[0].stackSize++;
         try{invoke(type,snapshot,"checkUnchanged",new Class<?>[0]);throw new AssertionError("Squeezer ignored registry amount mutation");}
         catch(com.github.dcysteine.nesql.exporter.task.Jobs.Fault failure){if(!failure.code.equals("recipe_changed"))throw failure;}
@@ -140,6 +155,45 @@ final class NativeSqueezerTest {
         try{constructor.newInstance(Arrays.asList(new Object()),containers);throw new AssertionError("Squeezer invoked an unadapted recipe class");}
         catch(java.lang.reflect.InvocationTargetException expected){if(!(expected.getCause() instanceof com.github.dcysteine.nesql.exporter.task.Jobs.Fault))throw expected;}
         Files.write(Paths.get("build/native-tests/forestry-squeezer-context.json"),CanonicalJson.bytes((JsonElement)invoke(type,snapshot,"context",new Class<?>[0])));
+    }
+    private static void entries(Object snapshot, Collection<ISqueezerRecipe> nativeRecipes) throws Exception {
+        // A cursor must cover fixed containers without running the throwing callback registered above.
+        Object cursor=invoke(snapshot.getClass(),snapshot,"entries",new Class<?>[0]);
+        Class<?> cursorType=cursor.getClass();
+        JsonObject context=(JsonObject)invoke(snapshot.getClass(),snapshot,"context",new Class<?>[0]);
+        int size=(Integer)invoke(cursorType,cursor,"size",new Class<?>[0]), index=0, fixed=0;
+        JsonArray observations=new JsonArray();
+        for(ISqueezerRecipe expected:nativeRecipes){
+            ISqueezerRecipe actual=(ISqueezerRecipe)invoke(cursorType,cursor,"recipe",new Class<?>[]{int.class},index);
+            JsonObject selector=(JsonObject)invoke(cursorType,cursor,"selector",new Class<?>[]{int.class},index);
+            if(!selector.equals(object("kind","ordinary","index",index))||!recipeJson(actual).equals(recipeJson(expected)))throw new AssertionError("Cursor changed an ordinary native rule");
+            actual.getResources()[0].stackSize=-999;
+            ISqueezerRecipe again=(ISqueezerRecipe)invoke(cursorType,cursor,"recipe",new Class<?>[]{int.class},index);
+            if(!recipeJson(again).equals(recipeJson(expected)))throw new AssertionError("Cursor exposed mutable native recipe values");
+            selector.addProperty("index",-1);
+            if(((JsonObject)invoke(cursorType,cursor,"selector",new Class<?>[]{int.class},index)).get("index").getAsInt()!=index)throw new AssertionError("Cursor exposed mutable selector");
+            observations.add(object("selector",invoke(cursorType,cursor,"selector",new Class<?>[]{int.class},index),"recipe",recipeJson(expected)));
+            index++;
+        }
+        for(;index<size;index++){
+            ISqueezerRecipe actual=(ISqueezerRecipe)invoke(cursorType,cursor,"recipe",new Class<?>[]{int.class},index);
+            JsonObject selector=(JsonObject)invoke(cursorType,cursor,"selector",new Class<?>[]{int.class},index);
+            if(!selector.get("kind").getAsString().equals("container"))throw new AssertionError("Fixed variant lost its selector");
+            ItemStack offered=actual.getResources()[0].copy();offered.stackSize=3;
+            ISqueezerRecipe expected=(ISqueezerRecipe)invoke(type("forestry.factory.recipes.SqueezerRecipeManager"),null,"findMatchingRecipe",new Class<?>[]{ItemStack[].class},(Object)array(offered));
+            if(expected==null||!recipeJson(actual).equals(recipeJson(expected)))throw new AssertionError("Fixed variant differs from native container lookup");
+            JsonObject filled=context.getAsJsonArray("filled").get(selector.get("filled").getAsInt()).getAsJsonObject();
+            if(!filled.getAsJsonObject("filled").get("registry").getAsString().equals(Item.itemRegistry.getNameForObject(offered.getItem())))throw new AssertionError("Fixed selector points to another container");
+            observations.add(object("selector",selector,"recipe",recipeJson(expected)));fixed++;
+        }
+        if(fixed<2)throw new AssertionError("Cursor dropped native water/lava container variants");
+        codechicken.nei.recipe.TemplateRecipeHandler handler=(codechicken.nei.recipe.TemplateRecipeHandler)type("forestry.factory.recipes.nei.NEIHandlerSqueezer").newInstance();
+        Object cached=invoke(cursorType,cursor,"cached",new Class<?>[]{codechicken.nei.recipe.TemplateRecipeHandler.class,int.class},handler,0);
+        java.util.List<?> inputs=(java.util.List<?>)field(cached,"inputs");
+        codechicken.nei.PositionedStack first=(codechicken.nei.PositionedStack)inputs.get(0);
+        if(first.relx!=12||first.rely!=10||field(cached,"tank")==null)throw new AssertionError("Squeezer native input/tank projection changed");
+        Files.write(Paths.get("build/native-tests/forestry-entry-observations.json"),CanonicalJson.bytes(object("program",context,"entries",observations)));
+        System.out.println("Native Forestry cursor: "+nativeRecipes.size()+" ordinary + "+fixed+" fixed variants, exact native lookup, owned copies and native cached layout passed");
     }
     private static void select(JsonArray observations,String name,ItemStack[] stock,ISqueezerRecipe retained,Class<?> managerType,Set<ISqueezerRecipe> recipes,Map<Object,Object> containers){
         JsonArray ordinary=new JsonArray(),rules=new JsonArray(),filled=new JsonArray(),dynamic=new JsonArray();
