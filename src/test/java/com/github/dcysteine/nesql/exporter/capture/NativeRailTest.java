@@ -20,6 +20,10 @@ import static com.github.dcysteine.nesql.exporter.source.Json.*;
 final class NativeRailTest {
     static void run() throws Exception {
         String prefix = "tonius.neiintegration.mods.railcraft.RecipeHandler";
+        for (String name : new String[] {"RollingMachineShaped", "RollingMachineShapeless"})
+            require(Recipes.adapter((TemplateRecipeHandler) Class.forName(prefix + name).newInstance()) != null,
+                    "Missing native rolling machine adapter: " + name);
+        NativeRollingTest.run();
         for (String name : new String[] {"CokeOven", "BlastFurnace"}) {
             TemplateRecipeHandler handler = (TemplateRecipeHandler) Class.forName(prefix + name).newInstance();
             require(Recipes.adapter(handler) != null, "Missing native Railcraft adapter: " + name);

@@ -434,6 +434,27 @@ final class Changes {
         recipe.addProperty("id", Identity.recipe(recipe)); recipes.add(recipe);
     }
 
+    static void rolling(List<JsonObject> items, List<JsonObject> recipes, List<JsonObject> categories, String texture, Function<String, String> text) {
+        String stone = Identity.item("minecraft:stone", 0, null), paper = Identity.item("minecraft:paper", 0, null);
+        String priorItem = item(items, "fixture:rolling_prior", 0, null, false, "Earlier rolling template", texture, text);
+        JsonObject origin = object("owner", "fixture", "handler", "fixture:rolling", "key", "rolling");
+        String category = Identity.origin("category", origin);
+        categories.add(object("id", category, "source", origin, "name", text.apply("Rolling machine 轧制机"), "icon", object("kind","item","id",stone),
+                "machines", array(), "view", null, "order", categories.size()));
+        JsonObject priorGrid = object("width",2,"height",1,"cells",array(0,null),"mirror",true);
+        JsonObject predicate = object("kind","wildcard","meta",false,"nbt",true);
+        for (boolean shaped : new boolean[] {true, false}) {
+            JsonObject first = choice(stone), second = choice(paper); first.add("rule",predicate); second.add("rule",predicate);
+            JsonObject recipe = object("source",origin,"category",category,
+                    "inputs",array(object("slot",0,"kind","item","choices",array(first)),object("slot",1,"kind","item","choices",array(second))),
+                    "outputs",array(object("slot",0,"kind","item","id",paper,"amount","2","quantity",null,"chance",object("numerator","1","denominator","1"),"role","result","change",null)),
+                    "duration",null,"energy",null,"grid",shaped ? object("width",2,"height",2,"cells",array(0,null,null,1),"mirror",false) : null,
+                    "properties",object(),"magic",null,"view",null,"order",shaped ? 0 : 1,
+                    "process",object("kind","rolling","powered",shaped,"earlier",array(object("grid",priorGrid,"inputs",array(array(object("id",priorItem,"rule",predicate)))))));
+            recipe.addProperty("id", Identity.recipe(recipe)); recipes.add(recipe);
+        }
+    }
+
     private static JsonObject choice(String id) {
         return object("id", id, "amount", "1", "rule", object("kind", "exact"), "consume", object("kind", "consume"), "returns", new JsonArray());
     }

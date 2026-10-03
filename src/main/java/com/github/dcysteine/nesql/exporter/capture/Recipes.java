@@ -30,7 +30,7 @@ import static com.github.dcysteine.nesql.exporter.source.Json.*;
 
 /** Explicit enumeration adapters. An unsupported handler is an error, never an empty recipe list. */
 final class Recipes {
-    enum Adapter { GT, MAGIC, AE, INSCRIBER, SCRAPBOX, ENCHANTER, VAT, ASSEMBLY, SAG, SOUL, IC2, SMELTING, EXTREME, FORESTRY, TINKER, SPACE, CIRCUIT, REFINERY, RAIL, SOLAR, FURNACE, SHAPED, SHAPELESS }
+    enum Adapter { GT, MAGIC, AE, INSCRIBER, SCRAPBOX, ENCHANTER, VAT, ASSEMBLY, SAG, SOUL, IC2, SMELTING, EXTREME, FORESTRY, TINKER, SPACE, CIRCUIT, REFINERY, RAIL, ROLLING, SOLAR, FURNACE, SHAPED, SHAPELESS }
 
     static Adapter adapter(ICraftingHandler handler) {
         if (GtRecipes.supports(handler)) return Adapter.GT;
@@ -52,6 +52,7 @@ final class Recipes {
         if (CircuitRecipes.supports(handler)) return Adapter.CIRCUIT;
         if (RefineryRecipes.supports(handler)) return Adapter.REFINERY;
         if (RailRecipes.supports(handler)) return Adapter.RAIL;
+        if (RollingRecipes.supports(handler)) return Adapter.ROLLING;
         if (SolarRecipes.supports(handler)) return Adapter.SOLAR;
         if (handler.getClass() == FurnaceRecipeHandler.class) return Adapter.FURNACE;
         if (handler.getClass() == ShapedRecipeHandler.class) return Adapter.SHAPED;
@@ -165,6 +166,8 @@ final class Recipes {
                     registry = new RefineryRecipes(handler);
                 } else if (adapter == Adapter.RAIL) {
                     registry = new RailRecipes(handler);
+                } else if (adapter == Adapter.ROLLING) {
+                    registry = new RollingRecipes(handler);
                 } else if (adapter == Adapter.SOLAR) {
                     registry = new SolarRecipes(handler);
                 } else if (adapter == Adapter.FURNACE) {
@@ -301,6 +304,8 @@ final class Recipes {
                     for (com.google.gson.JsonElement element : CircuitRecipes.decorations(facts, handler, source.id)) decorations.add(element);
                 } else if (registry instanceof RefineryRecipes && decorations.size() == 0) {
                     for (com.google.gson.JsonElement element : RefineryRecipes.decorations(facts, handler, source.id)) decorations.add(element);
+                } else if (registry instanceof RollingRecipes && decorations.size() == 0) {
+                    for (com.google.gson.JsonElement element : Ui.neiProgress(facts, handler, source.id, RollingRecipes.progressBars())) decorations.add(element);
                 } else if (registry instanceof RailRecipes && decorations.size() == 0) {
                     for (com.google.gson.JsonElement element : Ui.neiProgress(facts, handler, source.id, RailRecipes.progressBars(handler))) decorations.add(element);
                 } else if (registry instanceof SolarRecipes && decorations.size() == 0) {
