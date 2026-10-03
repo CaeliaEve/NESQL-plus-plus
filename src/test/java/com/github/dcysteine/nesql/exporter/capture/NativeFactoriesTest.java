@@ -20,6 +20,7 @@ final class NativeFactoriesTest {
         if (family.equals("tconstruct")) { tconstruct(); return; }
         if (!family.equals("forestry")) throw new IllegalArgumentException("Unknown native test family: " + family);
         forestry();
+        NativeSqueezerTest.run();
     }
     private static void tconstruct() throws Exception {
         Class<?> smeltery = Class.forName("tconstruct.library.crafting.Smeltery");
