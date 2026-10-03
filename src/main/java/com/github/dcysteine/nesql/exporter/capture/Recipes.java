@@ -46,6 +46,7 @@ final class Recipes {
         if (Ic2Recipes.supports(handler)) return Adapter.IC2;
         if (CannerRecipes.supports(handler)) return Adapter.CANNER;
         if (BuildcraftRecipes.supports(handler)) return Adapter.BUILDCRAFT;
+        if (RefiningRecipes.supports(handler)) return Adapter.BUILDCRAFT;
         if (SmeltingRecipes.supports(handler)) return Adapter.SMELTING;
         if (ExtremeRecipes.supports(handler)) return Adapter.EXTREME;
         if (ForestryRecipes.supports(handler)) return Adapter.FORESTRY;
@@ -142,7 +143,7 @@ final class Recipes {
                 } else if (adapter == Adapter.CANNER) {
                     registry = new CannerRecipes(handler);
                 } else if (adapter == Adapter.BUILDCRAFT) {
-                    registry = new BuildcraftRecipes(handler);
+                    registry = RefiningRecipes.supports(handler) ? new RefiningRecipes(handler) : new BuildcraftRecipes(handler);
                 } else if (adapter == Adapter.INSCRIBER) {
                     registry = new InscriberRecipes(handler);
                 } else if (adapter == Adapter.SCRAPBOX) {
@@ -350,6 +351,7 @@ final class Recipes {
                 int width = info.getWidth(), height = handler.getRecipeHeight(at);
                 if (registry instanceof CannerRecipes) { width = Math.max(width, 140); height = Math.max(height, CannerRecipes.height(handler)); }
                 if (registry instanceof BuildcraftRecipes) { width = Math.max(width,166); height = Math.max(height,96); }
+                if (registry instanceof RefiningRecipes) { width = Math.max(width,166); height = Math.max(height,65); }
                 if (gt != null) { width = gt.ui.width(width); height = gt.ui.height(height); }
                 for (com.google.gson.JsonElement element : row.elements) {
                     JsonObject position = element.getAsJsonObject();
@@ -363,6 +365,7 @@ final class Recipes {
                     if (registry instanceof Ic2Recipes) Ic2Recipes.scene(handler, () -> Ic2Recipes.draw(handler, at));
                     else if (registry instanceof CannerRecipes) CannerRecipes.scene(handler, () -> CannerRecipes.draw(handler, at));
                     else if (registry instanceof BuildcraftRecipes) BuildcraftRecipes.draw(handler, at);
+                    else if (registry instanceof RefiningRecipes) RefiningRecipes.draw(handler, at);
                     else if (registry instanceof ForestryRecipes) ForestryRecipes.draw(handler, at);
                     else if (registry instanceof CircuitRecipes) CircuitRecipes.scene(handler, () -> handler.drawBackground(at));
                     else if (registry instanceof RefineryRecipes) RefineryRecipes.draw(handler);

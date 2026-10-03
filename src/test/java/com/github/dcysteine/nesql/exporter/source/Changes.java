@@ -472,6 +472,21 @@ final class Changes {
         recipe.addProperty("id",Identity.recipe(recipe));recipes.add(recipe);
     }
 
+    static void refining(List<JsonObject> recipes,List<JsonObject> categories,Function<String,String> text) {
+        String water=Identity.fluid("water",null),honey=Identity.fluid("honey",null);
+        JsonObject origin=object("owner","fixture","handler","fixture:refining","key","refining");
+        String category=Identity.origin("category",origin);
+        categories.add(object("id",category,"source",origin,"name",text.apply("BuildCraft Refinery 精炼厂"),"icon",object("kind","fluid","id",water),"machines",array(),"view",null,"order",categories.size()));
+        JsonArray inputs=new JsonArray();
+        for(int slot=0;slot<2;slot++) {JsonObject c=choice(water);c.addProperty("amount","700");c.add("consume",object("kind","allocated"));inputs.add(object("kind","fluid","slot",slot,"choices",array(c)));}
+        JsonObject recipe=object("source",origin,"category",category,"order",0,"inputs",inputs,
+            "outputs",array(object("kind","fluid","slot",0,"id",honey,"amount","50","quantity",null,"change",null,"role","result","chance",Chance.of(1,1))),
+            "process",object("kind","buildcraftRefinery","energy",30,"delay","5","capacity",4000,
+                "earlier",array(array(object("id",Identity.fluid("hydrogen",null),"amount","200"))),"filling",array(array(Identity.fluid("helium",null),water),array(water))),
+            "duration",null,"energy",null,"grid",null,"magic",null,"view",null,"properties",object());
+        recipe.addProperty("id",Identity.recipe(recipe));recipes.add(recipe);
+    }
+
     private static JsonObject choice(String id) {
         return object("id", id, "amount", "1", "rule", object("kind", "exact"), "consume", object("kind", "consume"), "returns", new JsonArray());
     }
