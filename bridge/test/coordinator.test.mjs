@@ -66,6 +66,17 @@ test('source stage refuses incomplete, failed, widened or stale plans before pos
   }
 });
 
+test('source failures retain the real job and error for the export handoff', async () => {
+  const { plan, checkpoint, runner } = exportFixture();
+  const error = { code:'render_failed', message:'Native icon failed', fatal:false };
+  runner.client.request = async method => method === 'POST' ? { id:'failed-source' }
+    : { job:{ state:'failed', error } };
+  await assert.rejects(() => runner.runSourceStage(plan,checkpoint), /render_failed/);
+  assert.equal(checkpoint.stages?.source?.job,'failed-source');
+  assert.equal(checkpoint.stages.source.status,'failed');
+  assert.deepEqual(checkpoint.stages.source.error,error);
+});
+
 test('checkpoint journal recovers durable deltas and ignores only an unfinished final write', async t => {
   const directory = await mkdtemp(path.join(os.tmpdir(), 'nesql-journal-'));
   t.after(() => rm(directory, { recursive: true, force: true }));

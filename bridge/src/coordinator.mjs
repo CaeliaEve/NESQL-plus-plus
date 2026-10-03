@@ -596,7 +596,7 @@ export class AcceptanceCoordinator {
     const started = checkpoint.activeExport?.key === request.key
       ? checkpoint.activeExport
       : await this.client.request('POST', '/jobs', request);
-    assert.ok(started.id, 'Full export did not return a job id');
+    assert.ok(started.id, 'Source export did not return a job id');
     checkpoint.activeExport = { id: started.id, key: request.key };
     await this.saveCheckpoint(checkpoint);
     let job;
@@ -608,7 +608,10 @@ export class AcceptanceCoordinator {
     }
     checkpoint.activeExport = null;
     if (job.state !== 'succeeded' || !job.result?.path) {
-      const error = job.error || { code: `export_${job.state}`, message: 'Full source export did not complete' };
+      const error = job.error || { code: `export_${job.state}`, message: 'Source export did not complete' };
+      checkpoint.stages ??= {};
+      checkpoint.stages.source = { status: 'failed', job: started.id, error, request };
+      await this.saveCheckpoint(checkpoint);
       throw new Error(`${error.code}: ${error.message}`);
     }
     return { status: 'passed', job: started.id, result: job.result, request };
