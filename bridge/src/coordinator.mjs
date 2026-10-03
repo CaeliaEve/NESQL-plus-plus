@@ -137,9 +137,8 @@ export class AcceptanceCoordinator {
     finally { if (this.currentCheckpoint) await this.saveCheckpoint(this.currentCheckpoint, true); }
   }
 
-  async executePlan(plan, { onProgress }) {
-    memoryPolicy(plan.memory);
-    const game = await this.client.request('GET', '/game');
+  async planFingerprint(plan, game) {
+    game ??= await this.client.request('GET', '/game');
     if (!game.ready) {
       throw new Error(`Game server is not ready: ${game.reason || 'unknown'}`);
     }
@@ -168,7 +167,8 @@ export class AcceptanceCoordinator {
     if (foundModRow.sha256 !== undefined) assert.equal(foundModRow.sha256, actualModSha, 'Reported mod source digest differs from its file');
     assert.ok(Array.isArray(plan.handlers) && plan.handlers.length, 'A nonempty plan is required');
     assert.equal(new Set(plan.handlers.map(item => item.id)).size, plan.handlers.length, 'Duplicate plan target');
-    const planHash = digest(JSON.stringify(canonical({ handlers: plan.handlers, probes: plan.probes ?? [], dependencies: plan.dependencies ?? {}, pageSize: this.options.pageSize ?? 4096, memory: plan.memory ?? null })));
+    const planHash = digest(JSON.stringify(canonical({ handlers: plan.handlers, probes: plan.probes ?? [], dependencies: plan.dependencies ?? {}, pageSize: this.options.pageSize ?? 4096, memory: plan.memory ?? null,
+      source: plan.stages?.source ? { handlers: plan.stages.source.handlers ?? null, scope: plan.stages.source.scope ?? null } : null })));
     const envFingerprint = AcceptanceCoordinator.fingerprint({
       world: actualWorld, exporter: game.exporter, revision: game.revision,
       modSha256: actualModSha, planHash, session: this.client.session,
@@ -176,7 +176,14 @@ export class AcceptanceCoordinator {
       environment: game.environment, dependencies: plan.dependencies ?? {},
     });
 
-    const checkpoint = await this.loadCheckpoint(envFingerprint);
+    return envFingerprint;
+  }
+
+  async executePlan(plan, { onProgress }) {
+    memoryPolicy(plan.memory);
+    const game = await this.client.request('GET', '/game');
+    const checkpoint = await this.loadCheckpoint(await this.planFingerprint(plan, game));
+    const actualWorld = game.world?.folder || game.world?.name;
     this.currentCheckpoint = checkpoint;
 
     // If an active job was interrupted, verify its status first (C8)
@@ -565,7 +572,26 @@ export class AcceptanceCoordinator {
 
   async runSourceStage(plan, checkpoint) {
     const stage = plan.stages.source;
-    const request = { key: stage.key || `full-${this.runId.slice(-12)}`, name: stage.name || 'gtnh-full', profile: 'full', world: plan.world, probes: plan.probes };
+    assert.ok(Array.isArray(stage.handlers) && stage.handlers.length, 'Source stage requires an explicit nonempty selection');
+    assert.equal(new Set(stage.handlers).size, stage.handlers.length, 'Duplicate source handler');
+    for (const id of stage.handlers) assert.match(id, /^category_[a-f0-9]{64}$/);
+    assert.ok(plan.handlers.every(item => item.classification === 'recipe'), 'Recipe export requires a recipe-only diagnostic plan');
+    assert.deepEqual([...stage.handlers].sort(), plan.handlers.map(item => item.id).sort(), 'Source selection differs from the diagnostic plan');
+    assert.ok(stage.scope === undefined || stage.scope === 'recipes', 'Unsupported source scope');
+    assert.ok(!checkpoint.activeJob && !checkpoint.resourceStop, 'Diagnostics are still active or stopped');
+    assert.ok(Array.isArray(checkpoint.failures) && checkpoint.failures.length === 0, 'Diagnostics contain failures');
+    for (const id of stage.handlers) {
+      const state = checkpoint.handlers?.[id];
+      assert.ok(state && state.status === 'passed' && !state.error && state.hasFailures === false, `Diagnostics did not pass: ${id}`);
+      assert.ok(Number.isSafeInteger(state.total) && state.total >= 0 && state.checked === state.total
+        && state.offset === state.total && state.unexamined === 0, `Diagnostics are incomplete: ${id}`);
+      assert.ok(Array.isArray(state.failed) && !state.failed.length && Array.isArray(state.failures) && !state.failures.length
+        && state.failuresOmitted === 0 && !(state.failureSamplesOmitted > 0), `Diagnostics contain recipe failures: ${id}`);
+      assert.ok(Array.isArray(state.excluded), `Missing native exclusion evidence: ${id}`);
+    }
+    assert.equal(await this.planFingerprint(plan), checkpoint.fingerprint, 'Environment/session changed since diagnostics');
+    const request = { key: stage.key || `selection-${this.runId.slice(-12)}`, name: stage.name || 'gtnh-selection', profile: 'full', world: plan.world, probes: plan.probes,
+      handlers: [...stage.handlers], ...(stage.scope === undefined ? {} : { scope: stage.scope }) };
     if (checkpoint.activeExport?.key !== request.key) await this.guardResources(plan, checkpoint, { stage: 'source' });
     const started = checkpoint.activeExport?.key === request.key
       ? checkpoint.activeExport

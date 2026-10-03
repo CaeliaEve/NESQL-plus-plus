@@ -11,6 +11,61 @@ import { AcceptanceCoordinator, isFatalError } from '../src/coordinator.mjs';
 import { resolveReport } from '../src/reports.mjs';
 import { CheckpointLog, readCheckpoint } from '../src/checkpoint.mjs';
 
+function exportFixture() {
+  const id = 'category_' + 'a'.repeat(64);
+  const plan = { world: 'test-world', handlers: [{ id, classification: 'recipe' }],
+    stages: { source: { key: 'explicit-test', scope: 'recipes', handlers: [id] } } };
+  const checkpoint = { fingerprint: 'verified-environment', handlers: { [id]: {
+    id, status: 'passed', total: 2, checked: 2, offset: 2, unexamined: 0,
+    failed: [], failures: [], excluded: [1], hasFailures: false, failuresOmitted: 0
+  } }, failures: [] };
+  const runner = new AcceptanceCoordinator(path.join(os.tmpdir(), 'unused-export-gate'));
+  runner.saveCheckpoint = async () => {};
+  runner.guardResources = async () => {};
+  runner.planFingerprint = async () => 'verified-environment';
+  const requests = [];
+  runner.client = { request: async (method, url, body) => {
+    if (method === 'POST') { requests.push(body); return { id: 'export' }; }
+    return { job: { state: 'succeeded', result: { path: 'source' } } };
+  } };
+  return { id, plan, checkpoint, runner, requests };
+}
+
+test('source stage keeps the exact explicit selection after complete diagnostics', async () => {
+  const { id, plan, checkpoint, runner, requests } = exportFixture();
+  const result = await runner.runSourceStage(plan, checkpoint);
+  assert.deepEqual(requests[0].handlers, [id]);
+  assert.equal(requests[0].scope, 'recipes');
+  assert.equal(result.status, 'passed');
+  assert.deepEqual(checkpoint.handlers[id].excluded, [1], 'Native exclusions remain visible');
+});
+
+test('source stage refuses incomplete, failed, widened or stale plans before posting', async () => {
+  const mutations = [
+    x => { delete x.plan.stages.source.handlers; },
+    x => { x.plan.stages.source.handlers = []; },
+    x => { x.plan.stages.source.handlers.push(x.id); },
+    x => { x.plan.stages.source.handlers = ['category_' + 'b'.repeat(64)]; },
+    x => { x.plan.handlers.push({ id:'category_'+'b'.repeat(64), classification:'recipe' }); },
+    x => { delete x.checkpoint.handlers[x.id]; },
+    x => { x.checkpoint.handlers[x.id].status = 'excluded'; },
+    x => { x.checkpoint.handlers[x.id].status = 'partial'; },
+    x => { x.checkpoint.handlers[x.id].unexamined = 1; },
+    x => { x.checkpoint.handlers[x.id].checked = 1; },
+    x => { x.checkpoint.handlers[x.id].failed = [0]; },
+    x => { x.checkpoint.handlers[x.id].hasFailures = true; },
+    x => { x.checkpoint.handlers[x.id].failuresOmitted = 1; },
+    x => { x.checkpoint.handlers[x.id].error = { code:'failure' }; },
+    x => { x.plan.stages.source.scope = 'typo'; },
+    x => { x.runner.planFingerprint = async () => 'changed-environment'; }
+  ];
+  for (const mutate of mutations) {
+    const x = exportFixture(); mutate(x);
+    await assert.rejects(() => x.runner.runSourceStage(x.plan, x.checkpoint));
+    assert.equal(x.requests.length, 0, 'Invalid plan posted a game export');
+  }
+});
+
 test('checkpoint journal recovers durable deltas and ignores only an unfinished final write', async t => {
   const directory = await mkdtemp(path.join(os.tmpdir(), 'nesql-journal-'));
   t.after(() => rm(directory, { recursive: true, force: true }));

@@ -82,3 +82,9 @@ node acceptance/scripts/accept.mjs verify <job-id> --browser
 成功后除 `collect` / `verify --browser` 外，归档原始 job 和 `job.fragments.path` 指向的完整 manifest；按其 SHA256 使用 Compiler `assemble`，核对恢复的 Source ID 与原始结果相同。`writing` 归档不能组装，也不支持跳过任意配方范围续跑。
 
 资源诊断使用 `scan resources --resources <逻辑路径列表> --key <新 key>`。资源字节匹配与物品图标像素匹配是不同证据；只有满足 Compiler Source 关联条件时才能声明后者。
+
+## 按范围交付的协调器门禁
+
+自动 Source 阶段必须配置非空、唯一的 `stages.source.handlers`，与该诊断计划中的配方身份完全一致。`scope: "recipes"` 只导出指定配方及其引用事实；省略 scope 会包含共同领域采集，但仍必须明确指定 handlers。领域/工具核验应使用独立计划，不混进配方导出计划。
+
+协调器仅在所有目标完成连续全量分页、没有失败或待检查项，且重新核对游戏会话、世界、模组摘要、环境与计划指纹一致后提交 Source。原生排除记录保留；排除的整个处理器不能算作通过。空列表、失败后自动缩小范围、沿用旧环境检查点均被拒绝。诊断完成只允许进入正式导出，不代表视觉、Compiler 和网页验收完成。
