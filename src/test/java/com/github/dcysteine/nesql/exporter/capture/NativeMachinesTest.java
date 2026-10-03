@@ -18,6 +18,8 @@ public final class NativeMachinesTest {
     public static void main(String[] args) throws Exception { GameTest.run(); }
     public static void run() throws Exception {
         String family = System.getProperty("nesql.nativeFamily", "machines");
+        if (family.equals("core-fixes-casting")) { NativeCastingEventsTest.run(); return; }
+        if (family.startsWith("core-fixes")) { NativeCoreFixesTest.run(); return; }
         if (family.equals("forestry-callbacks")) { NativeSqueezerCallbacksTest.run(); return; }
         if (family.equals("forestry-work")) { NativeSqueezerWorkTest.run(); return; }
         if (family.equals("canner")) { NativeCannerTest.run(); return; }

@@ -23,7 +23,8 @@ final class Replaced {
                 && !category.equals("gt.recipe.arcfurnace/gt.recipe.category.arc_furnace_recycling")) return null;
         if (candidate(recipe) == null) return null;
         Map<String, ModContainer> mods = Loader.instance().getIndexedModList();
-        if (!version(mods.get("malisisdoors"), "1.18.2-GTNH") || !version(mods.get("gregtech"), "5.09.51.482")) return null;
+        // The legacy gregtech container reports MC1710; gregtech_nh identifies this build.
+        if (!version(mods.get("malisisdoors"), "1.18.2-GTNH") || !version(mods.get("gregtech_nh"), "5.09.51.482")) return null;
         Class<?> tool = MagicApi.type("net.malisis.core.util.replacement.ReplacementTool");
         return inspect(recipe, item -> (Item) MagicApi.invoke(tool, null, "originalItem", new Class<?>[]{Item.class}, item));
     }

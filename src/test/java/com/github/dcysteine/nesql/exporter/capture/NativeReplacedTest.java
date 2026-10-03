@@ -42,6 +42,15 @@ final class NativeReplacedTest {
         require(ghost.getItem()==old && ghost.stackSize==1, "Proof mutated native source");
         Map<ItemStack,ItemData> data = (Map<ItemStack,ItemData>) field(GTOreDictUnificator.class,null,"sItemStack2DataMap");
         Map<String,ItemStack> names = (Map<String,ItemStack>) field(GTOreDictUnificator.class,null,"sName2StackMap");
+        // Recycling registers material composition even when no ore prefix exists.
+        // Such an association leaves native input normalization unchanged.
+        ItemData composition = new ItemData(Materials.Iron, 3628800L);
+        data.put(ghost.copy(), composition);
+        require(recipe.isRecipeInputEqual(false,new FluidStack[0],ghost.copy())
+                && !recipe.isRecipeInputEqual(false,new FluidStack[0],new ItemStack(Items.iron_door)),
+                "Material-only source association changed native reachability");
+        require(Replaced.inspect(recipe,lookup)!=null, "Harmless recycling composition blocked unreachable-door proof");
+        data.remove(ghost);
         ItemStack registered = new ItemStack(Items.diamond);
         ItemData association = new ItemData(OrePrefixes.ingot,Materials.Iron);
         association.mUnificationTarget = ghost.copy(); data.put(registered,association);
@@ -55,6 +64,14 @@ final class NativeReplacedTest {
         require(Replaced.inspect(recipe,"gt.recipe.macerator/gt.recipe.macerator")==null, "Exclusion escaped recycling scope");
         require(Replaced.inspect(recipe,"gt.recipe.macerator/gt.recipe.category.macerator_recycling")==null,
                 "Production proof ignored absent pinned mod versions");
+        NativeCoreFixesTest.version("gregtech", "MC1710");
+        NativeCoreFixesTest.version("gregtech_nh", "5.09.51.482");
+        NativeCoreFixesTest.version("malisisdoors", "1.18.2-GTNH");
+        require(Replaced.inspect(recipe,"gt.recipe.macerator/gt.recipe.category.macerator_recycling")!=null,
+                "Pinned GTNH build was rejected because legacy GT reports MC1710");
+        NativeCoreFixesTest.version("gregtech_nh", "different");
+        require(Replaced.inspect(recipe,"gt.recipe.macerator/gt.recipe.category.macerator_recycling")==null,
+                "A different native build passed the door proof");
         association.mUnificationTarget=registered.copy(); data.put(ghost.copy(),association);
         require(Replaced.inspect(recipe,lookup)==null, "Ignored source normalization to a registered input");
         data.remove(ghost);

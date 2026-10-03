@@ -146,12 +146,10 @@ final class SpaceRecipes implements RegistryRecipes {
 
     private static void containerReturn(ItemStack input, JsonObject choice, Facts facts) {
         Item item = input.getItem();
-        try {
-            if (item.getClass().getMethod("hasContainerItem", ItemStack.class).getDeclaringClass() != Item.class)
-                throw fault("NASA container presence requires an adapter: " + item.getClass().getName());
-        } catch (NoSuchMethodException error) { throw new IllegalStateException(error); }
-        if (!item.hasContainerItem(input.copy())) return;
+        if (!ItemCallbacks.hasContainer(input)) return;
         // SlotRocketBenchResult uses the legacy item getter, not getContainerItem(ItemStack).
+        if (ItemCallbacks.method(item, "getContainerItem", "func_77668_q").getDeclaringClass() != Item.class)
+            throw fault("Unadapted NASA legacy container return: " + item.getClass().getName());
         Item returned = item.getContainerItem();
         if (returned == null) throw fault("NASA native container item is null");
         choice.getAsJsonArray("returns").add(object("kind", "item", "id", facts.item(new ItemStack(returned)), "amount", "1"));

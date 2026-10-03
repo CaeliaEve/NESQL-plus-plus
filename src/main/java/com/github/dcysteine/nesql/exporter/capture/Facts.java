@@ -91,7 +91,7 @@ final class Facts {
         if (items.contains(id)) return id;
         try {
             JsonArray tooltip = new JsonArray();
-            for (Object line : stack.getTooltip(Minecraft.getMinecraft().thePlayer, true)) tooltip.add(value(text((String) line)));
+            for (Object line : tooltipStack(stack).getTooltip(Minecraft.getMinecraft().thePlayer, true)) tooltip.add(value(text((String) line)));
             JsonObject tools = new JsonObject();
             for (String tool : stack.getItem().getToolClasses(stack)) tools.addProperty(tool, stack.getItem().getHarvestLevel(stack, tool));
             TreeSet<String> tags = new TreeSet<>();
@@ -116,6 +116,19 @@ final class Facts {
             throw fault;
         }
         return id;
+    }
+
+    /** EnderIO's creative entry initializes coordinates; some crafting templates do not.
+     * Initialize only a tooltip copy with its native default. Identity, aspects and icon
+     * retain the original null NBT; configured or empty-but-present tags are never replaced.
+     */
+    static ItemStack tooltipStack(ItemStack stack) {
+        if (stack.getTagCompound() != null || !stack.getItem().getClass().getName()
+                .equals("crazypants.enderio.teleport.telepad.ItemCoordSelector")) return stack;
+        MagicApi.version("EnderIO", "2.9.28");
+        ItemStack display = stack.copy();
+        MagicApi.invoke(stack.getItem().getClass(), null, "init", new Class<?>[]{ItemStack.class}, display);
+        return display;
     }
 
     String fluid(FluidStack original) {

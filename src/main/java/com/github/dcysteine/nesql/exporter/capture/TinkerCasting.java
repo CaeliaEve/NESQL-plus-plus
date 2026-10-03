@@ -44,7 +44,7 @@ final class TinkerCasting {
         dispatch(before);
         if (before.getResult() == Event.Result.DENY) return false;
         Event after = (Event) construct(type(EVENTS + "SmelteryCastedEvent$" + machine), new Class<?>[] {recipeType, ItemStack.class}, projection, output.copy());
-        dispatch(after);
+        boolean unstable = dispatch(after);
         output = (ItemStack) field(after, "output"); consume = (Boolean) field(after, "consumeCast");
         if (output == null || output.getItem() == null || output.stackSize <= 0) throw fault("Casting event produced no fixed result");
         output = output.copy();
@@ -68,18 +68,38 @@ final class TinkerCasting {
         } else row.property("tconstruct:emptyCast", "Requires an empty casting slot", true);
         row.fluidInput(null, 0, fluid, false); row.itemOutput(cached.getResult(), 0, output, 10000);
         row.record.addProperty("duration", Integer.toString(time));
+        if (unstable) row.record.add("process", object("kind", "unstableCasting"));
         handler.arecipes.clear(); handler.arecipes.add(cached); return true;
     }
 
-    private static void dispatch(Event event) {
+    private static boolean dispatch(Event event) {
         int bus = (Integer) field(EventBus.class, MinecraftForge.EVENT_BUS, "busID");
         IEventListener[] listeners = event.getListenerList().getListeners(bus).clone();
+        Set<IEventListener> timers = Collections.newSetFromMap(new IdentityHashMap<>());
+        Set<IEventListener> extraUtils = Collections.newSetFromMap(new IdentityHashMap<>());
         // Validate the complete snapshot before running anything. Unknown callbacks must never execute.
         for (IEventListener listener : listeners) {
             if (listener instanceof EventPriority) continue;
             if (listener.getClass() != ASMEventHandler.class) throw fault("Unadapted casting event listener: " + listener.getClass().getName());
             Object wrapper = field(listener, "handler"), target = field(wrapper, "instance");
             String name = target.getClass().getName(), callback;
+            if (name.equals("com.rwtema.extrautils.modintegration.TConEvents")) {
+                version("ExtraUtilities", "1.2.12");
+                if (!event.getClass().getName().equals(EVENTS+"SmelteryCastedEvent$CastingTable"))
+                    throw fault("Unexpected ExtraUtilities casting event");
+                boolean matched=false;
+                for (String candidate:new String[]{"addUnstableTimer","addBedrockiumPartSlowness"}) {
+                    try {
+                        Method method=target.getClass().getDeclaredMethod(candidate,event.getClass());
+                        if (((Map<?,?>)field(ASMEventHandler.class,null,"cache")).get(method)==wrapper.getClass()) {
+                            matched=true;extraUtils.add(listener);
+                            if (candidate.equals("addUnstableTimer")) timers.add(listener);
+                        }
+                    } catch (NoSuchMethodException error) { throw fault("Missing pinned ExtraUtilities callback: "+candidate); }
+                }
+                if (!matched) throw fault("Unadapted callback on casting event owner: "+name);
+                continue;
+            }
             switch (name) {
                 case "tconstruct.weaponry.WeaponryHandler": callback = "weaponryPartCast"; break;
                 case "iguanaman.iguanatweakstconstruct.restriction.PartRestrictionHandler": callback = "onPartCasting"; break;
@@ -92,7 +112,37 @@ final class TinkerCasting {
                 if (cache.get(method) != wrapper.getClass()) throw fault("Unadapted callback on casting event owner: " + name);
             } catch (NoSuchMethodException error) { throw fault("Unadapted casting event callback: " + name + "/" + event.getClass().getName()); }
         }
-        for (IEventListener listener : listeners) { Jobs.checkpoint(); listener.invoke(event); }
+        boolean unstable=false;
+        for (IEventListener listener : listeners) {
+            Jobs.checkpoint();
+            if (extraUtils.contains(listener)) {
+                ItemStack output=(ItemStack)field(event,"output");
+                int material=material(output);
+                if (timers.contains(listener)) {
+                    int configured=(Integer)field(type("com.rwtema.extrautils.ExtraUtils"),null,"tcon_unstable_material_id");
+                    if (configured>0 && material==configured) {
+                        // The native callback creates a compound, then reads server clocks.
+                        // Retain its base output, and represent clock writes as process semantics.
+                        if (output.getTagCompound()==null) output.setTagCompound(new NBTTagCompound());
+                        unstable=true;
+                    }
+                    continue;
+                }
+            }
+            listener.invoke(event);
+        }
+        return unstable;
+    }
+    private static int material(ItemStack output) {
+        if (output==null || !type("tconstruct.library.util.IToolPart").isInstance(output.getItem())) return -1;
+        try {
+            Method getter=output.getItem().getClass().getMethod("getMaterialID",ItemStack.class);
+            String owner=getter.getDeclaringClass().getName();
+            if ((!owner.equals("tconstruct.tools.items.ToolPart") && !owner.equals("tconstruct.library.tools.DynamicToolPart"))
+                    || ItemCallbacks.method(output.getItem(),"getDamage","getDamage",ItemStack.class).getDeclaringClass()!=net.minecraft.item.Item.class)
+                throw fault("Unadapted casting material predicate: "+owner);
+            return (Integer)invoke(output.getItem().getClass(),output.getItem(),"getMaterialID",new Class<?>[]{ItemStack.class},output.copy());
+        } catch (NoSuchMethodException error) { throw fault("Missing tool-part material getter"); }
     }
     private static Jobs.Fault fault(String message) { return new Jobs.Fault("recipe_unsupported", message); }
 }

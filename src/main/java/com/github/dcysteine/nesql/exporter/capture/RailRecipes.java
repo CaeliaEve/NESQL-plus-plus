@@ -112,14 +112,17 @@ final class RailRecipes implements RegistryRecipes {
     }
 
     private static final class Entry {
-        final ItemStack input, output; final FluidStack fluid; final boolean damage, nbt; final int time;
+        final ItemStack input, output; final FluidStack fluid; final boolean damage, nbt, fixedMeta; final int time;
         Entry(Object recipe, boolean coke) {
             ItemStack raw = (ItemStack) field(recipe, "input");
             if (raw == null || raw.getItem() == null || raw.getItemDamage() < 0) throw fault("Invalid Railcraft input template");
-            // InvTools calls the item's damage getter. A custom getter may turn
-            // arbitrary metadata into a wildcard; it needs its own semantics.
+            // InvTools compares Item#getDamage, whereas fact IDs retain raw metadata.
+            // GT++ burnables return one final field for every stack of this item.
             try {
-                if (raw.getItem().getClass().getMethod("getDamage", ItemStack.class).getDeclaringClass() != Item.class)
+                Class<?> getter = raw.getItem().getClass().getMethod("getDamage", ItemStack.class).getDeclaringClass();
+                fixedMeta = getter.getName().equals("gtPlusPlus.core.item.base.BaseItemBurnable");
+                if (fixedMeta) version("gregtech_nh", "5.09.51.482");
+                else if (getter != Item.class)
                     throw fault("Railcraft input uses a custom metadata predicate: " + raw.getItem().getClass().getName());
             } catch (NoSuchMethodException error) { throw fault("Missing native Item damage getter"); }
             input = raw.copy(); input.stackSize = 1;
@@ -132,7 +135,7 @@ final class RailRecipes implements RegistryRecipes {
             FluidStack liquid = coke ? (FluidStack) field(recipe, "fluidOutput") : null; fluid = liquid == null ? null : liquid.copy();
         }
         List<Pattern> patterns() {
-            boolean ignoreMeta = !damage || !input.getHasSubtypes() || input.getItemDamage() == 32767;
+            boolean ignoreMeta = fixedMeta || !damage || !input.getHasSubtypes() || input.getItemDamage() == 32767;
             List<Pattern> patterns = new ArrayList<>(); patterns.add(new Pattern(input, ignoreMeta, !nbt));
             if (!ignoreMeta) {
                 ItemStack wildcard = new ItemStack(input.getItem(), 1, 32767);

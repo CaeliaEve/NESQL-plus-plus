@@ -208,13 +208,21 @@ is explicit for cast-free recipes. Preserve native layouts and fluid flow artwor
 
 The native machine posts `SmelteryCastEvent` (may deny) and `SmelteryCastedEvent`
 (may change consumption/output). Capture runs the actual active listener snapshot
-on deep copied recipe/event data, after validating **every** callback. Allow only
-the reviewed TConstruct `WeaponryHandler.weaponryPartCast` and Iguana 2.6.6
-`PartRestrictionHandler.onPartCasting` / `CastHandler.onCasted`. Verify the exact
+on deep copied recipe/event data, after validating **every** callback. Support
+the reviewed TConstruct `WeaponryHandler.weaponryPartCast`, Iguana 2.6.6
+`PartRestrictionHandler.onPartCasting` / `CastHandler.onCasted`, and the two
+ExtraUtilities 1.2.12 casting-table callbacks described below. Verify the exact
 target class and FML's Method-to-generated-wrapper cache, not a method-name string
 alone. Unknown callbacks fail before any listener runs. Callback Errors/faults
 propagate normally. Original recipes, stacks and global event registration remain
 unchanged. Full initialized material restrictions still need real-game acceptance.
+
+`TConEvents.addBedrockiumPartSlowness` retains the native stable attribute NBT.
+For `addUnstableTimer`, Source 36 exports an `unstableCasting` process and an
+owned item prototype, never an export-time world timestamp. Native completion
+conditionally writes XUDeadline/XULocalDeadline/XULocalDim from loaded worlds.
+The configured material predicate is audited; unknown overrides remain errors.
+Compiler `docs/casting.md` defines the conditional writes and expiration boundary.
 
 The existing TConstruct native test command now additionally takes
 `-PnativeCraftingTestJar=build/native-tests/iguana.jar`. Its isolated classloader
@@ -235,8 +243,11 @@ the native physical slot's `isItemValid`: ordinary GalaxySpace slots enforce exa
 item/meta, cargo slots have disabled positions, and chest slots restrict grades.
 Source counts are not consumption: `SlotRocketBenchResult` consumes one item per
 occupied slot and returns `new ItemStack(item.getContainerItem())`. It does not
-use Forge's stack-sensitive container getter. Unadapted stack-sensitive container
-presence callbacks fail explicitly. Exact first-match shadowing is excluded;
+use Forge's stack-sensitive container getter. The pinned GTGenericItem presence
+predicate and known GT metadata getters are audited separately; ordinary GT
+components with no container are valid. A positive predicate still uses NASA's
+legacy result, and unknown callbacks or a null legacy result fail explicitly.
+Exact first-match shadowing is excluded;
 wildcard alternatives with conditional earlier-recipe overlap fail explicitly.
 
 An empty owned native container supplies slot indices/coordinates and predicates.
@@ -339,3 +350,22 @@ actual fluid admission and smelting, capacity rejection, both fuel modes, input
 ownership, and the original `onUpdate` clock versus every exported animation
 frame. This evidence is local; full installed-registry and GL export acceptance
 remain part of the unified live run.
+
+## Core diagnostic repairs in Source 36
+
+IC2 blast records per-choice same-input-slot containers separately from the air
+output return. Pinned Hodgepodge 2.6.112 ItemCell callbacks and IC2 consume(1)
+semantics preserve single-item replacement and stacked-container nonconsumption;
+the machine advances even when consume returns nothing. See the Compiler's
+`docs/blast.md` for checkpoint, output-space and retained-progress conditions.
+
+Railcraft's GT++ BaseItemBurnable getter returns a fixed field for every raw
+metadata value. Its native predicate therefore ignores raw metadata while the
+fact ID retains it. BuildCraft subtype reflection resolves MCP/SRG aliases on
+Item before rejecting unaudited overrides. EnderIO's null-NBT coordinate selector
+uses native initialization on a tooltip-only copy, retaining raw fact identity.
+
+The GT replacement proof checks `gregtech_nh` 5.09.51.482, since the same jar's
+`gregtech` container reports MC1710. Unregistered doors are excluded only after
+the existing native replacement/unification reachability proof; other missing
+registrations still fail. Local tests do not certify the installed registry.

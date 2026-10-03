@@ -499,7 +499,20 @@ final class Changes {
             "inputs",array(object("kind","item","slot",0,"choices",array(primary)),object("kind","item","slot",1,"choices",array(air))),
             "outputs",array(object("kind","item","slot",0,"id",paper,"amount","2","quantity",null,"change",null,"role","result","chance",Chance.of(1,1)),
                 object("kind","item","slot",1,"id",stone,"amount",null,"quantity",object("kind","potential","stat","ic2:slagSpace","nominal","3"),"change",null,"role","result","chance",Chance.of(1,1))),
-            "process",object("kind","ic2Blast","heat",50000),"duration",null,"energy",null,"grid",null,"magic",null,"view",null,"properties",object());
+            "process",object("kind","ic2Blast","heat",50000,"containers",array(array((Object)null),array(object("id",stone,"amount","1")))),"duration",null,"energy",null,"grid",null,"magic",null,"view",null,"properties",object());
+        recipe.addProperty("id",Identity.recipe(recipe));recipes.add(recipe);
+    }
+
+    static void unstableCasting(List<JsonObject> recipes,List<JsonObject> categories,Function<String,String> text) {
+        String stone=Identity.item("minecraft:stone",0,null);
+        JsonObject origin=object("owner","fixture","handler","tconstruct.plugins.nei.RecipeHandlerCastingTable","key","unstable-fixture");
+        String category=Identity.origin("category",origin);
+        categories.add(object("id",category,"source",origin,"name",text.apply("Unstable casting 浇铸计时"),"icon",null,"machines",array(),"view",null,"order",categories.size()));
+        JsonObject fluid=choice(Identity.fluid("water",null));fluid.addProperty("amount","144");
+        JsonObject recipe=object("source",origin,"category",category,"order",0,
+            "inputs",array(object("kind","fluid","slot",0,"choices",array(fluid))),
+            "outputs",array(object("kind","item","slot",0,"id",stone,"amount","1","quantity",null,"change",null,"role","result","chance",Chance.of(1,1))),
+            "process",object("kind","unstableCasting"),"duration","80","energy",null,"grid",null,"magic",null,"view",null,"properties",object());
         recipe.addProperty("id",Identity.recipe(recipe));recipes.add(recipe);
     }
 

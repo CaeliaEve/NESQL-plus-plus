@@ -154,6 +154,11 @@ final class IntegrationRules {
     }
     private static void inherited(Object object,String method,String owner,Class<?>... args) {
         if(object==null)throw fault("Missing native callback owner");
+        if (object instanceof Item && (method.equals("getHasSubtypes") || method.equals("func_77614_k"))) {
+            if (!ItemCallbacks.method((Item)object,"getHasSubtypes","func_77614_k",args).getDeclaringClass().getName().equals(owner))
+                throw fault("Unadapted integration callback: "+object.getClass().getName()+"."+method);
+            return;
+        }
         try {if(!object.getClass().getMethod(method,args).getDeclaringClass().getName().equals(owner))throw fault("Unadapted integration callback: "+object.getClass().getName()+"."+method);}
         catch(NoSuchMethodException e){throw fault("Missing integration callback: "+method);}
     }

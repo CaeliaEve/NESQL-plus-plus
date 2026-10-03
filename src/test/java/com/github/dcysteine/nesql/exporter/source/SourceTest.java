@@ -256,6 +256,7 @@ public final class SourceTest {
         Changes.buildcraft(recipes, categories, text);
         Changes.refining(recipes,categories,text);
         Changes.blast(recipes,categories,text);
+        Changes.unstableCasting(recipes,categories,text);
         Changes.integration(items,recipes,categories,texture,text);
         java.util.List<JsonObject> chunks = new java.util.ArrayList<>();
         JsonObject rule = object("time",3,"requirements",array(object("registry","minecraft:paper","meta",0,"amount",1,"nbt",null,"ores",array("paper"))),

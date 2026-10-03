@@ -6,6 +6,7 @@ import codechicken.nei.recipe.TemplateRecipeHandler;
 import com.github.dcysteine.nesql.exporter.task.Jobs;
 import com.google.gson.JsonElement;
 import com.google.gson.JsonObject;
+import com.google.gson.JsonArray;
 import net.minecraft.item.Item;
 import net.minecraft.item.ItemStack;
 import net.minecraft.nbt.NBTTagCompound;
@@ -29,7 +30,6 @@ final class BlastRecipes implements RegistryRecipes {
     BlastRecipes(TemplateRecipeHandler handler,Object manager,int heat,ItemStack air,ItemStack cell){
         if(!supports(handler)||manager==null||!manager.getClass().getName().equals("ic2.core.BasicMachineRecipeManager"))throw fault("Unknown IC2 blast registry");
         this.handler=handler;this.manager=manager;this.heat=heat;this.air=stack(air);this.cell=stack(cell);
-        containerless(this.air);
         if(this.air.getTagCompound()!=null&&!this.air.getTagCompound().hasNoTags())throw fault("Tagged IC2 air wrapper requires native tag-hash matching");
         this.air.setTagCompound(null);
         // getRecipe would execute arbitrary callbacks for these; do not call them for display.
@@ -47,8 +47,9 @@ final class BlastRecipes implements RegistryRecipes {
         if(!((List<?>)field(manager,"uncacheableRecipes")).isEmpty())throw fault("IC2 blast selectors changed to an unadapted callback");
         Map.Entry<?,?> source=sources.get(index);
         List<RecipeRow.Ingredient> inputs=Ic2Recipes.ingredients(source.getKey());
+        JsonArray containers=new JsonArray(),primary=new JsonArray(),airContainers=new JsonArray();
         for(RecipeRow.Ingredient input:inputs){
-            containerless(input.item);
+            primary.add(container(input.item,input.rule.get("meta").getAsBoolean(),row.facts));
             if(type("ic2.core.item.ItemUpgradeModule").isInstance(input.item.getItem()))throw fault("Native blast input slot rejects upgrade items");
             Object selected=invoke(manager.getClass(),manager,"getRecipe",new Class<?>[]{ItemStack.class},input.item.copy());
             if(selected==null||field(selected,"a")!=source.getKey()||field(selected,"b")!=source.getValue())throw new Jobs.Fault("slot_changed","IC2 blast cache selects another recipe for the displayed input");
@@ -63,6 +64,7 @@ final class BlastRecipes implements RegistryRecipes {
         if(positions.size()!=1)throw new Jobs.Fault("slot_changed","IC2 blast primary layout changed");
         row.itemInput(positions.get(0),0,inputs,false);
         boolean ignoreMeta=!air.getHasSubtypes()&&!air.isItemStackDamageable();
+        airContainers.add(container(air,ignoreMeta,row.facts)); containers.add(primary); containers.add(airContainers);
         row.itemInput(null,1,Collections.singletonList(new RecipeRow.Ingredient(air.copy(),1,false,object("kind","untagged","meta",ignoreMeta))),false);
         row.slot("input","item",1,15,38);
         for(JsonElement input:row.inputs)for(JsonElement c:input.getAsJsonObject().getAsJsonArray("choices"))c.getAsJsonObject().add("consume",object("kind","staged"));
@@ -71,7 +73,7 @@ final class BlastRecipes implements RegistryRecipes {
         row.itemOutput(cached.getResult(),0,outputs.get(0),10000);
         if(outputs.size()>1)row.itemOutput(cached.getOtherStacks().get(0),1,outputs.get(1),10000,
             object("kind","potential","stat","ic2:slagSpace","nominal",Integer.toString(outputs.get(1).stackSize)));
-        row.record.add("process",object("kind","ic2Blast","heat",heat));
+        row.record.add("process",object("kind","ic2Blast","heat",heat,"containers",containers));
         handler.arecipes.clear();handler.arecipes.add(cached);return true;
     }
     private TemplateRecipeHandler.CachedRecipe cached(List<RecipeRow.Ingredient> inputs,List<ItemStack> outputs){
@@ -83,14 +85,9 @@ final class BlastRecipes implements RegistryRecipes {
         }catch(ReflectiveOperationException error){Jobs.Fault failure=fault("Cannot construct IC2 blast layout");failure.initCause(error);throw failure;}
     }
     private static ItemStack stack(Object value){if(!(value instanceof ItemStack)||((ItemStack)value).getItem()==null||((ItemStack)value).stackSize<=0)throw fault("Invalid IC2 blast item");return ((ItemStack)value).copy();}
-    private static void containerless(ItemStack stack){
-        // The machine's consume(1) can retain/replace container items or consume nothing.
-        // Accept only the inherited constant containerless predicate, not a sampled callback.
-        try{
-            if(stack.getItem().getClass().getMethod("hasContainerItem",ItemStack.class).getDeclaringClass()!=Item.class
-                ||stack.getItem().getClass().getMethod("hasContainerItem").getDeclaringClass()!=Item.class
-                ||stack.getItem().hasContainerItem(stack.copy()))throw fault("IC2 blast container-bearing or dynamic input requires separate consumption semantics");
-        }catch(NoSuchMethodException error){throw fault("IC2 blast item container API changed");}
+    private static JsonElement container(ItemStack stack,boolean ignoreMeta,Facts facts){
+        ItemStack result=ItemCallbacks.container(stack,ignoreMeta);
+        return result==null?com.google.gson.JsonNull.INSTANCE:object("id",facts.item(result),"amount",Integer.toString(result.stackSize));
     }
     static int[][] progressBars(){return new int[][]{{64,16,176,51,27,27,20,3}};}
     static void draw(TemplateRecipeHandler handler,int index){Ic2Recipes.scene(handler,()->{handler.drawBackground(index);handler.drawForeground(index);});}

@@ -70,8 +70,11 @@ final class NativeBlastTest {
         Object containerInput=predicate.getClass().getConstructor(ItemStack.class,int.class).newInstance(new ItemStack(Items.milk_bucket),1);
         manager.getClass().getMethod("addRecipe",Class.forName(API+"IRecipeInput"),NBTTagCompound.class,ItemStack[].class)
             .invoke(containerManager,containerInput,null,new ItemStack[]{product});
-        try{adapter(handler,containerManager,50000).capture(0,row(new ItemStack(Items.milk_bucket),product));throw new AssertionError("Container consumption was flattened into unit loss");}
-        catch(Jobs.Fault expected){require(expected.code.equals("recipe_unsupported"),"Wrong container boundary error");}
+        RecipeRow containerRow=row(new ItemStack(Items.milk_bucket),new ItemStack(Items.bucket),new ItemStack(Items.paper),product);
+        adapter(handler,containerManager,50000).capture(0,containerRow);
+        require(containerRow.record.getAsJsonObject("process").getAsJsonArray("containers").get(0).getAsJsonArray()
+                .get(0).getAsJsonObject().get("id").getAsString().equals(Identity.item("minecraft:bucket",0,null)),
+                "Primary container consumption was flattened into unit loss");
         @SuppressWarnings("unchecked") List<Object> callbacks=(List<Object>)MagicApi.field(manager,"uncacheableRecipes");
         callbacks.add(new Object());
         try{adapter.capture(0,row(input,product,slag));throw new AssertionError("Late native callback was executed/accepted");}
