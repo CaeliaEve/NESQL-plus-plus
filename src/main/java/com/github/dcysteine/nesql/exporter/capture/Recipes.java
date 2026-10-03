@@ -202,8 +202,11 @@ final class Recipes {
                     String id = facts.item(item);
                     if (machineIds.add(id)) machines.add(object("kind", "item", "id", id));
                 }
-                facts.row("categories", object("id", id, "source", origin, "name", facts.text(name),
-                        "icon", icon, "machines", machines, "view", null, "order", order));
+                JsonObject category = object("id", id, "source", origin, "name", facts.text(name),
+                        "icon", icon, "machines", machines, "view", null, "order", order);
+                String program = registry == null ? null : registry.program(facts);
+                if (program != null) category.addProperty("program", program);
+                facts.row("categories", category);
                 return new Cursor(this, handler, facts, views, gt, magic, ae, registry, crafting);
             } catch (RuntimeException | Error failure) {
                 try { if (gt != null) gt.close(); }

@@ -126,6 +126,13 @@ final class NativeSqueezerTest {
         context.getAsJsonArray("ordinary").get(0).getAsJsonObject().addProperty("time",-99);
         if(((JsonObject)invoke(type,snapshot,"context",new Class<?>[0])).getAsJsonArray("ordinary").get(0).getAsJsonObject().get("time").getAsInt()==-99)throw new AssertionError("Squeezer context leaked mutable state");
         invoke(type,snapshot,"checkUnchanged",new Class<?>[0]);
+        Facts facts=new Facts("en_US");
+        String program=(String)invoke(type,snapshot,"publish",new Class<?>[]{Facts.class},facts);
+        Facts.Batch batch=facts.drain();JsonArray chunks=new JsonArray();
+        for(Facts.Record row:batch.records){if(!row.kind.equals("programs"))throw new AssertionError("Unexpected rule fact");chunks.add(row.value);}
+        if(chunks.size()!=4)throw new AssertionError("Shared rules lost a section");
+        if(!program.equals(invoke(type,snapshot,"publish",new Class<?>[]{Facts.class},facts))||!facts.drain().records.isEmpty())throw new AssertionError("Same rule context emitted twice");
+        Files.write(Paths.get("build/native-tests/forestry-program-chunks.json"),CanonicalJson.bytes(chunks));
         ISqueezerRecipe first=recipes.iterator().next();int original=first.getResources()[0].stackSize;first.getResources()[0].stackSize++;
         try{invoke(type,snapshot,"checkUnchanged",new Class<?>[0]);throw new AssertionError("Squeezer ignored registry amount mutation");}
         catch(com.github.dcysteine.nesql.exporter.task.Jobs.Fault failure){if(!failure.code.equals("recipe_changed"))throw failure;}

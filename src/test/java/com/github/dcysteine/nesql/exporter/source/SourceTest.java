@@ -30,6 +30,7 @@ public final class SourceTest {
         Path root = args.length == 0 ? Files.createTempDirectory("nesql-source-") : Paths.get(args[0]);
         Files.createDirectories(root);
         identities();
+        ProgramsTest.run();
         ProvenanceTest.run();
         ResourcesTest.run(root.resolve("resources"));
         FragmentsTest.run(root.resolve("fragments"));
@@ -256,6 +257,14 @@ public final class SourceTest {
         Changes.refining(recipes,categories,text);
         Changes.blast(recipes,categories,text);
         Changes.integration(items,recipes,categories,texture,text);
+        java.util.List<JsonObject> chunks = new java.util.ArrayList<>();
+        JsonObject rule = object("time",3,"requirements",array(object("registry","minecraft:paper","meta",0,"amount",1,"nbt",null,"ores",array("paper"))),
+                "fluid",object("registry","water","amount",100,"nbt",null),"remnant",null,"chance","00000000");
+        String program=Programs.squeezer(object("ordinary",array(rule),"containers",array(),"filled",array(),"dynamic",array()),chunks::add);
+        JsonObject sharedOrigin=object("owner","fixture","handler","fixture:sharedRules","key","sharedRules");
+        categories.add(object("id",Identity.origin("category",sharedOrigin),"source",sharedOrigin,"name",text.apply("Shared machine rules 共享规则"),
+                "icon",null,"machines",array(),"view",null,"order",categories.size(),"program",program));
+        records(dataset,"programs",chunks);
         records(dataset, "recipes", recipes); records(dataset, "categories", categories);
         java.util.TreeMap<String, JsonObject> unique = new java.util.TreeMap<>();
         for (JsonObject view : views) unique.put(view.get("id").getAsString(), view);

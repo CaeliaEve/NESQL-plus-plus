@@ -29,6 +29,7 @@ final class Facts {
     private final Set<String> fluids = new HashSet<>();
     private final Set<String> strings = new HashSet<>();
     private final Set<String> tracks = new HashSet<>();
+    private final Set<String> programs = new HashSet<>();
     private Batch batch = new Batch();
 
     Facts(String locale) { this.locale = locale; }
@@ -59,6 +60,12 @@ final class Facts {
         JsonObject record = object("frames", frames);
         String id = Identity.content("track", record);
         if (tracks.add(id)) { record.addProperty("id", id); row("tracks", record); }
+        return id;
+    }
+
+    String squeezerProgram(JsonObject rules) {
+        String id = Identity.content("program", object("kind", "forestrySqueezer", "rules", rules));
+        if (programs.add(id)) com.github.dcysteine.nesql.exporter.source.Programs.squeezer(rules, record -> row("programs", record));
         return id;
     }
 
