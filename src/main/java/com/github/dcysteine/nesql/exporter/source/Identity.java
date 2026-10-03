@@ -48,7 +48,7 @@ public final class Identity {
             JsonObject changed = new JsonObject(), operation = new JsonObject();
             output.entrySet().stream().filter(entry -> !entry.getKey().equals("id") && !entry.getKey().equals("amount"))
                     .forEach(entry -> changed.add(entry.getKey(), entry.getValue()));
-            output.getAsJsonObject("change").entrySet().stream().filter(entry -> !entry.getKey().equals("samples"))
+            output.getAsJsonObject("change").entrySet().stream().filter(entry -> !entry.getKey().equals("samples") && !entry.getKey().equals("bindings"))
                     .forEach(entry -> operation.add(entry.getKey(), entry.getValue()));
             changed.add("change", operation); outputs.add(changed);
         }

@@ -503,6 +503,39 @@ final class Changes {
         recipe.addProperty("id",Identity.recipe(recipe));recipes.add(recipe);
     }
 
+    static void integration(List<JsonObject> items,List<JsonObject> recipes,List<JsonObject> categories,String texture,Function<String,String> text) {
+        JsonObject origin=object("owner","fixture","handler","fixture:integration","key","integration");String category=Identity.origin("category",origin);
+        String[] robots=new String[2],boards=new String[2];String[][] products=new String[2][2];
+        for(int r=0;r<2;r++){
+            NBTTagCompound tag=new NBTTagCompound();tag.setInteger("energy",r*120);tag.setString("owner","discard-on-rebuild");
+            robots[r]=item(items,"fixture:integration_robot",0,tag,false,r==0?"Empty robot 空机器人":"Charged robot 充能机器人",texture,text);
+        }
+        for(int b=0;b<2;b++){
+            String id=b==0?"red":"blue";NBTTagCompound board=new NBTTagCompound();board.setString("id",id);
+            boards[b]=item(items,"fixture:integration_board",0,board,false,b==0?"Red robot board 红色机器人板":"Blue robot board 蓝色机器人板",texture,text);
+            for(int r=0;r<2;r++){
+                NBTTagCompound output=new NBTTagCompound();output.setTag("board",board.copy());output.setInteger("energy",r==0?20000:120);
+                products[r][b]=item(items,"fixture:integration_robot",0,output,false,(r==0?"Initialized ":"Charged ")+id+" robot 集成机器人",texture,text);
+            }
+        }
+        categories.add(object("id",category,"source",origin,"name",text.apply("BuildCraft Integration Table 集成台"),"icon",object("kind","item","id",robots[0]),"machines",array(),"view",null,"order",categories.size()));
+        JsonArray inputs=array();
+        for(int column=0;column<3;column++){
+            JsonArray choices=array();for(String id:column==0?robots:column==1?boards:new String[]{boards[1]}){
+                JsonObject c=choice(id);c.add("rule",object("kind","integration"));c.add("consume",object("kind","allocated"));choices.add(c);
+            }
+            inputs.add(object("kind","item","slot",column==2?8:column,"choices",choices));
+        }
+        JsonArray bindings=array(array(0,0,null),array(0,1,null),array(1,0,null),array(1,1,null),array(1,null,0));
+        JsonArray samples=array(stack(products[0][0]),stack(products[0][1]),stack(products[1][0]),stack(products[1][1]),stack(products[1][1]));
+        JsonObject recipe=object("source",origin,"category",category,"order",0,"inputs",inputs,
+            "outputs",array(object("kind","item","slot",0,"id",products[0][0],"amount","1","quantity",null,"role","result","chance",Chance.of(1,1),
+                "change",object("input",0,"action",object("kind","integration"),"bindings",bindings,"samples",samples))),
+            "process",object("kind","buildcraftIntegration","rule",object("kind","robot","energy",50000,"maximum",1,"primary",array("fixture:integration_robot"),"robot","fixture:integration_robot","empty","empty","boards",object("red","red","blue","blue"))),
+            "duration",null,"energy",null,"grid",null,"magic",null,"view",null,"properties",object());
+        recipe.addProperty("id",Identity.recipe(recipe));recipes.add(recipe);
+    }
+
     private static JsonObject choice(String id) {
         return object("id", id, "amount", "1", "rule", object("kind", "exact"), "consume", object("kind", "consume"), "returns", new JsonArray());
     }

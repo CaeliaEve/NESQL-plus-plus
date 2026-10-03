@@ -255,6 +255,7 @@ public final class SourceTest {
         Changes.buildcraft(recipes, categories, text);
         Changes.refining(recipes,categories,text);
         Changes.blast(recipes,categories,text);
+        Changes.integration(items,recipes,categories,texture,text);
         records(dataset, "recipes", recipes); records(dataset, "categories", categories);
         java.util.TreeMap<String, JsonObject> unique = new java.util.TreeMap<>();
         for (JsonObject view : views) unique.put(view.get("id").getAsString(), view);

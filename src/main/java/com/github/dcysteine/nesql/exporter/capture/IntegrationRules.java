@@ -13,7 +13,7 @@ import static com.github.dcysteine.nesql.exporter.source.Json.*;
 
 /** Audited BuildCraft 7.1.44 integration transformations, evaluated only on owned stacks.
  * This is a native observation boundary, not enumeration of the recipe's full input domain.
- * The eventual shared rule must preserve all ordered expansion slots and preview mutations.
+ * The shared integration rule preserves ordered expansion slots and preview mutations.
  */
 final class IntegrationRules {
     private static final String TRANSPORT="buildcraft.transport.", ROBOTICS="buildcraft.robotics.";

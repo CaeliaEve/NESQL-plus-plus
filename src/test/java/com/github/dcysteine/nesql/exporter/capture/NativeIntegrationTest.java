@@ -42,7 +42,7 @@ final class NativeIntegrationTest {
         invoke(type("buildcraft.api.gates.GateExpansions"),null,"registerExpansion",new Class<?>[]{type("buildcraft.api.gates.IGateExpansion"),ItemStack.class},expansion,new ItemStack(Items.diamond));
         try { Class.forName("com.github.dcysteine.nesql.exporter.capture.IntegrationRules"); }
         catch (ClassNotFoundException e) { throw new AssertionError("Integration table lacks owned multi-input native observations",e); }
-        gates(); facades(); robots();
+        gates(); facades(); robots(); adapter();
         java.nio.file.Files.write(java.nio.file.Paths.get("build/native-tests/integration-observations.json"),CanonicalJson.bytes(object("native","BuildCraft 7.1.44","cases",observations)));
         System.out.println("Native integration: ordered multi-expansion transformations, preview migration, consumption, owned failure and callback guards passed");
     }
@@ -150,6 +150,78 @@ final class NativeIntegrationTest {
         Field id=configured.getClass().getDeclaredField("id");id.setAccessible(true);id.set(configured,"fixture:changed");
         fails(()->observe(rules,input,Collections.singletonList(expansion),true),"recipe_changed");id.set(configured,"fixture:miner");
     }
+    @SuppressWarnings("unchecked") private static void adapter() throws Exception {
+        assign("buildcraft.api.transport.PipeWire","item",wire);
+        codechicken.nei.recipe.TemplateRecipeHandler handler=(codechicken.nei.recipe.TemplateRecipeHandler)type("buildcraft.compat.nei.RecipeHandlerIntegrationTable").newInstance();
+        require(Recipes.adapter(handler)!=null,"Integration table has no production adapter route");
+        List<ItemStack> facades=(List<ItemStack>)field(type(TRANSPORT+"ItemFacade"),null,"allFacades");
+        List<ItemStack> prior=new ArrayList<>(facades);facades.clear();
+        for(String block:new String[]{"minecraft:stone","minecraft:dirt"}){ItemStack f=new ItemStack(facade);f.setTagInfo("name",new NBTTagString(block));facades.add(f);}
+        try {
+            List<Object> nativeRecipes=new ArrayList<>();
+            nativeRecipes.add(type(TRANSPORT+"recipes.GateExpansionRecipe").newInstance());
+            nativeRecipes.add(type(TRANSPORT+"recipes.AdvancedFacadeRecipe").newInstance());
+            nativeRecipes.add(type(ROBOTICS+"RobotIntegrationRecipe").newInstance());
+            RegistryRecipes adapter=adapter(handler,nativeRecipes);
+            require(adapter.size()==3,"Small integration registry should use one bounded row per family");
+            Map<String,ItemStack> known=new HashMap<>();
+            for(Object raw:nativeRecipes){
+                List<ItemStack> inputs=(List<ItemStack>)invoke(raw.getClass(),raw,"generateExampleInput",new Class<?>[0]);
+                List<List<ItemStack>> groups=(List<List<ItemStack>>)invoke(raw.getClass(),raw,"generateExampleExpansions",new Class<?>[0]);
+                List<ItemStack> extras=new ArrayList<>();for(List<ItemStack> group:groups)extras.addAll(group);
+                if(raw.getClass().getName().contains("GateExpansion"))extras.add((ItemStack)invoke(type("buildcraft.silicon.ItemRedstoneChipset$Chipset"),field(type("buildcraft.silicon.ItemRedstoneChipset$Chipset"),null,"RED"),"getStack",new Class<?>[0]));
+                for(ItemStack s:inputs)known.put(id(s),s);for(ItemStack s:extras)known.put(id(s),s);
+                IntegrationRules rule=new IntegrationRules(raw);
+                for(ItemStack in:inputs)for(ItemStack a:extras){
+                    if(rule.kind.equals("facade")){for(ItemStack b:extras)if(a.getItem()==facade&&b.getItem()==wire){ItemStack out=rule.observe(in,Arrays.asList(a,b),true).output;known.put(id(out),out);}}
+                    else {ItemStack out=rule.observe(in,Collections.singletonList(a),true).output;known.put(id(out),out);
+                        if(rule.kind.equals("gate")){out=rule.observe(in,Arrays.asList(a,a.copy()),true).output;if(out!=null)known.put(id(out),out);}}
+                }
+            }
+            boolean hole=false;JsonArray records=new JsonArray();
+            for(int index=0;index<adapter.size();index++){
+                RecipeRow row=knownRow(known);require(adapter.capture(index,row),"Integration row was silently excluded");
+                JsonObject process=row.record.getAsJsonObject("process"),change=row.outputs.get(0).getAsJsonObject().getAsJsonObject("change");
+                require(process.get("kind").getAsString().equals("buildcraftIntegration")&&row.record.get("duration").isJsonNull()&&row.record.get("energy").isJsonNull(),"Integration became fixed time/EU");
+                JsonArray bindings=change.getAsJsonArray("bindings"),samples=change.getAsJsonArray("samples");
+                require(bindings.size()==samples.size()&&bindings.size()<=128,"Integration tuples are missing or unbounded");
+                IntegrationRules rule=new IntegrationRules(nativeRecipes.get(index));
+                for(int sample=0;sample<bindings.size();sample++){
+                    List<ItemStack> slots=new ArrayList<>(Collections.nCopies(8,null));ItemStack primary=null;JsonArray tuple=bindings.get(sample).getAsJsonArray();
+                    for(int column=0;column<row.inputs.size();column++){
+                        if(tuple.get(column).isJsonNull()){hole=true;continue;}
+                        JsonObject input=row.inputs.get(column).getAsJsonObject();int slot=input.get("slot").getAsInt();
+                        String fact=input.getAsJsonArray("choices").get(tuple.get(column).getAsInt()).getAsJsonObject().get("id").getAsString();
+                        ItemStack stack=known.get(fact).copy();if(slot==0)primary=stack;else slots.set(slot-1,stack);
+                    }
+                    ItemStack expected=rule.observe(primary,slots,false).output;
+                    require(samples.get(sample).getAsJsonObject().get("id").getAsString().equals(id(expected)),"Integration correlated product differs from native craft");
+                }
+                handler.arecipes.get(0).getIngredients().get(0).items[0].stackSize=123;
+                handler.arecipes.get(0).getResult().items[0].stackSize=123;
+                RecipeRow repeated=knownRow(known);adapter.capture(index,repeated);
+                require(row.inputs.equals(repeated.inputs)&&row.outputs.equals(repeated.outputs),"Display mutation escaped into integration samples");
+                row.finish();records.add(row.record);
+            }
+            require(hole,"Integration examples lost optional physical slots");
+            require(facades.get(0).getTagCompound().hasKey("name"),"Integration capture migrated borrowed facade registry");
+            fails(()->adapter(handler,Arrays.asList(nativeRecipes.get(0),nativeRecipes.get(0))),"recipe_unsupported");
+            for(int i=0;i<130;i++)facades.add(facades.get(i%2).copy());
+            RegistryRecipes bounded=adapter(handler,Collections.singletonList(nativeRecipes.get(1)));
+            require(bounded.size()>1&&bounded.size()<20,"Facade examples form an unbounded cartesian product");
+            RecipeRow tail=knownRow(known);require(bounded.capture(bounded.size()-1,tail),"Last integration batch was omitted");
+            tail.finish();records.add(tail.record);
+            JsonArray facts=new JsonArray();for(String key:new TreeSet<>(known.keySet()))facts.add(stack(known.get(key)));
+            java.nio.file.Files.write(java.nio.file.Paths.get("build/native-tests/integration-adapter-records.json"),CanonicalJson.bytes(object("items",facts,"recipes",records)));
+            nativeRecipes.remove(0);fails(()->adapter.capture(0,knownRow(known)),"recipe_changed");
+        } finally {facades.clear();facades.addAll(prior);}
+    }
+    private static RegistryRecipes adapter(codechicken.nei.recipe.TemplateRecipeHandler handler,List<?> recipes)throws Exception{
+        Constructor<?> ctor=type("com.github.dcysteine.nesql.exporter.capture.IntegrationRecipes").getDeclaredConstructor(codechicken.nei.recipe.TemplateRecipeHandler.class,List.class);ctor.setAccessible(true);
+        try{return (RegistryRecipes)ctor.newInstance(handler,recipes);}catch(InvocationTargetException e){throw (Exception)e.getCause();}
+    }
+    private static String id(ItemStack stack){return com.github.dcysteine.nesql.exporter.source.Identity.item(Item.itemRegistry.getNameForObject(stack.getItem()),Items.feather.getDamage(stack),TypedNbt.encode(stack.getTagCompound()));}
+    @SuppressWarnings("unchecked") private static RecipeRow knownRow(Map<String,ItemStack> known){Facts facts=new Facts("en_US");((Set<String>)field(facts,"items")).addAll(known.keySet());return new RecipeRow(facts,object("owner","BuildCraft|Silicon","handler","fixture","key","integration"),"category_test",0);}
     private static Item item(String cls,int id,String name)throws Exception{Item item=(Item)type(cls).newInstance();Item.itemRegistry.addObject(id,"fixture:integration_"+name,item);return item;}
     private static void assign(String cls,String name,Object value)throws Exception{type(cls).getField(name).set(null,value);}
     private static Object rules(Object nativeRecipe)throws Exception{

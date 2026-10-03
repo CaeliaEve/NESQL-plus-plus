@@ -47,6 +47,7 @@ final class Recipes {
         if (BlastRecipes.supports(handler)) return Adapter.BLAST;
         if (CannerRecipes.supports(handler)) return Adapter.CANNER;
         if (BuildcraftRecipes.supports(handler)) return Adapter.BUILDCRAFT;
+        if (IntegrationRecipes.supports(handler)) return Adapter.BUILDCRAFT;
         if (RefiningRecipes.supports(handler)) return Adapter.BUILDCRAFT;
         if (SmeltingRecipes.supports(handler)) return Adapter.SMELTING;
         if (ExtremeRecipes.supports(handler)) return Adapter.EXTREME;
@@ -146,7 +147,8 @@ final class Recipes {
                 } else if (adapter == Adapter.BLAST) {
                     registry = new BlastRecipes(handler);
                 } else if (adapter == Adapter.BUILDCRAFT) {
-                    registry = RefiningRecipes.supports(handler) ? new RefiningRecipes(handler) : new BuildcraftRecipes(handler);
+                    registry = IntegrationRecipes.supports(handler) ? new IntegrationRecipes(handler)
+                        : RefiningRecipes.supports(handler) ? new RefiningRecipes(handler) : new BuildcraftRecipes(handler);
                 } else if (adapter == Adapter.INSCRIBER) {
                     registry = new InscriberRecipes(handler);
                 } else if (adapter == Adapter.SCRAPBOX) {
@@ -356,6 +358,7 @@ final class Recipes {
                 int width = info.getWidth(), height = handler.getRecipeHeight(at);
                 if (registry instanceof CannerRecipes) { width = Math.max(width, 140); height = Math.max(height, CannerRecipes.height(handler)); }
                 if (registry instanceof BuildcraftRecipes) { width = Math.max(width,166); height = Math.max(height,96); }
+                if (registry instanceof IntegrationRecipes) { width = Math.max(width,166); height = Math.max(height,85); }
                 if (registry instanceof RefiningRecipes) { width = Math.max(width,166); height = Math.max(height,65); }
                 if (gt != null) { width = gt.ui.width(width); height = gt.ui.height(height); }
                 for (com.google.gson.JsonElement element : row.elements) {
@@ -371,6 +374,7 @@ final class Recipes {
                     else if (registry instanceof CannerRecipes) CannerRecipes.scene(handler, () -> CannerRecipes.draw(handler, at));
                     else if (registry instanceof BlastRecipes) BlastRecipes.draw(handler, at);
                     else if (registry instanceof BuildcraftRecipes) BuildcraftRecipes.draw(handler, at);
+                    else if (registry instanceof IntegrationRecipes) IntegrationRecipes.draw(handler,row.record.getAsJsonObject("process").getAsJsonObject("rule").get("energy").getAsInt());
                     else if (registry instanceof RefiningRecipes) RefiningRecipes.draw(handler, at);
                     else if (registry instanceof ForestryRecipes) ForestryRecipes.draw(handler, at);
                     else if (registry instanceof CircuitRecipes) CircuitRecipes.scene(handler, () -> handler.drawBackground(at));
