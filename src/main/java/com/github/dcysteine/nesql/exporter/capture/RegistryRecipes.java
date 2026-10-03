@@ -6,4 +6,6 @@ interface RegistryRecipes {
     boolean capture(int index, RecipeRow row);
     /** Optional bounded proof for a non-exportable native entry, retained in jobs/checks. */
     default com.google.gson.JsonObject exclusion(int index) { return null; }
+    /** Handler-wide native disable evidence also exists when its recipe list is empty. */
+    default com.google.gson.JsonObject handlerExclusion() { return null; }
 }

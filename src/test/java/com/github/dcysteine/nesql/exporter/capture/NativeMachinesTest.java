@@ -19,6 +19,7 @@ public final class NativeMachinesTest {
     public static void run() throws Exception {
         String family = System.getProperty("nesql.nativeFamily", "machines");
         if (family.equals("canner")) { NativeCannerTest.run(); return; }
+        if (family.equals("compression")) { NativeCompressionTest.run(); return; }
         if (family.equals("soul")) { NativeSoulTest.run(); return; }
         if (family.equals("ender-machines")) { NativeEnderMachinesTest.run(); return; }
         if (family.equals("vat")) { NativeVatTest.run(); return; }

@@ -45,7 +45,7 @@ final class NativeRailTest {
             Object nativeRecipe = java.lang.reflect.Proxy.newProxyInstance(handler.getClass().getClassLoader(),
                     new Class<?>[] {Class.forName("mods.railcraft.api.crafting.IRockCrusherRecipe")},
                     (proxy, method, args) -> { throw new AssertionError("Disabled recipe method executed: " + method); });
-            RockRecipes registry = new RockRecipes(handler, Arrays.asList(null, nativeRecipe));
+            DisabledRecipes registry = new DisabledRecipes(handler, Arrays.asList(null, nativeRecipe));
             require(registry.size() == 1, "Disabled NEI enumeration changed null omission");
             Recipes.Handler source = new Recipes.Handler(handler, 0);
             Facts facts = new Facts("en_US");
