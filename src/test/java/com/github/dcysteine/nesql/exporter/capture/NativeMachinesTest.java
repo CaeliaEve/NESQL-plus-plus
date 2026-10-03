@@ -20,6 +20,7 @@ public final class NativeMachinesTest {
         String family = System.getProperty("nesql.nativeFamily", "machines");
         if (family.equals("canner")) { NativeCannerTest.run(); return; }
         if (family.equals("blast")) { NativeBlastTest.run(); return; }
+        if (family.equals("integration")) { NativeIntegrationTest.run(); return; }
         if (family.equals("compression")) { NativeCompressionTest.run(); return; }
         if (family.equals("buildcraft")) { NativeBuildcraftTest.run(); NativeRefiningTest.run(); return; }
         if (family.equals("soul")) { NativeSoulTest.run(); return; }
