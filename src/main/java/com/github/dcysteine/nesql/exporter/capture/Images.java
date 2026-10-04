@@ -17,6 +17,9 @@ import net.minecraft.util.IIcon;
 import net.minecraft.util.ResourceLocation;
 import net.minecraftforge.client.IItemRenderer;
 import net.minecraftforge.client.MinecraftForgeClient;
+import net.minecraftforge.fluids.Fluid;
+import net.minecraftforge.fluids.FluidRegistry;
+import net.minecraftforge.fluids.FluidStack;
 import org.lwjgl.opengl.GL11;
 import org.lwjgl.opengl.GL12;
 
@@ -165,13 +168,39 @@ final class Images implements AutoCloseable {
     }
 
     private Plan plan(Facts.Icon request) {
-        IIcon icon = request.item != null ? request.item.getIconIndex() : request.fluid.getFluid().getIcon(request.fluid);
+        FluidStack fluid = request.item == null ? fluidTexture(request.fluid) : null;
+        IIcon icon = request.item != null ? request.item.getIconIndex() : fluid.getFluid().getIcon(fluid);
         boolean flat = request.item == null || (!(request.item.getItem() instanceof ItemBlock)
                 && !request.item.getItem().requiresMultipleRenderPasses()
                 && MinecraftForgeClient.getItemRenderer(request.item, IItemRenderer.ItemRenderType.INVENTORY) == null);
         if (!(icon instanceof TextureAtlasSprite) || !flat) return null;
         return animation((TextureAtlasSprite) icon, request.item != null
-                ? request.item.getItem().getColorFromItemStack(request.item, 0) : request.fluid.getFluid().getColor(request.fluid));
+                ? request.item.getItem().getColorFromItemStack(request.item, 0) : fluid.getFluid().getColor(fluid));
+    }
+
+    /** Galacticraft registers both legacy/current fluid names, but only its active
+     * oil/fuel role receives a block and stitched icons. Resolve that visual role
+     * on a copy; never merge fluid facts, mutate the registry or cache across reloads.
+     */
+    private static FluidStack fluidTexture(FluidStack stack) {
+        Fluid fluid = stack.getFluid();
+        if (fluid.getIcon(stack) != null) return stack;
+        String name = fluid.getName();
+        boolean oil = name.equals("oil") || name.equals("oilgc");
+        boolean fuel = name.equals("fuel") || name.equals("fuelgc");
+        cpw.mods.fml.common.ModContainer mod = cpw.mods.fml.common.Loader.instance().getIndexedModList().get("GalacticraftCore");
+        if ((oil || fuel) && fluid.getClass() == Fluid.class && fluid.getBlock() == null
+                && FluidRegistry.getFluid(name) == fluid && mod != null && "3.3.13-GTNH".equals(mod.getVersion())) {
+            Fluid active = (Fluid) MagicApi.field(MagicApi.type("micdoodle8.mods.galacticraft.core.GalacticraftCore"),
+                    null, oil ? "fluidOil" : "fluidFuel");
+            String other = oil ? (name.equals("oil") ? "oilgc" : "oil") : (name.equals("fuel") ? "fuelgc" : "fuel");
+            if (active != null && other.equals(active.getName()) && FluidRegistry.getFluid(other) == active) {
+                FluidStack visual = new FluidStack(active, stack.amount);
+                visual.tag = stack.tag == null ? null : (net.minecraft.nbt.NBTTagCompound) stack.tag.copy();
+                if (active.getIcon(visual) != null) return visual;
+            }
+        }
+        throw new Jobs.Fault("texture_missing", "Fluid has no texture or verified native visual role: " + name);
     }
 
     private Plan animation(TextureAtlasSprite sprite, int tint) {
@@ -198,15 +227,15 @@ final class Images implements AutoCloseable {
 
     private byte[] render(Facts.Icon request) {
         Jobs.checkpoint();
-        IIcon icon = request.item != null ? request.item.getIconIndex() : request.fluid.getFluid().getIcon(request.fluid);
-        if (icon == null && request.item == null) throw new Jobs.Fault("texture_missing", "Fluid has no texture: " + request.registry);
+        FluidStack fluid = request.item == null ? fluidTexture(request.fluid) : null;
+        IIcon icon = request.item != null ? request.item.getIconIndex() : fluid.getFluid().getIcon(fluid);
         return icon(request.registry, () -> {
             GL11.glEnable(GL12.GL_RESCALE_NORMAL);
             RenderHelper.enableGUIStandardItemLighting();
             if (request.item != null) GuiContainerManager.drawItem(0, 0, request.item);
             else {
                 RenderHelper.disableStandardItemLighting();
-                int color = request.fluid.getFluid().getColor(request.fluid);
+                int color = fluid.getFluid().getColor(fluid);
                 GL11.glColor4f(((color >>> 16) & 255) / 255f, ((color >>> 8) & 255) / 255f, (color & 255) / 255f, 1);
                 GuiDraw.changeTexture(TextureMap.locationBlocksTexture);
                 GuiDraw.gui.drawTexturedModelRectFromIcon(0, 0, icon, 16, 16);

@@ -369,3 +369,18 @@ The GT replacement proof checks `gregtech_nh` 5.09.51.482, since the same jar's
 `gregtech` container reports MC1710. Unregistered doors are excluded only after
 the existing native replacement/unification reachability proof; other missing
 registrations still fail. Local tests do not certify the installed registry.
+
+## Galacticraft compatibility-fluid visuals (0.39.1)
+
+Galacticraft 3.3.13-GTNH registers both `oil`/`oilgc` and `fuel`/`fuelgc`,
+but only the configured `GalacticraftCore.fluidOil` and `fluidFuel` roles
+receive block textures. A textureless, blockless plain Forge Fluid under the
+other name may use that registered role's sprite and stack-dependent tint.
+Both current and legacy-ID configurations are supported. Existing icons take
+precedence; unknown names, custom fluid subclasses, missing primary textures,
+unregistered objects and other Galacticraft versions still fail explicitly.
+
+This is visual selection only: the source fact keeps its original fluid ID,
+NBT and properties. Rendering uses a copy, preserves animation timing and reads
+the current native role after resource reloads. No registry icons are mutated,
+no placeholder is substituted, and Source 36 / Catalog 35 remain unchanged.
