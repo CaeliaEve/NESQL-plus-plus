@@ -361,6 +361,9 @@ final class Recipes {
                 HandlerInfo info = GuiRecipeTab.getHandlerInfo(handler);
                 int at = magic == null && ae == null && registry == null ? index : 0;
                 int width = info.getWidth(), height = handler.getRecipeHeight(at);
+                // NEIRecipeWidget treats nonpositive per-recipe height as unspecified.
+                // Fluid-only layouts have no item slots from which to infer the background bounds.
+                if (height <= 0) height = info.getHeight();
                 if (registry instanceof CannerRecipes) { width = Math.max(width, 140); height = Math.max(height, CannerRecipes.height(handler)); }
                 if (registry instanceof BuildcraftRecipes) { width = Math.max(width,166); height = Math.max(height,96); }
                 if (registry instanceof IntegrationRecipes) { width = Math.max(width,166); height = Math.max(height,85); }
@@ -371,7 +374,8 @@ final class Recipes {
                     if (position.has("width")) width = Math.max(width, position.get("x").getAsInt() + position.get("width").getAsInt());
                     if (position.has("height")) height = Math.max(height, position.get("y").getAsInt() + position.get("height").getAsInt());
                 }
-                if (width <= 0 || height <= 0 || width > 2048 || height > 2048) throw new Jobs.Fault("view_limit", "Invalid NEI recipe dimensions");
+                if (width <= 0 || height <= 0 || width > 2048 || height > 2048) throw new Jobs.Fault("view_limit",
+                        "Invalid NEI recipe dimensions: " + width + "x" + height + "; configured=" + info.getWidth() + "x" + info.getHeight());
                 gregtech.api.util.GTRecipe nativeRecipe = gt == null ? null : ((GTNEIDefaultHandler.CachedDefaultRecipe) handler.arecipes.get(index)).mRecipe;
                 if (gt != null) gt.ui.add(facts, row, width, height, nativeRecipe);
                 facts.scene(new Facts.Scene(row.record, row.elements, width, height, gt == null ? 0 : gt.ui.foreground(), source.id, () -> {

@@ -384,3 +384,21 @@ This is visual selection only: the source fact keeps its original fluid ID,
 NBT and properties. Rendering uses a copy, preserves animation timing and reads
 the current native role after resource reloads. No registry icons are mutated,
 no placeholder is substituted, and Source 36 / Catalog 35 remain unchanged.
+
+## NEI configured recipe height (0.39.2)
+
+NEI 2.8.44's `IRecipeHandler.getRecipeHeight(index)` defaults to zero, meaning
+unspecified. `NEIRecipeWidget` uses a positive per-recipe height, otherwise the
+registered `HandlerInfo` height. Scene emission now follows that same rule
+before expanding to exported element bounds. In particular, TConstruct 1.13.57
+alloying has only native fluid tanks and no item slots; its zero return must not
+be treated as a zero-height image. The configured 65-pixel height includes its
+160x65 background. Positive overrides remain authoritative, and invalid final
+dimensions still fail at the unchanged 2048-pixel limit with measured sizes.
+
+This corrects sizing for all handlers using the NEI default, including scenes
+whose item slots previously hid the error by producing an undersized canvas.
+It does not change recipe identities, quantities, the native draw callbacks,
+the frontend UI, or Source 36 / Catalog 35. The targeted offline regression
+emits the actual TConstruct cached alloy scene; real pixels still require the
+external live visual pilot before the next 209-handler export.

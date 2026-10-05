@@ -18,6 +18,7 @@ public final class NativeMachinesTest {
     public static void main(String[] args) throws Exception { GameTest.run(); }
     public static void run() throws Exception {
         String family = System.getProperty("nesql.nativeFamily", "machines");
+        if (family.equals("dimensions")) { NativeDimensionsTest.run(); return; }
         if (family.startsWith("fluid-icons")) { NativeFluidIconsTest.run(); return; }
         if (family.equals("core-fixes-casting")) { NativeCastingEventsTest.run(); return; }
         if (family.startsWith("core-fixes")) { NativeCoreFixesTest.run(); return; }
