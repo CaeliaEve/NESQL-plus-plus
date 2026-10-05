@@ -147,7 +147,10 @@ final class Audit {
                 if (!evidence.entrySet().isEmpty()) result.add("exclusionEvidence", evidence);
             } finally { cursor.close(); }
         })) {
-            try (Buffer buffer = new Buffer(path.resolve("category"))) { buffer.write(opening.drain()); result.add("categoryCounts", buffer.check()); }
+            Facts.Batch category = session.call("category fluid textures", () -> {
+                Facts.Batch batch = opening.drain(); Images.checkFluids(batch); return batch;
+            });
+            try (Buffer buffer = new Buffer(path.resolve("category"))) { buffer.write(category); result.add("categoryCounts", buffer.check()); }
             int total = session.call("handler " + handler.id + " size", cursor::size);
             java.util.ArrayDeque<Attempt> pending = new java.util.ArrayDeque<>();
             int end = Math.min(total, context.request().check.offset + context.request().check.limit);
@@ -188,6 +191,7 @@ final class Audit {
         Attempt(int index) { this.index = index; }
         long freeze(Facts.Batch source) throws IOException {
             if (!source.scenes.isEmpty() || !source.models.isEmpty()) throw new IOException("Data checks unexpectedly requested graphics");
+            Images.checkFluids(source);
             for (Facts.Icon icon : source.icons) source.records.add(new Facts.Record(icon.kind, icon.record));
             batch.records.addAll(source.records);
             return batch.freezeRecords();

@@ -168,24 +168,39 @@ final class Images implements AutoCloseable {
     }
 
     private Plan plan(Facts.Icon request) {
-        FluidStack fluid = request.item == null ? fluidTexture(request.fluid) : null;
-        IIcon icon = request.item != null ? request.item.getIconIndex() : fluid.getFluid().getIcon(fluid);
+        FluidTexture fluid = request.item == null ? fluidTexture(request.fluid) : null;
+        IIcon icon = request.item != null ? request.item.getIconIndex() : fluid.icon;
         boolean flat = request.item == null || (!(request.item.getItem() instanceof ItemBlock)
                 && !request.item.getItem().requiresMultipleRenderPasses()
                 && MinecraftForgeClient.getItemRenderer(request.item, IItemRenderer.ItemRenderType.INVENTORY) == null);
         if (!(icon instanceof TextureAtlasSprite) || !flat) return null;
         return animation((TextureAtlasSprite) icon, request.item != null
-                ? request.item.getItem().getColorFromItemStack(request.item, 0) : fluid.getFluid().getColor(fluid));
+                ? request.item.getItem().getColorFromItemStack(request.item, 0) : fluid.tint);
     }
 
-    /** Galacticraft registers both legacy/current fluid names, but only its active
-     * oil/fuel role receives a block and stitched icons. Resolve that visual role
-     * on a copy; never merge fluid facts, mutate the registry or cache across reloads.
+    /** Resolve only reviewed native visual relationships; never merge fluid facts,
+     * mutate the registry or cache across reloads. Galacticraft legacy oil/fuel
+     * names use a copy of their active role's stack for native icon/color callbacks.
      */
-    private static FluidStack fluidTexture(FluidStack stack) {
+    private static FluidTexture fluidTexture(FluidStack stack) {
         Fluid fluid = stack.getFluid();
-        if (fluid.getIcon(stack) != null) return stack;
+        IIcon icon = fluid.getIcon(stack);
+        if (icon != null) return new FluidTexture(icon, fluid.getColor(stack));
         String name = fluid.getName();
+        // ToxicEverglades uses GT++'s BlockBaseFluid: it stitches its own icons,
+        // but never copies them into Fluid. Read the registered native block,
+        // preserving resource-pack overrides, animation and the original tint.
+        net.minecraft.block.Block block = fluid.getBlock();
+        String blockName = block == null ? null : net.minecraft.block.Block.blockRegistry.getNameForObject(block);
+        cpw.mods.fml.common.ModContainer gt = cpw.mods.fml.common.Loader.instance().getIndexedModList().get("gregtech_nh");
+        if (name.equals("sludge") && fluid.getClass().getName().equals("toxiceverglades.block.BlockDarkWorldSludgeFluid")
+                && FluidRegistry.getFluid(name) == fluid && gt != null && "5.09.51.482".equals(gt.getVersion())
+                && block != null && block.getClass().getName().equals("gtPlusPlus.core.block.base.BlockBaseFluid")
+                && blockName != null && net.minecraft.block.Block.blockRegistry.getObject(blockName) == block
+                && ((net.minecraftforge.fluids.BlockFluidBase) block).getFluid() == fluid) {
+            icon = block.getIcon(1, 0);
+            if (icon != null) return new FluidTexture(icon, fluid.getColor(stack));
+        }
         boolean oil = name.equals("oil") || name.equals("oilgc");
         boolean fuel = name.equals("fuel") || name.equals("fuelgc");
         cpw.mods.fml.common.ModContainer mod = cpw.mods.fml.common.Loader.instance().getIndexedModList().get("GalacticraftCore");
@@ -197,13 +212,24 @@ final class Images implements AutoCloseable {
             if (active != null && other.equals(active.getName()) && FluidRegistry.getFluid(other) == active) {
                 FluidStack visual = new FluidStack(active, stack.amount);
                 visual.tag = stack.tag == null ? null : (net.minecraft.nbt.NBTTagCompound) stack.tag.copy();
-                if (active.getIcon(visual) != null) return visual;
+                icon = active.getIcon(visual);
+                if (icon != null) return new FluidTexture(icon, active.getColor(visual));
             }
         }
         throw new Jobs.Fault("texture_missing", "Fluid has no texture or verified native visual role: " + name);
     }
 
-    private Plan animation(TextureAtlasSprite sprite, int tint) {
+    /** Called on the client during existing recipe diagnostics, before JSON detaches.
+     * Checks only used fluid references/timelines; no FBO, PNG encoding or extra sweep.
+     */
+    static void checkFluids(Facts.Batch batch) {
+        for (Facts.Icon request : batch.icons) if (request.fluid != null) {
+            FluidTexture texture = fluidTexture(request.fluid);
+            if (texture.icon instanceof TextureAtlasSprite) animation((TextureAtlasSprite) texture.icon, texture.tint);
+        }
+    }
+
+    private static Plan animation(TextureAtlasSprite sprite, int tint) {
         if (sprite.getFrameCount() <= 1) return null;
         AnimationMetadataSection metadata = ReflectionHelper.getPrivateValue(TextureAtlasSprite.class, sprite,
                 "animationMetadata", "field_110982_k");
@@ -227,15 +253,15 @@ final class Images implements AutoCloseable {
 
     private byte[] render(Facts.Icon request) {
         Jobs.checkpoint();
-        FluidStack fluid = request.item == null ? fluidTexture(request.fluid) : null;
-        IIcon icon = request.item != null ? request.item.getIconIndex() : fluid.getFluid().getIcon(fluid);
+        FluidTexture fluid = request.item == null ? fluidTexture(request.fluid) : null;
+        IIcon icon = request.item != null ? request.item.getIconIndex() : fluid.icon;
         return icon(request.registry, () -> {
             GL11.glEnable(GL12.GL_RESCALE_NORMAL);
             RenderHelper.enableGUIStandardItemLighting();
             if (request.item != null) GuiContainerManager.drawItem(0, 0, request.item);
             else {
                 RenderHelper.disableStandardItemLighting();
-                int color = fluid.getFluid().getColor(fluid);
+                int color = fluid.tint;
                 GL11.glColor4f(((color >>> 16) & 255) / 255f, ((color >>> 8) & 255) / 255f, (color & 255) / 255f, 1);
                 GuiDraw.changeTexture(TextureMap.locationBlocksTexture);
                 GuiDraw.gui.drawTexturedModelRectFromIcon(0, 0, icon, 16, 16);
@@ -265,6 +291,10 @@ final class Images implements AutoCloseable {
     private static final class Captured {
         final Plan plan; final byte[] rgba;
         Captured(Plan plan, byte[] rgba) { this.plan = plan; this.rgba = rgba; }
+    }
+    private static final class FluidTexture {
+        final IIcon icon; final int tint;
+        FluidTexture(IIcon icon, int tint) { this.icon = icon; this.tint = tint; }
     }
     private static final class Plan {
         final TextureAtlasSprite sprite;

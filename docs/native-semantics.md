@@ -423,6 +423,30 @@ the exported wildcard/NBT rules with the native Railcraft manager; full client
 tooltip/icon capture remains part of the external pilot. This candidate also
 includes the 0.39.1 fluid-role and 0.39.2 NEI-height fixes.
 
+## Native sludge visuals and diagnostic texture checks (0.40.1 / Source 37)
+
+The pinned GT 5.09.51.482 jar registers `sludge` through ToxicEverglades
+`DarkWorldContentLoader`, using `BlockDarkWorldSludgeFluid` and a registered GT++
+`BlockBaseFluid`. The block stitches `miscutils:fluid/Fluid_Sludge_Still` and
+`Fluid_Sludge_Flow`, but does not set the Fluid icons. This is distinct from
+Galacticraft `bacterialsludge` and GT++ `fluid.sludge`; no MFR alias is inferred.
+
+When the fluid's own icon is absent, the exporter accepts the pinned native class
+pair only if both registry identities and the block-to-fluid relationship agree.
+It reads the block's actual still icon and the original fluid color, including
+resource-pack overrides and native animation. It does not mutate the fluid or
+substitute fluid IDs, NBT, amounts or physical properties. Missing native icons
+and unknown implementations still fail explicitly. Existing icons and the
+reviewed Galacticraft oil/fuel role resolution retain their precedence.
+
+Recipe diagnostics now check used fluid icon references and animation metadata
+on the client thread before the batch becomes detached JSON, including category
+facts. A missing reference is recorded by the existing recipe/handler diagnostic
+flow, so the diagnostic gate can stop a long visual export early. This adds no
+FBO capture, PNG encoding, additional registry sweep or cross-job cache. It does
+not certify item icons, GL rendering or final pixel correctness; the live visual
+pilot and final online/offline acceptance remain required.
+
 ## Railcraft derived sentinel predicates (0.40.0 / Source 37)
 
 A concrete subtype recipe also admits a literal offered metadata 32767. This

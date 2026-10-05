@@ -17,6 +17,7 @@ import java.util.Collections;
 /** Real Galacticraft role fields, Forge fluid identities and the production animation selection; no game or GL. */
 final class NativeFluidIconsTest {
     static void run() throws Exception {
+        if (System.getProperty("nesql.nativeFamily").endsWith("sludge")) { sludge(); return; }
         NativeCoreFixesTest.version("GalacticraftCore", "3.3.13-GTNH");
         ReflectionHelper.setPrivateValue(cpw.mods.fml.common.ModAPIManager.class, cpw.mods.fml.common.ModAPIManager.INSTANCE,
                 Collections.emptyMap(), "apiContainers");
@@ -53,6 +54,65 @@ final class NativeFluidIconsTest {
         NativeCoreFixesTest.version("GalacticraftCore", "unreviewed");
         rejects(new FluidStack(FluidRegistry.getFluid(legacy ? "oil" : "oilgc"), 1), "Unaudited Galacticraft version was accepted");
         System.out.println("Fluid icons: native oil/fuel aliases, both ID configurations, animation/tint, identity preservation and strict missing-texture boundaries passed");
+    }
+    private static void sludge() throws Exception {
+        NativeCoreFixesTest.version("gregtech_nh", "5.09.51.482");
+        Fluid fluid = new toxiceverglades.block.BlockDarkWorldSludgeFluid("sludge", 0x1e821e);
+        require(FluidRegistry.registerFluid(fluid), "Sludge registry collision");
+        // Avoid constructor-side global block/item registration; execute the actual native icon callbacks.
+        java.lang.reflect.Field access = sun.misc.Unsafe.class.getDeclaredField("theUnsafe"); access.setAccessible(true);
+        gtPlusPlus.core.block.base.BlockBaseFluid block = (gtPlusPlus.core.block.base.BlockBaseFluid)
+                ((sun.misc.Unsafe) access.get(null)).allocateInstance(gtPlusPlus.core.block.base.BlockBaseFluid.class);
+        ReflectionHelper.setPrivateValue(net.minecraftforge.fluids.BlockFluidBase.class, block, "sludge", "fluidName");
+        ReflectionHelper.setPrivateValue(net.minecraftforge.fluids.BlockFluidBase.class, block, fluid, "definedFluid");
+        ReflectionHelper.setPrivateValue(gtPlusPlus.core.block.base.BlockBaseFluid.class, block, "Sludge", "name");
+        ReflectionHelper.setPrivateValue(gtPlusPlus.core.block.base.BlockBaseFluid.class, block, new net.minecraft.util.IIcon[6], "textureArray");
+        java.lang.reflect.Field delegate = net.minecraft.block.Block.class.getField("delegate"); delegate.setAccessible(true);
+        delegate.set(block, new cpw.mods.fml.common.registry.RegistryDelegate.Delegate<>(block, net.minecraft.block.Block.class));
+        net.minecraft.block.Block.blockRegistry.addObject(3900, "ToxicEverglades:fluidSludge", block);
+        fluid.setBlock(block);
+        TextureAtlasSprite still = sprite("miscutils:fluid/Fluid_Sludge_Still", 4, 4);
+        TextureAtlasSprite flow = sprite("miscutils:fluid/Fluid_Sludge_Flow", 2, 2);
+        block.registerBlockIcons(name -> {
+            require(name.equals(still.getIconName()) || name.equals(flow.getIconName()), "Unexpected native sludge texture " + name);
+            return name.equals(still.getIconName()) ? still : flow;
+        });
+        FluidStack original = new FluidStack(fluid, 1000); original.tag = new NBTTagCompound(); original.tag.setString("proof", "unchanged");
+        require(fluid.getIcon(original) == null && block.getIcon(1, 0) == still, "Native missing-fluid-icon setup changed");
+        Object plan = plan(original);
+        require(MagicApi.field(plan, "sprite") == still && (Integer) MagicApi.field(plan, "tint") == 0x1e821e,
+                "Native sludge still texture/color lost");
+        require(((java.util.List<?>) MagicApi.field(plan, "timeline")).size() == 2, "Sludge animation lost");
+        require(fluid.getIcon(original) == null && original.getFluid() == fluid && original.amount == 1000
+                && original.tag.getString("proof").equals("unchanged"), "Sludge facts or registry were mutated");
+        freeze(original); // Same client-thread snapshot boundary as production recipe diagnostics, with no GL.
+        fluid.setIcons(flow);
+        require(MagicApi.field(plan(original), "sprite") == flow, "Existing fluid icon lost precedence");
+        fluid.setIcons(null);
+        Fluid unknown = new Fluid("unknown_preflight"); FluidRegistry.registerFluid(unknown);
+        try { freeze(new FluidStack(unknown, 1)); throw new AssertionError("Data diagnostic missed a textureless fluid"); }
+        catch (Jobs.Fault expected) { require(expected.code.equals("texture_missing"), "Wrong preflight fault"); }
+        ReflectionHelper.setPrivateValue(net.minecraftforge.fluids.BlockFluidBase.class, block, "unknown_preflight", "fluidName");
+        rejects(original, "Unrelated block fluid accepted");
+        ReflectionHelper.setPrivateValue(net.minecraftforge.fluids.BlockFluidBase.class, block, "sludge", "fluidName");
+        ReflectionHelper.setPrivateValue(gtPlusPlus.core.block.base.BlockBaseFluid.class, block, new net.minecraft.util.IIcon[6], "textureArray");
+        rejects(original, "Missing native block icon hidden");
+        block.registerBlockIcons(name -> still);
+        NativeCoreFixesTest.version("gregtech_nh", "unreviewed");
+        rejects(original, "Unreviewed sludge implementation accepted");
+        System.out.println("Sludge: actual native block icon registration, still/tint/animation, immutable facts, diagnostic preflight and strict boundaries passed");
+    }
+    private static void freeze(FluidStack fluid) throws Exception {
+        Class<?> type = Class.forName(Audit.class.getName() + "$Attempt");
+        java.lang.reflect.Constructor<?> constructor = type.getDeclaredConstructor(int.class); constructor.setAccessible(true);
+        Method method = type.getDeclaredMethod("freeze", Facts.Batch.class); method.setAccessible(true);
+        Facts.Batch batch = new Facts.Batch();
+        batch.icons.add(new Facts.Icon("fluids", new com.google.gson.JsonObject(), null, fluid, fluid.getFluid().getName()));
+        try { method.invoke(constructor.newInstance(0), batch); }
+        catch (InvocationTargetException error) {
+            if (error.getCause() instanceof RuntimeException) throw (RuntimeException) error.getCause();
+            throw error;
+        }
     }
     private static Object plan(FluidStack stack) throws Exception {
         Method method = Images.class.getDeclaredMethod("plan", Facts.Icon.class); method.setAccessible(true);
