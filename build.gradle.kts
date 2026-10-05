@@ -84,6 +84,12 @@ val checks = listOf("source" to "source.SourceTest", "jobs" to "task.JobsTest").
     }
 }
 tasks.named("check") { dependsOn(checks) }
+tasks.register<JavaExec>("visualThroughputTest") {
+    dependsOn("testClasses")
+    classpath = sourceSets.test.get().runtimeClasspath + gameLibraries
+    main = "com.github.dcysteine.nesql.exporter.capture.VisualThroughputTest"
+    maxHeapSize = "128m"
+}
 tasks.named<JavaExec>("sourceTest") {
     project.findProperty("sourceFixture")?.toString()?.let { args(it) }
 }

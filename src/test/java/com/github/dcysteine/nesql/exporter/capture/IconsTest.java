@@ -63,6 +63,25 @@ public final class IconsTest {
             sprite.setIconWidth(1); sprite.setIconHeight(1); sprite.initSprite(1, 1, 0, 0, false);
             RenderItem renderer = new RenderItem();
             try (Images images = new Images()) {
+                VisualBatch batching = new VisualBatch();
+                java.util.List<byte[]> snapshots = new java.util.ArrayList<>();
+                for (int color = 0; color < 3; color++) {
+                    final int channel = color;
+                    batching.add(() -> {
+                        byte[] rgba = images.icon("test:batch-" + channel, () -> {
+                            GL11.glClearColor(channel == 0 ? 1 : 0, channel == 1 ? 1 : 0, channel == 2 ? 1 : 0, 1);
+                            GL11.glClear(GL11.GL_COLOR_BUFFER_BIT);
+                        });
+                        java.awt.image.BufferedImage copy = new java.awt.image.BufferedImage(1,1,java.awt.image.BufferedImage.TYPE_INT_ARGB);
+                        copy.setRGB(0,0,0xff000000 | (rgba[0]&255)<<16 | (rgba[1]&255)<<8 | (rgba[2]&255));
+                        return new Images.Image(copy,new com.google.gson.JsonArray(),"capture","batch");
+                    }, result -> snapshots.add(VisualThroughputTest.encode(result.pixels)));
+                }
+                while (!batching.done()) { batching.capture(); batching.write(); }
+                for (int channel=0;channel<3;channel++) {
+                    int color=javax.imageio.ImageIO.read(new java.io.ByteArrayInputStream(snapshots.get(channel))).getRGB(0,0);
+                    if(color!=(0xff000000 | 0xff << (16-channel*8)))throw new AssertionError("Batched FBO reused another frame's pixels");
+                }
                 for (int i = 0; i < 3; i++) {
                     final boolean overlay = i == 1;
                     byte[] pixels = images.icon("test:native-item", () -> {

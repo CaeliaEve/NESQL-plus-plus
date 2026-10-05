@@ -21,8 +21,6 @@ import net.minecraftforge.fluids.Fluid;
 import net.minecraftforge.fluids.FluidRegistry;
 import net.minecraftforge.fluids.FluidStack;
 
-import javax.imageio.ImageIO;
-import java.io.ByteArrayOutputStream;
 import java.io.IOException;
 import java.nio.file.Path;
 import java.util.ArrayList;
@@ -222,18 +220,29 @@ public final class Capture implements Jobs.Task, AutoCloseable {
                         context.progress("recipes", 0, size, handler.name);
                         for (int index = 0; index < size;) {
                             final int begin = index;
-                            List<Facts.Batch> captured = new ArrayList<>();
+                            List<Snapshot> captured = new ArrayList<>();
                             index = session.call("recipe batch", () -> Slice.run(begin, size, recipe -> {
                                 session.check();
                                 if(recipe==begin)cursor.verify();
                                 cursor.capture(recipe);
                                 session.check();
-                                Facts.Batch batch = facts.drain(); captured.add(batch);
+                                Facts.Batch batch = facts.drain();
+                                VisualBatch visual = batch.models.isEmpty() ? sink.visuals(batch) : null;
+                                // Capture the first pixel slice without a second tick handoff.
+                                if (visual != null) visual.capture();
+                                captured.add(new Snapshot(batch, visual));
                                 // Rendering closures may depend on the cursor's current recipe.
                                 // Finish those visuals before advancing it again.
                                 return batch.hasVisuals() ? Long.MAX_VALUE : batch.freezeRecords();
                             }));
-                            for (Facts.Batch batch : captured) sink.write(batch);
+                            for (Snapshot snapshot : captured) {
+                                if (snapshot.visual == null) sink.write(snapshot.facts);
+                                else {
+                                    snapshot.visual.write();
+                                    sink.finishVisuals(snapshot.visual);
+                                    sink.records(snapshot.facts);
+                                }
+                            }
                             if (index / 64 != begin / 64 || index == size) context.progress("recipes", index, size, handler.name);
                         }
                     } finally {
@@ -304,6 +313,11 @@ public final class Capture implements Jobs.Task, AutoCloseable {
         sink.write(facts.drain());
     }
 
+    private static final class Snapshot {
+        final Facts.Batch facts; final VisualBatch visual;
+        Snapshot(Facts.Batch facts, VisualBatch visual) { this.facts = facts; this.visual = visual; }
+    }
+
     private static final class Sink implements AutoCloseable {
         final Dataset dataset;
         final Rows rows;
@@ -312,6 +326,8 @@ public final class Capture implements Jobs.Task, AutoCloseable {
         final boolean textures;
         final Map<Object, String> paints = new java.util.HashMap<>();
         final Pipeline encoding = new Pipeline();
+        final PngCache png = new PngCache(16 * 1024 * 1024L, 2048);
+        final java.util.LinkedHashMap<String, Boolean> assetRows = new java.util.LinkedHashMap<>(16, .75f, true);
 
         Sink(Dataset dataset, Rows rows, Images images, ClientThread.Session client, boolean textures) {
             this.dataset = dataset; this.rows = rows; this.images = images; this.client = client; this.textures = textures;
@@ -332,12 +348,19 @@ public final class Capture implements Jobs.Task, AutoCloseable {
                 String id = Identity.content("model", record); record.addProperty("id", id);
                 rows.add("models", record); model.appearance.addProperty("model", id);
             }
-            if (textures) for (Facts.Picture picture : batch.pictures) asset(images.picture(picture, client), id -> picture.record.addProperty(picture.field, id));
+            finishVisuals(visuals(batch));
+            records(batch);
+        }
+
+        VisualBatch visuals(Facts.Batch batch) {
+            VisualBatch visual = new VisualBatch();
+            if (textures) for (Facts.Picture picture : batch.pictures)
+                visual.add(() -> images.picture(picture, client), image -> asset(image, id -> picture.record.addProperty(picture.field, id)));
             for (Facts.Icon icon : batch.icons) {
-                if (textures) asset(images.capture(icon, client), id -> icon.record.addProperty("icon", id));
+                if (textures) visual.add(() -> images.capture(icon, client), image -> asset(image, id -> icon.record.addProperty("icon", id)));
             }
             for (Facts.Scene scene : batch.scenes) {
-                asset(images.scene(scene, client), background -> {
+                visual.add(() -> images.scene(scene, client), image -> asset(image, background -> {
                 JsonArray elements = new JsonArray();
                 elements.add(object("kind", "sprite", "asset", background, "x", 0, "y", 0,
                         "width", scene.width, "height", scene.height, "z", scene.z));
@@ -347,8 +370,19 @@ public final class Capture implements Jobs.Task, AutoCloseable {
                 view.addProperty("id", id);
                 scene.recipe.addProperty("view", id);
                 rows.add("views", view);
-                });
+                }));
             }
+            return visual;
+        }
+
+        void finishVisuals(VisualBatch visual) throws Exception {
+            while (!visual.done()) {
+                client.call("visual slice", () -> { visual.capture(); return null; });
+                visual.write();
+            }
+        }
+
+        void records(Facts.Batch batch) throws Exception {
             encoding.flush();
             for (Facts.Icon icon : batch.icons) rows.add(icon.kind, icon.record);
             for (Facts.Record record : batch.records) rows.add(record.kind, record.value);
@@ -363,20 +397,17 @@ public final class Capture implements Jobs.Task, AutoCloseable {
         interface Asset { void accept(String id) throws IOException; }
         void asset(Images.Image image, Asset target) throws Exception {
             Jobs.checkpoint();
-            encoding.submit((long) image.pixels.getWidth() * image.pixels.getHeight() * 4, () -> {
-            try (Jobs.Timing ignored = Jobs.measure("pngEncode")) {
-            ByteArrayOutputStream output = new ByteArrayOutputStream();
-            if (!ImageIO.write(image.pixels, "png", output)) throw new IOException("PNG encoder is unavailable");
-            return output.toByteArray();
-            }
-            }, bytes -> {
+            encoding.submit((long) image.pixels.getWidth() * image.pixels.getHeight() * 4, () -> png.encode(image.pixels), bytes -> {
             try (Jobs.Timing ignored = Jobs.measure("assetWrite")) {
             String path = dataset.asset(bytes, "png");
             JsonObject asset = object("path", path, "width", image.pixels.getWidth(), "height", image.pixels.getHeight(),
                     "frames", image.frames, "interpolate", false, "source", object("kind", image.kind, "location", image.location));
             String id = Identity.content("asset", asset);
             asset.addProperty("id", id);
-            rows.add("assets", asset);
+            if (assetRows.get(id) == null) {
+                rows.add("assets", asset); assetRows.put(id, true);
+                if (assetRows.size() > 8192) assetRows.remove(assetRows.keySet().iterator().next());
+            } else try (Jobs.Timing reused = Jobs.measure("assetRowReuse")) { /* identical content-addressed row */ }
             target.accept(id);
             }
             });

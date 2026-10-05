@@ -38,7 +38,9 @@ import java.util.Map;
 
 import static com.github.dcysteine.nesql.exporter.source.Json.*;
 
-/** Only sprite copies and GL calls run on the client; pixel transforms and encoding run on the worker. */
+/** Native reads and GL calls run on the client. Batched recipe capture also
+ * detaches/decodes its pixels there; PNG encoding always stays off the client.
+ */
 final class Images implements AutoCloseable {
     private static final int SIZE = 64;
     private final Surface icons = new Surface();
