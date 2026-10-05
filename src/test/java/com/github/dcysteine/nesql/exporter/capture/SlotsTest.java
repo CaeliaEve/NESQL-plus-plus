@@ -83,6 +83,7 @@ final class SlotsTest {
         scans(facts);
         unregisteredDisplay();
         nativeFailures();
+        inputEvidence();
         System.out.println("GT slots: ordered overlaps, empty slots, input/output separation, exact output quantities and alternative-only inputs passed");
     }
 
@@ -400,6 +401,52 @@ final class SlotsTest {
         java.io.IOException checked = new java.io.IOException("native checked exception");
         try { MagicApi.invoke(SlotsTest.class, null, "nativeFailure", new Class<?>[] {Throwable.class}, checked); throw new AssertionError("Native checked failure swallowed"); }
         catch (Jobs.Fault actual) { require(actual.getCause() == checked && actual.getMessage().contains("nativeFailure"), "Native checked cause lost"); }
+    }
+
+    private static void inputEvidence() {
+        List<ItemStack> previous = new java.util.ArrayList<>(codechicken.nei.ItemList.itemMap.get(Items.paper));
+        ItemStack source = new ItemStack(Items.paper, 3, OreDictionary.WILDCARD_VALUE);
+        try {
+            codechicken.nei.ItemList.itemMap.removeAll(Items.paper);
+            PositionedStack cached = new PositionedStack(source, 10, 20, true);
+            for (int meta = 0; meta < 25; meta++)
+                codechicken.nei.ItemList.itemMap.put(Items.paper, new ItemStack(Items.paper, 1, meta));
+            List<RecipeRow.Ingredient> expanded = GtRecipes.ingredients(source, false,
+                    item -> new PositionedStack(item, 10, 20, true).items);
+            require(cached.items.length == 1 && expanded.size() == 25, "Native stale-permutation setup failed");
+            try {
+                GtRecipes.checkedDisplay(0, cached, expanded, source, "fixture.native.recipe",
+                        () -> new PositionedStack(source, 10, 20, true));
+                throw new AssertionError("Evidence collection accepted stale display");
+            } catch (Jobs.Fault failure) {
+                require(failure.code.equals("slot_changed") && failure.getSuppressed().length == 4,
+                        "Missing bounded native comparison evidence");
+                com.google.gson.JsonObject encoded = com.github.dcysteine.nesql.exporter.task.Checks.failure(failure);
+                com.google.gson.JsonArray notes = encoded.getAsJsonArray("suppressed");
+                int[] counts = {1, 25, 1, 25};
+                for (int i = 0; i < 4; i++) {
+                    String message = notes.get(i).getAsJsonObject().get("message").getAsString();
+                    require(message.length() < 2000, "Evidence was truncated by diagnostic serialization");
+                    com.google.gson.JsonObject note = new com.google.gson.JsonParser().parse(message).getAsJsonObject();
+                    require(note.get("count").getAsInt() == counts[i], "Raw input and expanded counts conflated");
+                    if (i == 3) require(note.get("matchesExpansion").getAsBoolean(), "Fresh native comparison missing");
+                }
+            }
+            require(cached.items.length == 1 && source.stackSize == 3 && source.getItemDamage() == 32767,
+                    "Evidence collection rewrote shared cache or source");
+            PositionedStack current = new PositionedStack(source, 10, 20, true);
+            GtRecipes.checkedDisplay(0, current, expanded, source, "fixture.native.recipe",
+                    () -> { throw new AssertionError("Successful capture ran the failure probe"); });
+            try {
+                GtRecipes.checkedDisplay(0, cached, expanded, source, "fixture.native.recipe",
+                        () -> { throw new IllegalStateException("probe failure"); });
+                throw new AssertionError("Failed probe swallowed original failure");
+            } catch (Jobs.Fault failure) {
+                require(failure.code.equals("slot_changed") && failure.getSuppressed().length == 4,
+                        "Probe failure replaced the original diagnostic");
+            }
+        } finally { codechicken.nei.ItemList.itemMap.replaceValues(Items.paper, previous); }
+        System.out.println("GT input evidence: native 1-to-25 stale permutation, bounded reports, strict failure and unchanged cache passed");
     }
     private static void nativeFailure(Throwable failure) throws Throwable { throw failure; }
     private static PositionedStack display() { return new PositionedStack(new ItemStack(Items.paper), 10, 20, false); }

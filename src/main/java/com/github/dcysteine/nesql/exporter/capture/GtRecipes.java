@@ -154,7 +154,8 @@ final class GtRecipes implements AutoCloseable {
             } else {
                 List<RecipeRow.Ingredient> ingredients = ingredients(placement.source, recipe.isNBTSensitive,
                         item -> new PositionedStack(GTOreDictUnificator.getNonUnifiedStacks(item), display.relx, display.rely, true).items);
-                displayed(binding.index, display, ingredients);
+                checkedDisplay(binding.index, display, ingredients, placement.source, recipe.getClass().getName(),
+                        () -> handler.new CachedDefaultRecipe(recipe).mInputs.get(projectedInputs.indexOf(placement)));
                 row.itemInput(display, binding.index, ingredients, false);
             }
         }
@@ -448,6 +449,73 @@ final class GtRecipes implements AutoCloseable {
             }
         }
         return result;
+    }
+
+    static void checkedDisplay(int slot, PositionedStack display, List<RecipeRow.Ingredient> ingredients,
+                               Object source, String recipeType, java.util.function.Supplier<PositionedStack> currentNative) {
+        try { displayed(slot, display, ingredients); }
+        catch (Jobs.Fault failure) {
+            if (!"slot_changed".equals(failure.code)) throw failure;
+            // Failure-only probe. A newly built native view is evidence, never a
+            // replacement for the rejected shared cache or a reason to pass it.
+            ItemStack[] raw = source instanceof ItemStack ? new ItemStack[] {(ItemStack) source}
+                    : source instanceof ItemStack[] ? (ItemStack[]) source : null;
+            evidence(failure, "gt_input_source", () -> {
+                JsonObject note = stackEvidence(raw);
+                note.addProperty("recipeType", evidenceText(recipeType));
+                return note;
+            });
+            evidence(failure, "gt_input_expansion", () -> stackEvidence(ingredients.stream()
+                    .map(ingredient -> ingredient.display).toArray(ItemStack[]::new)));
+            evidence(failure, "gt_input_cached", () -> stackEvidence(display.items));
+            evidence(failure, "gt_input_current_native", () -> {
+                PositionedStack current = currentNative.get();
+                JsonObject note = stackEvidence(current.items);
+                note.addProperty("displayType", evidenceText(current.getClass().getName()));
+                try { displayed(slot, current, ingredients); note.addProperty("matchesExpansion", true); }
+                catch (Jobs.Fault mismatch) {
+                    note.addProperty("matchesExpansion", false);
+                    note.addProperty("comparisonError", mismatch.code);
+                }
+                return note;
+            });
+            throw failure;
+        }
+    }
+
+    private static void evidence(Jobs.Fault failure, String code, java.util.function.Supplier<JsonObject> probe) {
+        JsonObject note;
+        try { note = probe.get(); }
+        catch (java.util.concurrent.CancellationException cancelled) { throw cancelled; }
+        catch (RuntimeException unavailable) {
+            note = object("probeFailure", evidenceText(unavailable.getClass().getName()));
+        }
+        if (note.toString().length() > 1900 && note.has("samples")) {
+            note.add("samples", new com.google.gson.JsonArray());
+            note.add("samplesOmitted", note.get("count"));
+        }
+        failure.addSuppressed(new Jobs.Fault(code, note.toString()));
+    }
+
+    private static JsonObject stackEvidence(ItemStack[] stacks) {
+        com.google.gson.JsonArray samples = new com.google.gson.JsonArray();
+        int count = stacks == null ? 0 : stacks.length;
+        // Checks.failure keeps at most 2000 characters per exception. Two small
+        // samples retain registry/meta/amount and typed-NBT identity without tooltips.
+        for (int i = 0; i < Math.min(2, count); i++) {
+            ItemStack stack = stacks[i];
+            if (stack == null || stack.getItem() == null) { samples.add(value(null)); continue; }
+            samples.add(object("registry", evidenceText(Item.itemRegistry.getNameForObject(stack.getItem())),
+                    "meta", Items.feather.getDamage(stack), "amount", stack.stackSize,
+                    "id", displayKey(stack, false), "hasNbt", stack.hasTagCompound(),
+                    "itemListVariants", codechicken.nei.ItemList.itemMap.get(stack.getItem()).size()));
+        }
+        return object("count", count, "nullArray", stacks == null, "samples", samples,
+                "samplesOmitted", Math.max(0, count - 2));
+    }
+
+    private static String evidenceText(String text) {
+        return text == null || text.length() <= 160 ? text : text.substring(0, 160);
     }
 
     static void displayed(int slot, PositionedStack display, List<RecipeRow.Ingredient> ingredients) {
