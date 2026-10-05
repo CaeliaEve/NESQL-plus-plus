@@ -147,7 +147,7 @@ final class RailRecipes implements RegistryRecipes {
     }
     private static final class Pattern {
         final ItemStack item; final boolean meta, nbt;
-        Pattern(ItemStack item, boolean meta, boolean nbt) { this.item = item; this.meta = meta; this.nbt = nbt; }
+        Pattern(ItemStack item, boolean meta, boolean nbt) { this.item = example(item, meta); this.meta = meta; this.nbt = nbt; }
         boolean covers(Pattern other) { return (meta || !other.meta && item.getItemDamage() == other.item.getItemDamage())
                 && (nbt || !other.nbt && ItemStack.areItemStackTagsEqual(item, other.item)); }
         boolean overlaps(Pattern other) { return (meta || other.meta || item.getItemDamage() == other.item.getItemDamage())
@@ -156,6 +156,21 @@ final class RailRecipes implements RegistryRecipes {
             if (excludeSynthetic) return object("kind", "tags", "meta", meta, "keys", array(), "present", array(), "absent", array("synthetic"));
             return meta || nbt ? object("kind", "wildcard", "meta", meta, "nbt", nbt) : object("kind", "exact");
         }
+    }
+    private static ItemStack example(ItemStack template, boolean ignoreMeta) {
+        if (!ignoreMeta || Items.feather.getDamage(template) != 32767) return template;
+        // This is a predicate anchor, not a literal wildcard item. Keep matching
+        // every metadata value; take only concrete metadata from the loaded catalog.
+        for (ItemStack candidate : codechicken.nei.ItemList.items) {
+            Jobs.checkpoint();
+            if (candidate == null || candidate.getItem() != template.getItem() || candidate.stackSize <= 0) continue;
+            int meta = Items.feather.getDamage(candidate);
+            if (meta < 0 || meta == 32767) continue;
+            ItemStack example = template.copy(); example.setItemDamage(meta);
+            return example; // Preserve template NBT/count, never catalog-example NBT.
+        }
+        throw fault("Railcraft wildcard input has no concrete NEI metadata example: "
+                + Item.itemRegistry.getNameForObject(template.getItem()));
     }
     static int[][] progressBars(TemplateRecipeHandler handler) {
         return handler.getClass().getName().equals(NEI + "CokeOven")

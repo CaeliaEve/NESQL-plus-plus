@@ -402,3 +402,23 @@ It does not change recipe identities, quantities, the native draw callbacks,
 the frontend UI, or Source 36 / Catalog 35. The targeted offline regression
 emits the actual TConstruct cached alloy scene; real pixels still require the
 external live visual pilot before the next 209-handler export.
+
+## Railcraft wildcard input examples (0.39.3)
+
+A Railcraft input predicate with ignored metadata may use 32767 as its template.
+That is not a renderable subtype: AmunRa 0.8.2's ItemBlockMulti indexes its native
+sub-block array when resolving the name/icon and throws for 32767. Before such
+a predicate anchor becomes an item fact, select concrete metadata from a loaded
+NEI stack of the same Item. Copy only that metadata onto the owned template;
+keep its NBT and the existing wildcard, synthetic-tag and priority predicates.
+No metadata-zero default, name/texture placeholder or global Facts exception
+suppression is used. No concrete NEI example means an explicit failure.
+
+Literal metadata predicates, native registry templates, outputs and processing
+times are unchanged. The exported anchor now references a real item variant,
+so content-addressed recipe IDs may change, but the accepted metadata/NBT domain
+is unchanged. Matching still includes other metadata values, not just the
+displayed example. Tests reproduce the actual AmunRa name failure and compare
+the exported wildcard/NBT rules with the native Railcraft manager; full client
+tooltip/icon capture remains part of the external pilot. This candidate also
+includes the 0.39.1 fluid-role and 0.39.2 NEI-height fixes.

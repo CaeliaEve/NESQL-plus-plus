@@ -29,7 +29,7 @@ public final class GameTest {
                     loader.registerTransformer(GameTest.class.getName() + "$NbtListAccess");
                 if ("soul".equals(System.getProperty("nesql.nativeFamily")))
                     loader.registerTransformer(GameTest.class.getName() + "$EnderRegistry");
-                if ("space".equals(System.getProperty("nesql.nativeFamily")) || "circuits".equals(System.getProperty("nesql.nativeFamily")) || System.getProperty("nesql.nativeFamily", "").startsWith("fluid-icons"))
+                if ("space".equals(System.getProperty("nesql.nativeFamily")) || "circuits".equals(System.getProperty("nesql.nativeFamily")) || "rail-wildcard".equals(System.getProperty("nesql.nativeFamily")) || System.getProperty("nesql.nativeFamily", "").startsWith("fluid-icons"))
                     loader.registerTransformer(GameTest.class.getName() + "$OptionalApis");
                 if ("core-fixes-blast".equals(System.getProperty("nesql.nativeFamily")))
                     loader.registerTransformer(GameTest.class.getName() + "$Ic2Cells");
