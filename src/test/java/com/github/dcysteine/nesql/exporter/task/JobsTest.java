@@ -14,6 +14,7 @@ import static com.github.dcysteine.nesql.exporter.source.Json.array;
 public final class JobsTest {
     public static void main(String[] args) throws Exception {
         Path root = Files.createTempDirectory("nesql-jobs-");
+        snapshots(root.resolve("snapshots"));
         WorkTest.run();
         EpochTest.run();
         Path checks = root.resolve("diagnostics"); Files.createDirectories(checks); ChecksTest.run(checks);
@@ -32,6 +33,8 @@ public final class JobsTest {
         String id;
         try (Jobs jobs = new Jobs(root.resolve("jobs"), context -> {
             handoff.set(Jobs.bind(() -> null));
+            context.progress("capture", 0, 1, "Begin fixture");
+            context.progress("capture", 1, 1, "Pending fixture progress");
             began.countDown();
             try { new CountDownLatch(1).await(); }
             finally {
@@ -39,8 +42,12 @@ public final class JobsTest {
                 cleaned.countDown();
             }
         })) {
-            id = jobs.start(request).id;
+            synchronized (jobs) {
+                id = jobs.start(request).id;
+                require(snapshot(root, id).get("state").getAsString().equals("queued"), "Job start was not persisted immediately");
+            }
             require(began.await(5, TimeUnit.SECONDS), "Task did not start");
+            require(snapshot(root, id).get("state").getAsString().equals("running"), "Running state was not persisted before the task");
             require(id.equals(jobs.start(request).id), "Retry started another export");
             require(id.equals(jobs.start(reordered).id), "Probe order changed retry identity");
             require(jobs.read(id).request.probes.get(0).equals(Probe.defaults()), "Journal did not normalize probe order");
@@ -49,6 +56,8 @@ public final class JobsTest {
             expect("key_conflict", () -> jobs.start(new Jobs.Request("once", "different", "full")));
             expect("export_busy", () -> jobs.start(new Jobs.Request("another", "fixture", "full")));
             require(jobs.cancel(id).state.equals("cancelling"), "Cancellation skipped cleanup");
+            require(snapshot(root, id).get("state").getAsString().equals("cancelling")
+                    && snapshot(root, id).get("completed").getAsLong() == 1, "Cancellation request did not immediately persist pending progress");
             try { handoff.get().call(); throw new AssertionError("Client handoff lost its job cancellation"); }
             catch (java.util.concurrent.CancellationException expected) { /* owning job is cancelled */ }
             Jobs.checkpoint();
@@ -58,6 +67,7 @@ public final class JobsTest {
             await(jobs, id, "cancelled");
             require(jobs.cancel(id).state.equals("cancelled"), "Cancellation was not idempotent");
         }
+        require(snapshot(root, id).get("state").getAsString().equals("cancelled"), "Cancellation completion was not persisted");
         try (Jobs jobs = new Jobs(root.resolve("jobs"), context -> {
             context.publish(() -> SourceTest.fixture(root.resolve("capture"), root.resolve("datasets")));
         })) {
@@ -87,6 +97,111 @@ public final class JobsTest {
         catch (java.io.IOException expected) { require(expected.getMessage().contains("Invalid job report"), "Wrong journal error"); }
         api(Files.createTempDirectory("nesql-api-"));
         recipeScope(Files.createTempDirectory("nesql-scope-"));
+    }
+
+    private static void snapshots(Path root) throws Exception {
+        java.util.concurrent.atomic.AtomicLong clock = new java.util.concurrent.atomic.AtomicLong();
+        java.util.concurrent.atomic.AtomicReference<Jobs.Context> context = new java.util.concurrent.atomic.AtomicReference<>();
+        java.util.concurrent.atomic.AtomicReference<Jobs.Observer> observer = new java.util.concurrent.atomic.AtomicReference<>();
+        CountDownLatch ready = new CountDownLatch(1), finish = new CountDownLatch(1);
+        Jobs.Request request = new Jobs.Request("snapshots", "fixture", "data");
+        String id;
+        try (Jobs jobs = new Jobs(root.resolve("jobs"), value -> {
+            context.set(value); observer.set(Jobs.observer()); ready.countDown();
+            finish.await();
+            throw new Jobs.Fault("snapshot_fixture", "Expected fixture failure");
+        }, clock::get)) {
+            id = jobs.start(request).id;
+            try {
+                require(ready.await(5, TimeUnit.SECONDS), "Snapshot fixture did not start");
+                Jobs.Context task = context.get(); Jobs.Observer updates = observer.get();
+                task.progress("capture", 0, 20, "Begin capture");
+                updates.update(operation("1", "queued", "call", 0));
+                com.google.gson.JsonObject first = snapshot(root, id);
+                require(first.get("stage").getAsString().equals("capture")
+                        && first.getAsJsonObject("operation").get("state").getAsString().equals("queued"), "Initial stage/phase was not persisted");
+                task.progress("capture", 1, 20, "First row");
+                updates.update(operation("1", "running", "call", 3));
+                require(jobs.read(id).completed == 1 && jobs.read(id).sequence == first.get("sequence").getAsLong() + 1
+                        && jobs.current().operation.get("state").getAsString().equals("running"),
+                        "Coalescing lost live progress or running observation");
+                require(snapshot(root, id).equals(first), "Ordinary progress/observer updates replaced the snapshot inside 250 ms");
+
+                clock.set(TimeUnit.MILLISECONDS.toNanos(249));
+                updates.update(operation("1", "done", "call", 7));
+                updates.update(operation("1", "done", "call", 7));
+                updates.update(operation("2", "done", "call", 11));
+                require(snapshot(root, id).equals(first), "Completed operation samples bypassed the snapshot gate");
+                com.google.gson.JsonObject timings = task.timings();
+                com.google.gson.JsonObject timing = timings.getAsJsonArray("operations").get(0).getAsJsonObject();
+                require(timing.get("calls").getAsInt() == 2 && timing.get("runMicros").getAsLong() == 18
+                        && timings.getAsJsonObject("phases").get("call").getAsLong() == 18
+                        && jobs.current().performance.getAsJsonObject("clientRun").get("calls").getAsInt() == 2,
+                        "Coalescing dropped or duplicated in-memory operation timing");
+                clock.set(TimeUnit.MILLISECONDS.toNanos(250));
+                task.progress("capture", 2, 20, "Second row");
+                com.google.gson.JsonObject elapsed = snapshot(root, id);
+                require(elapsed.get("completed").getAsLong() == 2
+                        && elapsed.getAsJsonObject("operation").get("id").getAsString().equals("2"), "250 ms boundary did not flush the latest snapshot");
+                clock.set(TimeUnit.MILLISECONDS.toNanos(499));
+                task.progress("capture", 3, 20, "Third row");
+                require(snapshot(root, id).equals(elapsed), "Successful snapshot did not restart the gate");
+                clock.set(TimeUnit.MILLISECONDS.toNanos(500));
+                updates.update(operation("3", "running", "call", 1));
+                require(snapshot(root, id).get("completed").getAsLong() == 3, "Observer did not flush elapsed progress");
+
+                updates.update(operation("3", "running", "encode", 2));
+                com.google.gson.JsonObject phase = snapshot(root, id);
+                require(phase.getAsJsonObject("operation").get("phase").getAsString().equals("encode"), "Phase change was throttled");
+                task.progress("capture", 4, 20, "Fourth row");
+                require(snapshot(root, id).equals(phase), "Phase snapshot did not coalesce subsequent ordinary progress");
+                Path temporary = root.resolve("jobs").resolve(id + ".tmp");
+                Files.createDirectory(temporary);
+                try {
+                    task.progress("publish", 5, 20, "Prepare publication");
+                    throw new AssertionError("Stage snapshot I/O failure was swallowed");
+                } catch (java.io.IOException expected) { /* retrying this boundary still needs an immediate snapshot */ }
+                finally { Files.delete(temporary); }
+                task.progress("publish", 5, 20, "Prepare publication");
+                require(snapshot(root, id).get("stage").getAsString().equals("publish"), "Retrying a failed stage snapshot was throttled");
+
+                Files.createDirectory(temporary);
+                clock.set(TimeUnit.MILLISECONDS.toNanos(750));
+                try {
+                    task.progress("publish", 6, 20, "Failed snapshot");
+                    throw new AssertionError("Snapshot I/O failure was swallowed");
+                } catch (java.io.IOException expected) { /* a due snapshot must propagate its write failure */ }
+                finally { Files.delete(temporary); }
+                task.progress("publish", 7, 20, "Retry snapshot");
+                require(snapshot(root, id).get("completed").getAsLong() == 7, "Failed snapshot incorrectly advanced the gate");
+                task.progress("publish", 8, 20, "Final pending row");
+                updates.update(operation("3", "done", "encode", 9));
+                require(snapshot(root, id).get("completed").getAsLong() == 7, "Pending tail was not coalesced");
+            } finally { finish.countDown(); await(jobs, id, "failed"); }
+        }
+        com.google.gson.JsonObject terminal = snapshot(root, id);
+        require(terminal.get("state").getAsString().equals("failed") && terminal.get("completed").getAsLong() == 8
+                && terminal.getAsJsonObject("operation").get("state").getAsString().equals("done")
+                && terminal.getAsJsonObject("performance").getAsJsonObject("clientRun").get("micros").getAsLong() == 27,
+                "Terminal snapshot lost pending progress, operation or timing");
+        String next;
+        try (Jobs jobs = new Jobs(root.resolve("jobs"), value -> { throw new Jobs.Fault("next_fixture", "Expected next failure"); }, clock::get)) {
+            require(jobs.start(request).id.equals(id) && jobs.current().completed == 8, "Restart lost coalesced terminal state or retry identity");
+            next = jobs.start(new Jobs.Request("next", "fixture", "data")).id;
+            await(jobs, next, "failed");
+        }
+        require(snapshot(root, next).get("state").getAsString().equals("failed"), "New job inherited the previous snapshot gate");
+        System.out.println("Job snapshots: 250 ms coalescing, live timing, stage/phase flush, I/O retry, terminal state and restart passed");
+    }
+
+    private static com.google.gson.JsonObject operation(String id, String state, String phase, long running) {
+        return object("id", id, "name", "capture", "phase", phase, "state", state, "created", "2026-10-05T00:00:00Z",
+                "queueMicros", "2", "runMicros", Long.toString(running), "slow", false,
+                "phases", object(phase, Long.toString(running)), "stack", array(), "framesOmitted", 0);
+    }
+
+    private static com.google.gson.JsonObject snapshot(Path root, String id) throws Exception {
+        return parse(Files.readAllBytes(root.resolve("jobs").resolve(id + ".json")));
     }
 
     private static void recipeScope(Path root) throws Exception {

@@ -40,8 +40,10 @@ public final class Jobs implements AutoCloseable {
     private static final ThreadLocal<Context> CURRENT = new ThreadLocal<>();
     private static final int EVENT_LIMIT = 32;
     private static final int REPORT_LIMIT = 256 * 1024;
+    private static final long SNAPSHOT_INTERVAL = TimeUnit.MILLISECONDS.toNanos(250);
     private final Path directory;
     private final Task task;
+    private final java.util.function.LongSupplier clock;
     private final FileChannel lease;
     private final FileLock owner;
     private final Map<String, String> retries = new LinkedHashMap<>();
@@ -239,6 +241,8 @@ public final class Jobs implements AutoCloseable {
         public Map<String, Object> error;
         private transient Thread thread;
         private transient boolean cancelled;
+        private transient long snapshotNanos;
+        private transient boolean snapshotBoundary;
 
         private boolean terminal() {
             return "succeeded".equals(state) || "checked".equals(state) || "failed".equals(state) || "cancelled".equals(state);
@@ -306,6 +310,8 @@ public final class Jobs implements AutoCloseable {
 
         private void observe(JsonObject operation) throws IOException {
             synchronized (Jobs.this) {
+                boolean phaseChanged = job.operation == null
+                        || !java.util.Objects.equals(job.operation.get("phase"), operation.get("phase"));
                 job.operation = operation;
                 String state = operation.get("state").getAsString(), id = operation.get("id").getAsString();
                 if ((state.equals("done") || state.equals("failed")) && !id.equals(observed)) {
@@ -322,7 +328,7 @@ public final class Jobs implements AutoCloseable {
                     });
                     if (operation.get("slow").getAsBoolean()) { if (slow.size() < 8) slow.add(operation); else slowOmitted++; }
                 }
-                save(job, false);
+                snapshot(job, phaseChanged);
             }
         }
 
@@ -355,10 +361,11 @@ public final class Jobs implements AutoCloseable {
                 throw new IllegalArgumentException("Invalid export progress");
             }
             synchronized (Jobs.this) {
+                boolean stageChanged = !java.util.Objects.equals(job.stage, stage);
                 job.completed = completed;
                 job.total = total;
                 event(job, stage, message);
-                save(job, false);
+                snapshot(job, stageChanged);
             }
         }
 
@@ -400,8 +407,13 @@ public final class Jobs implements AutoCloseable {
     }
 
     public Jobs(Path directory, Task task) throws IOException {
+        this(directory, task, System::nanoTime);
+    }
+
+    Jobs(Path directory, Task task, java.util.function.LongSupplier clock) throws IOException {
         this.directory = directory.toAbsolutePath().normalize();
         this.task = task;
+        this.clock = clock;
         Dataset.directory(this.directory);
         Path lock = this.directory.resolve(".lock");
         if (Files.exists(lock, LinkOption.NOFOLLOW_LINKS)) Dataset.plain(lock);
@@ -567,7 +579,7 @@ public final class Jobs implements AutoCloseable {
                     if (!job.terminal()) fail(job, "export_failed", "Export terminated unexpectedly");
                     try { save(job); }
                     catch (IOException error) { throw new IllegalStateException("Cannot persist export result", error); }
-                    finally { job.thread = null; active = null; }
+                    finally { job.thread = null; job.snapshotNanos = 0; job.snapshotBoundary = false; active = null; }
                 }
             } finally {
                 CURRENT.remove();
@@ -670,6 +682,14 @@ public final class Jobs implements AutoCloseable {
         save(job, true);
     }
 
+    /** Only routine status samples coalesce; phase/stage boundaries still persist immediately. */
+    private void snapshot(Job job, boolean boundary) throws IOException {
+        job.snapshotBoundary |= boundary;
+        if (job.snapshotBoundary || job != active || job.terminal() || clock.getAsLong() - job.snapshotNanos >= SNAPSHOT_INTERVAL) {
+            save(job, false);
+        }
+    }
+
     private void save(Job job, boolean durable) throws IOException {
         Dataset.plain(directory);
         Path temporary = directory.resolve(job.id + ".tmp");
@@ -685,6 +705,8 @@ public final class Jobs implements AutoCloseable {
         }
         Files.move(temporary, target, StandardCopyOption.ATOMIC_MOVE, StandardCopyOption.REPLACE_EXISTING);
         track(job);
+        job.snapshotNanos = job.terminal() ? 0 : clock.getAsLong();
+        job.snapshotBoundary = false;
     }
 
     @Override
