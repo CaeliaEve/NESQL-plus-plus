@@ -10,7 +10,7 @@ import javax.imageio.ImageIO;
 
 /** Small offline behavior checks; no game instance or benchmark claim. */
 public final class VisualThroughputTest {
-    public static void main(String[] args) throws Exception { png(); batches(); assets(); System.out.println("Visual throughput: PNG bytes, provenance independence, eviction and ordered bounded capture passed"); }
+    public static void main(String[] args) throws Exception { png(); batches(); assets(); OverlapTest.run(); System.out.println("Visual throughput: PNG bytes, provenance independence, eviction and ordered bounded capture passed"); }
     private static void assets() throws Exception {
         java.nio.file.Path root=java.nio.file.Files.createTempDirectory("nesql-visual-assets-");
         try (com.github.dcysteine.nesql.exporter.source.Dataset dataset=new com.github.dcysteine.nesql.exporter.source.Dataset(root.resolve("source"),"fixture",new com.google.gson.JsonObject(),false);

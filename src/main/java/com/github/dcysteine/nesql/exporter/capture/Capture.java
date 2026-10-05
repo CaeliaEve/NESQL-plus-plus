@@ -245,6 +245,8 @@ public final class Capture implements Jobs.Task, AutoCloseable {
                             }
                             if (index / 64 != begin / 64 || index == size) context.progress("recipes", index, size, handler.name);
                         }
+                        // Finish ordered commits before native handler teardown or publication.
+                        sink.encoding.flush();
                     } finally {
                         client.cleanup(() -> {
                             try {
@@ -350,25 +352,33 @@ public final class Capture implements Jobs.Task, AutoCloseable {
             }
             finishVisuals(visuals(batch));
             records(batch);
+            // Models, registries and other non-recipe callers retain synchronous ownership.
+            encoding.flush();
         }
 
         VisualBatch visuals(Facts.Batch batch) {
             VisualBatch visual = new VisualBatch();
-            if (textures) for (Facts.Picture picture : batch.pictures)
-                visual.add(() -> images.picture(picture, client), image -> asset(image, id -> picture.record.addProperty(picture.field, id)));
+            JsonSnapshot json = batch.json;
+            if (textures) for (Facts.Picture picture : batch.pictures) {
+                JsonObject record = picture.record; String field = picture.field;
+                visual.add(() -> images.picture(picture, client), image -> asset(image, id -> json.object(record).addProperty(field, id)));
+            }
             for (Facts.Icon icon : batch.icons) {
-                if (textures) visual.add(() -> images.capture(icon, client), image -> asset(image, id -> icon.record.addProperty("icon", id)));
+                JsonObject record = icon.record;
+                if (textures) visual.add(() -> images.capture(icon, client), image -> asset(image, id -> json.object(record).addProperty("icon", id)));
             }
             for (Facts.Scene scene : batch.scenes) {
+                JsonObject recipe = scene.recipe; JsonArray decorations = scene.elements;
+                int width = scene.width, height = scene.height, z = scene.z;
                 visual.add(() -> images.scene(scene, client), image -> asset(image, background -> {
                 JsonArray elements = new JsonArray();
                 elements.add(object("kind", "sprite", "asset", background, "x", 0, "y", 0,
-                        "width", scene.width, "height", scene.height, "z", scene.z));
-                for (JsonElement element : scene.elements) elements.add(element);
-                JsonObject view = object("width", scene.width, "height", scene.height, "elements", elements);
+                        "width", width, "height", height, "z", z));
+                for (JsonElement element : json.array(decorations)) elements.add(element);
+                JsonObject view = object("width", width, "height", height, "elements", elements);
                 String id = Identity.content("view", view);
                 view.addProperty("id", id);
-                scene.recipe.addProperty("view", id);
+                json.object(recipe).addProperty("view", id);
                 rows.add("views", view);
                 }));
             }
@@ -383,9 +393,16 @@ public final class Capture implements Jobs.Task, AutoCloseable {
         }
 
         void records(Facts.Batch batch) throws Exception {
-            encoding.flush();
-            for (Facts.Icon icon : batch.icons) rows.add(icon.kind, icon.record);
-            for (Facts.Record record : batch.records) rows.add(record.kind, record.value);
+            // UI layout/track caches reuse Picture target objects in later recipes.
+            // Populate their IDs before detaching, while subsequent scene/icon work may overlap.
+            if (!batch.pictures.isEmpty()) encoding.flush();
+            batch.json.freeze(batch);
+            List<Facts.Record> records = new ArrayList<>();
+            for (Facts.Icon icon : batch.icons) records.add(new Facts.Record(icon.kind, batch.json.object(icon.record)));
+            for (Facts.Record record : batch.records) records.add(new Facts.Record(record.kind, batch.json.object(record.value)));
+            if (!records.isEmpty()) encoding.submit(batch.json.weight, () -> new byte[0], bytes -> {
+                for (Facts.Record record : records) rows.add(record.kind, record.value);
+            });
         }
 
         String asset(Images.Image image) throws Exception {

@@ -6,7 +6,8 @@ import java.util.List;
 import java.util.concurrent.Callable;
 
 /** Capture a bounded pixel slice on the client, then consume it on the exporter.
- * The caller retains the current native recipe until all slices have been written.
+ * The caller retains the native recipe until every slice has been submitted.
+ * Detached record/PNG commits may finish later in the bounded output queue.
  */
 final class VisualBatch {
     interface Save { void accept(Images.Image image) throws Exception; }

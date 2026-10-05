@@ -155,6 +155,7 @@ final class Facts {
     Batch drain() { Batch result = batch; batch = new Batch(); return result; }
 
     static final class Batch {
+        final JsonSnapshot json = new JsonSnapshot();
         final List<Record> records = new ArrayList<>();
         final List<Icon> icons = new ArrayList<>();
         final List<Scene> scenes = new ArrayList<>();
