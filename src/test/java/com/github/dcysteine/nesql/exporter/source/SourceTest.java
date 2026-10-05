@@ -198,6 +198,8 @@ public final class SourceTest {
                 choices.add(object("id", item, "amount", "1", "consume", object("kind", "keep"), "returns", new JsonArray(),
                         "rule", object("kind", "except", "base", object("kind", "wildcard", "meta", false, "nbt", true),
                                 "exclude", array(object("id", prior, "rule", object("kind", "exact"))))));
+                choices.add(object("id", item, "amount", "1", "consume", object("kind", "consume"), "returns", array(),
+                        "rule", object("kind", "metadata", "value", 32767, "nbt", false, "absent", array("synthetic"))));
             }
             inputs.add(object("slot", 0, "kind", "item", "choices", choices));
             outputs.add(object("slot", 0, "kind", machine ? "fluid" : "item", "id", machine ? water : paper,

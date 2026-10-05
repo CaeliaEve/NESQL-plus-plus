@@ -140,25 +140,31 @@ final class RailRecipes implements RegistryRecipes {
             if (!ignoreMeta) {
                 ItemStack wildcard = new ItemStack(input.getItem(), 1, 32767);
                 if (input.hasTagCompound()) wildcard.setTagCompound((net.minecraft.nbt.NBTTagCompound) input.getTagCompound().copy());
-                patterns.add(new Pattern(wildcard, false, !nbt));
+                patterns.add(new Pattern(wildcard, false, !nbt, input));
             }
             return patterns;
         }
     }
     private static final class Pattern {
-        final ItemStack item; final boolean meta, nbt;
-        Pattern(ItemStack item, boolean meta, boolean nbt) { this.item = example(item, meta); this.meta = meta; this.nbt = nbt; }
-        boolean covers(Pattern other) { return (meta || !other.meta && item.getItemDamage() == other.item.getItemDamage())
+        final ItemStack item; final boolean meta, nbt; final int damage;
+        Pattern(ItemStack item, boolean meta, boolean nbt) { this(item, meta, nbt, item); }
+        Pattern(ItemStack template, boolean meta, boolean nbt, ItemStack display) {
+            damage = template.getItemDamage(); this.item = example(display); this.meta = meta; this.nbt = nbt;
+        }
+        boolean covers(Pattern other) { return (meta || !other.meta && damage == other.damage)
                 && (nbt || !other.nbt && ItemStack.areItemStackTagsEqual(item, other.item)); }
-        boolean overlaps(Pattern other) { return (meta || other.meta || item.getItemDamage() == other.item.getItemDamage())
+        boolean overlaps(Pattern other) { return (meta || other.meta || damage == other.damage)
                 && (nbt || other.nbt || ItemStack.areItemStackTagsEqual(item, other.item)); }
         JsonObject rule(boolean excludeSynthetic) {
+            // Literal sentinel matching must not depend on the concrete display's metadata.
+            if (!meta && damage != item.getItemDamage()) return object("kind", "metadata", "value", damage,
+                    "nbt", nbt, "absent", excludeSynthetic ? array("synthetic") : array());
             if (excludeSynthetic) return object("kind", "tags", "meta", meta, "keys", array(), "present", array(), "absent", array("synthetic"));
             return meta || nbt ? object("kind", "wildcard", "meta", meta, "nbt", nbt) : object("kind", "exact");
         }
     }
-    private static ItemStack example(ItemStack template, boolean ignoreMeta) {
-        if (!ignoreMeta || Items.feather.getDamage(template) != 32767) return template;
+    private static ItemStack example(ItemStack template) {
+        if (Items.feather.getDamage(template) != 32767) return template;
         // This is a predicate anchor, not a literal wildcard item. Keep matching
         // every metadata value; take only concrete metadata from the loaded catalog.
         for (ItemStack candidate : codechicken.nei.ItemList.items) {

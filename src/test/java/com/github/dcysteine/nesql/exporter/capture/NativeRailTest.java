@@ -149,7 +149,7 @@ final class NativeRailTest {
         else manager.getClass().getMethod("addRecipe",ItemStack.class,boolean.class,boolean.class,int.class,ItemStack.class).invoke(manager,input,damage,nbt,time,output);
     }
     private static String id(ItemStack stack) { return Identity.item(Item.itemRegistry.getNameForObject(stack.getItem()), Items.feather.getDamage(stack), TypedNbt.encode(stack.getTagCompound())); }
-    private static boolean matches(JsonObject rule, ItemStack anchor, ItemStack offered, Map<String, ItemStack> known) {
+    static boolean matches(JsonObject rule, ItemStack anchor, ItemStack offered, Map<String, ItemStack> known) {
         String kind = rule.get("kind").getAsString();
         if (kind.equals("except")) {
             if (!matches(rule.getAsJsonObject("base"), anchor, offered, known)) return false;
@@ -160,6 +160,13 @@ final class NativeRailTest {
             return true;
         }
         if (offered.getItem() != anchor.getItem()) return false;
+        if (kind.equals("metadata")) {
+            if (offered.getItemDamage() != rule.get("value").getAsInt()
+                    || !rule.get("nbt").getAsBoolean() && !ItemStack.areItemStackTagsEqual(offered, anchor)) return false;
+            for (JsonElement key : rule.getAsJsonArray("absent"))
+                if (offered.hasTagCompound() && offered.getTagCompound().hasKey(key.getAsString())) return false;
+            return true;
+        }
         if (kind.equals("exact")) return offered.getItemDamage() == anchor.getItemDamage() && ItemStack.areItemStackTagsEqual(offered, anchor);
         if (!rule.get("meta").getAsBoolean() && offered.getItemDamage() != anchor.getItemDamage()) return false;
         if (kind.equals("tags")) return !offered.hasTagCompound() || !offered.getTagCompound().hasKey("synthetic");

@@ -422,3 +422,19 @@ displayed example. Tests reproduce the actual AmunRa name failure and compare
 the exported wildcard/NBT rules with the native Railcraft manager; full client
 tooltip/icon capture remains part of the external pilot. This candidate also
 includes the 0.39.1 fluid-role and 0.39.2 NEI-height fixes.
+
+## Railcraft derived sentinel predicates (0.40.0 / Source 37)
+
+A concrete subtype recipe also admits a literal offered metadata 32767. This
+second pattern must retain 32767 for coverage, overlap and prior exclusions.
+Its display/fact uses the original concrete recipe input; the new `metadata`
+rule carries the literal matching value, NBT behavior and absent synthetic key.
+It does not accept every subtype, nor just the display subtype. Direct ignored-
+metadata templates still select a concrete NEI example. Native registry stacks
+and NEI examples remain untouched. Compiler/contracts 0.37.0 / Catalog 36
+transport the rule and avoid positive use links from display-only branches.
+
+The focused real AmunRa/Railcraft regression covers both pattern paths, two
+concrete subtypes before a broad fallback, required/ignored NBT, false-valued
+synthetic tags and native winner comparison, in addition to the existing rail
+suite. Client tooltip/FBO and full-registry verification remain external.

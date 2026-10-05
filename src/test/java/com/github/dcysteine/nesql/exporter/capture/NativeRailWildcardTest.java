@@ -32,6 +32,7 @@ final class NativeRailWildcardTest {
         candidate.setTagInfo("catalogOnly", new net.minecraft.nbt.NBTTagInt(99));
         List<ItemStack> previous = ItemList.items;
         try {
+            derived(item, candidate);
             ItemList.items = new ArrayList<>(Arrays.asList(template.copy(), new ItemStack(Items.coal), candidate));
             for (boolean nbt : new boolean[]{false, true}) {
                 if (nbt) template.setTagInfo("grade", new net.minecraft.nbt.NBTTagInt(5));
@@ -74,6 +75,62 @@ final class NativeRailWildcardTest {
             }
         } finally { ItemList.items = previous; }
         System.out.println("Native Railcraft/AmunRa: concrete display, wildcard/NBT semantics, absent-example rejection and source ownership passed");
+    }
+    private static void derived(Item item, ItemStack candidate) throws Exception {
+        // Concrete native input creates a second, literal-32767 branch. Replacing
+        // its display must neither turn it into meta 7 nor broaden it to all wood.
+        ItemList.items = new ArrayList<>(Collections.singletonList(candidate));
+        for (boolean nbt : new boolean[]{false, true}) {
+            Class<?> type = Class.forName("mods.railcraft.common.util.crafting.CokeOvenCraftingManager");
+            Object manager = type.newInstance();
+            Map<String, ItemStack> known = new HashMap<>();
+            for (int meta : new int[]{0, 3, 7, 32767}) for (int tag = 0; tag < 3; tag++) {
+                ItemStack offered = new ItemStack(item, 1, meta);
+                if (tag > 0) offered.setTagInfo("grade", new net.minecraft.nbt.NBTTagInt(5));
+                if (tag == 2) offered.setTagInfo("synthetic", new net.minecraft.nbt.NBTTagByte((byte)0));
+                known.put(id(offered), offered);
+            }
+            for (int meta : new int[]{3, 7, 32767}) {
+                ItemStack input = new ItemStack(item, 9, meta), output = new ItemStack(Items.coal, meta == 3 ? 2 : 1, meta == 3 ? 1 : 0);
+                if (nbt) input.setTagInfo("grade", new net.minecraft.nbt.NBTTagInt(5));
+                type.getMethod("addRecipe", ItemStack.class, boolean.class, boolean.class, ItemStack.class, FluidStack.class, int.class)
+                        .invoke(manager, input, true, nbt, output, new FluidStack(FluidRegistry.WATER, 250), 51);
+                known.put(id(output), output);
+            }
+            TemplateRecipeHandler handler = (TemplateRecipeHandler) Class.forName("tonius.neiintegration.mods.railcraft.RecipeHandlerCokeOven").newInstance();
+            RailRecipes adapter = new RailRecipes(handler, (List<?>) type.getMethod("getRecipes").invoke(manager));
+            List<RecipeRow> rows = new ArrayList<>();
+            for (int index = 0; index < adapter.size(); index++) {
+                RecipeRow row = NativeCoreFixesTest.row(known.values().toArray(new ItemStack[0]));
+                if (!adapter.capture(index, row)) continue;
+                rows.add(row);
+                for (com.google.gson.JsonElement raw : row.inputs.get(0).getAsJsonObject().getAsJsonArray("choices")) {
+                    ItemStack display = known.get(raw.getAsJsonObject().get("id").getAsString());
+                    require(display != null && display.getItemDamage() != 32767,
+                            "Derived literal-wildcard branch reached facts with sentinel metadata");
+                    require(display.getDisplayName().contains("wood"), "Concrete native label failed");
+                }
+            }
+            require(rows.size() == 3, "Priority handling dropped an unshadowed native recipe");
+            for (ItemStack offered : known.values()) {
+                if (offered.getItem() != item) continue;
+                Object nativeRecipe = type.getMethod("getRecipe", ItemStack.class).invoke(manager, offered);
+                if (offered.hasTagCompound() && offered.getTagCompound().hasKey("synthetic")) nativeRecipe = null;
+                String expected = nativeRecipe == null ? null : id((ItemStack) nativeRecipe.getClass().getMethod("getOutput").invoke(nativeRecipe));
+                List<String> actual = new ArrayList<>();
+                for (RecipeRow row : rows) {
+                    boolean accepts = false;
+                    for (com.google.gson.JsonElement raw : row.inputs.get(0).getAsJsonObject().getAsJsonArray("choices")) {
+                        JsonObject choice = raw.getAsJsonObject();
+                        accepts |= NativeRailTest.matches(choice.getAsJsonObject("rule"), known.get(choice.get("id").getAsString()), offered, known);
+                    }
+                    if (accepts) actual.add(row.outputs.get(0).getAsJsonObject().get("id").getAsString());
+                }
+                require(expected == null ? actual.isEmpty() : actual.equals(Collections.singletonList(expected)),
+                        "Derived branch changed native priority/meta/NBT for meta=" + offered.getItemDamage());
+            }
+        }
+        require(candidate.getItemDamage() == 7 && candidate.stackSize == 12 && candidate.getTagCompound().hasKey("catalogOnly"), "Catalog sample mutated");
     }
     private static String id(ItemStack stack) { return Identity.item(Item.itemRegistry.getNameForObject(stack.getItem()), Items.feather.getDamage(stack), TypedNbt.encode(stack.getTagCompound())); }
     private static void require(boolean value, String message) { if (!value) throw new AssertionError(message); }
