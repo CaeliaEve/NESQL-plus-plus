@@ -20,6 +20,9 @@ import static com.github.dcysteine.nesql.exporter.source.Json.object;
 /** Durable immutable Source files. Incomplete captures are evidence, never datasets. */
 public final class Fragments {
     private static final int LIMIT = 64 * 1024 * 1024;
+    // Capture v1 contains both files and source.files. Keep the Source limit,
+    // allowing two copies plus 1 MiB for request/provenance and envelope fields.
+    private static final int MANIFEST_LIMIT = 2 * Dataset.MANIFEST_LIMIT + 1024 * 1024;
     private final Path root;
     private final Listener listener;
     private final JsonObject manifest;
@@ -27,6 +30,7 @@ public final class Fragments {
     private boolean complete;
     private String manifestHash;
     private long manifestBytes;
+    private long descriptorBytes = 2; // JSON array brackets; include commas as records arrive.
 
     public interface Listener { void saved(Receipt receipt) throws IOException; }
     public static final class Receipt {
@@ -51,7 +55,10 @@ public final class Fragments {
         if (complete) throw new IOException("Capture is complete");
         Jobs.checkpoint();
         String path = descriptor.get("path").getAsString();
-        if (files.size() >= 100000 || files.containsKey(path)) throw new IOException("Too many or duplicate capture files");
+        if (files.containsKey(path)) throw new IOException("Duplicate capture file: " + path);
+        byte[] partBytes = CanonicalJson.bytes(descriptor);
+        long nextBytes = descriptorBytes + partBytes.length + (files.isEmpty() ? 0 : 1);
+        if (nextBytes > Dataset.MANIFEST_LIMIT) throw new IOException("Capture descriptors exceed Source manifest byte limit");
         if (descriptor.get("kind").getAsString().equals("environment") &&
                 !descriptor.get("sha256").equals(manifest.getAsJsonObject("provenance").get("environment"))) {
             throw new IOException("Capture environment differs from its provenance");
@@ -76,13 +83,15 @@ public final class Fragments {
         }
         // One bounded receipt per fragment avoids rewriting a growing manifest
         // for every icon (quadratic work on a full item catalog).
-        write(part(path), CanonicalJson.bytes(descriptor), false);
+        write(part(path), partBytes, false);
         files.put(path, copy(descriptor));
+        descriptorBytes = nextBytes;
         if (files.size() % 64 == 0) notifySaved();
     }
 
     /** Called only after native capture and resource cleanup have passed their guards. */
     public void complete(JsonObject source) throws IOException {
+        if (CanonicalJson.bytes(source).length > Dataset.MANIFEST_LIMIT) throw new IOException("Source manifest exceeds 64 MiB");
         JsonObject expected = copy(source);
         String id = expected.remove("id").getAsString();
         if (!CanonicalJson.digest(expected).equals(id) || !source.get("format").getAsString().equals(Dataset.FORMAT)
@@ -133,7 +142,7 @@ public final class Fragments {
         manifest.add("files", descriptors()); manifest.remove("id");
         manifest.addProperty("id", CanonicalJson.digest(manifest));
         byte[] bytes = CanonicalJson.bytes(manifest);
-        if (bytes.length > LIMIT) throw new IOException("Capture manifest exceeds its limit");
+        if (bytes.length > MANIFEST_LIMIT) throw new IOException("Capture manifest exceeds 129 MiB");
         write(root.resolve("manifest.json"), bytes, true);
         manifestHash = CanonicalJson.digest(bytes); manifestBytes = bytes.length;
         notifySaved();

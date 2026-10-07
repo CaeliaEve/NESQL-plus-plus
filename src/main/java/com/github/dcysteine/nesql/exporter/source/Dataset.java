@@ -26,6 +26,7 @@ public final class Dataset implements AutoCloseable {
     public static final String FORMAT = "elysium.source";
     public static final int REVISION = 37;
     public static final int RECORD_LIMIT = 1024 * 1024;
+    public static final int MANIFEST_LIMIT = 64 * 1024 * 1024;
     public static final List<String> COLLECTIONS = java.util.Collections.unmodifiableList(java.util.Arrays.asList(
             "aspects", "assets", "blocks", "builds", "categories", "circuits", "fluids", "groups", "items", "materials", "models", "mutations", "programs", "recipes", "research", "shapes", "species", "strings", "structures", "tracks", "views"));
     private static final long SHARD_LIMIT = 16L * 1024 * 1024;
@@ -149,7 +150,9 @@ public final class Dataset implements AutoCloseable {
         manifest.add("files", descriptors);
         id = CanonicalJson.digest(manifest);
         manifest.addProperty("id", id);
-        Files.write(staging.resolve("manifest.json"), CanonicalJson.bytes(manifest), StandardOpenOption.CREATE_NEW);
+        byte[] manifestBytes = CanonicalJson.bytes(manifest);
+        if (manifestBytes.length > MANIFEST_LIMIT) throw new IOException("Source manifest exceeds 64 MiB");
+        Files.write(staging.resolve("manifest.json"), manifestBytes, StandardOpenOption.CREATE_NEW);
         sealed = true;
         return id;
     }

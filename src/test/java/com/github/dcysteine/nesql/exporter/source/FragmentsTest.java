@@ -19,6 +19,7 @@ final class FragmentsTest {
                 "inputs", array(), "resources", array(), "knowledge", object(), "probes", array(Probe.defaults().json()),
                 "settings", object("profile", "full", "handlers", handler, "scope", "recipes"));
         JsonObject provenance = Provenance.capture(environment, request, CanonicalJson.digest(new byte[]{1}));
+        capacity(root.resolve("capacity"), provenance, request);
         java.awt.image.BufferedImage pixels = new java.awt.image.BufferedImage(1, 1, java.awt.image.BufferedImage.TYPE_INT_ARGB);
         pixels.setRGB(0, 0, 0xff102030);
         java.io.ByteArrayOutputStream bytes = new java.io.ByteArrayOutputStream();
@@ -102,6 +103,35 @@ final class FragmentsTest {
             require(job.state.equals("failed") && job.result == null && job.fragments.state.equals("complete"), "Restart lost recovery evidence or published a failed result");
             require(job.fragments.sha256.equals(CanonicalJson.digest(Files.readAllBytes(java.nio.file.Paths.get(job.fragments.path)))), "Restored fragment receipt differs from its manifest");
         }
+    }
+    @SuppressWarnings("unchecked")
+    private static void capacity(Path root, JsonObject provenance, Jobs.Request request) throws Exception {
+        Fragments archive = new Fragments(root, provenance, request, value -> {});
+        java.lang.reflect.Field index = Fragments.class.getDeclaredField("files"); index.setAccessible(true);
+        java.util.Map<String, JsonObject> files = (java.util.Map<String, JsonObject>) index.get(archive);
+        // Seed only the already-recorded index: avoid 100,000 fsyncs in a boundary test.
+        // The next record still performs real hashing, linking and durable receipt I/O.
+        JsonObject prior = object("path", "prior");
+        for (int i = 0; i < 100000; i++) files.put("prior/" + i, prior);
+        byte[] bytes = {1, 2, 3};
+        Path input = root.resolve("input"); Files.write(input, bytes);
+        String hash = CanonicalJson.digest(bytes), path = "assets/" + hash + ".png";
+        JsonObject descriptor = object("path", path, "kind", "asset", "encoding", "png", "bytes", 3,
+                "decodedBytes", 3, "rows", 0, "sha256", hash);
+        archive.record(input, descriptor);
+        require(files.size() == 100001, "Lost the first fragment beyond the old count limit");
+        require(Files.exists(root.resolve("blobs").resolve(hash)), "Large capture lost its blob");
+        try (java.util.stream.Stream<Path> parts = Files.list(root.resolve("parts"))) {
+            Path[] written = parts.toArray(Path[]::new);
+            require(written.length == 1 && read(written[0]).equals(descriptor), "Missing large capture receipt");
+        }
+        try { archive.record(input, descriptor); throw new AssertionError("Accepted a duplicate after the old limit"); }
+        catch (java.io.IOException expected) { require(expected.getMessage().contains("Duplicate"), "Duplicate path was misclassified"); }
+        java.lang.reflect.Field budget = Fragments.class.getDeclaredField("descriptorBytes"); budget.setAccessible(true);
+        files.clear(); budget.setLong(archive, 64L * 1024 * 1024);
+        try { archive.record(input, descriptor); throw new AssertionError("Accepted a descriptor beyond the byte budget"); }
+        catch (java.io.IOException expected) { require(expected.getMessage().contains("manifest"), "Wrong capacity failure"); }
+        require(read(root.resolve("manifest.json")).get("state").getAsString().equals("writing"), "Capacity failure published a capture");
     }
     private static JsonObject read(Path path) throws Exception { return new JsonParser().parse(new String(Files.readAllBytes(path), StandardCharsets.UTF_8)).getAsJsonObject(); }
     private static void require(boolean condition, String message) { if (!condition) throw new AssertionError(message); }

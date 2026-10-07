@@ -216,3 +216,14 @@ Salis的CHESTSCAN使用数量0、metadata32767的箱子作为研究图标。箱�
 source/catalog revision13 requires Compiler/contracts0.13.0. Forestry scanner entries now produce separate unanalyzed/analyzed branches with native results for every concrete input member. Display-only outputs such as “Scanned Sapling” never become item facts. The whole input stack is processed; 500tick/2EU/t/100mB applies before analysis, while an already analyzed member takes 1tick/1EU/t and requires but retains 100mB honey. Candidate samples retain their genotype and mate. Missing genomes, unknown member implementations, repaired genotypes and unstable serialization remain explicit failures.
 
 For diagnostics, check the scanner's full range once (298 entries in the last inventory), confirming its current total before choosing the limit. The first nine entries cover the Forestry forms in the pinned target; the original failures were sapling at3 and pollen at8. `checkedRecipes` counts native entries, not the two emitted branch records. Retain exclusions and exact error chains, then use ordinary handlers as controls. A successful check does not validate GL or produce a compilable source.
+
+## Capture capacity (0.42.2)
+
+Capture revision 1 no longer rejects the 100,001st closed file. Duplicate logical
+paths still fail, and descriptor bytes are bounded incrementally by the 64 MiB
+Source manifest budget. The exact Source envelope is checked when sealing.
+The capture manifest budget is 129 MiB (two descriptor lists plus envelope
+headroom); individual assets remain limited to 64 MiB. Pair with Compiler 0.37.2,
+which keeps the Source and 128 GiB aggregate limits when assembling.
+Writing/failed captures remain evidence only, never resumable Source datasets.
+This capacity fix does not establish a new throughput multiplier.
