@@ -21,7 +21,7 @@ public final class Provenance {
 
     public static JsonObject capture(JsonObject environment, Jobs.Request request, String session) {
         if (session == null || !session.matches("[a-f0-9]{64}")) throw new IllegalArgumentException("A live session identity is required");
-        JsonObject selection = new Gson().toJsonTree(request).getAsJsonObject();
+        JsonObject selection = request.captureRequest();
         selection.remove("key"); selection.remove("name");
         return object("revision", 1, "environment", CanonicalJson.digest(environment), "runtime", runtime(environment),
                 "session", session, "selection", CanonicalJson.digest(selection));

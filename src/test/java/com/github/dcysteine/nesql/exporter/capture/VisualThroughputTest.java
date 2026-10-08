@@ -10,14 +10,78 @@ import javax.imageio.ImageIO;
 
 /** Small offline behavior checks; no game instance or benchmark claim. */
 public final class VisualThroughputTest {
-    public static void main(String[] args) throws Exception { png(); batches(); assets(); OverlapTest.run(); System.out.println("Visual throughput: PNG bytes, provenance independence, eviction and ordered bounded capture passed"); }
+    public static void main(String[] args) throws Exception { preflight(); png(); batches(); assets(); checkpointAssets(); OverlapTest.run(); System.out.println("Visual throughput: PNG bytes, provenance independence, eviction and ordered bounded capture passed"); }
+    /** Production Sink encoding and checkpoint journaling share the same asset bytes and rows. */
+    private static void checkpointAssets() throws Exception {
+        java.nio.file.Path root = java.nio.file.Files.createTempDirectory("nesql-sink-checkpoint-");
+        com.google.gson.JsonObject provenance = com.github.dcysteine.nesql.exporter.source.Json.object(
+                "environment", repeat('1'), "runtime", repeat('2'), "session", repeat('3'), "selection", repeat('4'));
+        com.google.gson.JsonObject[] receipt = {null};
+        String source;
+        try {
+            try (com.github.dcysteine.nesql.exporter.source.Dataset dataset = new com.github.dcysteine.nesql.exporter.source.Dataset(root.resolve("source"), "fixture", new com.google.gson.JsonObject(), false);
+                 com.github.dcysteine.nesql.exporter.source.Rows rows = new com.github.dcysteine.nesql.exporter.source.Rows(root.resolve("rows"));
+                 com.github.dcysteine.nesql.exporter.source.Checkpoints checkpoint = new com.github.dcysteine.nesql.exporter.source.Checkpoints(root.resolve("first"), provenance, java.util.Collections.emptyList(), "fixture", saved -> receipt[0] = saved)) {
+                checkpoint.begin("base");
+                Class<?> type = Class.forName(Capture.class.getName() + "$Sink");
+                java.lang.reflect.Constructor<?> constructor = type.getDeclaredConstructors()[0]; constructor.setAccessible(true);
+                Object sink = constructor.newInstance(dataset, rows, null, null, true, checkpoint, root.resolve("source"));
+                java.lang.reflect.Method asset = type.getDeclaredMethod("asset", Images.Image.class); asset.setAccessible(true);
+                try (AutoCloseable owner = (AutoCloseable) sink) {
+                    Images.Image image = new Images.Image(pixels(4, 4, 0xff123456), new JsonArray(), "capture", "fixture:journal");
+                    String first = (String) asset.invoke(sink, image);
+                    require(first.equals(asset.invoke(sink, image)), "Journal changed deduplicated asset identity");
+                    JsonArray frames = new JsonArray();
+                    frames.add(com.github.dcysteine.nesql.exporter.source.Json.object("x", 0, "y", 0, "width", 4, "height", 4, "ticks", 3));
+                    asset.invoke(sink, new Images.Image(image.pixels, frames, "capture", "fixture:journal"));
+                }
+                checkpoint.finish(new com.google.gson.JsonObject()); checkpoint.release(true);
+                rows.write(dataset); source = dataset.seal();
+            }
+            try (com.github.dcysteine.nesql.exporter.source.Dataset dataset = new com.github.dcysteine.nesql.exporter.source.Dataset(root.resolve("resumed"), "fixture", new com.google.gson.JsonObject(), false);
+                 com.github.dcysteine.nesql.exporter.source.Rows rows = new com.github.dcysteine.nesql.exporter.source.Rows(root.resolve("resumed-rows"));
+                 com.github.dcysteine.nesql.exporter.source.Checkpoints checkpoint = new com.github.dcysteine.nesql.exporter.source.Checkpoints(root.resolve("second"), provenance, java.util.Collections.emptyList(), "fixture", saved -> {})) {
+                int[] assets = {0};
+                int units = checkpoint.replay(root.resolve("first"), receipt[0].get("sha256").getAsString(), dataset, rows, (kind, row) -> { if (kind.equals("assets")) assets[0]++; }, (unit, evidence) -> {});
+                require(units == 1 && assets[0] == 2, "Sink journal lost native asset provenance or frame metadata");
+                rows.write(dataset); require(source.equals(dataset.seal()), "Sink checkpoint changed Source bytes");
+            }
+        } finally {
+            // Only this test's new temporary tree is owned here; production archives are never consulted.
+            try (java.util.stream.Stream<java.nio.file.Path> files = java.nio.file.Files.walk(root)) {
+                for (java.nio.file.Path file : files.sorted(java.util.Comparator.reverseOrder()).collect(java.util.stream.Collectors.toList())) java.nio.file.Files.delete(file);
+            }
+        }
+    }
+    private static String repeat(char value) { char[] text = new char[64]; Arrays.fill(text, value); return new String(text); }
+    private static void preflight() throws Exception {
+        net.minecraft.client.renderer.texture.TextureAtlasSprite sprite = new net.minecraft.client.renderer.texture.TextureAtlasSprite("fixture:animation") {};
+        sprite.setIconWidth(1); sprite.setIconHeight(1);
+        sprite.setFramesTextureData(Arrays.asList(new int[][] {new int[] {1}}, new int[][] {new int[] {2}}));
+        cpw.mods.fml.relauncher.ReflectionHelper.setPrivateValue(net.minecraft.client.renderer.texture.TextureAtlasSprite.class, sprite,
+                new net.minecraft.client.resources.data.AnimationMetadataSection(Arrays.asList(
+                        new net.minecraft.client.resources.data.AnimationFrame(0, 1), new net.minecraft.client.resources.data.AnimationFrame(1, 1)), 1, 1, 1), "animationMetadata");
+        checkAnimation(sprite);
+        sprite.setFramesTextureData(Arrays.asList(new int[][] {new int[] {1}}, new int[][] {null}));
+        try { checkAnimation(sprite); throw new AssertionError("Preflight missed an unavailable animation frame"); }
+        catch (com.github.dcysteine.nesql.exporter.task.Jobs.Fault expected) { require(expected.code.equals("animation_missing"), "Wrong frame failure"); }
+        sprite.setIconWidth(4096); sprite.setIconHeight(4096);
+        try { checkAnimation(sprite); throw new AssertionError("Preflight missed oversized packed animation"); }
+        catch (com.github.dcysteine.nesql.exporter.task.Jobs.Fault expected) { require(expected.code.equals("texture_limit"), "Wrong budget failure"); }
+    }
+    private static void checkAnimation(net.minecraft.client.renderer.texture.TextureAtlasSprite sprite) throws Exception {
+        java.lang.reflect.Method method = Images.class.getDeclaredMethod("checkAnimation", net.minecraft.client.renderer.texture.TextureAtlasSprite.class, int.class);
+        method.setAccessible(true);
+        try { method.invoke(null, sprite, 0xffffff); }
+        catch (java.lang.reflect.InvocationTargetException failure) { throw (Exception) failure.getCause(); }
+    }
     private static void assets() throws Exception {
         java.nio.file.Path root=java.nio.file.Files.createTempDirectory("nesql-visual-assets-");
         try (com.github.dcysteine.nesql.exporter.source.Dataset dataset=new com.github.dcysteine.nesql.exporter.source.Dataset(root.resolve("source"),"fixture",new com.google.gson.JsonObject(),false);
              com.github.dcysteine.nesql.exporter.source.Rows rows=new com.github.dcysteine.nesql.exporter.source.Rows(root.resolve("rows"))) {
             Class<?> type=Class.forName(Capture.class.getName()+"$Sink");
             java.lang.reflect.Constructor<?> constructor=type.getDeclaredConstructors()[0];constructor.setAccessible(true);
-            Object sink=constructor.newInstance(dataset,rows,null,null,true);
+            Object sink=constructor.newInstance(dataset,rows,null,null,true,null,null);
             java.lang.reflect.Method asset=type.getDeclaredMethod("asset",Images.Image.class);asset.setAccessible(true);
             try (AutoCloseable owner=(AutoCloseable)sink) {
                 Images.Image first=new Images.Image(pixels(8,4,0xff123456),new JsonArray(),"capture","native:first");

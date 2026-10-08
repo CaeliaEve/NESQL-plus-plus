@@ -53,9 +53,19 @@ final class WorkTest {
         Work<Void> broken = new Work<>("broken native call", () -> { throw original; }); broken.run();
         try { broken.await(queue, 1, ignored -> {}); throw new AssertionError("Native failure disappeared"); }
         catch (Jobs.Fault expected) { require(expected == original, "Native error was replaced by a timeout"); }
+        Jobs.Fault teardown = new Jobs.Fault("fixture_factory", "Factory and native cleanup failed");
+        teardown.addSuppressed(new java.io.IOException("native cleanup"));
+        Work<Void> unreported = new Work<>("failed factory and report", () -> { throw teardown; }); unreported.run();
+        try { unreported.await(queue, 1, ignored -> { throw new java.io.IOException("terminal journal"); }); throw new AssertionError("Expected native failure"); }
+        catch (Exception expected) {
+            require(expected == teardown && expected.getSuppressed().length == 2,
+                    "Terminal observation hid the native factory/cleanup failure");
+        }
 
         CountDownLatch busy = new CountDownLatch(1), finish = new CountDownLatch(1), entered = new CountDownLatch(1), returned = new CountDownLatch(1);
-        Work<Void> cancelled = new Work<>("cancelled after start", () -> { busy.countDown(); finish.await(); return null; });
+        Jobs.Fault factoryFailure = new Jobs.Fault("fixture_factory", "Native factory failed during cancellation");
+        factoryFailure.addSuppressed(new java.io.IOException("Native cleanup failed"));
+        Work<Void> cancelled = new Work<>("cancelled after start", () -> { busy.countDown(); finish.await(); throw factoryFailure; });
         AtomicReference<Throwable> error = new AtomicReference<>();
         Thread game = new Thread(cancelled::run), waiting = new Thread(() -> {
             entered.countDown();
@@ -69,6 +79,7 @@ final class WorkTest {
             require(!returned.await(50, TimeUnit.MILLISECONDS), "Cancellation returned while native work was still running");
         } finally { finish.countDown(); game.join(5000); waiting.join(5000); }
         require(error.get() instanceof InterruptedException && returned.getCount() == 0, "Cancellation lost its original signal");
+        require(java.util.Arrays.asList(error.get().getSuppressed()).contains(factoryFailure), "Cancellation hid a native factory/cleanup failure");
         AutoCloseable resource = () -> {};
         Work<AutoCloseable> factory = new Work<>("factory", () -> resource); factory.run();
         try {

@@ -47,7 +47,7 @@ public final class Fragments {
         Files.createDirectory(this.root.resolve("blobs"));
         Files.createDirectory(this.root.resolve("parts"));
         manifest = object("format", "elysium.capture", "revision", 1, "state", "writing", "provenance", copy(provenance),
-                "request", new com.google.gson.Gson().toJsonTree(request));
+                "request", request.captureRequest());
         save();
     }
 

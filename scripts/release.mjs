@@ -18,6 +18,7 @@ const files = new Map([
   ['docs/mcp.md', 'docs/mcp.md'],
   ['docs/native-semantics.md', 'docs/native-semantics.md'],
   ['docs/visual-throughput.md', 'docs/visual-throughput.md'],
+  ['docs/recovery.md', 'docs/recovery.md'],
   ['bridge/package.json', 'bridge/package.json'],
   ['bridge/package-lock.json', 'bridge/package-lock.json'],
 ]);

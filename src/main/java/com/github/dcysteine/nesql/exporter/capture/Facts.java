@@ -34,6 +34,19 @@ final class Facts {
 
     Facts(String locale) { this.locale = locale; }
 
+    /** Only used before native capture starts, while replaying verified immutable records. */
+    void restore(String kind, JsonObject record) {
+        String id = record.get("id").getAsString();
+        switch (kind) {
+            case "items": items.add(id); break;
+            case "fluids": fluids.add(id); break;
+            case "strings": strings.add(id); break;
+            case "tracks": tracks.add(id); break;
+            case "programs": programs.add(record.get("program").getAsString()); break;
+            default: break;
+        }
+    }
+
     String text(String value) {
         if (value == null) throw new IllegalArgumentException("A game text value was null");
         JsonObject record = object("locale", locale, "text", value);

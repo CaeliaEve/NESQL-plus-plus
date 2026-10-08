@@ -18,6 +18,14 @@ public final class NativeMachinesTest {
     public static void main(String[] args) throws Exception { GameTest.run(); }
     public static void run() throws Exception {
         String family = System.getProperty("nesql.nativeFamily", "machines");
+        if (family.equals("genetics-roots")) { NativeGeneticsTest.run(); return; }
+        if (family.equals("ore-groups")) { NativeOreGroupsTest.run(); return; }
+        if (family.equals("galaxy-assembly")) { NativeGalaxyAssemblyTest.run(); return; }
+        if (family.equals("qed")) { NativeQedTest.run(); return; }
+        if (family.equals("botania-pool")) { NativeBotaniaPoolTest.run(); return; }
+        if (family.equals("botania-runic")) { NativeBotaniaRunicTest.run(); return; }
+        if (family.equals("botania-floating")) { NativeBotaniaFloatingTest.run(); return; }
+        if (family.equals("imbuing")) { NativeImbuingTest.run(); return; }
         if (family.equals("rail-wildcard")) { NativeRailWildcardTest.run(); return; }
         if (family.equals("dimensions")) { NativeDimensionsTest.run(); return; }
         if (family.startsWith("fluid-icons")) { NativeFluidIconsTest.run(); return; }

@@ -82,6 +82,7 @@ public final class Jobs implements AutoCloseable {
         public final String world;
         public final Checks.Selection check;
         public final String scope;
+        public final Resume resume;
 
         public Request(String key, String name, String profile) {
             this(key, name, profile, java.util.Collections.emptyList());
@@ -96,10 +97,10 @@ public final class Jobs implements AutoCloseable {
         }
 
         public Request(String key, String name, String profile, List<String> handlers, List<Probe> probes, String world) {
-            this(key, name, profile, handlers, probes, world, null, null);
+            this(key, name, profile, handlers, probes, world, null, null, null);
         }
 
-        private Request(String key, String name, String profile, List<String> handlers, List<Probe> probes, String world, Checks.Selection check, String scope) {
+        private Request(String key, String name, String profile, List<String> handlers, List<Probe> probes, String world, Checks.Selection check, String scope, Resume resume) {
             identifier(key, "key");
             identifier(name, "name");
             if (!Arrays.asList("full", "data", "images").contains(profile)) {
@@ -118,6 +119,8 @@ public final class Jobs implements AutoCloseable {
                 throw new Fault("invalid_request", "Recipe scope requires a bound export world and full or data profile");
             }
             this.scope = scope;
+            if (resume != null && !recipeScope()) throw new Fault("invalid_request", "Recovery currently requires explicit recipe scope");
+            this.resume = resume;
             if (check != null && (!profile.equals("data") || !name.equals("check") || world == null)) throw new Fault("invalid_request", "Checks require a bound world and data-only capture");
             if (handlers == null || handlers.size() > 512) throw new Fault("invalid_request", "Invalid handler selection");
             java.util.TreeSet<String> selected = new java.util.TreeSet<>();
@@ -135,7 +138,7 @@ public final class Jobs implements AutoCloseable {
         }
 
         public static Request parse(JsonObject body) {
-            if (body == null || !body.entrySet().stream().allMatch(entry -> Arrays.asList("key", "name", "profile", "handlers", "probes", "world", "check", "scope").contains(entry.getKey()))) {
+            if (body == null || !body.entrySet().stream().allMatch(entry -> Arrays.asList("key", "name", "profile", "handlers", "probes", "world", "check", "scope", "resume").contains(entry.getKey()))) {
                 throw new Fault("invalid_request", "Unknown export request field");
             }
             List<String> handlers = new ArrayList<>();
@@ -155,7 +158,8 @@ public final class Jobs implements AutoCloseable {
             }
             return new Request(string(body.get("key"), "key"), string(body.get("name"), "name"), string(body.get("profile"), "profile"), handlers, probes,
                     !body.has("world") || body.get("world").isJsonNull() ? null : string(body.get("world"), "world"), check,
-                    !body.has("scope") || body.get("scope").isJsonNull() ? null : string(body.get("scope"), "scope"));
+                    !body.has("scope") || body.get("scope").isJsonNull() ? null : string(body.get("scope"), "scope"),
+                    !body.has("resume") || body.get("resume").isJsonNull() ? null : Resume.parse(body.get("resume")));
         }
 
         private static String string(JsonElement value, String name) {
@@ -166,7 +170,12 @@ public final class Jobs implements AutoCloseable {
         private boolean matches(Request other) {
             return key.equals(other.key) && name.equals(other.name) && profile.equals(other.profile) && handlers.equals(other.handlers)
                     && probes.equals(other.probes) && java.util.Objects.equals(world, other.world) && java.util.Objects.equals(check, other.check)
-                    && java.util.Objects.equals(scope, other.scope);
+                    && java.util.Objects.equals(scope, other.scope) && java.util.Objects.equals(resume, other.resume);
+        }
+
+        /** Recovery is transport, not part of captured game facts or capture selection. */
+        public JsonObject captureRequest() {
+            JsonObject result = new Gson().toJsonTree(this).getAsJsonObject(); result.remove("resume"); return result;
         }
 
         public boolean recipeScope() { return "recipes".equals(scope); }
@@ -175,6 +184,23 @@ public final class Jobs implements AutoCloseable {
         public void checkWorld(String folder) {
             if (world != null && !world.equals(folder)) throw new Fault("world_changed", "Expected save " + world + "; loaded " + folder);
         }
+    }
+
+    public static final class Resume {
+        public final String job, sha256;
+        private Resume(String job, String sha256) { this.job = job; this.sha256 = sha256; }
+        private static Resume parse(JsonElement element) {
+            if (!element.isJsonObject()) throw new Fault("invalid_request", "resume must contain job and sha256");
+            JsonObject value = element.getAsJsonObject();
+            if (value.entrySet().size() != 2 || !value.has("job") || !value.has("sha256")) throw new Fault("invalid_request", "Unknown or missing resume fields");
+            String job = Request.string(value.get("job"), "resume.job"), hash = Request.string(value.get("sha256"), "resume.sha256");
+            if (!job.matches("[a-f0-9]{8}-[a-f0-9]{4}-[a-f0-9]{4}-[a-f0-9]{4}-[a-f0-9]{12}") || !hash.matches("[a-f0-9]{64}")) {
+                throw new Fault("invalid_request", "resume requires a job UUID and original checkpoint digest");
+            }
+            return new Resume(job, hash);
+        }
+        @Override public boolean equals(Object other) { return other instanceof Resume && job.equals(((Resume) other).job) && sha256.equals(((Resume) other).sha256); }
+        @Override public int hashCode() { return java.util.Objects.hash(job, sha256); }
     }
 
     public static final class Result {
@@ -559,7 +585,10 @@ public final class Jobs implements AutoCloseable {
         } catch (Exception error) {
             synchronized (this) {
                 if (!job.terminal()) {
-                    if (job.cancelled || error instanceof InterruptedException || error instanceof CancellationException) {
+                    // Cancellation is a clean terminal signal only when no
+                    // native, cleanup or reporting failure accompanies it.
+                    if ((error instanceof InterruptedException || error instanceof CancellationException)
+                            && error.getCause() == null && error.getSuppressed().length == 0) {
                         job.state = "cancelled";
                         job.finished = Instant.now().toString();
                         event(job, "cancelled", "Export stopped and temporary files closed");

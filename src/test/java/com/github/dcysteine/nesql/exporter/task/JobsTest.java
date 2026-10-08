@@ -97,6 +97,30 @@ public final class JobsTest {
         catch (java.io.IOException expected) { require(expected.getMessage().contains("Invalid job report"), "Wrong journal error"); }
         api(Files.createTempDirectory("nesql-api-"));
         recipeScope(Files.createTempDirectory("nesql-scope-"));
+        cancellationFailure(Files.createTempDirectory("nesql-cancel-failure-"));
+    }
+
+    private static void cancellationFailure(Path root) throws Exception {
+        CountDownLatch started = new CountDownLatch(1);
+        try (Jobs jobs = new Jobs(root.resolve("jobs"), context -> {
+            started.countDown();
+            try { new CountDownLatch(1).await(); }
+            catch (InterruptedException cancelled) {
+                cancelled.addSuppressed(new java.io.IOException("native cleanup evidence"));
+                throw cancelled;
+            }
+        })) {
+            String id = jobs.start(new Jobs.Request("cancel-failure", "fixture", "data")).id;
+            require(started.await(5, TimeUnit.SECONDS), "Cancellation failure fixture did not start");
+            jobs.cancel(id);
+            for (int i=0;i<500 && jobs.read(id).finished == null;i++) Thread.sleep(10);
+            Jobs.Job terminal = jobs.read(id);
+            require(terminal.state.equals("failed") && terminal.error != null && Boolean.TRUE.equals(terminal.error.get("fatal")),
+                    "Cancellation erased native cleanup failure");
+            require(snapshot(root,id).getAsJsonObject("error").getAsJsonObject("details").getAsJsonArray("suppressed")
+                    .get(0).getAsJsonObject().get("message").getAsString().contains("native cleanup evidence"),
+                    "Cancelled cleanup evidence was not persisted");
+        }
     }
 
     private static void snapshots(Path root) throws Exception {

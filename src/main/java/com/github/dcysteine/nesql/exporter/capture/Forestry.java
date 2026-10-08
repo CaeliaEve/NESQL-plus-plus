@@ -26,6 +26,8 @@ import forestry.api.genetics.IAlleleTolerance;
 import forestry.api.genetics.IChromosomeType;
 import forestry.api.genetics.IMutation;
 import forestry.api.genetics.ISpeciesRoot;
+import forestry.api.lepidopterology.EnumFlutterType;
+import forestry.api.lepidopterology.IAlleleButterflySpecies;
 import net.minecraft.item.ItemStack;
 
 import java.nio.charset.StandardCharsets;
@@ -42,7 +44,7 @@ import static com.github.dcysteine.nesql.exporter.source.Json.*;
 /** Read-only registered templates and mutations for the target Forestry API. */
 final class Forestry {
     private final ISpeciesRoot root;
-    private final boolean bees;
+    private final String kind;
     private final IChromosomeType key;
     private final IChromosomeType[] chromosomes;
     private final Map<String, IAllele[]> templates = new TreeMap<>();
@@ -52,7 +54,20 @@ final class Forestry {
 
     static List<Forestry> all() {
         require();
-        return Arrays.asList(new Forestry(BeeManager.beeRoot, true), new Forestry(TreeManager.treeRoot, false));
+        List<Forestry> result = new ArrayList<>();
+        result.add(new Forestry(BeeManager.beeRoot, "bee"));
+        result.add(new Forestry(TreeManager.treeRoot, "tree"));
+        ISpeciesRoot butterflies = AlleleManager.alleleRegistry.getSpeciesRoot("rootButterflies");
+        if (butterflies != null) result.add(new Forestry(butterflies, "butterfly"));
+        ISpeciesRoot flowers = AlleleManager.alleleRegistry.getSpeciesRoot("rootFlowers");
+        if (flowers != null) {
+            ModContainer botany = Loader.instance().getIndexedModList().get("Botany");
+            if (botany == null || !"2.5.24".equals(botany.getVersion())) {
+                throw new Jobs.Fault("domain_unsupported", "Flowers require the target Botany 2.5.24");
+            }
+            result.add(new Forestry(flowers, "flower"));
+        }
+        return result;
     }
 
     static void require() {
@@ -62,10 +77,13 @@ final class Forestry {
         }
     }
 
-    private Forestry(ISpeciesRoot root, boolean bees) {
-        if (root == null) throw new Jobs.Fault("species_unavailable", "The target bee or tree registry is unavailable");
+    private Forestry(ISpeciesRoot root, String kind) {
+        if (root == null) throw new Jobs.Fault("species_unavailable", "The target " + kind + " registry is unavailable");
+        String expected = kind.equals("bee") ? "rootBees" : kind.equals("tree") ? "rootTrees"
+                : kind.equals("butterfly") ? "rootButterflies" : kind.equals("flower") ? "rootFlowers" : null;
+        if (expected == null || !expected.equals(root.getUID())) throw new Jobs.Fault("species_root", "Unexpected root for " + kind);
         this.root = root;
-        this.bees = bees;
+        this.kind = kind;
         key = root.getKaryotypeKey();
         chromosomes = root.getKaryotype().clone();
         if (key == null || key.getSpeciesRoot() != root || chromosomes.length == 0 || chromosomes.length > 256) {
@@ -99,7 +117,9 @@ final class Forestry {
         JsonArray members = new JsonArray();
         JsonArray products, specialties;
         Boolean nocturnal = null, fruitCompatible = null;
-        if (bees) {
+        String jubilance = null;
+        JsonObject flower = null;
+        if (kind.equals("bee")) {
             IAlleleBeeSpecies bee = (IAlleleBeeSpecies) allele;
             for (EnumBeeType form : new EnumBeeType[] {EnumBeeType.QUEEN, EnumBeeType.PRINCESS, EnumBeeType.DRONE, EnumBeeType.LARVAE}) {
                 members.add(member(facts, template, form.getName(), form.ordinal()));
@@ -107,7 +127,8 @@ final class Forestry {
             products = products(bee.getProductChances(), facts);
             specialties = products(bee.getSpecialtyChances(), facts);
             nocturnal = bee.isNocturnal();
-        } else {
+            jubilance = ForestryJubilance.capture(bee, facts);
+        } else if (kind.equals("tree")) {
             for (EnumGermlingType form : new EnumGermlingType[] {EnumGermlingType.SAPLING, EnumGermlingType.POLLEN}) {
                 members.add(member(facts, template, form.getName(), form.ordinal()));
             }
@@ -115,16 +136,30 @@ final class Forestry {
             products = products(tree.getProduceList(), facts);
             specialties = products(tree.getSpecialtyList(), facts);
             fruitCompatible = tree.canBearFruit();
+        } else {
+            products = new JsonArray();
+            specialties = new JsonArray();
+            if (kind.equals("butterfly")) {
+                for (EnumFlutterType form : new EnumFlutterType[] {EnumFlutterType.BUTTERFLY, EnumFlutterType.SERUM, EnumFlutterType.CATERPILLAR}) {
+                    members.add(member(facts, template, form.name().toLowerCase(Locale.ROOT), form.ordinal()));
+                }
+                nocturnal = ((IAlleleButterflySpecies) allele).isNocturnal();
+            } else {
+                for (Enum<?> form : ForestryFlowers.forms()) {
+                    members.add(member(facts, template, form.name().toLowerCase(Locale.ROOT), form.ordinal()));
+                }
+                flower = ForestryFlowers.traits(allele);
+            }
         }
         JsonObject source = origin(allele);
-        facts.row("species", object("id", Identity.origin("species", source), "source", source, "kind", bees ? "bee" : "tree",
+        facts.row("species", object("id", Identity.origin("species", source), "source", source, "kind", kind,
                 "name", facts.text(allele.getName()), "description", facts.text(allele.getDescription()),
                 "binomial", allele.getBinomial(), "authority", allele.getAuthority(),
                 "temperature", allele.getTemperature().name().toLowerCase(Locale.ROOT),
                 "humidity", allele.getHumidity().name().toLowerCase(Locale.ROOT),
                 "dominant", allele.isDominant(), "secret", allele.isSecret(), "counted", allele.isCounted(),
                 "blacklisted", AlleleManager.alleleRegistry.isBlacklisted(allele.getUID()),
-                "nocturnal", nocturnal, "fruitCompatible", fruitCompatible,
+                "nocturnal", nocturnal, "fruitCompatible", fruitCompatible, "jubilance", jubilance, "flower", flower,
                 "members", members, "genes", genes(template, facts), "products", products, "specialties", specialties));
     }
 
@@ -156,7 +191,7 @@ final class Forestry {
     }
 
     private JsonObject member(Facts facts, IAllele[] template, String form, int ordinal) {
-        // getMemberStack(QUEEN) mates its argument. Never give it shared registry individuals.
+        // Native queens mate their argument; flower seed/pollen reset its age. Use a fresh individual for every form.
         ItemStack stack = root.getMemberStack(root.templateAsIndividual(template.clone()), ordinal);
         return object("form", form, "item", facts.item(stack));
     }
@@ -209,7 +244,7 @@ final class Forestry {
         return Identity.origin("species", origin(allele));
     }
 
-    private JsonObject origin(IAlleleSpecies allele) { return object("owner", "Forestry", "handler", root.getUID(), "key", allele.getUID()); }
+    private JsonObject origin(IAlleleSpecies allele) { return object("owner", kind.equals("flower") ? "Botany" : "Forestry", "handler", root.getUID(), "key", allele.getUID()); }
 
     private static JsonArray products(Map<ItemStack, Float> products, Facts facts) {
         if (products == null || products.size() > 4096) throw new Jobs.Fault("species_products", "Invalid bee product map");

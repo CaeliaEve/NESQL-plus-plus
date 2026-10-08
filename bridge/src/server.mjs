@@ -34,7 +34,9 @@ export function createServer(client) {
       world: z.string().min(1).max(128).regex(/^[^/\\\x00-\x1f\x7f]+$/).refine(value => value !== '.' && value !== '..').optional()
         .describe('Expected single-player save folder from inspect_game.world.folder. A different world fails before capture. Included in retry identity.'),
       profile: z.enum(['full', 'data', 'images']).describe('The requested collection scope; only a complete dataset can become a full catalog.'),
-      scope: z.literal('recipes').optional().describe('Capture only the explicit handlers and their referenced items/fluids, aspects, texts and views. Requires handlers and world; excludes full item browsing and other domains. Always publishes selection scope. Magic handlers require research capture and are not accepted here.'),
+      scope: z.literal('recipes').optional().describe('Capture only the explicit handlers and their referenced items/fluids, aspects, texts and views. Requires handlers and world; excludes full item browsing and other domains. Always publishes selection scope. Magic handlers include their complete referenced research closure.'),
+      resume: z.object({ job: z.string().regex(/^[a-f0-9]{8}-[a-f0-9]{4}-[a-f0-9]{4}-[a-f0-9]{4}-[a-f0-9]{12}$/), sha256: z.string().regex(/^[a-f0-9]{64}$/) }).strict().optional()
+        .describe('Start a NEW job/key using the previous terminal job performance.checkpoint digest. Recipe scope only; identical selection, exporter, environment and live session required. Replays only completed Handler units after clean native teardown; never repairs old writing captures.'),
       handlers: z.array(z.string().regex(/^category_[a-f0-9]{64}$/)).max(512).optional()
         .describe('Explicit handler selection from inspect_game. Omit for all handlers. Unsupported handlers fail the job; selecting a subset publishes a selection snapshot.'),
       probes: z.array(probe).min(1).max(16).refine(values => new Set(values.map(value =>
@@ -50,11 +52,11 @@ export function createServer(client) {
   }, call('GET', args => args.id === undefined ? '/jobs' : `/jobs/${args.id}`));
 
   server.registerTool('start_check', {
-    description: 'Start an isolated diagnostic sweep without exporting a dataset. Select structures, recipe ranges, or explicit texture/language resources. Resource checks hash bytes resolved by the native resource manager and recheck stability; they do not validate item rendering. Poll read_job: checked means the report is complete, not that all targets passed. Reports remain on local disk. Uses the same single active-job queue as exports.',
+    description: 'Start an isolated diagnostic sweep without exporting a dataset. Select structures, recipe ranges, ore dictionary registrations, or explicit texture/language resources. Resource checks hash bytes resolved by the native resource manager and recheck stability; they do not validate item rendering. Poll read_job: checked means the report is complete, not that all targets passed. Reports remain on local disk. Uses the same single active-job queue as exports.',
     inputSchema: {
       key: identifier,
       world: z.string().min(1).max(128).regex(/^[^/\\\x00-\x1f\x7f]+$/).refine(value => value !== '.' && value !== '..'),
-      domain: z.enum(['structures', 'recipes', 'resources']),
+      domain: z.enum(['structures', 'recipes', 'resources', 'ore-groups']),
       resources: z.array(z.string().min(1).max(4096)).min(1).max(128)
         .refine(values => new Set(values).size === values.length).optional()
         .describe('Explicit namespace:path resources, restricted to textures and language files. Only for resources; proves resolved bytes, not rendered item appearance.'),
@@ -64,6 +66,7 @@ export function createServer(client) {
         .describe('Recipe handler ids. Omit to inventory all handlers and check supported adapters. Only for recipes.'),
       offset: z.number().int().min(0).max(1_000_000).optional().describe('First recipe index in each handler, default 0.'),
       limit: z.number().int().min(1).max(4096).optional().describe('Maximum recipes checked per handler, default 128. Unexamined recipes remain explicit in the report.'),
+      render: z.boolean().optional().describe('Recipe ranges only, with explicit limit <=16. Draw actual native icons, pictures and views without PNG encoding or Source publication. Samples do not certify other dynamic paths.'),
       probes: z.array(probe).min(1).max(16).optional(),
     },
     annotations: { readOnlyHint: false, destructiveHint: false, idempotentHint: true, openWorldHint: false },

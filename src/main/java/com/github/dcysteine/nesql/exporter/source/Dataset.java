@@ -24,11 +24,11 @@ import java.util.zip.GZIPOutputStream;
 /** Writes one immutable, declared source dataset. The caller owns record ordering. */
 public final class Dataset implements AutoCloseable {
     public static final String FORMAT = "elysium.source";
-    public static final int REVISION = 37;
+    public static final int REVISION = 38;
     public static final int RECORD_LIMIT = 1024 * 1024;
     public static final int MANIFEST_LIMIT = 64 * 1024 * 1024;
     public static final List<String> COLLECTIONS = java.util.Collections.unmodifiableList(java.util.Arrays.asList(
-            "aspects", "assets", "blocks", "builds", "categories", "circuits", "fluids", "groups", "items", "materials", "models", "mutations", "programs", "recipes", "research", "shapes", "species", "strings", "structures", "tracks", "views"));
+            "aspects", "assets", "blocks", "builds", "categories", "circuits", "fluids", "groups", "items", "materials", "models", "mutations", "ore-groups", "ore-members", "programs", "recipes", "research", "shapes", "species", "strings", "structures", "tracks", "views"));
     private static final long SHARD_LIMIT = 16L * 1024 * 1024;
     private final Path staging;
     private final JsonObject manifest = new JsonObject();

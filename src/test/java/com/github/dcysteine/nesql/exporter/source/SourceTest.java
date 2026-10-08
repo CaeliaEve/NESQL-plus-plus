@@ -34,11 +34,13 @@ public final class SourceTest {
         ProvenanceTest.run();
         ResourcesTest.run(root.resolve("resources"));
         FragmentsTest.run(root.resolve("fragments"));
+        CheckpointsTest.run(root.resolve("checkpoints"));
         probabilities();
         geometry();
         com.github.dcysteine.nesql.exporter.capture.ModelsTest.run();
         com.github.dcysteine.nesql.exporter.capture.UiTest.run();
         com.github.dcysteine.nesql.exporter.capture.ProductsTest.run();
+        com.github.dcysteine.nesql.exporter.capture.ForestryJubilanceTest.run();
         com.github.dcysteine.nesql.exporter.capture.MagicRecipesTest.run();
         com.github.dcysteine.nesql.exporter.capture.EnvironmentTest.run(root.resolve("environment"));
         com.github.dcysteine.nesql.exporter.capture.StudiesTest.run();
@@ -155,6 +157,7 @@ public final class SourceTest {
             dataset.records("circuits").write(object("id", Identity.origin("circuit", circuitSource), "source", circuitSource,
                     "name", text.apply("Fixture circuit 电路"), "kind", "line", "boards", new JsonArray(), "steps", steps, "order", 0));
             genetics(dataset, stone, text);
+            ores(dataset, paper);
             structures(dataset, stone, asset, text);
             magic(dataset, stone, asset, text);
             Dataset.Records textRecords = dataset.records("strings");
@@ -162,6 +165,26 @@ public final class SourceTest {
             dataset.seal();
             return dataset.prepare(datasets).call();
         } finally { Files.delete(image); }
+    }
+
+    private static void ores(Dataset dataset, String paper) throws Exception {
+        java.util.List<JsonObject> groups = new java.util.ArrayList<>(), members = new java.util.ArrayList<>();
+        String[] names = {"oreFixture", "oreVacant", "paper"};
+        for (int order = 0; order < names.length; order++) {
+            JsonObject origin = object("owner", "Forge", "handler", "net.minecraftforge.oredict.OreDictionary", "key", names[order]);
+            String id = Identity.origin("oregroup", origin);
+            int count = order == 0 ? 3 : order == 1 ? 0 : 1;
+            groups.add(object("id", id, "source", origin, "name", names[order], "order", order, "members", count));
+            for (int index = 0; index < count; index++) {
+                boolean wildcard = order == 0 && index == 0;
+                NBTTagCompound tag = new NBTTagCompound(); tag.setString("raw", "wildcard");
+                members.add(object("id", id + ".member_" + String.format(java.util.Locale.ROOT, "%08x", index), "group", id, "index", index,
+                        "template", object("registry", "minecraft:paper", "meta", wildcard ? 32767 : 0,
+                                "nbt", wildcard ? TypedNbt.encode(tag) : null, "amount", wildcard ? "0" : "-4"),
+                        "display", index == 2 ? null : paper));
+            }
+        }
+        records(dataset, "ore-groups", groups); records(dataset, "ore-members", members);
     }
 
     private static void records(Dataset dataset, String kind, java.util.List<JsonObject> rows) throws Exception {
@@ -255,6 +278,9 @@ public final class SourceTest {
         Changes.sag(items, recipes, categories, texture, text);
         Changes.soul(items, recipes, categories, texture, text);
         Changes.rolling(items, recipes, categories, texture, text);
+        Changes.qed(recipes, categories, text);
+        Changes.galaxyAssembly(recipes, categories, text);
+        Changes.floating(items, recipes, categories, texture, text);
         Changes.buildcraft(recipes, categories, text);
         Changes.refining(recipes,categories,text);
         Changes.blast(recipes,categories,text);
@@ -483,30 +509,36 @@ public final class SourceTest {
 
     private static void genetics(Dataset dataset, String item, java.util.function.Function<String, String> text) throws Exception {
         java.util.TreeMap<String, JsonObject> species = new java.util.TreeMap<>();
-        String[] ids = new String[3];
+        String[] ids = new String[5];
         JsonArray genes = new JsonArray();
         genes.add(object("key", "flower_provider", "allele", "fixture.flowers", "name", text.apply("Fixture flowers"), "dominant", true, "value", JsonNull.INSTANCE));
         genes.add(object("key", "speed", "allele", "fixture.speed", "name", text.apply("Fixture speed"), "dominant", true,
                 "value", object("kind", "decimal", "value", "0.3")));
-        for (int index = 0; index < 3; index++) {
+        String[] kinds = {"bee", "bee", "tree", "butterfly", "flower"};
+        String[] roots = {"rootBees", "rootBees", "rootTrees", "rootButterflies", "rootFlowers"};
+        String[] names = {"Fixture bee 蜜蜂", "Fixture hybrid 杂交蜂", "Fixture tree 树木", "Fixture butterfly 蝴蝶", "Fixture flower 花卉"};
+        for (int index = 0; index < kinds.length; index++) {
             boolean bee = index < 2;
-            JsonObject source = object("owner", "fixture", "handler", bee ? "rootBees" : "rootTrees", "key", "species." + index);
+            boolean tree = index == 2;
+            JsonObject source = object("owner", "fixture", "handler", roots[index], "key", "species." + index);
             ids[index] = Identity.origin("species", source);
             JsonArray members = new JsonArray(), products = new JsonArray();
-            members.add(object("form", bee ? "queen" : "sapling", "item", item));
-            products.add(object("item", item, "amount", "2", "chance", bee ? Chance.decimal(0.3f, 1) : JsonNull.INSTANCE));
-            String name = index == 0 ? "Fixture bee 蜜蜂" : index == 1 ? "Fixture hybrid 杂交蜂" : "Fixture tree 树木";
-            species.put(ids[index], object("id", ids[index], "source", source, "kind", bee ? "bee" : "tree", "name", text.apply(name),
+            members.add(object("form", bee ? "queen" : tree ? "sapling" : kinds[index], "item", item));
+            if (bee || tree) products.add(object("item", item, "amount", "2", "chance", bee ? Chance.decimal(0.3f, 1) : JsonNull.INSTANCE));
+            species.put(ids[index], object("id", ids[index], "source", source, "kind", kinds[index], "name", text.apply(names[index]),
                     "description", text.apply("Synthetic contract fixture"), "binomial", "fixture", "authority", "fixture",
                     "temperature", "normal", "humidity", "normal", "dominant", true, "secret", index == 1, "blacklisted", !bee, "counted", true,
-                    "nocturnal", bee ? new JsonPrimitive(false) : JsonNull.INSTANCE, "fruitCompatible", bee ? JsonNull.INSTANCE : new JsonPrimitive(false),
+                    "nocturnal", bee || index == 3 ? new JsonPrimitive(index == 3) : JsonNull.INSTANCE, "fruitCompatible", tree ? new JsonPrimitive(false) : JsonNull.INSTANCE,
+                    "jubilance", bee ? text.apply("Fixture specialty requires suitable climate") : null,
+                    "flower", index == 4 ? object("acidity", "neutral", "moisture", "normal", "type", 12) : null,
                     "members", members, "genes", genes, "products", products, "specialties", new JsonArray()));
         }
         Dataset.Records speciesRows = dataset.records("species");
         for (JsonObject row : species.values()) speciesRows.write(row);
         java.util.TreeMap<String, JsonObject> mutations = new java.util.TreeMap<>();
-        for (int index = 0; index < 2; index++) {
-            String[] pair = {ids[0], ids[index]};
+        for (int index = 0; index < 4; index++) {
+            int child = index < 2 ? 1 : index + 1;
+            String[] pair = index < 2 ? new String[]{ids[0], ids[index]} : new String[]{ids[child], ids[child]};
             Arrays.sort(pair);
             JsonArray parents = new JsonArray(), conditions = new JsonArray();
             for (String parent : pair) parents.add(new JsonPrimitive(parent));
@@ -514,7 +546,7 @@ public final class SourceTest {
             JsonArray resultGenes = new JsonArray();
             resultGenes.add(object("key", "speed", "allele", "fixture.fast", "name", text.apply("Fixture fast allele"), "dominant", false,
                     "value", object("kind", "decimal", "value", "2")));
-            JsonObject mutation = object("handler", "fixture.mutation", "occurrence", 0, "parents", parents, "result", ids[1], "chance", Chance.decimal(index == 0 ? 7.5f : 10f, 100),
+            JsonObject mutation = object("handler", "fixture.mutation", "occurrence", 0, "parents", parents, "result", ids[child], "chance", Chance.decimal(index == 0 ? 7.5f : 10f, 100),
                     "conditions", conditions, "secret", index == 1, "genes", resultGenes);
             String id = Identity.content("mutation", mutation);
             mutation.addProperty("id", id);

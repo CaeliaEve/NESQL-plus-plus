@@ -12,6 +12,7 @@ import { GameClient, GameError } from './client.mjs';
 import { memoryPolicy, assessMemory, readMemory } from './resources.mjs';
 import { resolveReport } from './reports.mjs';
 import { CheckpointLog, readCheckpoint } from './checkpoint.mjs';
+import { visualChecks } from './visual-checks.mjs';
 
 const execFileAsync = promisify(execFile);
 
@@ -590,8 +591,23 @@ export class AcceptanceCoordinator {
       assert.ok(Array.isArray(state.excluded), `Missing native exclusion evidence: ${id}`);
     }
     assert.equal(await this.planFingerprint(plan), checkpoint.fingerprint, 'Environment/session changed since diagnostics');
+    if (stage.preflight) {
+      const visual = await this.runVisualStage(plan, checkpoint);
+      assert.equal(visual.status, 'passed', 'Representative rendering failed; Source export is blocked');
+    }
     const request = { key: stage.key || `selection-${this.runId.slice(-12)}`, name: stage.name || 'gtnh-selection', profile: 'full', world: plan.world, probes: plan.probes,
       handlers: [...stage.handlers], ...(stage.scope === undefined ? {} : { scope: stage.scope }) };
+    if (stage.resume !== undefined) {
+      assert.equal(stage.scope, 'recipes', 'Recovery requires recipe scope');
+      assert.deepEqual(Object.keys(stage.resume).sort(), ['job', 'sha256'], 'Invalid recovery reference');
+      assert.match(stage.resume.job, /^[a-f0-9]{8}-[a-f0-9]{4}-[a-f0-9]{4}-[a-f0-9]{4}-[a-f0-9]{12}$/);
+      assert.match(stage.resume.sha256, /^[a-f0-9]{64}$/);
+      const previous = checkpoint.stages?.source;
+      assert.ok(previous?.status === 'failed' && previous.job === stage.resume.job, 'Recovery must reference the recorded failed Source attempt');
+      assert.equal(previous.checkpoint?.sha256, stage.resume.sha256, 'Recovery digest differs from the recorded completed prefix');
+      assert.notEqual(request.key, previous.request?.key, 'Recovery must use a new key');
+      request.resume = { ...stage.resume };
+    }
     if (checkpoint.activeExport?.key !== request.key) await this.guardResources(plan, checkpoint, { stage: 'source' });
     const started = checkpoint.activeExport?.key === request.key
       ? checkpoint.activeExport
@@ -607,10 +623,14 @@ export class AcceptanceCoordinator {
       await new Promise(resolve => setTimeout(resolve, 1000));
     }
     checkpoint.activeExport = null;
+    checkpoint.sourceAttempts ??= [];
+    if (!checkpoint.sourceAttempts.some(attempt => attempt.job === started.id)) checkpoint.sourceAttempts.push({
+      job: started.id, state: job.state, request, checkpoint: job.performance?.checkpoint ?? null, error: job.error ?? null
+    });
     if (job.state !== 'succeeded' || !job.result?.path) {
       const error = job.error || { code: `export_${job.state}`, message: 'Source export did not complete' };
       checkpoint.stages ??= {};
-      checkpoint.stages.source = { status: 'failed', job: started.id, error, request };
+      checkpoint.stages.source = { status: 'failed', job: started.id, error, request, checkpoint: job.performance?.checkpoint ?? null };
       await this.saveCheckpoint(checkpoint);
       throw new Error(`${error.code}: ${error.message}`);
     }
@@ -630,6 +650,8 @@ export class AcceptanceCoordinator {
     const checked = await runCompiler(stage.executable, ['check', '--input', output]);
     return { status: 'passed', source, output, report, inspect: inspect.value, compile: compiled.value, check: checked.value };
   }
+
+  async runVisualStage(plan, checkpoint) { return visualChecks(this, plan, checkpoint, isFatalError); }
 
   async guardResources(plan, checkpoint, target) {
     if (!memoryPolicy(plan.memory)) return;

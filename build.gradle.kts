@@ -136,6 +136,47 @@ tasks.register<JavaExec>("nativeMachinesTest") {
     systemProperty("nesql.nativeFamily", project.findProperty("nativeFamily")?.toString() ?: "machines")
 }
 
+tasks.register<JavaExec>("nativeGendustryFluidsTest") {
+    group = "verification"
+    dependsOn("testClasses")
+    classpath = sourceSets.test.get().runtimeClasspath + gameLibraries +
+        files("build/native-tests/gendustry.jar", "build/native-tests/bdlib.jar")
+    main = "com.github.dcysteine.nesql.exporter.capture.NativeGendustryFluidsTest"
+    maxHeapSize = "256m"
+}
+
+tasks.register<JavaExec>("nativeBloodOrbTest") {
+    group = "verification"
+    dependsOn("testClasses")
+    classpath = sourceSets.test.get().runtimeClasspath + gameLibraries + files("build/native-tests/bloodmagic.jar", "build/native-tests/railcraft.jar", "build/native-tests/ic2.jar", "build/native-tests/applecore.jar")
+    main = "com.github.dcysteine.nesql.exporter.capture.NativeBloodOrbTest"
+    maxHeapSize = "256m"
+}
+
+tasks.register<JavaExec>("nativeCreativeCoreTest") {
+    group = "verification"
+    dependsOn("testClasses")
+    classpath = sourceSets.test.get().runtimeClasspath + gameLibraries + files("build/native-tests/littletiles.jar")
+    main = "com.github.dcysteine.nesql.exporter.capture.NativeCreativeCoreTest"
+    maxHeapSize = "256m"
+}
+
+tasks.register<JavaExec>("nativeDecayableTest") {
+    group = "verification"
+    dependsOn("testClasses")
+    classpath = sourceSets.test.get().runtimeClasspath + gameLibraries + files("build/native-tests/railcraft.jar", "build/native-tests/ic2.jar", "build/native-tests/applecore.jar", "build/native-tests/unimixins.jar")
+    main = "com.github.dcysteine.nesql.exporter.capture.NativeDecayableTest"
+    maxHeapSize = "256m"
+}
+
+tasks.register<JavaExec>("nativeBloodOrbShapelessTest") {
+    group = "verification"
+    dependsOn("testClasses")
+    classpath = sourceSets.test.get().runtimeClasspath + gameLibraries + files("build/native-tests/bloodmagic.jar", "build/native-tests/railcraft.jar", "build/native-tests/ic2.jar", "build/native-tests/applecore.jar")
+    main = "com.github.dcysteine.nesql.exporter.capture.NativeBloodOrbShapelessTest"
+    maxHeapSize = "256m"
+}
+
 val glNatives by configurations.creating
 val nativePlatform = if (System.getProperty("os.name").startsWith("Windows")) "windows" else "linux"
 dependencies { glNatives("org.lwjgl.lwjgl:lwjgl-platform:2.9.1:natives-$nativePlatform") }

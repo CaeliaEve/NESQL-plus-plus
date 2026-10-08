@@ -48,7 +48,9 @@ final class Audit {
         Map<String, Recipes.Handler> handlers = new TreeMap<>();
         JsonArray targets = new JsonArray();
         JsonArray inventory = new JsonArray();
-        if (request.check.domain.equals("structures")) {
+        if (request.check.domain.equals("ore-groups")) {
+            targets.add(object("domain", "ore-groups", "status", "pending"));
+        } else if (request.check.domain.equals("structures")) {
             for (Structures.Machine machine : session.call("structure inventory", Structures::all)) structures.put(machine.id, machine);
             Iterable<Integer> selected = request.check.controllers.isEmpty() ? structures.keySet() : request.check.controllers;
             for (int id : selected) {
@@ -76,7 +78,9 @@ final class Audit {
             report.planning(context.timings());
             report.save();
             Checks.sweep(context, report, guard, (index, row) -> {
-                    if (row.has("controller")) {
+                    if (row.has("domain")) {
+                        ores(session, row, locale, work.resolve("ore-groups"), guard);
+                    } else if (row.has("controller")) {
                         Structures.Machine machine = structures.get(row.get("controller").getAsInt());
                         if (machine == null) throw new Jobs.Fault("controller_missing", "Controller is not registered");
                         structure(session, request, machine, row, locale, work.resolve("structure-" + machine.id), report);
@@ -97,6 +101,21 @@ final class Audit {
             try { report.finish(error instanceof CancellationException || error instanceof InterruptedException ? "cancelled" : "stopped", error); }
             catch (IOException reporting) { error.addSuppressed(reporting); }
             throw error;
+        }
+    }
+
+    private void ores(ClientThread.Session session, JsonObject result, String locale, Path path, Checks.Guard guard) throws Exception {
+        Facts facts = new Facts(locale);
+        OreGroups cursor = session.call("ore groups open", OreGroups::new);
+        try (Buffer buffer = new Buffer(path)) {
+            boolean done;
+            do {
+                guard.check();
+                done = session.call("ore groups capture", () -> cursor.capture(facts));
+                buffer.write(facts.drain());
+            } while (!done);
+            result.add("counts", buffer.check());
+            result.addProperty("status", "passed");
         }
     }
 
@@ -140,15 +159,21 @@ final class Audit {
                          String locale, Path path, Jobs.Context context, Checks.Guard guard, Checks.Report report) throws Exception {
         Dataset.directory(path);
         Facts opening = new Facts(locale);
-        Recipes.Cursor cursor = session.call("handler " + handler.id + " open", () -> handler.open(opening, false));
+        boolean render = context.request().check.render;
+        Images images = render ? new Images() : null;
+        Recipes.Cursor cursor = session.call("handler " + handler.id + " open", () -> handler.open(opening, render));
+        JsonArray visualSamples = new JsonArray();
+        if (render) result.add("visualSamples", visualSamples);
         try (AutoCloseable owned = () -> release("handler " + handler.id, () -> {
             try {
                 JsonObject evidence = cursor.exclusions();
                 if (!evidence.entrySet().isEmpty()) result.add("exclusionEvidence", evidence);
             } finally { cursor.close(); }
-        })) {
+        }); AutoCloseable graphics = () -> { if (images != null) release("render probe", images::close); }) {
             Facts.Batch category = session.call("category fluid textures", () -> {
-                Facts.Batch batch = opening.drain(); Images.checkFluids(batch); return batch;
+                Facts.Batch batch = opening.drain(); Images.checkFluids(batch);
+                if (render) visualSamples.add(render(batch, images, session, -1));
+                return batch;
             });
             try (Buffer buffer = new Buffer(path.resolve("category"))) { buffer.write(category); result.add("categoryCounts", buffer.check()); }
             int total = session.call("handler " + handler.id + " size", cursor::size);
@@ -165,7 +190,13 @@ final class Audit {
                         ClientThread.phase("recipe capture"); cursor.capture(next, facts);
                         ClientThread.phase("health"); guard.check();
                         ClientThread.phase("snapshot");
-                        return attempt.freeze(facts.drain());
+                        Facts.Batch batch = facts.drain();
+                        if (render) {
+                            ClientThread.phase("representative rendering");
+                            visualSamples.add(render(batch, images, session, next));
+                        }
+                        long size = attempt.freeze(batch);
+                        return render ? Long.MAX_VALUE : size;
                     } catch (Exception | Error error) {
                         attempt.error = error;
                         return Checks.fatal(error) ? Long.MAX_VALUE : 0;
@@ -180,6 +211,27 @@ final class Audit {
                     return buffer.check().has("recipes");
                 }
             });
+        }
+    }
+
+    /** Executes owned native draw closures before the cursor can advance. No encoding or publication. */
+    private static JsonObject render(Facts.Batch batch, Images images, ClientThread.Session session, int index) throws Exception {
+        if (!batch.models.isEmpty()) throw new Jobs.Fault("check_unsupported", "Recipe render probes do not capture structure models");
+        long[] pixels = {0, 0};
+        for (Facts.Picture picture : batch.pictures) pixels(images.picture(picture, session), pixels);
+        for (Facts.Icon icon : batch.icons) pixels(images.capture(icon, session), pixels);
+        for (Facts.Scene scene : batch.scenes) pixels(images.scene(scene, session), pixels);
+        JsonObject result = object("index", index, "icons", batch.icons.size(), "pictures", batch.pictures.size(), "scenes", batch.scenes.size(),
+                "pixels", Long.toString(pixels[0]), "visiblePixels", Long.toString(pixels[1]));
+        batch.scenes.clear(); batch.pictures.clear();
+        return result;
+    }
+
+    private static void pixels(Images.Image image, long[] counts) {
+        counts[0] += (long) image.pixels.getWidth() * image.pixels.getHeight();
+        for (int y = 0; y < image.pixels.getHeight(); y++) {
+            Jobs.checkpoint();
+            for (int x = 0; x < image.pixels.getWidth(); x++) if ((image.pixels.getRGB(x, y) >>> 24) != 0) counts[1]++;
         }
     }
 

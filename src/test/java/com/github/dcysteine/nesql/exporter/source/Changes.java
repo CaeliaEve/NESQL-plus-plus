@@ -455,6 +455,71 @@ final class Changes {
         }
     }
 
+    static void qed(List<JsonObject> recipes, List<JsonObject> categories, Function<String,String> text) {
+        String stone = Identity.item("minecraft:stone", 0, null), paper = Identity.item("minecraft:paper", 0, null);
+        JsonObject origin = object("owner", "ExtraUtilities", "handler", "com.rwtema.extrautils.nei.EnderConstructorHandler", "key", "qed");
+        String category = Identity.origin("category", origin);
+        categories.add(object("id", category, "source", origin, "name", text.apply("QED 量子纠缠装置"),
+                "icon", object("kind", "item", "id", stone), "machines", array(), "view", null, "order", categories.size()));
+        JsonObject predicate = object("kind", "wildcard", "meta", false, "nbt", true);
+        JsonObject input = choice(stone); input.add("rule", predicate);
+        JsonObject recipe = object("source", origin, "category", category, "order", 0,
+                "inputs", array(object("kind", "item", "slot", 0, "choices", array(input))),
+                "outputs", array(object("kind", "item", "slot", 0, "id", paper, "amount", "1", "quantity", null,
+                        "chance", Chance.of(1, 1), "role", "result", "change", null)),
+                "process", object("kind", "qed", "enderFlux", "20000", "earlier", array(object("grid", null,
+                        "inputs", array(array(object("id", paper, "rule", predicate)))))),
+                "grid", object("width", 1, "height", 1, "cells", array(0), "mirror", true),
+                "duration", null, "energy", null, "magic", null, "view", null, "properties", object());
+        recipe.addProperty("id", Identity.recipe(recipe)); recipes.add(recipe);
+    }
+
+    static void galaxyAssembly(List<JsonObject> recipes, List<JsonObject> categories, Function<String,String> text) {
+        String stone = Identity.item("minecraft:stone", 0, null), paper = Identity.item("minecraft:paper", 0, null);
+        String prior = Identity.item("fixture:rolling_prior", 0, null);
+        JsonObject origin = object("owner", "fixture", "handler", "galaxyspace.core.nei.AssemblyMachineRecipeHandler", "key", "assembly");
+        String category = Identity.origin("category", origin);
+        categories.add(object("id", category, "source", origin, "name", text.apply("GalaxySpace Assembly 太空装配机"),
+                "icon", object("kind", "item", "id", stone), "machines", array(), "view", null, "order", categories.size()));
+        JsonObject predicate = object("kind", "wildcard", "meta", false, "nbt", true);
+        JsonObject first = choice(stone), second = choice(paper);
+        first.add("rule", predicate); second.add("rule", predicate);
+        JsonObject recipe = object("source", origin, "category", category, "order", 0,
+                "inputs", array(object("kind", "item", "slot", 0, "choices", array(first)),
+                        object("kind", "item", "slot", 1, "choices", array(second))),
+                "outputs", array(object("kind", "item", "slot", 0, "id", paper, "amount", "70", "quantity", null,
+                        "chance", Chance.of(1, 1), "role", "result", "change", null)),
+                "process", object("kind", "galaxyspace-assembly", "earlier", array(object("grid", null,
+                        "inputs", array(array(object("id", prior, "rule", predicate)))))),
+                "grid", object("width", 2, "height", 2, "cells", array(0, null, null, 1), "mirror", true),
+                "duration", null, "energy", null, "magic", null, "view", null, "properties", object());
+        recipe.addProperty("id", Identity.recipe(recipe)); recipes.add(recipe);
+    }
+
+    static void floating(List<JsonObject> items, List<JsonObject> recipes, List<JsonObject> categories, String texture, Function<String,String> text) {
+        JsonObject origin=object("owner","fixture","handler","fixture:floating","key","floating");
+        String category=Identity.origin("category",origin);
+        NBTTagCompound specialTag=new NBTTagCompound();specialTag.setString("type","pureDaisy");specialTag.setString("discard","extra input data");
+        NBTTagCompound resultTag=new NBTTagCompound();resultTag.setString("type","pureDaisy");
+        NBTTagCompound baseTag=new NBTTagCompound();baseTag.setString("type","baseExample");baseTag.setInteger("discardBase",9);
+        String floating=item(items,"fixture:floating_flower",0,null,false,"Floating flower 浮空花",texture,text);
+        String special=item(items,"fixture:special_flower",0,specialTag,false,"Special flower 特殊花",texture,text);
+        String base=item(items,"fixture:floating_special",0,baseTag,false,"Floating flower base 浮空花变换基类",texture,text);
+        String product=item(items,"fixture:floating_special",0,resultTag,false,"Floating pure daisy 浮空白雏菊",texture,text);
+        categories.add(object("id",category,"source",origin,"name",text.apply("Floating flowers 浮空花合成"),"icon",object("kind","item","id",product),"machines",array(),"view",null,"order",categories.size()));
+        JsonArray inputs=array();
+        for(int slot=0;slot<3;slot++) {
+            JsonObject c=choice(slot==0?floating:special);
+            c.add("rule",slot==2?object("kind","string_tag","key","type"):object("kind","wildcard","meta",true,"nbt",true));
+            inputs.add(object("kind","item","slot",slot,"choices",array(c)));
+        }
+        JsonObject recipe=object("source",origin,"category",category,"order",0,"inputs",inputs,
+            "outputs",array(object("kind","item","slot",0,"id",product,"amount","1","quantity",null,"role","result","chance",Chance.of(1,1),
+                "change",object("input",2,"action",object("kind","floatingFlower","base",base),"samples",array(stack(product))))),
+            "process",object("kind","floatingFlowers","special",array(1,2)),"duration",null,"energy",null,"grid",null,"magic",null,"view",null,"properties",object());
+        recipe.addProperty("id",Identity.recipe(recipe));recipes.add(recipe);
+    }
+
     static void buildcraft(List<JsonObject> recipes, List<JsonObject> categories, Function<String,String> text) {
         String stone=Identity.item("minecraft:stone",0,null), paper=Identity.item("minecraft:paper",0,null);
         JsonObject origin=object("owner","fixture","handler","fixture:buildcraft","key","assembly");

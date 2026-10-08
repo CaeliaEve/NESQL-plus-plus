@@ -35,6 +35,16 @@ final class ProvenanceTest {
         require(!evidence.equals(Provenance.capture(data, new Jobs.Request("one", "first", "images"), session)), "Ignored capture profile");
         require(!evidence.equals(Provenance.capture(data, first, CanonicalJson.digest(new byte[]{3}))), "Ignored session change");
         require(data.getAsJsonObject("settings").has("profile") && data.has("probes"), "Mutated source environment");
+        JsonObject request = object("key", "resume-one", "name", "fixture", "profile", "full", "scope", "recipes",
+                "handlers", array("category_" + CanonicalJson.digest(new byte[]{4})), "world", "test-copy");
+        Jobs.Request original = Jobs.Request.parse(request);
+        request.add("resume", object("job", "12345678-1234-1234-1234-123456789abc", "sha256", CanonicalJson.digest(new byte[]{5})));
+        Jobs.Request resumed = Jobs.Request.parse(request);
+        require(Provenance.capture(data, original, session).equals(Provenance.capture(data, resumed, session)),
+                "Recovery transport changed captured fact selection");
+        request.getAsJsonObject("resume").addProperty("job", "../other");
+        try { Jobs.Request.parse(request); throw new AssertionError("Accepted a recovery path as job ID"); }
+        catch (Jobs.Fault expected) { }
     }
     private static JsonObject copy(JsonObject value) { return new JsonParser().parse(value.toString()).getAsJsonObject(); }
     private static void require(boolean condition, String message) { if (!condition) throw new AssertionError(message); }

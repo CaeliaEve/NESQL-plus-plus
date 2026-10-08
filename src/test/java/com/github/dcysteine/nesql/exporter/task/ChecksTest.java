@@ -17,6 +17,16 @@ final class ChecksTest {
 
     static void run(Path root) throws Exception {
         slices();
+        ores(root.resolve("ores"));
+        Jobs.Request visual = Checks.request(object("key", "visual", "world", "test-copy", "domain", "recipes", "render", true, "limit", 1));
+        if (!new com.google.gson.Gson().toJsonTree(visual.check).getAsJsonObject().get("render").getAsBoolean()) throw new AssertionError("Representative rendering selection lost");
+        for (JsonObject invalid : java.util.Arrays.asList(
+                object("key", "bad", "domain", "recipes", "render", "true", "limit", 1),
+                object("key", "bad", "domain", "recipes", "render", true, "limit", 17),
+                object("key", "bad", "domain", "structures", "render", true))) {
+            try { Checks.request(invalid); throw new AssertionError("Accepted invalid representative rendering request"); }
+            catch (Jobs.Fault expected) { }
+        }
         Jobs.Request resources = Checks.request(object("key", "resources", "world", "test-copy", "domain", "resources",
                 "resources", array("demo:textures/z.png", "demo:lang/en_US.lang")));
         require(resources.check.resources.equals(java.util.Arrays.asList("demo:lang/en_US.lang", "demo:textures/z.png")), "Resource targets are not canonical");
@@ -139,6 +149,35 @@ final class ChecksTest {
         recipes(root);
         failureProtocol(root.resolve("severity"));
         System.out.println("Diagnostic tasks: observed work through timing reports, decimal quantities, failure/cancel reports, retry identity and publication separation passed");
+    }
+
+    private static void ores(Path root) throws Exception {
+        Jobs.Request request = Checks.request(object("key", "ore-check", "world", "test-copy", "domain", "ore-groups"));
+        require(request.check.domain.equals("ore-groups"), "Ore diagnostic domain lost");
+        for (JsonObject invalid : java.util.Arrays.asList(
+                object("key", "bad", "world", "test", "domain", "ore-groups", "controllers", array(1)),
+                object("key", "bad", "world", "test", "domain", "ore-groups", "resources", array("demo:lang/en_US.lang")),
+                object("key", "bad", "world", "test", "domain", "ore-groups", "handlers", array("category_" + String.join("", java.util.Collections.nCopies(64, "a")))),
+                object("key", "bad", "world", "test", "domain", "ore-groups", "offset", 1),
+                object("key", "bad", "world", "test", "domain", "ore-groups", "limit", 2),
+                object("key", "bad", "world", "test", "domain", "ore-groups", "render", true))) {
+            try { Checks.request(invalid); throw new AssertionError("Ore checks accepted recipe/structure/resource options"); }
+            catch (Jobs.Fault expected) { require(expected.code.equals("invalid_request"), "Wrong ore request rejection"); }
+        }
+        try (Jobs jobs = new Jobs(root.resolve("jobs"), context -> {
+            JsonArray rows = array(object("domain", "ore-groups", "status", "pending"));
+            Checks.Report report = new Checks.Report(root.resolve("checks"), context, object(), rows);
+            Checks.sweep(context, report, () -> {}, (index, row) -> { throw new Jobs.Fault("ore_groups", "changed registration"); });
+            context.checked(report.finish("complete", null));
+        })) {
+            Jobs.Job done = await(jobs, jobs.start(request).id);
+            require(done.state.equals("checked") && done.report.failed == 1 && done.result == null, "Ore failure did not become an isolated diagnostic report");
+            JsonObject report = new com.google.gson.JsonParser().parse(new String(Files.readAllBytes(root.resolve("checks").resolve(done.id + ".json")), StandardCharsets.UTF_8)).getAsJsonObject();
+            JsonObject row = report.getAsJsonArray("rows").get(0).getAsJsonObject();
+            String detail = row.getAsJsonArray("failureFiles").get(0).getAsJsonObject().get("path").getAsString();
+            JsonObject failure = new com.google.gson.JsonParser().parse(new String(Files.readAllBytes(root.resolve("checks").resolve(detail)), StandardCharsets.UTF_8)).getAsJsonObject();
+            require(failure.getAsJsonObject("target").get("domain").getAsString().equals("ore-groups"), "Ore failure target identity was mislabeled");
+        }
     }
 
     private static void slices() throws Exception {

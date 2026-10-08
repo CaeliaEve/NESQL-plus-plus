@@ -52,6 +52,8 @@ final class NativeDimensionsTest {
             try {
                 try { emit(sized, row(sized)); throw new AssertionError("Invalid native dimensions accepted"); }
                 catch (Jobs.Fault expected) { require(expected.code.equals("view_limit"), "Wrong dimension failure"); }
+                try { emit(sized, row(sized), false); throw new AssertionError("Data preflight missed invalid native dimensions"); }
+                catch (Jobs.Fault expected) { require(expected.code.equals("view_limit"), "Wrong data preflight failure"); }
             } finally { restore(sized, prior); }
         }
         System.out.println("Native dimensions: TConstruct alloy scene, NEI height fallback, positive overrides, slot extents and limits passed");
@@ -65,8 +67,11 @@ final class NativeDimensionsTest {
         return row;
     }
     private static Facts.Scene emit(TemplateRecipeHandler handler, RecipeRow row) throws Exception {
+        return emit(handler, row, true);
+    }
+    private static Facts.Scene emit(TemplateRecipeHandler handler, RecipeRow row, boolean views) throws Exception {
         Recipes.Cursor cursor = new Recipes.Cursor(new Recipes.Handler(handler, 0), handler, row.facts,
-                true, null, null, null, null, null);
+                views, null, null, null, null, null);
         Method emit = Recipes.Cursor.class.getDeclaredMethod("emit", int.class, RecipeRow.class, Facts.class);
         emit.setAccessible(true);
         try { emit.invoke(cursor, 0, row, row.facts); }
@@ -75,6 +80,7 @@ final class NativeDimensionsTest {
             throw (Exception) error.getCause();
         }
         Facts.Batch batch = row.facts.drain();
+        if (!views) { require(batch.scenes.isEmpty(), "Data preflight requested GL"); return null; }
         require(batch.scenes.size() == 1, "Recipe was not emitted as one native scene");
         return batch.scenes.get(0);
     }

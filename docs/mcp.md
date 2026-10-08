@@ -6,7 +6,7 @@
 
 目标为 GT New Horizons 2.8.4 Java 8。模组只服务本机单人世界，不支持专用服务器。MCP 客户端启动独立的 Node 进程，桥接通过受限的 loopback HTTP 接口调用游戏任务服务；Java 8 模组不嵌入 MCP SDK。
 
-模组 0.12.1 写出 source 修订 11。MCP 连接协议保持不变；数据修订与传输协议是不同的元数据。编译器拒绝旧数据修订，不提供旧格式兜底读取。
+当前模组 0.43.0 写出 Source 修订 38，配套 Compiler/contracts 0.38.0、Catalog 修订 37。MCP 连接协议保持不变；数据修订与传输协议是不同的元数据。编译器拒绝旧数据修订，不提供旧格式兜底读取。下文带旧版本号的段落记录功能引入历史，不代表当前发布版本。
 
 ```json
 {
@@ -28,8 +28,8 @@
 | 工具 | 参数 | 结果 |
 | --- | --- | --- |
 | `inspect_game` | 无 | 单人世界状态、NEI 是否就绪、profile、handler 清单及支持状态、模组来源、研究注册表诊断、客户端队列与最长调用耗时 |
-| `start_export` | `key`、`name`、`profile`，可选 `handlers`、`probes` | 立即返回 Job；文件留在磁盘 |
-| `start_check` | `key`、`world`、`domain`，可选 `controllers`、`handlers`、`offset`、`limit`、`probes` | 异步诊断Job；无source发布；本机nesql/checks报告 |
+| `start_export` | `key`、`name`、`profile`，可选 `world`、`handlers`、`probes`、`scope`、`resume` | 立即返回 Job；文件留在磁盘 |
+| `start_check` | `key`、`world`、`domain`，可选 `controllers`、`handlers`、`resources`、`offset`、`limit`、`probes`、`render` | 异步诊断 Job；无 Source 发布；本机 nesql/checks 报告 |
 | `read_job` | 可选 `id` | `{job}`；省略 ID 时返回活动或最近任务，没有任务时为 `null` |
 | `cancel_export` | `id` | 请求协作取消，返回 Job；轮询至终态 |
 | `list_exports` | 可选 `after`、`limit` | `{rows,next}`；按内容 ID 排序，limit 默认 20、范围 1–100 |
@@ -40,6 +40,14 @@
 `inspect_game` 同时报告 exporter 版本、source revision 和当前 world.folder/name。`start_export` 可传 `world` 指定预期单人存档文件夹；实际采集开始前在游戏线程核对，切到其他存档会报 world_changed。该条件参与任务幂等比较和日志恢复。验收工具使用它将任务绑定到独立测试存档；它不修改存档。
 
 ## 独立诊断
+
+当前 `render: true` 仅用于 `domain: "recipes"` 且显式 `limit <= 16` 的代表性渲染诊断。实际绘制图标与配方场景，记录像素数，不编码 PNG；完整数据诊断、代表性渲染与正式 Source 是三个独立事实。协调器可通过 `stages.source.preflight` 自动执行这些样本，详见 [视觉导出调度](visual-throughput.md)。
+
+`domain: "ore-groups"` 独立诊断矿辞登记，使用正式采集器读取所有已登记组；无需完整结构采集。仅需 `key` 与 `world`，不接受配方范围、handlers、controllers、resources 或渲染选项。报告目标为 `{domain:"ore-groups"}`，记录组与成员数量，失败明细保留该领域身份，不发布 Source。
+
+非 recipe-only 的正式采集写入 `ore-groups` 与 `ore-members`：保留原始组名排序、空组、登记顺序和重复位置。成员模板保留 registry、原始 metadata、类型化 NBT 与有符号 int32 数量；零与负数仅为登记记录。32767 通配模板不调用名称/提示 API；`display` 只引用 NEI 中通过原生匹配的具体示例，未知时为 null。采集与二次一致性复核按最多16条或2ms分片，检测同长度替换及 NBT 变化；展示示例总预算262144条。它们是独立资料，不产生配方/用途边。
+
+`scope: "recipes"` 的导出可按 [Handler 检查点协议](recovery.md) 显式传入 `resume: {job, sha256}`，必须使用新 key、原选择与同一游戏会话。普通历史 `writing` 分片不是恢复输入，也不能直接交给 Compiler。
 
 0.12.0新增start_check，HTTP入口为POST /checks，复用同一单任务队列和cancel_export/read_job。domain为structures或recipes，world必填。structures的controllers为最多512个不重复的0–32767编号，省略或[]表示全部IConstructable；不能传配方筛选。recipes的handlers来自inspect_game，省略或[]表示全部处理器，未适配项标unsupported。offset默认0、最大1000000，limit默认128、范围1–4096，限定每个处理器本轮范围。请求不接受任意代码或输出路径。
 
@@ -157,7 +165,7 @@ MagicRecipe.payment 保存允许以待替换法杖付款的配置、输入槽、
 
 ## 指定处理器的正式 Source
 
-0.15.4 的 `start_export` 增加可选 `scope: "recipes"`。必须指定 `world` 和非空 `handlers`，profile 只能是 `full` 或 `data`。只枚举所选处理器，连带保存引用的物品/流体、要素、文本和需要的图像/视图；不遍历整个物品浏览表、材料、电路、遗传、研究或结构。所有集合仍按契约声明，范围外集合为空，Source 永远为 `selection`。不能把它用于完整资料库覆盖验收。需要研究依赖的魔法处理器明确拒绝此 scope，常规导出入口保持不变。
+`start_export` 的 `scope: "recipes"` 必须指定 `world` 和非空 `handlers`，profile 只能是 `full` 或 `data`。只枚举所选处理器，连带保存引用的物品/流体、要素、文本和需要的图像/视图；不遍历整个物品浏览表、材料、电路、遗传、矿辞或结构。0.43.0 对需要研究依赖的魔法处理器同时保存完整注册研究闭包，包括先决条件、知识状态和物品触发事实。所有集合仍按契约声明，范围外集合为空，Source 永远为 `selection`。不能把它用于完整资料库覆盖验收。
 
 scope 进入请求重试身份和完整环境设置；运行身份只排除已知的请求字段（profile、handlers、scope、probes），因此同会话资源检查仍能关联。Compiler 0.14.3 验证 scope 与环境一致，并拒绝局部请求声称完整 Source。其他未知设置依然参与运行身份，不会被泛化剥离。
 

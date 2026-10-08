@@ -77,6 +77,50 @@ test('source failures retain the real job and error for the export handoff', asy
   assert.deepEqual(checkpoint.stages.source.error,error);
 });
 
+test('explicit source recovery forwards a pinned prefix with a new job key and retains previous failures', async () => {
+  const { plan, checkpoint, runner, requests } = exportFixture();
+  const previous = { status: 'failed', job: randomUUID(), request: { key: 'old-export' }, checkpoint: { sha256: 'c'.repeat(64) } };
+  checkpoint.stages = { source: previous };
+  plan.stages.source.resume = { job: previous.job, sha256: previous.checkpoint.sha256 };
+  await runner.runSourceStage(plan, checkpoint);
+  assert.deepEqual(requests[0].resume, plan.stages.source.resume);
+  assert.notEqual(requests[0].key, previous.request.key);
+  plan.stages.source.key = previous.request.key;
+  await assert.rejects(() => runner.runSourceStage(plan, checkpoint), /new key/);
+});
+
+test('Source gate requires successful representative rendering when enabled', async () => {
+  const x = exportFixture();
+  x.plan.stages.source.preflight = true;
+  x.runner.runVisualStage = async () => ({ status: 'failed', samples: [] });
+  await assert.rejects(() => x.runner.runSourceStage(x.plan, x.checkpoint), /render/i);
+  assert.equal(x.requests.length, 0);
+});
+
+test('representative rendering checks first/last recipes, verifies evidence and reuses only recorded samples', async t => {
+  const root = await mkdtemp(path.join(os.tmpdir(), 'nesql-render-probe-'));
+  t.after(() => rm(root, { recursive: true, force: true }));
+  const x = exportFixture(); x.plan.stages.source.preflight = true; x.checkpoint.handlers[x.id].excluded = [];
+  let pending, calls = 0;
+  x.runner.client.request = async (method, url, body) => {
+    if (method === 'POST') { pending = body; calls++; return { id: `probe-${calls}` }; }
+    const id = `probe-${calls}`, file = path.join(root, `${id}.json`);
+    const bytes = Buffer.from(JSON.stringify({ job: id, status: 'complete', request: { key: pending.key, world: pending.world, handlers: pending.handlers,
+      check: { render: true, offset: pending.offset, limit: 1 } }, rows: [{ handler: x.id, status: 'partial', totalRecipes: 2,
+      checkedRecipes: 1, offset: pending.offset, end: pending.offset + 1, failedRecipes: [], excludedRecipes: [], failures: [],
+      visualSamples: [{ index: pending.offset, scenes: 1, pixels: '100', visiblePixels: '99' }] }] }));
+    await writeFile(file, bytes);
+    return { job: { id, state: 'checked', report: { path: file, bytes: bytes.length, sha256: createHash('sha256').update(bytes).digest('hex') } } };
+  };
+  x.runner.archiveReport = async job => ({ archivePath: job.report.path, sha256: job.report.sha256 });
+  const stage = await x.runner.runVisualStage(x.plan, x.checkpoint);
+  assert.equal(stage.status, 'passed'); assert.deepEqual(stage.samples.map(sample => sample.offset), [0, 1]);
+  assert.equal(calls, 2);
+  await x.runner.runVisualStage(x.plan, x.checkpoint); assert.equal(calls, 2, 'Verified samples were blindly rerendered');
+  await writeFile(stage.samples[0].archive.archivePath, '{}');
+  await assert.rejects(() => x.runner.runVisualStage(x.plan, x.checkpoint), /evidence changed/);
+});
+
 test('checkpoint journal recovers durable deltas and ignores only an unfinished final write', async t => {
   const directory = await mkdtemp(path.join(os.tmpdir(), 'nesql-journal-'));
   t.after(() => rm(directory, { recursive: true, force: true }));

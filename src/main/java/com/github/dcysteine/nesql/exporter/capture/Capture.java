@@ -8,6 +8,8 @@ import com.github.dcysteine.nesql.exporter.source.Dataset;
 import com.github.dcysteine.nesql.exporter.source.Identity;
 import com.github.dcysteine.nesql.exporter.source.Rows;
 import com.github.dcysteine.nesql.exporter.source.Fragments;
+import com.github.dcysteine.nesql.exporter.source.Checkpoints;
+import com.github.dcysteine.nesql.exporter.source.Semantic;
 import com.github.dcysteine.nesql.exporter.task.ClientThread;
 import com.github.dcysteine.nesql.exporter.task.Jobs;
 import com.github.dcysteine.nesql.exporter.task.Pipeline;
@@ -96,15 +98,13 @@ public final class Capture implements Jobs.Task, AutoCloseable {
             for (Recipes.Handler handler : Recipes.handlers()) {
                 if (request.handlers.isEmpty() || remaining.remove(handler.id)) {
                     if (!handler.supported) throw new Jobs.Fault("handler_unsupported", "No adapter for " + handler.name + ": " + handler.id);
-                    if (request.recipeScope() && handler.adapter == Recipes.Adapter.MAGIC) {
-                        throw new Jobs.Fault("scope_unsupported", "Magic recipes require research capture; omit recipe-only scope: " + handler.id);
-                    }
                     selected.add(handler);
                 }
             }
             if (!remaining.isEmpty()) throw new Jobs.Fault("handler_missing", "Requested handler is not registered: " + remaining.iterator().next());
             return selected;
         });
+        boolean researchDependencies = request.recipeScope() && handlers.stream().anyMatch(handler -> handler.adapter == Recipes.Adapter.MAGIC);
         context.progress("registry", 0, 1, "Checking research and material registries");
         Magic magic = session.call(Magic::new);
         List<gregtech.api.enums.Materials> materials = request.recipeScope() ? java.util.Collections.emptyList() : session.call(GtMaterials::all);
@@ -116,105 +116,158 @@ public final class Capture implements Jobs.Task, AutoCloseable {
         Dataset.directory(workRoot);
         Path work = workRoot.resolve(context.id());
         Fragments fragments = new Fragments(directory.resolve("captures").resolve(context.id()), context.provenance(), request, context::fragments);
+        List<String> order = new ArrayList<>(); for (Recipes.Handler handler : handlers) order.add(handler.id);
+        Checkpoints checkpoint = request.recipeScope() ? new Checkpoints(directory.resolve("checkpoints").resolve(context.id()),
+                context.provenance(), order, Main.MOD_VERSION, receipt -> {
+                    receipt.addProperty("job", context.id()); context.metric("checkpoint", receipt);
+                    context.progress("checkpoint", receipt.get("handlers").getAsInt(), handlers.size(), "Sealed completed Handler prefix");
+                }) : null;
+        boolean[] nativeClean = {true};
+        Throwable captureFailure = null;
         try (Dataset dataset = new Dataset(work, Main.MOD_VERSION, environment,
                 request.complete(), fragments)) {
             Images images = new Images();
             Models models = request.profile.equals("data") || request.recipeScope() ? null : session.call(Models::new);
-            try (AutoCloseable visuals = () -> client.cleanup(() -> { try (Models owned = models) { images.close(); } });
+            try (AutoCloseable visuals = () -> {
+                    try { client.cleanup(() -> { try (Models owned = models) { images.close(); } }); }
+                    catch (Exception | Error failure) { nativeClean[0] = false; throw failure; }
+                 };
                  Rows rows = new Rows(workRoot.resolve(context.id() + "-sort"));
-                 Sink sink = new Sink(dataset, rows, images, session, !request.profile.equals("data"))) {
-                for (int index = 0; index < magic.aspectCount(); index++) {
-                    final int aspect = index;
-                    session.call(() -> { magic.aspect(aspect, facts); return null; });
-                    sink.write(facts.drain());
+                 Sink sink = new Sink(dataset, rows, images, session, !request.profile.equals("data"), checkpoint, work)) {
+                int restored = 0;
+                if (request.resume != null) {
+                    context.progress("resume", 0, handlers.size(), "Verifying completed Handler units and replaying exact records");
+                    Facts validationFacts = new Facts(environment.get("locale").getAsString());
+                    try { restored = checkpoint.replay(directory.resolve("checkpoints").resolve(request.resume.job), request.resume.sha256, dataset, rows, facts::restore,
+                            (unit, evidence) -> {
+                                JsonObject current = validateUnit(unit, handlers, validationFacts, session, context, nativeClean, researchDependencies);
+                                if (!current.equals(evidence)) throw new Jobs.Fault("checkpoint_changed", "Native facts or exclusions changed in completed unit " + unit);
+                                verifyEnvironment(session, request, environment);
+                            }); }
+                    catch (java.util.concurrent.CancellationException cancelled) { throw cancelled; }
+                    catch (Jobs.Fault failure) { throw failure; }
+                    catch (IOException | RuntimeException failure) {
+                        Jobs.Fault error = new Jobs.Fault("checkpoint_invalid", "Cannot reuse completed Handler units: " + failure.getMessage());
+                        error.initCause(failure); throw error;
+                    }
+                    verifyEnvironment(session, request, environment);
                 }
-                context.progress("aspects", magic.aspectCount(), magic.aspectCount(), "Captured registered aspect definitions");
-                if (!request.recipeScope()) {
-                    captureItems(session, facts, sink, context);
-                    Map<String, Fluid> fluids = session.call(() -> new TreeMap<>(FluidRegistry.getRegisteredFluids()));
-                    int fluidCount = 0;
-                    for (Map.Entry<String, Fluid> entry : fluids.entrySet()) {
-                        session.call(() -> {
-                            if (FluidRegistry.getFluid(entry.getKey()) != entry.getValue()) throw new Jobs.Fault("registry_changed", "Fluid registry changed during export");
-                            facts.fluid(new FluidStack(entry.getValue(), 1));
-                            return null;
-                        });
-                        sink.write(facts.drain());
-                        fluidCount++;
-                        if (fluidCount % 64 == 0 || fluidCount == fluids.size()) context.progress("fluids", fluidCount, fluids.size(), "Captured registered fluids");
-                    }
-                    for (int index = 0; index < materials.size(); index++) {
-                        final gregtech.api.enums.Materials material = materials.get(index);
-                        GtMaterials.Cursor cursor = session.call(() -> new GtMaterials.Cursor(material, facts));
-                        boolean done;
-                        do {
-                            done = session.call(() -> cursor.capture(facts));
-                            sink.write(facts.drain());
-                        } while (!done);
-                        if ((index + 1) % 16 == 0 || index + 1 == materials.size()) context.progress("materials", index + 1, materials.size(), "Captured material forms and composition");
-                    }
-                    GtCircuits circuits = session.call(GtCircuits::new);
-                    for (int index = 0; index < circuits.size(); index++) {
-                        final int family = index;
-                        session.call(() -> { circuits.capture(family, facts); return null; });
+                if (restored == 0) {
+                    if (checkpoint != null) { checkpoint.begin("base"); sink.proof = new Semantic(); }
+                    for (int index = 0; index < magic.aspectCount(); index++) {
+                        final int aspect = index;
+                        session.call(() -> { magic.aspect(aspect, facts); return null; });
                         sink.write(facts.drain());
                     }
-                    context.progress("circuits", circuits.size(), circuits.size(), "Captured circuit definitions from NEICustomDiagram");
-                    for (Forestry genetics : session.call(Forestry::all)) {
-                        for (int index = 0; index < genetics.speciesCount(); index++) {
-                            final int species = index;
-                            session.call(() -> { genetics.captureSpecies(species, facts); return null; });
-                            sink.write(facts.drain());
-                            if ((index + 1) % 16 == 0 || index + 1 == genetics.speciesCount()) {
-                                context.progress("species", index + 1, genetics.speciesCount(), genetics.name());
-                            }
-                        }
-                        for (int index = 0; index < genetics.mutationCount(); index++) {
-                            final int mutation = index;
-                            session.call(() -> { genetics.captureMutation(mutation, facts); return null; });
-                            sink.write(facts.drain());
-                            if ((index + 1) % 64 == 0 || index + 1 == genetics.mutationCount()) {
-                                context.progress("mutations", index + 1, genetics.mutationCount(), genetics.name());
-                            }
-                        }
-                    }
-                    List<Structures.Machine> machines = session.call(Structures::all);
-                    for (int index = 0; index < magic.researchCount(); index++) {
-                        final int study = index;
-                        Magic.Cursor cursor = session.call(() -> magic.research(study));
-                        boolean done;
+                    context.progress("aspects", magic.aspectCount(), magic.aspectCount(), "Captured registered aspect definitions");
+                    // Magic recipe references include parent/sibling research links. Keep
+                    // their native registry closure in the seed, without global item or
+                    // structure capture. Recipe scope remains a selected Source.
+                    if (researchDependencies) captureResearch(magic, facts, session, context, sink::write);
+                    if (!request.recipeScope()) {
+                        captureItems(session, facts, sink, context);
+                        OreGroups ores = session.call(OreGroups::new);
+                        boolean oresDone;
                         do {
-                            done = session.call(() -> cursor.capture(facts));
+                            oresDone = session.call(() -> ores.capture(facts));
                             sink.write(facts.drain());
-                        } while (!done);
-                        if ((index + 1) % 32 == 0 || index + 1 == magic.researchCount()) context.progress("research", index + 1, magic.researchCount(), "Captured research prerequisites and observed knowledge");
-                    }
-                    context.progress("structures", 0, machines.size(), "Starting structure capture: 0/" + machines.size());
-                    for (int index = 0; index < machines.size(); index++) {
-                        final Structures.Machine machine = machines.get(index);
-                        try {
-                            Structures.Cursor cursor = session.call("structure " + machine.id + " open", () -> new Structures.Cursor(machine, facts, models, request.probes, request.profile.equals("full") && request.handlers.isEmpty()));
-                            try (AutoCloseable owned = () -> client.cleanup("structure " + machine.id + " release", cursor::close)) {
-                                boolean done;
-                                do {
-                                    done = session.call("structure " + machine.id + " capture", cursor::capture);
-                                    sink.write(facts.drain());
-                                } while (!done);
-                            }
-                        } catch (java.util.concurrent.CancellationException error) { throw error; }
-                        catch (RuntimeException error) {
-                            throw Structures.failure("Structure index=" + index + "; controller=" + machine.id
-                                    + "; type=" + machine.machine.getClass().getName(), error);
+                            context.progress("ores", ores.completed(), ores.count(), "Captured native ore dictionary groups and ordered templates");
+                        } while (!oresDone);
+                        Map<String, Fluid> fluids = session.call(() -> new TreeMap<>(FluidRegistry.getRegisteredFluids()));
+                        int fluidCount = 0;
+                        for (Map.Entry<String, Fluid> entry : fluids.entrySet()) {
+                            session.call(() -> {
+                                if (FluidRegistry.getFluid(entry.getKey()) != entry.getValue()) throw new Jobs.Fault("registry_changed", "Fluid registry changed during export");
+                                facts.fluid(new FluidStack(entry.getValue(), 1));
+                                return null;
+                            });
+                            sink.write(facts.drain());
+                            fluidCount++;
+                            if (fluidCount % 64 == 0 || fluidCount == fluids.size()) context.progress("fluids", fluidCount, fluids.size(), "Captured registered fluids");
                         }
-                        if ((index + 1) % 16 == 0 || index + 1 == machines.size()) context.progress("structures", index + 1, machines.size(),
-                                "Captured structure definitions: " + (index + 1) + "/" + machines.size());
+                        for (int index = 0; index < materials.size(); index++) {
+                            final gregtech.api.enums.Materials material = materials.get(index);
+                            GtMaterials.Cursor cursor = session.call(() -> new GtMaterials.Cursor(material, facts));
+                            boolean done;
+                            do {
+                                done = session.call(() -> cursor.capture(facts));
+                                sink.write(facts.drain());
+                            } while (!done);
+                            if ((index + 1) % 16 == 0 || index + 1 == materials.size()) context.progress("materials", index + 1, materials.size(), "Captured material forms and composition");
+                        }
+                        GtCircuits circuits = session.call(GtCircuits::new);
+                        for (int index = 0; index < circuits.size(); index++) {
+                            final int family = index;
+                            session.call(() -> { circuits.capture(family, facts); return null; });
+                            sink.write(facts.drain());
+                        }
+                        context.progress("circuits", circuits.size(), circuits.size(), "Captured circuit definitions from NEICustomDiagram");
+                        for (Forestry genetics : session.call(Forestry::all)) {
+                            for (int index = 0; index < genetics.speciesCount(); index++) {
+                                final int species = index;
+                                session.call(() -> { genetics.captureSpecies(species, facts); return null; });
+                                sink.write(facts.drain());
+                                if ((index + 1) % 16 == 0 || index + 1 == genetics.speciesCount()) {
+                                    context.progress("species", index + 1, genetics.speciesCount(), genetics.name());
+                                }
+                            }
+                            for (int index = 0; index < genetics.mutationCount(); index++) {
+                                final int mutation = index;
+                                session.call(() -> { genetics.captureMutation(mutation, facts); return null; });
+                                sink.write(facts.drain());
+                                if ((index + 1) % 64 == 0 || index + 1 == genetics.mutationCount()) {
+                                    context.progress("mutations", index + 1, genetics.mutationCount(), genetics.name());
+                                }
+                            }
+                        }
+                        List<Structures.Machine> machines = session.call(Structures::all);
+                        captureResearch(magic, facts, session, context, sink::write);
+                        context.progress("structures", 0, machines.size(), "Starting structure capture: 0/" + machines.size());
+                        for (int index = 0; index < machines.size(); index++) {
+                            final Structures.Machine machine = machines.get(index);
+                            try {
+                                Structures.Cursor cursor = session.call("structure " + machine.id + " open", () -> new Structures.Cursor(machine, facts, models, request.probes, request.profile.equals("full") && request.handlers.isEmpty()));
+                                try (AutoCloseable owned = () -> client.cleanup("structure " + machine.id + " release", cursor::close)) {
+                                    boolean done;
+                                    do {
+                                        done = session.call("structure " + machine.id + " capture", cursor::capture);
+                                        sink.write(facts.drain());
+                                    } while (!done);
+                                }
+                            } catch (java.util.concurrent.CancellationException error) { throw error; }
+                            catch (RuntimeException error) {
+                                throw Structures.failure("Structure index=" + index + "; controller=" + machine.id
+                                        + "; type=" + machine.machine.getClass().getName(), error);
+                            }
+                            if ((index + 1) % 16 == 0 || index + 1 == machines.size()) context.progress("structures", index + 1, machines.size(),
+                                    "Captured structure definitions: " + (index + 1) + "/" + machines.size());
+                        }
                     }
+                    if (checkpoint != null) { sink.encoding.flush(); verifyEnvironment(session, request, environment); checkpoint.finish(object("semantic", sink.proof.finish(), "exclusions", object())); }
                 }
-                JsonObject recipeExclusions = new JsonObject();
-                for (Recipes.Handler handler : handlers) {
+                JsonObject recipeExclusions = checkpoint == null ? new JsonObject() : checkpoint.evidence();
+                if (!recipeExclusions.entrySet().isEmpty()) context.metric("recipeExclusions", recipeExclusions);
+                for (int handlerIndex = Math.max(0, restored - 1); handlerIndex < handlers.size(); handlerIndex++) {
+                    Recipes.Handler handler = handlers.get(handlerIndex);
+                    if (checkpoint != null) { checkpoint.begin(handler.id); sink.proof = new Semantic(); }
                     context.progress("recipes", 0, 0, "Opening recipe handler: " + handler.name);
-                    Recipes.Cursor cursor = session.call("handler " + handler.id + " open", () -> handler.open(facts, !request.profile.equals("data")));
-                    try {
+                    Recipes.Cursor cursor;
+                    try { cursor = session.call("handler " + handler.id + " open", () -> handler.open(facts, !request.profile.equals("data"))); }
+                    catch (Exception | Error failure) {
+                        if (failure.getSuppressed().length != 0) nativeClean[0] = false;
+                        throw failure;
+                    }
+                    try (AutoCloseable owned = () -> {
+                        try { client.cleanup(() -> {
+                            try (Recipes.Cursor nativeCursor = cursor) {
+                                JsonObject evidence = cursor.exclusions();
+                                if (!evidence.entrySet().isEmpty()) {
+                                    recipeExclusions.add(handler.id, evidence);
+                                    context.metric("recipeExclusions", new com.google.gson.JsonParser().parse(recipeExclusions.toString()).getAsJsonObject());
+                                }
+                            }
+                        }); } catch (Exception | Error failure) { nativeClean[0] = false; throw failure; }
+                    }) {
                         sink.write(facts.drain());
                         int size = session.call(cursor::size);
                         context.progress("recipes", 0, size, handler.name);
@@ -238,6 +291,7 @@ public final class Capture implements Jobs.Task, AutoCloseable {
                             for (Snapshot snapshot : captured) {
                                 if (snapshot.visual == null) sink.write(snapshot.facts);
                                 else {
+                                    captureProof(sink.proof, snapshot.facts);
                                     snapshot.visual.write();
                                     sink.finishVisuals(snapshot.visual);
                                     sink.records(snapshot.facts);
@@ -247,16 +301,11 @@ public final class Capture implements Jobs.Task, AutoCloseable {
                         }
                         // Finish ordered commits before native handler teardown or publication.
                         sink.encoding.flush();
-                    } finally {
-                        client.cleanup(() -> {
-                            try {
-                                JsonObject evidence = cursor.exclusions();
-                                if (!evidence.entrySet().isEmpty()) {
-                                    recipeExclusions.add(handler.id, evidence);
-                                    context.metric("recipeExclusions", new com.google.gson.JsonParser().parse(recipeExclusions.toString()).getAsJsonObject());
-                                }
-                            } finally { cursor.close(); }
-                        });
+                    }
+                    if (checkpoint != null) {
+                        verifyEnvironment(session, request, environment);
+                        checkpoint.finish(object("semantic", sink.proof.finish(), "exclusions",
+                                recipeExclusions.has(handler.id) ? recipeExclusions.getAsJsonObject(handler.id) : object()));
                     }
                 }
                 context.progress("records", 0, 1, "Sorting records, checking duplicate identities and writing bounded shards");
@@ -267,13 +316,97 @@ public final class Capture implements Jobs.Task, AutoCloseable {
                     throw new Jobs.Fault("environment_changed", "Mods, resources, configuration or player knowledge changed during export");
                 }
             }
+            if (checkpoint != null) checkpoint.release(nativeClean[0]);
             dataset.seal();
             session.call(() -> null);
             dataset.archive();
             java.util.concurrent.Callable<Jobs.Result> publication = dataset.prepare(directory.resolve("datasets"));
             session.call(() -> null);
             context.publish(publication);
+        } catch (Exception | Error failure) {
+            captureFailure = failure; throw failure;
+        } finally {
+            if (checkpoint != null) {
+                try { try { checkpoint.release(nativeClean[0]); } finally { checkpoint.close(); } }
+                catch (Exception | Error failure) {
+                    if (captureFailure == null) throw failure;
+                    captureFailure.addSuppressed(failure);
+                }
+            }
         }
+    }
+
+    private void verifyEnvironment(ClientThread.Session session, Jobs.Request request, JsonObject expected) throws Exception {
+        JsonObject current = Environment.capture(session, instance, request, hashes);
+        if (!CanonicalJson.digest(expected).equals(CanonicalJson.digest(current))) {
+            throw new Jobs.Fault("environment_changed", "The checkpoint environment changed during capture");
+        }
+        session.call(() -> null);
+    }
+
+    private JsonObject validateUnit(int unit, List<Recipes.Handler> handlers, Facts facts,
+                                    ClientThread.Session session, Jobs.Context context, boolean[] nativeClean, boolean researchDependencies) throws Exception {
+        Semantic proof = new Semantic();
+        JsonObject[] exclusions = {object()};
+        if (unit == 0) {
+            // Disk verification may take time: resolve live registries and the
+            // clue candidate catalog now, not from the request's earlier seed.
+            Magic magic = session.call(Magic::new);
+            for (int index = 0; index < magic.aspectCount(); index++) {
+                final int aspect = index;
+                Facts.Batch batch = session.call(() -> { magic.aspect(aspect, facts); return facts.drain(); });
+                captureProof(proof, batch);
+            }
+            if (researchDependencies) captureResearch(magic, facts, session, context, batch -> captureProof(proof, batch));
+        } else {
+            Recipes.Handler handler = handlers.get(unit - 1);
+            Recipes.Cursor cursor;
+            try { cursor = session.call("resume data open " + handler.id, () -> handler.open(facts, false)); }
+            catch (Exception | Error failure) { if (failure.getSuppressed().length != 0) nativeClean[0] = false; throw failure; }
+            try (AutoCloseable owned = () -> {
+                try { client.cleanup(() -> {
+                    try (Recipes.Cursor nativeCursor = cursor) { exclusions[0] = cursor.exclusions(); }
+                }); } catch (Exception | Error failure) { nativeClean[0] = false; throw failure; }
+            }) {
+                captureProof(proof, facts.drain());
+                int total = session.call(cursor::size);
+                for (int index = 0; index < total;) {
+                    final int start = index;
+                    List<Facts.Batch> batches = new ArrayList<>();
+                    index = session.call("resume native facts", () -> Slice.run(start, total, next -> {
+                        session.check(); if (next == start) cursor.verify(); cursor.capture(next);
+                        Facts.Batch batch = facts.drain(); Images.checkFluids(batch); batches.add(batch);
+                        return batch.freezeRecords();
+                    }));
+                    for (Facts.Batch batch : batches) captureProof(proof, batch);
+                    if (index / 128 != start / 128 || index == total) context.progress("resume-check", index, total, handler.name);
+                }
+            }
+        }
+        return object("semantic", proof.finish(), "exclusions", exclusions[0]);
+    }
+
+    private interface BatchSink { void accept(Facts.Batch batch) throws Exception; }
+
+    private static void captureResearch(Magic magic, Facts facts, ClientThread.Session session,
+                                        Jobs.Context context, BatchSink sink) throws Exception {
+        for (int index = 0; index < magic.researchCount(); index++) {
+            final int study = index;
+            Magic.Cursor cursor = session.call(() -> magic.research(study));
+            boolean done;
+            do {
+                done = session.call(() -> cursor.capture(facts));
+                sink.accept(facts.drain());
+            } while (!done);
+            if ((index + 1) % 32 == 0 || index + 1 == magic.researchCount()) context.progress("research", index + 1,
+                    magic.researchCount(), "Captured research prerequisites and observed knowledge");
+        }
+    }
+
+    private static void captureProof(Semantic proof, Facts.Batch batch) {
+        if (proof == null) return;
+        for (Facts.Icon icon : batch.icons) proof.add(icon.kind, icon.record);
+        for (Facts.Record record : batch.records) proof.add(record.kind, record.value);
     }
 
     private void captureItems(ClientThread.Session session, Facts facts, Sink sink, Jobs.Context context) throws Exception {
@@ -321,21 +454,31 @@ public final class Capture implements Jobs.Task, AutoCloseable {
     }
 
     private static final class Sink implements AutoCloseable {
+        Semantic proof;
         final Dataset dataset;
         final Rows rows;
         final Images images;
         final ClientThread.Session client;
         final boolean textures;
+        final Checkpoints checkpoint;
+        final Path assetRoot;
         final Map<Object, String> paints = new java.util.HashMap<>();
         final Pipeline encoding = new Pipeline();
         final PngCache png = new PngCache(16 * 1024 * 1024L, 2048);
         final java.util.LinkedHashMap<String, Boolean> assetRows = new java.util.LinkedHashMap<>(16, .75f, true);
 
-        Sink(Dataset dataset, Rows rows, Images images, ClientThread.Session client, boolean textures) {
+        Sink(Dataset dataset, Rows rows, Images images, ClientThread.Session client, boolean textures, Checkpoints checkpoint, Path assetRoot) {
             this.dataset = dataset; this.rows = rows; this.images = images; this.client = client; this.textures = textures;
+            this.checkpoint = checkpoint; this.assetRoot = assetRoot;
+        }
+
+        void row(String kind, JsonObject value) throws IOException {
+            rows.add(kind, value);
+            if (checkpoint != null) checkpoint.row(kind, value);
         }
 
         void write(Facts.Batch batch) throws Exception {
+            captureProof(proof, batch);
             for (Models.Draft model : batch.models) {
                 JsonArray faces = new JsonArray();
                 for (Models.Face face : model.faces) {
@@ -348,7 +491,7 @@ public final class Capture implements Jobs.Task, AutoCloseable {
                 }
                 JsonObject record = object("faces", faces, "hidden", faces.size() == 0);
                 String id = Identity.content("model", record); record.addProperty("id", id);
-                rows.add("models", record); model.appearance.addProperty("model", id);
+                row("models", record); model.appearance.addProperty("model", id);
             }
             finishVisuals(visuals(batch));
             records(batch);
@@ -379,7 +522,7 @@ public final class Capture implements Jobs.Task, AutoCloseable {
                 String id = Identity.content("view", view);
                 view.addProperty("id", id);
                 json.object(recipe).addProperty("view", id);
-                rows.add("views", view);
+                row("views", view);
                 }));
             }
             return visual;
@@ -401,7 +544,7 @@ public final class Capture implements Jobs.Task, AutoCloseable {
             for (Facts.Icon icon : batch.icons) records.add(new Facts.Record(icon.kind, batch.json.object(icon.record)));
             for (Facts.Record record : batch.records) records.add(new Facts.Record(record.kind, batch.json.object(record.value)));
             if (!records.isEmpty()) encoding.submit(batch.json.weight, () -> new byte[0], bytes -> {
-                for (Facts.Record record : records) rows.add(record.kind, record.value);
+                for (Facts.Record record : records) row(record.kind, record.value);
             });
         }
 
@@ -417,12 +560,13 @@ public final class Capture implements Jobs.Task, AutoCloseable {
             encoding.submit((long) image.pixels.getWidth() * image.pixels.getHeight() * 4, () -> png.encode(image.pixels), bytes -> {
             try (Jobs.Timing ignored = Jobs.measure("assetWrite")) {
             String path = dataset.asset(bytes, "png");
+            if (checkpoint != null) checkpoint.asset(assetRoot.resolve(path), path);
             JsonObject asset = object("path", path, "width", image.pixels.getWidth(), "height", image.pixels.getHeight(),
                     "frames", image.frames, "interpolate", false, "source", object("kind", image.kind, "location", image.location));
             String id = Identity.content("asset", asset);
             asset.addProperty("id", id);
             if (assetRows.get(id) == null) {
-                rows.add("assets", asset); assetRows.put(id, true);
+                row("assets", asset); assetRows.put(id, true);
                 if (assetRows.size() > 8192) assetRows.remove(assetRows.keySet().iterator().next());
             } else try (Jobs.Timing reused = Jobs.measure("assetRowReuse")) { /* identical content-addressed row */ }
             target.accept(id);

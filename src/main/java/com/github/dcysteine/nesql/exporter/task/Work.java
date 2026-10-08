@@ -108,14 +108,20 @@ final class Work<T> {
             try { observe(observer); } catch (java.io.IOException reporting) { failure.addSuppressed(reporting); }
             throw failure;
         }
-        observe(observer);
-        try { return result.get(); }
+        T value;
+        try { value = result.get(); }
         catch (ExecutionException error) {
             Throwable cause = error.getCause();
+            // A terminal journal error must not conceal native factory or
+            // teardown failure: recovery depends on that complete error chain.
+            try { observe(observer); }
+            catch (Exception | Error reporting) { if (reporting != cause) cause.addSuppressed(reporting); }
             if (cause instanceof Exception) throw (Exception) cause;
             if (cause instanceof Error) throw (Error) cause;
             throw new IllegalStateException(cause);
         }
+        observe(observer);
+        return value;
     }
 
     private void observe(Jobs.Observer observer) throws java.io.IOException {
@@ -141,6 +147,14 @@ final class Work<T> {
                 try { observe(observer); }
                 catch (java.io.IOException reporting) { if (failure.getSuppressed().length < 4) failure.addSuppressed(reporting); }
             }
+        }
+        // The native factory may have failed (including its own cleanup) while
+        // this waiter was cancelled. Keep that failure even if it completed
+        // between the loop condition and the final observation.
+        if (result.isCompletedExceptionally()) {
+            try { result.join(); }
+            catch (java.util.concurrent.CompletionException nativeFailure) { failure.addSuppressed(nativeFailure.getCause()); }
+            catch (java.util.concurrent.CancellationException nativeFailure) { failure.addSuppressed(nativeFailure); }
         }
         if (interrupted) Thread.currentThread().interrupt();
     }

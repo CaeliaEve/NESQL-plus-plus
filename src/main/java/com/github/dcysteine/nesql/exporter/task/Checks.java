@@ -32,9 +32,10 @@ public final class Checks {
         public final List<Integer> controllers;
         public final List<String> resources;
         public final int offset, limit;
+        public final boolean render;
 
-        private Selection(String domain, List<Integer> controllers, List<String> resources, int offset, int limit) {
-            if (!Arrays.asList("structures", "recipes", "resources").contains(domain)) throw invalid("Choose structures, recipes or resources");
+        private Selection(String domain, List<Integer> controllers, List<String> resources, int offset, int limit, boolean render) {
+            if (!Arrays.asList("structures", "recipes", "resources", "ore-groups").contains(domain)) throw invalid("Choose structures, recipes, resources or ore-groups");
             if (controllers.size() > 512 || new TreeSet<>(controllers).size() != controllers.size()) throw invalid("Controller ids must be unique, with at most 512 targets");
             if (!domain.equals("structures") && !controllers.isEmpty()) throw invalid("Only structure checks accept controller ids");
             if (domain.equals("resources") ? resources.isEmpty() || resources.size() > 128 : !resources.isEmpty()) throw invalid("Resource checks require 1-128 explicit resources");
@@ -43,10 +44,12 @@ public final class Checks {
             this.domain = domain;
             this.controllers = Collections.unmodifiableList(new ArrayList<>(new TreeSet<>(controllers)));
             this.offset = offset; this.limit = limit;
+            if (render && (!domain.equals("recipes") || limit > 16)) throw invalid("Representative rendering requires a recipe range of 1-16 entries");
+            this.render = render;
         }
 
         public static Selection parse(JsonObject body) {
-            fields(body, "domain", "controllers", "resources", "offset", "limit");
+            fields(body, "domain", "controllers", "resources", "offset", "limit", "render");
             JsonElement domain = body.get("domain");
             if (domain == null || !domain.isJsonPrimitive() || !domain.getAsJsonPrimitive().isString()) throw invalid("domain must be a string");
             List<Integer> controllers = new ArrayList<>();
@@ -67,25 +70,26 @@ public final class Checks {
             int offset = body.has("offset") ? integer(body.get("offset"), "offset", 0, 1_000_000) : 0;
             int limit = body.has("limit") ? integer(body.get("limit"), "limit", 1, 4096) : 128;
             if (!domain.getAsString().equals("recipes") && (offset != 0 || limit != 128)) throw invalid("Recipe ranges only apply to recipes");
-            return new Selection(domain.getAsString(), controllers, resources, offset, limit);
+            if (body.has("render") && (!body.get("render").isJsonPrimitive() || !body.get("render").getAsJsonPrimitive().isBoolean())) throw invalid("render must be a boolean");
+            return new Selection(domain.getAsString(), controllers, resources, offset, limit, body.has("render") && body.get("render").getAsBoolean());
         }
 
         @Override public boolean equals(Object value) {
             if (!(value instanceof Selection)) return false;
             Selection other = (Selection) value;
-            return domain.equals(other.domain) && controllers.equals(other.controllers) && resourceSelection().equals(other.resourceSelection()) && offset == other.offset && limit == other.limit;
+            return domain.equals(other.domain) && controllers.equals(other.controllers) && resourceSelection().equals(other.resourceSelection()) && offset == other.offset && limit == other.limit && render == other.render;
         }
         // Gson restores pre-resource diagnostic history without this additive field.
         private List<String> resourceSelection() { return resources == null ? Collections.emptyList() : resources; }
-        @Override public int hashCode() { return java.util.Objects.hash(domain, controllers, resourceSelection(), offset, limit); }
+        @Override public int hashCode() { return java.util.Objects.hash(domain, controllers, resourceSelection(), offset, limit, render); }
     }
 
     public static Jobs.Request request(JsonObject body) {
-        fields(body, "key", "world", "domain", "controllers", "handlers", "resources", "probes", "offset", "limit");
+        fields(body, "key", "world", "domain", "controllers", "handlers", "resources", "probes", "offset", "limit", "render");
         JsonObject request = object("name", "check", "profile", "data");
         for (String field : new String[] {"key", "world", "handlers", "probes"}) if (body.has(field)) request.add(field, body.get(field));
         JsonObject selection = new JsonObject();
-        for (String field : new String[] {"domain", "controllers", "resources", "offset", "limit"}) if (body.has(field)) selection.add(field, body.get(field));
+        for (String field : new String[] {"domain", "controllers", "resources", "offset", "limit", "render"}) if (body.has(field)) selection.add(field, body.get(field));
         request.add("check", selection);
         return Jobs.Request.parse(request);
     }
@@ -143,7 +147,7 @@ public final class Checks {
 
         /** Every failed recipe has an immutable detail file, independently of the inline preview limit. */
         public void failure(JsonObject row, int index, Throwable error) throws IOException {
-            JsonObject identity = row.has("resource") ? object("resource", row.get("resource")) : row.has("handler") ? object("handler", row.get("handler")) : object("controller", row.get("controller"));
+            JsonObject identity = row.has("domain") ? object("domain", row.get("domain")) : row.has("resource") ? object("resource", row.get("resource")) : row.has("handler") ? object("handler", row.get("handler")) : object("controller", row.get("controller"));
             String name = CanonicalJson.digest(identity) + "-" + index + ".json";
             String folder = context.id() + "-details";
             Path directory = path.getParent().resolve(folder);
@@ -257,7 +261,7 @@ public final class Checks {
         for (int index = 0; index < report.size(); index++) {
             context.check(); guard.check();
             JsonObject row = report.row(index); row.addProperty("status", "running"); report.save();
-            String target = row.has("resource") ? row.get("resource").getAsString() : row.has("controller") ? "controller " + row.get("controller").getAsInt() : row.get("handler").getAsString();
+            String target = row.has("domain") ? row.get("domain").getAsString() : row.has("resource") ? row.get("resource").getAsString() : row.has("controller") ? "controller " + row.get("controller").getAsInt() : row.get("handler").getAsString();
             context.progress("check_" + context.request().check.domain, index, report.size(), "Checking " + target);
             long began = System.nanoTime();
             try {

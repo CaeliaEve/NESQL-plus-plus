@@ -30,7 +30,7 @@ import static com.github.dcysteine.nesql.exporter.source.Json.*;
 
 /** Explicit enumeration adapters. An unsupported handler is an error, never an empty recipe list. */
 final class Recipes {
-    enum Adapter { GT, MAGIC, AE, INSCRIBER, SCRAPBOX, ENCHANTER, VAT, ASSEMBLY, BUILDCRAFT, SAG, SOUL, IC2, BLAST, CANNER, SMELTING, EXTREME, FORESTRY, TINKER, SPACE, CIRCUIT, REFINERY, RAIL, ROLLING, DISABLED, SOLAR, FURNACE, SHAPED, SHAPELESS }
+    enum Adapter { GT, MAGIC, AE, INSCRIBER, SCRAPBOX, ENCHANTER, VAT, ASSEMBLY, BUILDCRAFT, SAG, SOUL, IC2, BLAST, CANNER, SMELTING, EXTREME, FORESTRY, TINKER, SPACE, CIRCUIT, REFINERY, RAIL, ROLLING, DISABLED, SOLAR, GENDUSTRY_FLUIDS, QED, BOTANIA_POOL, IMBUING, BLOOD_ORB_SHAPED, BLOOD_ORB_SHAPELESS, CREATIVECORE, BOTANIA_RUNIC, BOTANIA_FLOATING, GALAXY_ASSEMBLY, DECAYABLE, FURNACE, SHAPED, SHAPELESS }
 
     static Adapter adapter(ICraftingHandler handler) {
         if (GtRecipes.supports(handler)) return Adapter.GT;
@@ -60,6 +60,17 @@ final class Recipes {
         if (RollingRecipes.supports(handler)) return Adapter.ROLLING;
         if (DisabledRecipes.supports(handler)) return Adapter.DISABLED;
         if (SolarRecipes.supports(handler)) return Adapter.SOLAR;
+        if (GendustryFluidRecipes.supports(handler)) return Adapter.GENDUSTRY_FLUIDS;
+        if (QedRecipes.supports(handler)) return Adapter.QED;
+        if (BotaniaPoolRecipes.supports(handler)) return Adapter.BOTANIA_POOL;
+        if (ImbuingRecipes.supports(handler)) return Adapter.IMBUING;
+        if (BloodOrbShapedRecipes.supports(handler)) return Adapter.BLOOD_ORB_SHAPED;
+        if (BloodOrbShapelessRecipes.supports(handler)) return Adapter.BLOOD_ORB_SHAPELESS;
+        if (CreativeCoreRecipes.supports(handler)) return Adapter.CREATIVECORE;
+        if (BotaniaRunicRecipes.supports(handler)) return Adapter.BOTANIA_RUNIC;
+        if (BotaniaFloatingRecipes.supports(handler)) return Adapter.BOTANIA_FLOATING;
+        if (GalaxyAssemblyRecipes.supports(handler)) return Adapter.GALAXY_ASSEMBLY;
+        if (DecayableRecipes.supports(handler)) return Adapter.DECAYABLE;
         if (handler.getClass() == FurnaceRecipeHandler.class) return Adapter.FURNACE;
         if (handler.getClass() == ShapedRecipeHandler.class) return Adapter.SHAPED;
         if (handler.getClass() == ShapelessRecipeHandler.class) return Adapter.SHAPELESS;
@@ -185,6 +196,28 @@ final class Recipes {
                     registry = new DisabledRecipes(handler);
                 } else if (adapter == Adapter.SOLAR) {
                     registry = new SolarRecipes(handler);
+                } else if (adapter == Adapter.GENDUSTRY_FLUIDS) {
+                    registry = new GendustryFluidRecipes(handler);
+                } else if (adapter == Adapter.QED) {
+                    registry = new QedRecipes(handler);
+                } else if (adapter == Adapter.BOTANIA_POOL) {
+                    registry = new BotaniaPoolRecipes(handler);
+                } else if (adapter == Adapter.IMBUING) {
+                    registry = new ImbuingRecipes(handler);
+                } else if (adapter == Adapter.BLOOD_ORB_SHAPED) {
+                    registry = new BloodOrbShapedRecipes(handler);
+                } else if (adapter == Adapter.BLOOD_ORB_SHAPELESS) {
+                    registry = new BloodOrbShapelessRecipes(handler);
+                } else if (adapter == Adapter.CREATIVECORE) {
+                    registry = new CreativeCoreRecipes(handler);
+                } else if (adapter == Adapter.BOTANIA_RUNIC) {
+                    registry = new BotaniaRunicRecipes(handler);
+                } else if (adapter == Adapter.BOTANIA_FLOATING) {
+                    registry = new BotaniaFloatingRecipes(handler);
+                } else if (adapter == Adapter.GALAXY_ASSEMBLY) {
+                    registry = new GalaxyAssemblyRecipes(handler);
+                } else if (adapter == Adapter.DECAYABLE) {
+                    registry = new DecayableRecipes(handler);
                 } else if (adapter == Adapter.FURNACE) {
                     handler.loadCraftingRecipes("smelting");
                 } else if (adapter == Adapter.SHAPED) {
@@ -326,6 +359,7 @@ final class Recipes {
         private void emit(int index, RecipeRow row, Facts facts) {
             row.finish();
             if (!recipes.add(row.record.get("id").getAsString())) return;
+            if (!views) dimensions(index, row);
             if (views) {
                 if ((handler.getClass() == FurnaceRecipeHandler.class || registry instanceof SmeltingRecipes) && decorations.size() == 0) {
                     for (com.google.gson.JsonElement element : Ui.furnace(facts, (FurnaceRecipeHandler) handler, source.id)) decorations.add(element);
@@ -345,6 +379,12 @@ final class Recipes {
                     for (com.google.gson.JsonElement element : RefineryRecipes.decorations(facts, handler, source.id)) decorations.add(element);
                 } else if (registry instanceof RollingRecipes && decorations.size() == 0) {
                     for (com.google.gson.JsonElement element : Ui.neiProgress(facts, handler, source.id, RollingRecipes.progressBars())) decorations.add(element);
+                } else if (registry instanceof QedRecipes && decorations.size() == 0) {
+                    for (com.google.gson.JsonElement element : QedRecipes.decorations(facts, source.id)) decorations.add(element);
+                } else if (registry instanceof ImbuingRecipes && decorations.size() == 0) {
+                    for (com.google.gson.JsonElement element : Ui.neiProgress(facts, handler, source.id, ImbuingRecipes.progressBars())) decorations.add(element);
+                } else if (registry instanceof GalaxyAssemblyRecipes && decorations.size() == 0) {
+                    for (com.google.gson.JsonElement element : GalaxyAssemblyRecipes.decorations(facts, source.id)) decorations.add(element);
                 } else if (registry instanceof RailRecipes && decorations.size() == 0) {
                     for (com.google.gson.JsonElement element : Ui.neiProgress(facts, handler, source.id, RailRecipes.progressBars(handler))) decorations.add(element);
                 } else if (registry instanceof SolarRecipes && decorations.size() == 0) {
@@ -358,24 +398,9 @@ final class Recipes {
                 }
                 for (com.google.gson.JsonElement element : decorations) row.elements.add(element);
                 if(registry instanceof SqueezerRecipes)for(com.google.gson.JsonElement element:((SqueezerRecipes)registry).decorations(facts))row.elements.add(element);
-                HandlerInfo info = GuiRecipeTab.getHandlerInfo(handler);
                 int at = magic == null && ae == null && registry == null ? index : 0;
-                int width = info.getWidth(), height = handler.getRecipeHeight(at);
-                // NEIRecipeWidget treats nonpositive per-recipe height as unspecified.
-                // Fluid-only layouts have no item slots from which to infer the background bounds.
-                if (height <= 0) height = info.getHeight();
-                if (registry instanceof CannerRecipes) { width = Math.max(width, 140); height = Math.max(height, CannerRecipes.height(handler)); }
-                if (registry instanceof BuildcraftRecipes) { width = Math.max(width,166); height = Math.max(height,96); }
-                if (registry instanceof IntegrationRecipes) { width = Math.max(width,166); height = Math.max(height,85); }
-                if (registry instanceof RefiningRecipes) { width = Math.max(width,166); height = Math.max(height,65); }
-                if (gt != null) { width = gt.ui.width(width); height = gt.ui.height(height); }
-                for (com.google.gson.JsonElement element : row.elements) {
-                    JsonObject position = element.getAsJsonObject();
-                    if (position.has("width")) width = Math.max(width, position.get("x").getAsInt() + position.get("width").getAsInt());
-                    if (position.has("height")) height = Math.max(height, position.get("y").getAsInt() + position.get("height").getAsInt());
-                }
-                if (width <= 0 || height <= 0 || width > 2048 || height > 2048) throw new Jobs.Fault("view_limit",
-                        "Invalid NEI recipe dimensions: " + width + "x" + height + "; configured=" + info.getWidth() + "x" + info.getHeight());
+                int[] dimensions = dimensions(index, row);
+                int width = dimensions[0], height = dimensions[1];
                 gregtech.api.util.GTRecipe nativeRecipe = gt == null ? null : ((GTNEIDefaultHandler.CachedDefaultRecipe) handler.arecipes.get(index)).mRecipe;
                 if (gt != null) gt.ui.add(facts, row, width, height, nativeRecipe);
                 facts.scene(new Facts.Scene(row.record, row.elements, width, height, gt == null ? 0 : gt.ui.foreground(), source.id, () -> {
@@ -395,6 +420,9 @@ final class Recipes {
                     else if (registry instanceof EnderAssemblyRecipes) ((EnderAssemblyRecipes)registry).draw(index);
                     else if (registry instanceof SagRecipes) ((SagRecipes)registry).draw(index);
                     else if (registry instanceof SoulRecipes) ((SoulRecipes)registry).draw(index);
+                    else if (registry instanceof BotaniaPoolRecipes) BotaniaPoolRecipes.draw(handler, at);
+                    else if (registry instanceof BotaniaRunicRecipes) BotaniaRunicRecipes.draw(handler, at);
+                    else if (registry instanceof GalaxyAssemblyRecipes) GalaxyAssemblyRecipes.draw(handler, at);
                     else if (registry instanceof EnderEnchanterRecipes) EnderEnchanterRecipes.scene(handler,row.record.getAsJsonObject("process").get("level").getAsInt(),
                             () -> {handler.drawBackground(at);handler.drawForeground(at);});
                     else if (gt == null) { handler.drawBackground(at); if (decorations.size() == 0) handler.drawForeground(at); }
@@ -402,6 +430,28 @@ final class Recipes {
                 }));
             }
             facts.row("recipes", row.record);
+        }
+
+        private int[] dimensions(int index, RecipeRow row) {
+            HandlerInfo info = GuiRecipeTab.getHandlerInfo(handler);
+            int at = magic == null && ae == null && registry == null ? index : 0;
+            int width = info.getWidth(), height = handler.getRecipeHeight(at);
+            // NEIRecipeWidget treats nonpositive per-recipe height as unspecified.
+            // Fluid-only layouts have no item slots from which to infer the background bounds.
+            if (height <= 0) height = info.getHeight();
+            if (registry instanceof CannerRecipes) { width = Math.max(width, 140); height = Math.max(height, CannerRecipes.height(handler)); }
+            if (registry instanceof BuildcraftRecipes) { width = Math.max(width,166); height = Math.max(height,96); }
+            if (registry instanceof IntegrationRecipes) { width = Math.max(width,166); height = Math.max(height,85); }
+            if (registry instanceof RefiningRecipes) { width = Math.max(width,166); height = Math.max(height,65); }
+            if (gt != null && gt.ui != null) { width = gt.ui.width(width); height = gt.ui.height(height); }
+            for (com.google.gson.JsonElement element : row.elements) {
+                JsonObject position = element.getAsJsonObject();
+                if (position.has("width")) width = Math.max(width, position.get("x").getAsInt() + position.get("width").getAsInt());
+                if (position.has("height")) height = Math.max(height, position.get("y").getAsInt() + position.get("height").getAsInt());
+            }
+            if (width <= 0 || height <= 0 || width > 2048 || height > 2048) throw new Jobs.Fault("view_limit",
+                    "Invalid NEI recipe dimensions: " + width + "x" + height + "; configured=" + info.getWidth() + "x" + info.getHeight());
+            return new int[] {width, height};
         }
 
         @Override public void close() { try { if (gt != null) gt.close(); } finally { handler.arecipes.clear(); } }

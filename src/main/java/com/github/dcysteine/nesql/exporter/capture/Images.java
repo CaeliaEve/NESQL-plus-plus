@@ -123,13 +123,9 @@ final class Images implements AutoCloseable {
     }
 
     private Image animation(Plan plan, ClientThread.Session client) throws Exception {
+        int[] dimensions = packed(plan);
         int count = plan.frames.size();
-        int columns = Math.max(1, (plan.height * count + 16383) / 16384);
-        int rows = (count + columns - 1) / columns;
-        int width = plan.width * columns, height = plan.height * rows;
-        if (width > 16384 || height > 16384 || (long) width * height > 16 * 1024 * 1024) {
-            throw new Jobs.Fault("texture_limit", "Animation exceeds its pixel budget: " + plan.location);
-        }
+        int width = dimensions[0], height = dimensions[1], columns = width / plan.width;
         BufferedImage image = new BufferedImage(width, height, BufferedImage.TYPE_INT_ARGB);
         int index = 0;
         Map<Integer, Integer> positions = new LinkedHashMap<>();
@@ -227,8 +223,32 @@ final class Images implements AutoCloseable {
     static void checkFluids(Facts.Batch batch) {
         for (Facts.Icon request : batch.icons) if (request.fluid != null) {
             FluidTexture texture = fluidTexture(request.fluid);
-            if (texture.icon instanceof TextureAtlasSprite) animation((TextureAtlasSprite) texture.icon, texture.tint);
+            if (texture.icon instanceof TextureAtlasSprite) checkAnimation((TextureAtlasSprite) texture.icon, texture.tint);
         }
+    }
+
+    static void checkAnimation(TextureAtlasSprite sprite, int tint) {
+        Plan plan = animation(sprite, tint);
+        if (plan == null) return;
+        packed(plan);
+        for (int frame : plan.frames) {
+            Jobs.checkpoint();
+            int[][] levels = sprite.getFrameTextureData(frame);
+            if (levels == null || levels.length == 0 || levels[0] == null || levels[0].length != plan.width * plan.height) {
+                throw new Jobs.Fault("animation_missing", "Sprite frame is unavailable: " + plan.location + "/" + frame);
+            }
+        }
+    }
+
+    private static int[] packed(Plan plan) {
+        int count = plan.frames.size();
+        int columns = Math.max(1, (plan.height * count + 16383) / 16384);
+        int rows = (count + columns - 1) / columns;
+        int width = plan.width * columns, height = plan.height * rows;
+        if (width > 16384 || height > 16384 || (long) width * height > 16 * 1024 * 1024) {
+            throw new Jobs.Fault("texture_limit", "Animation exceeds its pixel budget: " + plan.location);
+        }
+        return new int[] {width, height};
     }
 
     private static Plan animation(TextureAtlasSprite sprite, int tint) {

@@ -24,7 +24,7 @@ final class OverlapTest {
              Rows rows=new Rows(root.resolve("rows"))) {
             Class<?> type=Class.forName(Capture.class.getName()+"$Sink");
             java.lang.reflect.Constructor<?> ctor=type.getDeclaredConstructors()[0];ctor.setAccessible(true);
-            Object sink=ctor.newInstance(dataset,rows,null,null,true);
+            Object sink=ctor.newInstance(dataset,rows,null,null,true,null,null);
             Field field=type.getDeclaredField("encoding");field.setAccessible(true);
             Pipeline queue=(Pipeline)field.get(sink);
             Method records=type.getDeclaredMethod("records",Facts.Batch.class);records.setAccessible(true);
