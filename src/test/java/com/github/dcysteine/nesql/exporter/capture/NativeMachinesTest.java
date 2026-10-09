@@ -21,6 +21,7 @@ public final class NativeMachinesTest {
         if (family.equals("chisel")) { NativeChiselTest.run(); return; }
         if (family.equals("logistics-soldering")) { NativeLogisticsPipesTest.run(); return; }
         if (family.equals("blood-alchemy")) { NativeBloodAlchemyTest.run(); return; }
+        if (family.equals("blood-calcinator")) { NativeBloodCalcinatorTest.run(); return; }
         if (family.equals("witchery-spinning")) { NativeWitcherySpinningTest.run(); return; }
         if (family.equals("spinning")) { NativeSpinningTest.run(); return; }
         if (family.equals("distillery")) { NativeDistilleryTest.run(); return; }
