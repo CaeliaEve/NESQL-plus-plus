@@ -30,7 +30,7 @@ import static com.github.dcysteine.nesql.exporter.source.Json.*;
 
 /** Explicit enumeration adapters. An unsupported handler is an error, never an empty recipe list. */
 final class Recipes {
-    enum Adapter { SPINNING, DISTILLERY, GT, MAGIC, AE, INSCRIBER, SCRAPBOX, ENCHANTER, VAT, ASSEMBLY, BUILDCRAFT, SAG, SOUL, IC2, IC2_ADVANCED, IC2_LATHE, PROJECT_BLUE, BLAST, CANNER, SMELTING, EXTREME, FORESTRY, TINKER, SPACE, CIRCUIT, REFINERY, RAIL, ROLLING, DISABLED, SOLAR, GENDUSTRY_FLUIDS, QED, BOTANIA_POOL, BOTANIA_STATIC, BOTANIA_BREWERY, IMBUING, BLOOD_ORB_SHAPED, BLOOD_ORB_SHAPELESS, CREATIVECORE, BOTANIA_RUNIC, BOTANIA_FLOATING, GALAXY_ASSEMBLY, DECAYABLE, BREWING, FIREWORKS, PROJECT_RED, FUEL, CHISEL, LOGISTICS_SOLDERING, FURNACE, SHAPED, SHAPELESS }
+    enum Adapter { SPINNING, DISTILLERY, GT, MAGIC, AE, INSCRIBER, SCRAPBOX, ENCHANTER, VAT, ASSEMBLY, BUILDCRAFT, SAG, SOUL, IC2, IC2_ADVANCED, IC2_LATHE, PROJECT_BLUE, BLAST, CANNER, SMELTING, EXTREME, FORESTRY, TINKER, SPACE, CIRCUIT, REFINERY, RAIL, ROLLING, DISABLED, SOLAR, GENDUSTRY_FLUIDS, QED, BOTANIA_POOL, BOTANIA_STATIC, BOTANIA_BREWERY, IMBUING, BLOOD_ORB_SHAPED, BLOOD_ORB_SHAPELESS, BLOOD_ALCHEMY, CREATIVECORE, BOTANIA_RUNIC, BOTANIA_FLOATING, GALAXY_ASSEMBLY, DECAYABLE, BREWING, FIREWORKS, PROJECT_RED, FUEL, CHISEL, LOGISTICS_SOLDERING, FURNACE, SHAPED, SHAPELESS }
 
     static Adapter adapter(ICraftingHandler handler) {
         if (WitcherySpinningRecipes.supports(handler)) return Adapter.SPINNING;
@@ -74,6 +74,7 @@ final class Recipes {
         if (ImbuingRecipes.supports(handler)) return Adapter.IMBUING;
         if (BloodOrbShapedRecipes.supports(handler)) return Adapter.BLOOD_ORB_SHAPED;
         if (BloodOrbShapelessRecipes.supports(handler)) return Adapter.BLOOD_ORB_SHAPELESS;
+        if (BloodAlchemyRecipes.supports(handler)) return Adapter.BLOOD_ALCHEMY;
         if (CreativeCoreRecipes.supports(handler)) return Adapter.CREATIVECORE;
         if (BotaniaRunicRecipes.supports(handler)) return Adapter.BOTANIA_RUNIC;
         if (BotaniaFloatingRecipes.supports(handler)) return Adapter.BOTANIA_FLOATING;
@@ -258,6 +259,8 @@ final class Recipes {
                     registry = new ChiselRecipes(handler);
                 } else if (adapter == Adapter.LOGISTICS_SOLDERING) {
                     registry = new LogisticsPipesRecipes(handler);
+                } else if (adapter == Adapter.BLOOD_ALCHEMY) {
+                    registry = new BloodAlchemyRecipes(handler);
                 } else if (adapter == Adapter.FURNACE) {
                     handler.loadCraftingRecipes("smelting");
                 } else if (adapter == Adapter.SHAPED) {
