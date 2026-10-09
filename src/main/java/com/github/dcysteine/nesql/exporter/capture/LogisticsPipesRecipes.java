@@ -18,7 +18,16 @@ final class LogisticsPipesRecipes implements RegistryRecipes {
     private static final String REGISTRY = "logisticspipes.recipes.SolderingStationRecipes";
     private static final String RECORD = REGISTRY + "$SolderingStationRecipe";
     private final TemplateRecipeHandler handler;
-    private final List<Object> recipes;
+    private final List<Entry> recipes;
+
+    private static final class Entry {
+        final ItemStack[] source;
+        final ItemStack result;
+        final Object callback;
+        Entry(ItemStack[] source, ItemStack result, Object callback) {
+            this.source = source; this.result = result; this.callback = callback;
+        }
+    }
 
     static boolean supports(ICraftingHandler value) { return supportsClass(value.getClass().getName()); }
     static boolean supportsClass(String name) { return HANDLER.equals(name); }
@@ -35,9 +44,8 @@ final class LogisticsPipesRecipes implements RegistryRecipes {
             ItemStack result = (ItemStack) field(value, "result");
             Object callback = field(value, "handler");
             if (source == null || source.length != 9 || result == null || result.getItem() == null) throw fault("Invalid LogisticsPipes soldering recipe shape");
-            if (callback != null) throw fault("LogisticsPipes soldering result callback is not statically representable");
             for (ItemStack item : source) if (item != null && (item.getItem() == null || item.stackSize <= 0)) throw fault("Invalid LogisticsPipes soldering ingredient");
-            recipes.add(value);
+            recipes.add(new Entry(copy(source), result.copy(), callback));
         }
         if (recipes.isEmpty()) throw fault("LogisticsPipes soldering registry is empty");
     }
@@ -45,9 +53,10 @@ final class LogisticsPipesRecipes implements RegistryRecipes {
     public int size() { return recipes.size(); }
 
     public boolean capture(int index, RecipeRow row) {
-        Object recipe = recipes.get(index);
-        ItemStack[] source = ((ItemStack[]) field(recipe, "source"));
-        ItemStack result = ((ItemStack) field(recipe, "result")).copy();
+        Entry recipe = recipes.get(index);
+        if (recipe.callback != null) throw fault("LogisticsPipes soldering result callback is not statically representable at index " + index);
+        ItemStack[] source = recipe.source;
+        ItemStack result = recipe.result.copy();
         int slot = 0;
         for (int y = 0; y < 3; y++) for (int x = 0; x < 3; x++) {
             ItemStack item = source[y * 3 + x];
@@ -62,6 +71,12 @@ final class LogisticsPipesRecipes implements RegistryRecipes {
         row.itemOutput(new PositionedStack(result.copy(), 136, 36, false), 0, result, 10000);
         row.property("logisticspipes:heat", "Native soldering station requires heated solder", true);
         return true;
+    }
+
+    private static ItemStack[] copy(ItemStack[] source) {
+        ItemStack[] result = new ItemStack[source.length];
+        for (int i = 0; i < source.length; i++) result[i] = source[i] == null ? null : source[i].copy();
+        return result;
     }
 
     private static Jobs.Fault fault(String message) { return new Jobs.Fault("recipe_unsupported", message); }
