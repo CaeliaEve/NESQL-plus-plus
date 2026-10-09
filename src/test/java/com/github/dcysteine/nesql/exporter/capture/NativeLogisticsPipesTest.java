@@ -44,11 +44,12 @@ public final class NativeLogisticsPipesTest {
             require(row.inputs.size() == 2 && row.outputs.size() == 1, "Soldering layout or auxiliary iron input was lost");
             JsonObject choice = row.inputs.get(0).getAsJsonObject().getAsJsonArray("choices").get(0).getAsJsonObject();
             require(choice.get("amount").getAsString().equals("1"), "Soldering input quantity changed");
-            try { adapter.capture(1, NativeCoreFixesTest.row(source[0], result)); throw new AssertionError("Dynamic callback entry was silently exported"); }
-            catch (com.github.dcysteine.nesql.exporter.task.Jobs.Fault expected) {
-                require(expected.code.equals("recipe_unsupported") && expected.getMessage().contains("index 1"),
-                        "Dynamic callback failure lacked a bounded per-entry reason");
-            }
+            require(!adapter.capture(1, NativeCoreFixesTest.row(source[0], result)),
+                    "Dynamic callback entry was silently exported");
+            JsonObject proof = adapter.exclusion(1);
+            require(proof != null && proof.get("reason").getAsString().equals("dynamic_result_callback")
+                            && proof.get("index").getAsInt() == 1,
+                    "Dynamic callback exclusion lacked a bounded per-entry proof");
             require(source[0].stackSize == 2 && result.stackSize == 3, "Soldering capture mutated native source stacks");
         } finally { registry.clear(); registry.addAll(before); }
         System.out.println("Native LogisticsPipes: static capture, per-entry dynamic callback rejection, layout and immutability passed");

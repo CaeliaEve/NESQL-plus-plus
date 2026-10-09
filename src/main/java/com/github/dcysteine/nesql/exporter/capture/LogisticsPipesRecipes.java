@@ -9,6 +9,7 @@ import net.minecraft.item.ItemStack;
 import java.lang.reflect.Field;
 import java.util.ArrayList;
 import java.util.List;
+import com.google.gson.JsonObject;
 import static com.github.dcysteine.nesql.exporter.capture.MagicApi.field;
 import static com.github.dcysteine.nesql.exporter.source.Json.object;
 
@@ -54,7 +55,7 @@ final class LogisticsPipesRecipes implements RegistryRecipes {
 
     public boolean capture(int index, RecipeRow row) {
         Entry recipe = recipes.get(index);
-        if (recipe.callback != null) throw fault("LogisticsPipes soldering result callback is not statically representable at index " + index);
+        if (recipe.callback != null) return false;
         ItemStack[] source = recipe.source;
         ItemStack result = recipe.result.copy();
         int slot = 0;
@@ -71,6 +72,15 @@ final class LogisticsPipesRecipes implements RegistryRecipes {
         row.itemOutput(new PositionedStack(result.copy(), 136, 36, false), 0, result, 10000);
         row.property("logisticspipes:heat", "Native soldering station requires heated solder", true);
         return true;
+    }
+
+    public JsonObject exclusion(int index) {
+        Entry recipe = recipes.get(index);
+        if (recipe.callback == null) return null;
+        return object("reason", "dynamic_result_callback", "scope", "registered_entry",
+                "nativeClass", RECORD, "index", index,
+                "callbackClass", recipe.callback.getClass().getName(),
+                "condition", "ICraftingResultHandler.handleCrafting mutates the result at runtime and is not invoked during capture");
     }
 
     private static ItemStack[] copy(ItemStack[] source) {
