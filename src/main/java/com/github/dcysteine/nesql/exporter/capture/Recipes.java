@@ -30,7 +30,7 @@ import static com.github.dcysteine.nesql.exporter.source.Json.*;
 
 /** Explicit enumeration adapters. An unsupported handler is an error, never an empty recipe list. */
 final class Recipes {
-    enum Adapter { GT, MAGIC, AE, INSCRIBER, SCRAPBOX, ENCHANTER, VAT, ASSEMBLY, BUILDCRAFT, SAG, SOUL, IC2, BLAST, CANNER, SMELTING, EXTREME, FORESTRY, TINKER, SPACE, CIRCUIT, REFINERY, RAIL, ROLLING, DISABLED, SOLAR, GENDUSTRY_FLUIDS, QED, BOTANIA_POOL, IMBUING, BLOOD_ORB_SHAPED, BLOOD_ORB_SHAPELESS, CREATIVECORE, BOTANIA_RUNIC, BOTANIA_FLOATING, GALAXY_ASSEMBLY, DECAYABLE, FURNACE, SHAPED, SHAPELESS }
+    enum Adapter { GT, MAGIC, AE, INSCRIBER, SCRAPBOX, ENCHANTER, VAT, ASSEMBLY, BUILDCRAFT, SAG, SOUL, IC2, IC2_ADVANCED, IC2_LATHE, PROJECT_BLUE, BLAST, CANNER, SMELTING, EXTREME, FORESTRY, TINKER, SPACE, CIRCUIT, REFINERY, RAIL, ROLLING, DISABLED, SOLAR, GENDUSTRY_FLUIDS, QED, BOTANIA_POOL, BOTANIA_STATIC, IMBUING, BLOOD_ORB_SHAPED, BLOOD_ORB_SHAPELESS, CREATIVECORE, BOTANIA_RUNIC, BOTANIA_FLOATING, GALAXY_ASSEMBLY, DECAYABLE, BREWING, FIREWORKS, PROJECT_RED, FUEL, CHISEL, FURNACE, SHAPED, SHAPELESS }
 
     static Adapter adapter(ICraftingHandler handler) {
         if (GtRecipes.supports(handler)) return Adapter.GT;
@@ -44,6 +44,9 @@ final class Recipes {
         if (SagRecipes.supports(handler)) return Adapter.SAG;
         if (SoulRecipes.supports(handler)) return Adapter.SOUL;
         if (Ic2Recipes.supports(handler)) return Adapter.IC2;
+        if (Ic2AdvancedRecipes.supports(handler)) return Adapter.IC2_ADVANCED;
+        if (Ic2LatheRecipes.supports(handler)) return Adapter.IC2_LATHE;
+        if (ProjectBlueRecipes.supports(handler)) return Adapter.PROJECT_BLUE;
         if (BlastRecipes.supports(handler)) return Adapter.BLAST;
         if (CannerRecipes.supports(handler)) return Adapter.CANNER;
         if (BuildcraftRecipes.supports(handler)) return Adapter.BUILDCRAFT;
@@ -63,6 +66,7 @@ final class Recipes {
         if (GendustryFluidRecipes.supports(handler)) return Adapter.GENDUSTRY_FLUIDS;
         if (QedRecipes.supports(handler)) return Adapter.QED;
         if (BotaniaPoolRecipes.supports(handler)) return Adapter.BOTANIA_POOL;
+        if (BotaniaStaticRecipes.supports(handler)) return Adapter.BOTANIA_STATIC;
         if (ImbuingRecipes.supports(handler)) return Adapter.IMBUING;
         if (BloodOrbShapedRecipes.supports(handler)) return Adapter.BLOOD_ORB_SHAPED;
         if (BloodOrbShapelessRecipes.supports(handler)) return Adapter.BLOOD_ORB_SHAPELESS;
@@ -71,6 +75,11 @@ final class Recipes {
         if (BotaniaFloatingRecipes.supports(handler)) return Adapter.BOTANIA_FLOATING;
         if (GalaxyAssemblyRecipes.supports(handler)) return Adapter.GALAXY_ASSEMBLY;
         if (DecayableRecipes.supports(handler)) return Adapter.DECAYABLE;
+        if (BrewingRecipes.supports(handler)) return Adapter.BREWING;
+        if (FireworkRecipes.supports(handler)) return Adapter.FIREWORKS;
+        if (ProjectRedRecipes.supports(handler)) return Adapter.PROJECT_RED;
+        if (FuelRecipes.supports(handler)) return Adapter.FUEL;
+        if (ChiselRecipes.supports(handler)) return Adapter.CHISEL;
         if (handler.getClass() == FurnaceRecipeHandler.class) return Adapter.FURNACE;
         if (handler.getClass() == ShapedRecipeHandler.class) return Adapter.SHAPED;
         if (handler.getClass() == ShapelessRecipeHandler.class) return Adapter.SHAPELESS;
@@ -153,6 +162,12 @@ final class Recipes {
                     ae = new AeRecipes(handler);
                 } else if (adapter == Adapter.IC2) {
                     registry = new Ic2Recipes(handler);
+                } else if (adapter == Adapter.IC2_ADVANCED) {
+                    registry = new Ic2AdvancedRecipes(handler);
+                } else if (adapter == Adapter.IC2_LATHE) {
+                    registry = new Ic2LatheRecipes(handler);
+                } else if (adapter == Adapter.PROJECT_BLUE) {
+                    registry = new ProjectBlueRecipes(handler);
                 } else if (adapter == Adapter.CANNER) {
                     registry = new CannerRecipes(handler);
                 } else if (adapter == Adapter.BLAST) {
@@ -202,6 +217,8 @@ final class Recipes {
                     registry = new QedRecipes(handler);
                 } else if (adapter == Adapter.BOTANIA_POOL) {
                     registry = new BotaniaPoolRecipes(handler);
+                } else if (adapter == Adapter.BOTANIA_STATIC) {
+                    registry = new BotaniaStaticRecipes(handler);
                 } else if (adapter == Adapter.IMBUING) {
                     registry = new ImbuingRecipes(handler);
                 } else if (adapter == Adapter.BLOOD_ORB_SHAPED) {
@@ -218,6 +235,16 @@ final class Recipes {
                     registry = new GalaxyAssemblyRecipes(handler);
                 } else if (adapter == Adapter.DECAYABLE) {
                     registry = new DecayableRecipes(handler);
+                } else if (adapter == Adapter.BREWING) {
+                    registry = new BrewingRecipes(handler);
+                } else if (adapter == Adapter.FIREWORKS) {
+                    registry = new FireworkRecipes(handler);
+                } else if (adapter == Adapter.PROJECT_RED) {
+                    registry = new ProjectRedRecipes(handler);
+                } else if (adapter == Adapter.FUEL) {
+                    registry = new FuelRecipes(handler);
+                } else if (adapter == Adapter.CHISEL) {
+                    registry = new ChiselRecipes(handler);
                 } else if (adapter == Adapter.FURNACE) {
                     handler.loadCraftingRecipes("smelting");
                 } else if (adapter == Adapter.SHAPED) {
