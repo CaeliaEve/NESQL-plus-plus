@@ -30,9 +30,12 @@ import static com.github.dcysteine.nesql.exporter.source.Json.*;
 
 /** Explicit enumeration adapters. An unsupported handler is an error, never an empty recipe list. */
 final class Recipes {
-    enum Adapter { GT, MAGIC, AE, INSCRIBER, SCRAPBOX, ENCHANTER, VAT, ASSEMBLY, BUILDCRAFT, SAG, SOUL, IC2, IC2_ADVANCED, IC2_LATHE, PROJECT_BLUE, BLAST, CANNER, SMELTING, EXTREME, FORESTRY, TINKER, SPACE, CIRCUIT, REFINERY, RAIL, ROLLING, DISABLED, SOLAR, GENDUSTRY_FLUIDS, QED, BOTANIA_POOL, BOTANIA_STATIC, BOTANIA_BREWERY, IMBUING, BLOOD_ORB_SHAPED, BLOOD_ORB_SHAPELESS, CREATIVECORE, BOTANIA_RUNIC, BOTANIA_FLOATING, GALAXY_ASSEMBLY, DECAYABLE, BREWING, FIREWORKS, PROJECT_RED, FUEL, CHISEL, FURNACE, SHAPED, SHAPELESS }
+    enum Adapter { SPINNING, DISTILLERY, GT, MAGIC, AE, INSCRIBER, SCRAPBOX, ENCHANTER, VAT, ASSEMBLY, BUILDCRAFT, SAG, SOUL, IC2, IC2_ADVANCED, IC2_LATHE, PROJECT_BLUE, BLAST, CANNER, SMELTING, EXTREME, FORESTRY, TINKER, SPACE, CIRCUIT, REFINERY, RAIL, ROLLING, DISABLED, SOLAR, GENDUSTRY_FLUIDS, QED, BOTANIA_POOL, BOTANIA_STATIC, BOTANIA_BREWERY, IMBUING, BLOOD_ORB_SHAPED, BLOOD_ORB_SHAPELESS, CREATIVECORE, BOTANIA_RUNIC, BOTANIA_FLOATING, GALAXY_ASSEMBLY, DECAYABLE, BREWING, FIREWORKS, PROJECT_RED, FUEL, CHISEL, FURNACE, SHAPED, SHAPELESS }
 
     static Adapter adapter(ICraftingHandler handler) {
+        if (WitcherySpinningRecipes.supports(handler)) return Adapter.SPINNING;
+        if (SpinningRecipes.supports(handler)) return Adapter.SPINNING;
+        if (DistilleryRecipes.supports(handler)) return Adapter.DISTILLERY;
         if (GtRecipes.supports(handler)) return Adapter.GT;
         if (MagicRecipes.supports(handler)) return Adapter.MAGIC;
         if (AeRecipes.supports(handler)) return Adapter.AE;
@@ -153,7 +156,11 @@ final class Recipes {
             RegistryRecipes registry = null;
             Crafting crafting = null;
             try {
-                if (adapter == Adapter.GT) {
+                if (adapter == Adapter.SPINNING) {
+                    registry = WitcherySpinningRecipes.supports(handler) ? new WitcherySpinningRecipes(handler) : new SpinningRecipes(handler);
+                } else if (adapter == Adapter.DISTILLERY) {
+                    registry = new DistilleryRecipes(handler);
+                } else if (adapter == Adapter.GT) {
                     GTNEIDefaultHandler machine = (GTNEIDefaultHandler) handler;
                     handler.arecipes.addAll(machine.getCache());
                     gt = new GtRecipes(machine, views, id);
@@ -391,6 +398,12 @@ final class Recipes {
             if (!recipes.add(row.record.get("id").getAsString())) return;
             if (!views) dimensions(index, row);
             if (views) {
+                if (registry instanceof WitcherySpinningRecipes && decorations.size() == 0) {
+                    for (com.google.gson.JsonElement element : Ui.neiProgress(facts, handler, source.id, WitcherySpinningRecipes.progressBars())) decorations.add(element);
+                }
+                if (registry instanceof DistilleryRecipes && decorations.size() == 0) {
+                    for (com.google.gson.JsonElement element : Ui.neiProgress(facts, handler, source.id, DistilleryRecipes.progressBars())) decorations.add(element);
+                }
                 if ((handler.getClass() == FurnaceRecipeHandler.class || registry instanceof SmeltingRecipes) && decorations.size() == 0) {
                     for (com.google.gson.JsonElement element : Ui.furnace(facts, (FurnaceRecipeHandler) handler, source.id)) decorations.add(element);
                 } else if (registry instanceof Ic2Recipes && decorations.size() == 0) {
@@ -473,6 +486,7 @@ final class Recipes {
             if (registry instanceof BuildcraftRecipes) { width = Math.max(width,166); height = Math.max(height,96); }
             if (registry instanceof IntegrationRecipes) { width = Math.max(width,166); height = Math.max(height,85); }
             if (registry instanceof RefiningRecipes) { width = Math.max(width,166); height = Math.max(height,65); }
+            if (registry instanceof SpinningRecipes) { width = Math.max(width,166); height = Math.max(height,106); }
             if (gt != null && gt.ui != null) { width = gt.ui.width(width); height = gt.ui.height(height); }
             for (com.google.gson.JsonElement element : row.elements) {
                 JsonObject position = element.getAsJsonObject();

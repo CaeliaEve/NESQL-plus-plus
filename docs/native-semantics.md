@@ -462,3 +462,47 @@ The focused real AmunRa/Railcraft regression covers both pattern paths, two
 concrete subtypes before a broad fallback, required/ignored NBT, false-valued
 synthetic tags and native winner comparison, in addition to the existing rail
 suite. Client tooltip/FBO and full-registry verification remain external.
+
+## Witchery distillery and spinning machines (local adapter slice)
+
+Three independent registry adapters are now dispatched. These are bounded native
+adapters, not an assertion that every recipe in the loaded pack is supported.
+
+* Witchery 0.24.1 / WitcheryExtras 1.3.8 distillery consumes one of each reagent
+  and the registered empty-clay-jar count. Reagent order is interchangeable,
+  input NBT is ignored, and metadata is compared only for subtype items. Four
+  output positions retain gaps. Work requires altar power (0.6 per successful
+  tick, 800 ticks); this is not EU. Both native progress tracks are retained,
+  including the original power-meter UV starting at -2. Outputs describe empty
+  output slots: native incompatible occupied slots can suppress individual outputs.
+* Witching Gadgets 1.7.25-GTNH spinning consumes one item per occupied reagent
+  slot, irrespective of template counts. Forge ore predicates ignore NBT. A
+  wildcard predicate uses a concrete NEI example without narrowing the predicate.
+  Its native counter completes after 121 updates from zero (120 increments and
+  one completion update). The 166 by 106 background and native slot positions
+  are retained. Outputs describe an empty output slot.
+* Witchery spinning consumes the registered fibre quantity and one of each
+  modifier. Modifier order and surplus unmatched modifier slots are allowed;
+  unmatched modifiers are not consumed. Literal metadata and ignored NBT are
+  retained. Work takes 300 successful altar-powered ticks at 0.6 power per tick.
+  Its slot layout and progress track remain separate from Witching Gadgets.
+
+All three check registry drift and reject overlapping first-match recipes rather
+than exporting mutually incompatible outputs as independently obtainable. The
+Witching Gadgets native list matcher can remove multiple requirements for one
+offered slot: even equal overlapping ore lists are unsafe. The adapter supports
+disjoint lists and equal/disjoint scalar predicates; other cases still need a
+dedicated conditional representation. Witchery literal metadata 32767 currently
+fails pending a verified display example. Unknown callbacks, empty ingredient
+domains and unsupported shapes remain explicit failures, never zero-row success.
+
+Lightweight tests load the pinned native recipe classes and execute their matchers
+before checking exported consumption, layout, output quantities and registry
+drift. The spinning suite includes a native greedy-removal counterexample. These
+tests do not bootstrap the full mod registries, render GL pixels or certify live
+export. Registry overlap restrictions must be assessed against loaded pack data.
+
+Remaining dedicated work includes dynamic banner patterns and gene-template NBT,
+Witching Gadgets infernal furnace bellows/vis-dependent duration and bonus rolls,
+LogisticsPipes result callbacks, and the unadapted genetic/ritual/domain handlers.
+Route coverage must remain separate from per-entry semantic and live acceptance.
