@@ -30,7 +30,7 @@ import static com.github.dcysteine.nesql.exporter.source.Json.*;
 
 /** Explicit enumeration adapters. An unsupported handler is an error, never an empty recipe list. */
 final class Recipes {
-    enum Adapter { GT, MAGIC, AE, INSCRIBER, SCRAPBOX, ENCHANTER, VAT, ASSEMBLY, BUILDCRAFT, SAG, SOUL, IC2, IC2_ADVANCED, IC2_LATHE, PROJECT_BLUE, BLAST, CANNER, SMELTING, EXTREME, FORESTRY, TINKER, SPACE, CIRCUIT, REFINERY, RAIL, ROLLING, DISABLED, SOLAR, GENDUSTRY_FLUIDS, QED, BOTANIA_POOL, BOTANIA_STATIC, IMBUING, BLOOD_ORB_SHAPED, BLOOD_ORB_SHAPELESS, CREATIVECORE, BOTANIA_RUNIC, BOTANIA_FLOATING, GALAXY_ASSEMBLY, DECAYABLE, BREWING, FIREWORKS, PROJECT_RED, FUEL, CHISEL, FURNACE, SHAPED, SHAPELESS }
+    enum Adapter { GT, MAGIC, AE, INSCRIBER, SCRAPBOX, ENCHANTER, VAT, ASSEMBLY, BUILDCRAFT, SAG, SOUL, IC2, IC2_ADVANCED, IC2_LATHE, PROJECT_BLUE, BLAST, CANNER, SMELTING, EXTREME, FORESTRY, TINKER, SPACE, CIRCUIT, REFINERY, RAIL, ROLLING, DISABLED, SOLAR, GENDUSTRY_FLUIDS, QED, BOTANIA_POOL, BOTANIA_STATIC, BOTANIA_BREWERY, IMBUING, BLOOD_ORB_SHAPED, BLOOD_ORB_SHAPELESS, CREATIVECORE, BOTANIA_RUNIC, BOTANIA_FLOATING, GALAXY_ASSEMBLY, DECAYABLE, BREWING, FIREWORKS, PROJECT_RED, FUEL, CHISEL, FURNACE, SHAPED, SHAPELESS }
 
     static Adapter adapter(ICraftingHandler handler) {
         if (GtRecipes.supports(handler)) return Adapter.GT;
@@ -67,6 +67,7 @@ final class Recipes {
         if (QedRecipes.supports(handler)) return Adapter.QED;
         if (BotaniaPoolRecipes.supports(handler)) return Adapter.BOTANIA_POOL;
         if (BotaniaStaticRecipes.supports(handler)) return Adapter.BOTANIA_STATIC;
+        if (BotaniaBreweryRecipes.supports(handler)) return Adapter.BOTANIA_BREWERY;
         if (ImbuingRecipes.supports(handler)) return Adapter.IMBUING;
         if (BloodOrbShapedRecipes.supports(handler)) return Adapter.BLOOD_ORB_SHAPED;
         if (BloodOrbShapelessRecipes.supports(handler)) return Adapter.BLOOD_ORB_SHAPELESS;
@@ -219,6 +220,8 @@ final class Recipes {
                     registry = new BotaniaPoolRecipes(handler);
                 } else if (adapter == Adapter.BOTANIA_STATIC) {
                     registry = new BotaniaStaticRecipes(handler);
+                } else if (adapter == Adapter.BOTANIA_BREWERY) {
+                    registry = new BotaniaBreweryRecipes(handler);
                 } else if (adapter == Adapter.IMBUING) {
                     registry = new ImbuingRecipes(handler);
                 } else if (adapter == Adapter.BLOOD_ORB_SHAPED) {
