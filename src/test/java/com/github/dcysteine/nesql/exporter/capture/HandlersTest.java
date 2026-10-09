@@ -27,6 +27,12 @@ public final class HandlersTest {
         require(BotaniaStaticRecipes.supportsClass("vazkii.botania.client.integration.nei.recipe.RecipeHandlerElvenTrade"), "Botania elven trade handler was not routed");
         require(BotaniaStaticRecipes.supportsClass("vazkii.botania.client.integration.nei.recipe.RecipeHandlerPetalApothecary"), "Botania petal handler was not routed");
         require(BotaniaBreweryRecipes.supportsClass("vazkii.botania.client.integration.nei.recipe.RecipeHandlerBrewery"), "Botania brewery handler was not routed");
+        for (String handler : new String[] {
+                "net.bdew.gendustry.nei.ImprinterHandler", "net.bdew.gendustry.nei.SamplerHandler",
+                "net.bdew.gendustry.nei.TransposerHandler", "net.bdew.gendustry.nei.MutatronHandler",
+                "net.bdew.gendustry.nei.ReplicatorHandler", "net.bdew.gendustry.nei.ExtractorHandler"})
+            require(GendustryGeneticsRecipes.supportsClass(handler), "Gendustry genetics handler was not routed: " + handler);
+        require(!GendustryGeneticsRecipes.supportsClass("net.bdew.gendustry.nei.TemplateCraftingHandler"), "Gendustry template handler claimed genetics semantics");
         require(ChiselRecipes.supportsClass("team.chisel.compat.nei.RecipeHandlerChisel"), "Chisel handler was not routed");
         require("dynamic_native_preview".equals(FireworkRecipes.exclusionReason()), "Firework must remain excluded until its dynamic cycle is modelled");
         require("stateful_dynamic_domain".equals(Ic2LatheRecipes.exclusionReason()), "IC2 lathe must remain excluded until state transitions are modelled");

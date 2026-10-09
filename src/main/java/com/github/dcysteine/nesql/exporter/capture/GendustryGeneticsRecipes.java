@@ -21,7 +21,10 @@ final class GendustryGeneticsRecipes implements RegistryRecipes {
     private final int size;
     static boolean supports(ICraftingHandler h) {
         if (h == null) return false;
-        String n = h.getClass().getName();
+        return supportsClass(h.getClass().getName());
+    }
+    static boolean supportsClass(String n) {
+        if (n == null) return false;
         return n.equals(ROOT+"ImprinterHandler") || n.equals(ROOT+"SamplerHandler") || n.equals(ROOT+"TransposerHandler")
             || n.equals(ROOT+"MutatronHandler") || n.equals(ROOT+"ReplicatorHandler") || n.equals(ROOT+"ExtractorHandler");
     }
