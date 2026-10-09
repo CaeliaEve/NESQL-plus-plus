@@ -33,6 +33,9 @@ public final class HandlersTest {
                 "net.bdew.gendustry.nei.ReplicatorHandler", "net.bdew.gendustry.nei.ExtractorHandler"})
             require(GendustryGeneticsRecipes.supportsClass(handler), "Gendustry genetics handler was not routed: " + handler);
         require(!GendustryGeneticsRecipes.supportsClass("net.bdew.gendustry.nei.TemplateCraftingHandler"), "Gendustry template handler claimed genetics semantics");
+        require(HarvestCraftRecipes.supportsClass("com.pam.harvestcraft.GardenRecipeHandler"), "HarvestCraft garden handler was not routed");
+        require(HarvestCraftRecipes.supportsClass("com.pam.harvestcraft.FishTrapRecipeHandler"), "HarvestCraft fish trap handler was not routed");
+        require(HarvestCraftRecipes.supportsClass("com.pam.harvestcraft.AnimalTrapRecipeHandler"), "HarvestCraft animal trap handler was not routed");
         require(ChiselRecipes.supportsClass("team.chisel.compat.nei.RecipeHandlerChisel"), "Chisel handler was not routed");
         require("dynamic_native_preview".equals(FireworkRecipes.exclusionReason()), "Firework must remain excluded until its dynamic cycle is modelled");
         require("stateful_dynamic_domain".equals(Ic2LatheRecipes.exclusionReason()), "IC2 lathe must remain excluded until state transitions are modelled");

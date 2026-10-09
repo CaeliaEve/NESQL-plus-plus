@@ -30,7 +30,7 @@ import static com.github.dcysteine.nesql.exporter.source.Json.*;
 
 /** Explicit enumeration adapters. An unsupported handler is an error, never an empty recipe list. */
 final class Recipes {
-    enum Adapter { SPINNING, DISTILLERY, GT, MAGIC, AE, INSCRIBER, SCRAPBOX, ENCHANTER, VAT, ASSEMBLY, BUILDCRAFT, SAG, SOUL, IC2, IC2_ADVANCED, IC2_LATHE, PROJECT_BLUE, BLAST, CANNER, SMELTING, EXTREME, FORESTRY, TINKER, SPACE, CIRCUIT, REFINERY, RAIL, ROLLING, DISABLED, SOLAR, GENDUSTRY_FLUIDS, GENDUSTRY_TEMPLATE, GENDUSTRY_GENETICS, QED, BOTANIA_POOL, BOTANIA_STATIC, BOTANIA_BREWERY, IMBUING, BLOOD_ORB_SHAPED, BLOOD_ORB_SHAPELESS, BLOOD_ALCHEMY, BLOOD_CALCINATOR, CREATIVECORE, BOTANIA_RUNIC, BOTANIA_FLOATING, GALAXY_ASSEMBLY, DECAYABLE, BREWING, FIREWORKS, PROJECT_RED, FUEL, CHISEL, LOGISTICS_SOLDERING, FURNACE, SHAPED, SHAPELESS }
+    enum Adapter { SPINNING, DISTILLERY, GT, MAGIC, AE, INSCRIBER, SCRAPBOX, ENCHANTER, VAT, ASSEMBLY, BUILDCRAFT, SAG, SOUL, IC2, IC2_ADVANCED, IC2_LATHE, PROJECT_BLUE, BLAST, CANNER, SMELTING, EXTREME, FORESTRY, TINKER, SPACE, CIRCUIT, REFINERY, RAIL, ROLLING, DISABLED, SOLAR, GENDUSTRY_FLUIDS, GENDUSTRY_TEMPLATE, GENDUSTRY_GENETICS, HARVESTCRAFT, QED, BOTANIA_POOL, BOTANIA_STATIC, BOTANIA_BREWERY, IMBUING, BLOOD_ORB_SHAPED, BLOOD_ORB_SHAPELESS, BLOOD_ALCHEMY, BLOOD_CALCINATOR, CREATIVECORE, BOTANIA_RUNIC, BOTANIA_FLOATING, GALAXY_ASSEMBLY, DECAYABLE, BREWING, FIREWORKS, PROJECT_RED, FUEL, CHISEL, LOGISTICS_SOLDERING, FURNACE, SHAPED, SHAPELESS }
 
     static Adapter adapter(ICraftingHandler handler) {
         if (WitcherySpinningRecipes.supports(handler)) return Adapter.SPINNING;
@@ -68,6 +68,7 @@ final class Recipes {
         if (SolarRecipes.supports(handler)) return Adapter.SOLAR;
         if (GendustryTemplateRecipes.supports(handler)) return Adapter.GENDUSTRY_TEMPLATE;
         if (GendustryGeneticsRecipes.supports(handler)) return Adapter.GENDUSTRY_GENETICS;
+        if (HarvestCraftRecipes.supports(handler)) return Adapter.HARVESTCRAFT;
         if (GendustryFluidRecipes.supports(handler)) return Adapter.GENDUSTRY_FLUIDS;
         if (QedRecipes.supports(handler)) return Adapter.QED;
         if (BotaniaPoolRecipes.supports(handler)) return Adapter.BOTANIA_POOL;
@@ -230,6 +231,8 @@ final class Recipes {
                     registry = new GendustryTemplateRecipes(handler);
                 } else if (adapter == Adapter.GENDUSTRY_GENETICS) {
                     registry = new GendustryGeneticsRecipes(handler);
+                } else if (adapter == Adapter.HARVESTCRAFT) {
+                    registry = new HarvestCraftRecipes(handler);
                 } else if (adapter == Adapter.QED) {
                     registry = new QedRecipes(handler);
                 } else if (adapter == Adapter.BOTANIA_POOL) {
