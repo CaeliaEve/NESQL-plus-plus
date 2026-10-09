@@ -4,6 +4,10 @@ package com.github.dcysteine.nesql.exporter.capture;
 interface RegistryRecipes {
     int size();
     boolean capture(int index, RecipeRow row);
+    /** A native page may represent alternative results; adapters can expand it into owned rows. */
+    default java.util.List<RecipeRow> captureRows(int index, RecipeRow row) {
+        return capture(index, row) ? java.util.Collections.singletonList(row) : java.util.Collections.emptyList();
+    }
     /** Publish one shared rule context, referenced by its category. */
     default String program(Facts facts) { return null; }
     /** Check shared registry drift once per game-thread capture batch. */

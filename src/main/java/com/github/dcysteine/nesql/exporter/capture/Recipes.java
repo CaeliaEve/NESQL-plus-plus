@@ -352,7 +352,8 @@ final class Recipes {
             else if (magic != null) { if (!magic.capture(index, row)) return; }
             else if (ae != null) { ae.capture(index, row); }
             else if (registry != null) {
-                if (!registry.capture(index, row)) {
+                java.util.List<RecipeRow> captured = registry.captureRows(index, row);
+                if (captured.isEmpty()) {
                     JsonObject proof = registry.exclusion(index);
                     if (proof != null) {
                         if (exclusions.entrySet().size() - (exclusions.has("handler") ? 1 : 0) >= 4096 && !exclusions.has(Integer.toString(index)))
@@ -361,6 +362,8 @@ final class Recipes {
                     }
                     return;
                 }
+                for (RecipeRow branch : captured) emit(index, branch, facts);
+                return;
             }
             else if (crafting != null && crafting.capture(index, row)) { /* Native special result captured. */ }
             else {

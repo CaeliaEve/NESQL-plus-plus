@@ -5,14 +5,16 @@ import codechicken.nei.recipe.ICraftingHandler;
 import codechicken.nei.recipe.TemplateRecipeHandler;
 import com.github.dcysteine.nesql.exporter.task.Jobs;
 import net.minecraft.item.ItemStack;
+import java.util.ArrayList;
+import java.util.Collections;
 import java.util.List;
 import static com.github.dcysteine.nesql.exporter.source.Json.object;
 
-/** Chisel groups are fixed one-input to many-output native carving tables. */
+/** Chisel pages are one input group with alternative carving targets. */
 final class ChiselRecipes implements RegistryRecipes {
     private static final String HANDLER = "team.chisel.compat.nei.RecipeHandlerChisel";
     private final TemplateRecipeHandler handler;
-    private final int size;
+    private final List<Page> pages;
 
     static boolean supports(ICraftingHandler value) { return supportsClass(value.getClass().getName()); }
     static boolean supportsClass(String name) { return HANDLER.equals(name); }
@@ -21,28 +23,59 @@ final class ChiselRecipes implements RegistryRecipes {
         if (!supports(handler)) throw fault("Unknown Chisel handler");
         this.handler = handler;
         handler.loadCraftingRecipes("chisel2.chisel");
-        size = handler.numRecipes();
-        if (size <= 0 || size > 65536) throw fault("Chisel registry has an invalid size: " + size);
+        int count = handler.numRecipes();
+        if (count <= 0 || count > 65536) throw fault("Chisel registry has an invalid size: " + count);
+        pages = new ArrayList<>();
+        for (int index = 0; index < count; index++) pages.add(page(handler, index));
     }
-    public int size() { return size; }
+    ChiselRecipes(TemplateRecipeHandler handler, List<Page> pages) {
+        if (!supports(handler) || pages == null || pages.isEmpty() || pages.size() > 65536) throw fault("Invalid Chisel fixture");
+        this.handler = handler;
+        this.pages = new ArrayList<>(pages);
+    }
+    public int size() { return pages.size(); }
+
+    private static Page page(TemplateRecipeHandler handler, int index) {
+        List<PositionedStack> inputs = handler.getIngredientStacks(index);
+        List<PositionedStack> outputs = handler.getOtherStacks(index);
+        if (inputs == null || inputs.size() != 1 || inputs.get(0) == null || inputs.get(0).item == null)
+            throw fault("Chisel page must have one input");
+        if (outputs == null || outputs.isEmpty() || outputs.size() > 45) throw fault("Chisel page has invalid outputs");
+        return new Page(inputs.get(0), outputs);
+    }
 
     public boolean capture(int index, RecipeRow row) {
-        List<PositionedStack> inputs = handler.getIngredientStacks(index);
-        if (inputs == null || inputs.size() != 1 || inputs.get(0) == null || inputs.get(0).item == null) throw fault("Chisel recipe must have one input");
-        PositionedStack input = inputs.get(0);
+        return !captureRows(index, row).isEmpty();
+    }
+
+    public List<RecipeRow> captureRows(int index, RecipeRow row) {
+        Page page = pages.get(index);
+        PositionedStack input = page.input;
         if (input.items == null || input.items.length == 0) throw fault("Chisel input has no candidates");
         boolean wildcard = input.items.length != 1;
         for (ItemStack candidate : input.items) if (candidate == null || candidate.getItemDamage() == Short.MAX_VALUE) wildcard = true;
-        row.itemInput(input, 0, Math.max(1, input.item.stackSize), false, false,
-                object("kind", wildcard ? "wildcard" : "exact", "meta", wildcard, "nbt", true));
-        List<PositionedStack> outputs = handler.getOtherStacks(index);
-        if (outputs == null || outputs.isEmpty() || outputs.size() > 45) throw fault("Chisel recipe has invalid outputs");
-        int slot = 0;
-        for (PositionedStack output : outputs) {
+        List<RecipeRow> rows = new ArrayList<>();
+        row.property("chisel:toolRequired", "Requires a compatible chisel tool", true);
+        row.property("chisel:toolWear", "Tool wear per successful carving", 1);
+        row.property("chisel:targetTag", "Selected target is stored on the chisel", "chiselTarget");
+        for (PositionedStack output : page.outputs) {
             if (output == null || output.item == null || output.items == null || output.items.length == 0) throw fault("Chisel output is empty");
-            row.itemOutput(output, slot++, output.item, 10000);
+            if (output.items.length != 1) throw fault("Chisel output has an unadapted alternative list");
+            RecipeRow branch = rows.isEmpty() ? row : row.branch();
+            branch.itemInput(input, 0, Math.max(1, input.item.stackSize), false, false,
+                    object("kind", wildcard ? "wildcard" : "exact", "meta", wildcard, "nbt", true));
+            branch.itemOutput(output, 0, output.item, 10000);
+            rows.add(branch);
         }
-        return true;
+        return rows;
+    }
+    static final class Page {
+        final PositionedStack input;
+        final List<PositionedStack> outputs;
+        Page(PositionedStack input, List<PositionedStack> outputs) {
+            this.input = input;
+            this.outputs = Collections.unmodifiableList(new ArrayList<>(outputs));
+        }
     }
     private static Jobs.Fault fault(String message) { return new Jobs.Fault("recipe_unsupported", message); }
 }
