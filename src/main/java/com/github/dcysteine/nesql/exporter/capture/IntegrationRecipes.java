@@ -1,8 +1,6 @@
 package com.github.dcysteine.nesql.exporter.capture;
 
-import codechicken.lib.gui.GuiDraw;
-import codechicken.nei.PositionedStack;
-import codechicken.nei.recipe.ICraftingHandler;
+import codechicken.nei.recipe.IRecipeHandler;
 import codechicken.nei.recipe.TemplateRecipeHandler;
 import com.github.dcysteine.nesql.exporter.source.CanonicalJson;
 import com.github.dcysteine.nesql.exporter.source.Identity;
@@ -20,28 +18,34 @@ import static com.github.dcysteine.nesql.exporter.source.Json.*;
 final class IntegrationRecipes implements RegistryRecipes {
     private static final String HANDLER="buildcraft.compat.nei.RecipeHandlerIntegrationTable";
     private static final int BATCH=128;
-    private final TemplateRecipeHandler handler;
     private final List<?> registry, snapshot;
+    private final Object manager;
     private final List<Family> families=new ArrayList<>();
-    private final int[] x,y;
     private int size;
+    private boolean closed;
 
-    static boolean supports(ICraftingHandler handler){return handler.getClass().getName().equals(HANDLER);}
-    IntegrationRecipes(TemplateRecipeHandler handler){this(handler,registry());}
-    private static List<?> registry(){
-        version("BuildCraft|Silicon","7.1.44");version("BuildCraft|Compat","7.1.18");
+    static boolean supports(IRecipeHandler handler){return handler.getClass().getName().equals(HANDLER);}
+    IntegrationRecipes(TemplateRecipeHandler handler){this(handler,registrationSource(handler));}
+    static Source registrationSource(IRecipeHandler handler){
+        if(!supports(handler))throw fault("Unknown integration handler");
+        MagicApi.version("IntegrationRecipes","BuildCraft|Silicon");MagicApi.version("IntegrationRecipes","BuildCraft|Compat");
         Object manager=field(type("buildcraft.api.recipes.BuildcraftRecipeRegistry"),null,"integrationTable");
-        if(manager==null||!manager.getClass().getName().equals("buildcraft.core.recipes.IntegrationRecipeManager"))throw fault("Unknown integration manager");
-        Object rows=invoke(manager.getClass(),manager,"getRecipes",new Class<?>[0]);
-        if(!(rows instanceof List))throw fault("Integration registry lost its native order");
-        return (List<?>)rows;
+        if(manager==null)throw new Jobs.Fault("handler_not_ready","Integration manager is unavailable");
+        if(!manager.getClass().getName().equals("buildcraft.core.recipes.IntegrationRecipeManager"))throw fault("Unknown integration manager");
+        Object rows=field(manager,"integrationRecipes");
+        if(rows==null)throw new Jobs.Fault("handler_not_ready","Integration registry is unavailable");
+        if(rows.getClass()!=LinkedList.class||invoke(manager.getClass(),manager,"getRecipes",new Class<?>[0])!=rows)throw fault("Integration registry lost its native source");
+        return new Source(manager,(List<?>)rows);
     }
+    static final class Source{final Object manager;final List<?> recipes;Source(Object manager,List<?> recipes){this.manager=manager;this.recipes=recipes;}}
+    private IntegrationRecipes(TemplateRecipeHandler handler,Source source){this(handler,source.recipes,source.manager);}
     IntegrationRecipes(TemplateRecipeHandler handler,List<?> registry){
+        this(handler,registry,null);
+    }
+    private IntegrationRecipes(TemplateRecipeHandler handler,List<?> registry,Object manager){
+        if(registry==null)throw new Jobs.Fault("handler_not_ready","Integration registry is unavailable");
         if(!supports(handler)||registry.size()>3)throw fault("Unadapted integration registry");
-        this.handler=handler;this.registry=registry;this.snapshot=new ArrayList<>(registry);
-        Class<?> container=type("buildcraft.silicon.gui.ContainerIntegrationTable");
-        x=((int[])field(container,null,"SLOT_X")).clone();y=((int[])field(container,null,"SLOT_Y")).clone();
-        if(x.length!=9||y.length!=9)throw fault("Integration physical slots changed");
+        this.manager=manager;this.registry=registry;this.snapshot=new ArrayList<>(registry);
         Set<String> kinds=new HashSet<>();
         for(Object raw:snapshot){
             Family family=new Family(raw,size);
@@ -51,10 +55,28 @@ final class IntegrationRecipes implements RegistryRecipes {
             families.add(family);size+=family.batches;
         }
     }
-    public int size(){return size;}
-    public boolean capture(int index,RecipeRow row){
+    public int size(){verify();return size;}
+    public void verify(){
+        if(closed)throw new Jobs.Fault("capture_closed","Integration reader is closed");
+        if(manager!=null&&(field(type("buildcraft.api.recipes.BuildcraftRecipeRegistry"),null,"integrationTable")!=manager
+                ||field(manager,"integrationRecipes")!=registry))throw changed("native manager or list changed");
         if(registry.size()!=snapshot.size())throw new Jobs.Fault("recipe_changed","Integration registry size changed");
         for(int i=0;i<snapshot.size();i++)if(registry.get(i)!=snapshot.get(i))throw new Jobs.Fault("recipe_changed","Integration registry order changed");
+        for(Family family:families)family.rule.verify();
+    }
+    public void finishVerification(){
+        verify();for(Family family:families){Jobs.checkpoint();family.rule.finishVerification();
+            if(!family.signature.equals(new Family(family.nativeRecipe,family.start).signature))throw changed("native examples or rule context changed");}
+    }
+    public void close(){if(closed)return;closed=true;snapshot.clear();families.clear();size=0;}
+    public boolean capture(int index,RecipeRow row){
+        verify();
+        try{captureRow(index,row);}catch(RuntimeException|Error failure){
+            try{verify();}catch(RuntimeException|Error drift){if(drift!=failure)failure.addSuppressed(drift);}throw failure;
+        }
+        verify();return true;
+    }
+    private void captureRow(int index,RecipeRow row){
         if(index<0||index>=size)throw fault("Invalid integration batch index");
         Family family=null;for(Family value:families)if(index>=value.start&&index<value.start+value.batches){family=value;break;}
         if(family==null)throw fault("Missing integration family");
@@ -71,15 +93,14 @@ final class IntegrationRecipes implements RegistryRecipes {
             samples.add(offered);outputs.add(preview.output.copy());
             for(int slot=0;slot<9;slot++)if(offered[slot]!=null)choices.get(slot).putIfAbsent(id(offered[slot]),offered[slot]);
         }
-        List<PositionedStack> display=new ArrayList<>();List<Map<String,Integer>> columns=new ArrayList<>();List<Integer> slots=new ArrayList<>();
+        List<Map<String,Integer>> columns=new ArrayList<>();List<Integer> slots=new ArrayList<>();
         for(int slot=0;slot<9;slot++)if(!choices.get(slot).isEmpty()){
-            List<RecipeRow.Ingredient> ingredients=new ArrayList<>();List<ItemStack> visible=new ArrayList<>();Map<String,Integer> column=new HashMap<>();
+            List<RecipeRow.Ingredient> ingredients=new ArrayList<>();Map<String,Integer> column=new HashMap<>();
             for(Map.Entry<String,ItemStack> choice:choices.get(slot).entrySet()){
-                column.put(choice.getKey(),ingredients.size());ItemStack stack=choice.getValue().copy();visible.add(stack.copy());
+                column.put(choice.getKey(),ingredients.size());ItemStack stack=choice.getValue().copy();
                 ingredients.add(new RecipeRow.Ingredient(stack,1,false,object("kind","integration")));
             }
-            PositionedStack position=new PositionedStack(visible,x[slot]-5,y[slot]-13,false);display.add(position);
-            row.itemInput(position,slot,ingredients,false);
+            row.itemInput(slot,ingredients,false);
             for(JsonElement choice:row.inputs.get(row.inputs.size()-1).getAsJsonObject().getAsJsonArray("choices"))choice.getAsJsonObject().add("consume",object("kind","allocated"));
             columns.add(column);slots.add(slot);
         }
@@ -90,24 +111,18 @@ final class IntegrationRecipes implements RegistryRecipes {
             }
             bindings.add(tuple);ItemStack output=outputs.get(sample);products.add(object("id",row.facts.item(output),"amount",Integer.toString(output.stackSize)));
         }
-        ItemStack first=outputs.get(0);PositionedStack result=new PositionedStack(first.copy(),133,36,false);
-        row.itemOutput(result,0,first,10000);
+        ItemStack first=outputs.get(0);
+        row.itemOutput(0,first,10000);
         row.outputs.get(0).getAsJsonObject().add("change",object("input",0,"action",object("kind","integration"),"bindings",bindings,"samples",products));
         row.record.add("process",object("kind","buildcraftIntegration","rule",family.rule.context()));
         if(CanonicalJson.bytes(row.record).length>1000000)throw fault("Integration example batch exceeds the source record budget");
-        handler.arecipes.clear();handler.arecipes.add(handler.new CachedRecipe(){
-            @Override public List<PositionedStack> getIngredients(){return display;}
-            @Override public PositionedStack getResult(){return result;}
-        });
-        return true;
-    }
-    static void draw(TemplateRecipeHandler handler,int energy){
-        handler.drawBackground(0);GuiDraw.drawStringC(energy+" RF",108,10,0x808080,false);
     }
     private static final class Family {
         final IntegrationRules rule;final List<ItemStack> inputs,expansions,wires;
         final int start,count,batches;
+        final Object nativeRecipe;final String signature;
         Family(Object raw,int start){
+            nativeRecipe=raw;
             rule=new IntegrationRules(raw);this.start=start;
             inputs=stacks(invoke(raw.getClass(),raw,"generateExampleInput",new Class<?>[0]));
             Object generated=invoke(raw.getClass(),raw,"generateExampleExpansions",new Class<?>[0]);
@@ -127,6 +142,7 @@ final class IntegrationRecipes implements RegistryRecipes {
                 :(long)inputs.size()*(rule.kind.equals("gate")?expansions.size()+1:expansions.size()*2);
             if(total>262144)throw fault("Integration display example budget exceeded");
             count=(int)total;batches=(count+BATCH-1)/BATCH;
+            signature=CanonicalJson.digest(object("context",rule.context(),"inputs",facts(inputs),"expansions",facts(expansions),"wires",facts(wires),"count",count));
         }
         ItemStack[] sample(int index){
             ItemStack[] slots=new ItemStack[9];
@@ -147,6 +163,7 @@ final class IntegrationRecipes implements RegistryRecipes {
             return slots;
         }
     }
+    private static JsonArray facts(List<ItemStack> values){JsonArray result=array();for(ItemStack value:values){Jobs.checkpoint();result.add(RecipeRow.stackEvidence(value));}return result;}
     private static List<ItemStack> stacks(Object values){
         if(!(values instanceof List)||((List<?>)values).size()>65536)throw fault("Invalid integration example list");
         List<ItemStack> result=new ArrayList<>();for(Object value:(List<?>)values){Jobs.checkpoint();if(!(value instanceof ItemStack))throw fault("Invalid integration example");result.add(one((ItemStack)value));}return result;
@@ -161,4 +178,5 @@ final class IntegrationRecipes implements RegistryRecipes {
         return Identity.item(name,Items.feather.getDamage(stack),TypedNbt.encode(stack.getTagCompound()));
     }
     private static Jobs.Fault fault(String message){return new Jobs.Fault("recipe_unsupported",message);}
+    private static Jobs.Fault changed(String message){return new Jobs.Fault("recipe_changed","Integration "+message);}
 }

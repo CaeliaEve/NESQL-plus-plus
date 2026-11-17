@@ -1,6 +1,5 @@
 package com.github.dcysteine.nesql.exporter.capture;
 
-import codechicken.nei.PositionedStack;
 import codechicken.nei.recipe.ICraftingHandler;
 import codechicken.nei.recipe.TemplateRecipeHandler;
 import com.github.dcysteine.nesql.exporter.task.Jobs;
@@ -17,15 +16,27 @@ import static com.github.dcysteine.nesql.exporter.source.Json.*;
 /** EnderIO many-to-one machines share matching, consumption and output selection. */
 final class EnderAssemblyRecipes implements RegistryRecipes {
     private static final String ROOT="crazypants.enderio.machine.", HANDLER="crazypants.enderio.nei.AlloySmelterRecipeHandler", SPLICE="crazypants.enderio.nei.SliceAndSpliceRecipeHandler";
-    private final TemplateRecipeHandler handler;
+    private final String nativeHandler;
     private final boolean splice;
     private final List<ItemStack> axes=new ArrayList<>(),shears=new ArrayList<>();
     private final List<Entry> entries=new ArrayList<>();
+    private final Map<Item,Map<Integer,Float>> experience=new IdentityHashMap<>();
+    private final NativeDefinitions definitions;
+    private boolean closed;
     static boolean supports(ICraftingHandler h){return h.getClass().getName().equals(HANDLER)||h.getClass().getName().equals(SPLICE);}
     EnderAssemblyRecipes(TemplateRecipeHandler h){this(h,registry(h));}
-    private EnderAssemblyRecipes(TemplateRecipeHandler h,Object manager){this(h,(List<?>)call(manager,"getRecipes"),h.getClass().getName().equals(HANDLER)&&(Boolean)field(call(manager,"getVanillaRecipe"),"enabled"));}
+    private EnderAssemblyRecipes(TemplateRecipeHandler h,Object manager){
+        this(h,(List<?>)call(manager,"getRecipes"),h.getClass().getName().equals(HANDLER)&&(Boolean)field(call(manager,"getVanillaRecipe"),"enabled"),
+                () -> current(h));
+    }
+    private static List<?> current(TemplateRecipeHandler handler){
+        Object manager=registry(handler);
+        if(handler.getClass().getName().equals(HANDLER)&&(Boolean)field(call(manager,"getVanillaRecipe"),"enabled"))
+            throw new Jobs.Fault("recipe_changed","Native Alloy furnace mode was enabled during capture");
+        return (List<?>)call(manager,"getRecipes");
+    }
     private static Object registry(TemplateRecipeHandler h){
-        version("EnderIO","2.9.28");
+        MagicApi.version("EnderAssemblyRecipes","EnderIO");
         boolean splice=h.getClass().getName().equals(SPLICE);
         Object manager=invoke(type(ROOT+(splice?"slicensplice.SliceAndSpliceRecipeManager":"alloy.AlloyRecipeManager")),null,"getInstance",new Class<?>[0]);
         Object vanilla=splice?null:call(manager,"getVanillaRecipe");
@@ -45,11 +56,18 @@ final class EnderAssemblyRecipes implements RegistryRecipes {
         return manager;
     }
     EnderAssemblyRecipes(TemplateRecipeHandler h,List<?> source,boolean furnaceEnabled){
+        this(h,source,furnaceEnabled,() -> source);
+    }
+    private EnderAssemblyRecipes(TemplateRecipeHandler h,List<?> source,boolean furnaceEnabled,java.util.function.Supplier<List<?>> current){
         if(!supports(h)||source==null||source.size()>262144)throw fault("Unknown or oversized alloy registry");
         // The pinned GTNH configuration disables this independent, dynamic furnace path.
         if(furnaceEnabled)throw fault("Enabled Alloy furnace mode requires its separate native batch adapter");
-        handler=h;splice=h.getClass().getName().equals(SPLICE);
+        nativeHandler=h.getClass().getName();splice=nativeHandler.equals(SPLICE);
+        definitions=new NativeDefinitions(nativeHandler,source,current,EnderDefinitions::assembly);
         for(Object record:source){Jobs.checkpoint();entries.add(new Entry(record,splice?5:2));}
+        // Native getExperianceForOutput scans the first primary result, even for a secondary output.
+        for(Entry entry:entries){Output primary=entry.outputs.get(0);
+            experience.computeIfAbsent(primary.item.getItem(),ignored->new HashMap<>()).putIfAbsent(primary.item.getItemDamage(),primary.experience);}
         if(splice){
             // Admission is instanceof, not ore tags or the NEI representative iron tools.
             for(Object registered:Item.itemRegistry){
@@ -62,45 +80,57 @@ final class EnderAssemblyRecipes implements RegistryRecipes {
             if(axes.isEmpty()||shears.isEmpty()||axes.size()>65536||shears.size()>65536)throw fault("Invalid splice tool registry");
         }
     }
-    public int size(){return entries.size();}
+    public int size(){verify();return entries.size();}
+    public void verify(){if(closed)throw new Jobs.Fault("capture_closed","Native assembly reader is closed");definitions.verify();}
+    public void finishVerification(){verify();definitions.finishVerification();if(splice){verifyTools(axes,true);verifyTools(shears,false);}}
+    public void close(){if(!closed){entries.clear();experience.clear();axes.clear();shears.clear();definitions.close();closed=true;}}
     public boolean capture(int index,RecipeRow row){
+        verify();
+        return definitions.checked(index,() -> captureEntry(index,row));
+    }
+    private boolean captureEntry(int index,RecipeRow row){
         Entry e=entries.get(index);JsonArray slots=array();
         // Each offered stack advances only one positive requirement, bounded by physical inputs.
-        if(e.inputs.size()>(splice?6:3))return false;
-        int[][] positions=splice?new int[][]{{31,29},{49,29},{67,29},{31,47},{49,47},{67,47}}:new int[][]{{50,13},{75,3},{99,13}};
+        if(e.inputs.size()>(splice?6:3))return row.exclude(object("reason","requirements_exceed_native_physical_inputs",
+            "handler",nativeHandler,"requirements",e.inputs.size(),"physicalInputs",splice?6:3));
         for(int i=0;i<e.inputs.size();i++){
-            Input in=e.inputs.get(i);if(in.patterns.isEmpty())return false;
-            List<RecipeRow.Ingredient> choices=new ArrayList<>();List<ItemStack> display=new ArrayList<>();
-            for(EnderInputs.Pattern p:in.patterns){choices.add(new RecipeRow.Ingredient(p.item,in.amount,false,p.rule()));display.add(p.item.copy());}
+            Input in=e.inputs.get(i);if(in.patterns.isEmpty())return row.exclude(object("reason","empty_native_required_input_predicate",
+                "handler",nativeHandler,"requirement",i,"slot",in.slot));
+            List<RecipeRow.Ingredient> choices=new ArrayList<>();
+            for(EnderInputs.Pattern p:in.patterns)choices.add(new RecipeRow.Ingredient(p.item,in.amount,false,p.rule()));
             // Input.slot identifies the ordered requirement, not a physical machine inventory slot.
-            int at=splice&&in.slot>=0?in.slot:i;
-            row.itemInput(new PositionedStack(display,positions[at][0],positions[at][1],false),i,choices,false);
+            row.itemInput(i,choices,false);
             for(com.google.gson.JsonElement c:row.inputs.get(i).getAsJsonObject().getAsJsonArray("choices"))
                 c.getAsJsonObject().add("consume",object("kind","allocated"));
             slots.add(value(in.slot));
         }
         row.record.add("process",object("kind",splice?"splice":"alloy","energy",e.energy,"slots",slots));
-        if(splice){tool(row,6,axes,41,5);tool(row,7,shears,59,5);}
+        if(splice){tool(row,6,axes);tool(row,7,shears);}
+        List<Float> outputExperience=new ArrayList<>();
         for(int i=0;i<e.outputs.size();i++){
             Output out=e.outputs.get(i);
-            row.itemOutput(i==0?new PositionedStack(out.item.copy(),splice?121:75,splice?38:42,false):null,i,out.item.copy(),10000,
+            row.itemOutput(i,out.item.copy(),10000,
                 object("kind","sharedRoll","nominal",Integer.toString(out.item.stackSize),"threshold",Float.toString(out.chance)));
+            outputExperience.add(experience.getOrDefault(out.item.getItem(),Collections.emptyMap()).getOrDefault(out.item.getItemDamage(),0f));
         }
-        handler.arecipes.clear();handler.arecipes.add(handler.new CachedRecipe(){@Override public PositionedStack getResult(){return null;}});
+        row.property("enderio:experience","Experience lookup per output item",outputExperience);
         return true;
     }
-    private static void tool(RecipeRow row,int slot,List<ItemStack> tools,int x,int y){
-        List<RecipeRow.Ingredient> choices=new ArrayList<>();List<ItemStack> displays=new ArrayList<>();
-        for(ItemStack tool:tools){choices.add(new RecipeRow.Ingredient(tool.copy(),1,false,object("kind","wildcard","meta",true,"nbt",true)));displays.add(tool.copy());}
-        row.itemInput(new PositionedStack(displays,x,y,false),slot,choices,false);
+    private static void tool(RecipeRow row,int slot,List<ItemStack> tools){
+        List<RecipeRow.Ingredient> choices=new ArrayList<>();
+        for(ItemStack tool:tools)choices.add(new RecipeRow.Ingredient(tool.copy(),1,false,object("kind","wildcard","meta",true,"nbt",true)));
+        row.itemInput(slot,choices,false);
         for(com.google.gson.JsonElement c:row.inputs.get(row.inputs.size()-1).getAsJsonObject().getAsJsonArray("choices"))c.getAsJsonObject().add("consume",object("kind","wear"));
     }
-    int[][] progressBars(){return splice?new int[][]{{91,38,177,14,23,17,120,0}}:new int[][]{{51,31,166,0,22,13,48,3},{99,31,166,0,22,13,48,3}};}
-    void draw(int index){
-        handler.drawBackground(0);
-        Class<?> power=type("crazypants.enderio.power.PowerDisplayUtil");
-        String energy=invoke(power,null,"formatPower",new Class<?>[]{int.class},entries.get(index).energy)+" "+invoke(power,null,"abrevation",new Class<?>[0]);
-        codechicken.lib.gui.GuiDraw.drawString(energy,100,splice?57:52,0x808080,false);
+    private static void verifyTools(List<ItemStack> captured,boolean axe){
+        Set<Item> remaining=Collections.newSetFromMap(new IdentityHashMap<Item,Boolean>());
+        for(ItemStack stack:captured)remaining.add(stack.getItem());
+        for(Object registered:Item.itemRegistry){
+            Jobs.checkpoint();Item item=(Item)registered;
+            if(axe?item instanceof ItemAxe:item instanceof ItemShears)
+                if(!remaining.remove(item))throw new Jobs.Fault("recipe_changed","Native splice tool registry gained or repeated an item");
+        }
+        if(!remaining.isEmpty())throw new Jobs.Fault("recipe_changed","Native splice tool registry lost an item");
     }
     private static final class Entry {
         final List<Input> inputs=new ArrayList<>();final List<Output> outputs=new ArrayList<>();final int energy;
@@ -123,11 +153,15 @@ final class EnderAssemblyRecipes implements RegistryRecipes {
         }
     }
     private static final class Output {
-        final ItemStack item;final float chance;
+        final ItemStack item;final float chance,experience;
         Output(Object source){
             if(source==null||!source.getClass().getName().equals(ROOT+"recipe.RecipeOutput")||(Boolean)call(source,"isFluid"))throw fault("Unsupported Alloy result");
             ItemStack original=(ItemStack)call(source,"getOutput");chance=(Float)call(source,"getChance");
+            experience=(Float)call(source,"getExperiance");
             if(original==null||original.stackSize<=0||!Float.isFinite(chance)||chance<0||chance>1)throw fault("Invalid Alloy result amount or threshold");
+            if(!Float.isFinite(experience))throw fault("Invalid native assembly experience");
+            if(ItemCallbacks.method(original.getItem(),"getDamage","getDamage",ItemStack.class).getDeclaringClass()!=Item.class)
+                throw fault("Assembly experience lookup requires a dedicated output metadata getter");
             item=original.copy();
         }
     }

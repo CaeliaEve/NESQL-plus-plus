@@ -1,209 +1,93 @@
 package com.github.dcysteine.nesql.exporter.capture;
 
-import codechicken.nei.PositionedStack;
+import static com.github.dcysteine.nesql.exporter.capture.MagicApi.*;
+import static com.github.dcysteine.nesql.exporter.source.Json.*;
+
 import codechicken.nei.recipe.ICraftingHandler;
 import codechicken.nei.recipe.TemplateRecipeHandler;
-import com.github.dcysteine.nesql.exporter.source.CanonicalJson;
 import com.github.dcysteine.nesql.exporter.source.TypedNbt;
 import com.github.dcysteine.nesql.exporter.task.Jobs;
-import com.google.gson.JsonArray;
-import com.google.gson.JsonObject;
+import com.google.gson.*;
+import java.util.*;
 import net.minecraft.init.Items;
 import net.minecraft.item.Item;
 import net.minecraft.item.ItemStack;
 import net.minecraftforge.oredict.OreDictionary;
-import java.util.*;
-import static com.github.dcysteine.nesql.exporter.capture.MagicApi.*;
-import static com.github.dcysteine.nesql.exporter.source.Json.*;
 
-/** RandomThings 2.6.6 healthy imbuing runs, with a proof that native HashMap matching is unambiguous. */
+/** Native RandomThings identity-HashMap matching, including overlap, key reuse and stale output. */
 final class ImbuingRecipes implements RegistryRecipes {
-    private static final String HANDLER = "lumien.randomthings.Handler.ModCompability.NEI.ImbuingStationRecipeHandler";
-    private static final String RECIPE = "lumien.randomthings.Handler.ImbuingStation.ImbuingRecipe";
-    private static final String REGISTRY = "lumien.randomthings.Handler.ImbuingStation.ImbuingRecipeHandler";
-    private static final String SETTINGS = "lumien.randomthings.Configuration.Settings";
-    private final TemplateRecipeHandler handler;
-    private final List<?> registry;
-    private final List<Entry> entries = new ArrayList<>();
-    private final float threshold;
-    private final int ticks;
-    private boolean nativeRegistry;
-
-    static boolean supports(ICraftingHandler handler) { return handler.getClass().getName().equals(HANDLER); }
-    ImbuingRecipes(TemplateRecipeHandler handler) { this(handler, registry(), (Float) field(type(SETTINGS), null, "IMBUING_LENGTH")); nativeRegistry = true; }
-    private static List<?> registry() {
-        version("RandomThings", "2.6.6");
-        return (List<?>) field(type(REGISTRY), null, "imbuingRecipes");
+  private static final String HANDLER="lumien.randomthings.Handler.ModCompability.NEI.ImbuingStationRecipeHandler",
+      RECIPE="lumien.randomthings.Handler.ImbuingStation.ImbuingRecipe",REGISTRY="lumien.randomthings.Handler.ImbuingStation.ImbuingRecipeHandler",
+      SETTINGS="lumien.randomthings.Configuration.Settings";
+  private final List<Entry> entries=new ArrayList<>();
+  private final NativeItemExamples examples=new NativeItemExamples();
+  private NativeDefinitionGraph bindings;
+  private final IdentityHashMap<ItemStack,Integer> outputAliases=new IdentityHashMap<>();
+  private JsonArray definitions;
+  private int thresholdBits;
+  private boolean closed;
+  private Object[] anchors;
+  private final Set<String> oreNames=new TreeSet<>();
+  static boolean supports(ICraftingHandler handler){return handler!=null&&supportsClass(handler.getClass().getName());}
+  static boolean supportsClass(String name){return HANDLER.equals(name);}
+  static Object[] registrationAnchors(){
+    Object source=field(type(REGISTRY),null,"imbuingRecipes");if(source==null)throw new Jobs.Fault("handler_not_ready","Imbuing source is unavailable");
+    if(source.getClass()!=ArrayList.class||((List<?>)source).size()>4096)throw fault("Unadapted imbuing registry storage");
+    return new Object[]{source,field(OreDictionary.class,null,"nameToId"),field(OreDictionary.class,null,"idToStack")};
+  }
+  ImbuingRecipes(TemplateRecipeHandler handler){
+    if(!supports(handler))throw fault("Unknown imbuing handler");MagicApi.version("ImbuingRecipes","RandomThings");
+    try{
+      anchors=registrationAnchors();
+      thresholdBits=Float.floatToRawIntBits((Float)field(type(SETTINGS),null,"IMBUING_LENGTH"));
+      for(Object raw:(List<?>)registrationAnchors()[0])entries.add(new Entry(raw));
+      definitions=array();for(Entry entry:entries){definitions.add(entry.definition());oreNames.addAll(entry.base.ores);for(Filter filter:entry.ingredients)oreNames.addAll(filter.ores);}
+      bindings=new NativeDefinitionGraph(this::definitionRoots,NativeDefinitionGraph.shapes(RECIPE,"toImbue","ingredients","result"));
+      if(com.github.dcysteine.nesql.exporter.source.CanonicalJson.bytes(definitions).length>32*1024*1024)throw new Jobs.Fault("recipe_limit","Imbuing native descriptions exceed byte budget");
+    }catch(RuntimeException|Error failure){close();throw failure;}
+  }
+  private Object[] definitionRoots(){List<Object> roots=new ArrayList<>();roots.add(registrationAnchors()[0]);for(String name:oreNames)roots.add(NativeOreTable.members(name));return roots.toArray();}
+  public int size(){alive();return entries.size();}
+  public void verify(){alive();Object[] current=registrationAnchors();for(int i=0;i<anchors.length;i++)if(anchors[i]!=current[i])throw new Jobs.Fault("environment_changed","Imbuing native registry roots changed");bindings.verifyRoots();if(Float.floatToRawIntBits((Float)field(type(SETTINGS),null,"IMBUING_LENGTH"))!=thresholdBits)throw new Jobs.Fault("environment_changed","Imbuing timer configuration changed");}
+  public void finishVerification(){verify();bindings.verify();examples.verify();}
+  public boolean capture(int index,RecipeRow row){
+    alive();Entry entry=entries.get(index);
+    for(int slot=0;slot<entry.ingredients.size();slot++)input(row,entry.ingredients.get(slot),slot);
+    input(row,entry.base,65535);
+    if(entry.output.stackSize>0)row.itemOutput(0,entry.output,10000,object("kind","potential","stat","randomthings:imbuingState","nominal",Integer.toString(Math.min(64,entry.output.stackSize)),"sample",null,"condition","native_identity_order_and_cached_output_state","parameters",null));
+    row.record.add("process",object("kind","randomThingsImbuing","version","2.6.6","thresholdBits",String.format(Locale.ROOT,"%08x",thresholdBits),"selected",index,
+        "definitions",definitions,"baseInput",65535,"baseSlot",3,"reagentSlots",3,"outputSlot",4,"result",object("id",row.facts.item(entry.output),"amount",Integer.toString(entry.output.stackSize))));
+    row.note("randomthings:imbuing", "lumien.randomthings.Handler.ImbuingStation.ImbuingRecipe#matchesInventory;lumien.randomthings.TileEntities.TileEntityImbuingStation#updateEntity,imbue",row.facts.locale().equals("zh_CN")
+        ?"原生配方按注册顺序首匹配。中心在槽 3，三个材料槽按 ItemStack 对象身份放入 HashMap；每个要求总取 HashMap 遍历中的首个匹配键，即使该键已使用也会再次匹配，最后每个非空键都必须被标记。重复对象别名折叠为一个键，重叠材料的结果取决于运行时对象哈希顺序，不能用普通无序分配代替。匹配为内容相同（含标签、忽略数量）或共享矿辞。完成扣槽 0..3 每槽一件，不返还容器。输出对象引用变化且新输出能装入时才重置并更新缓存；同一输出引用不会重检空间，不能装入另一输出时可能继续旧缓存产物。计时按原生 float 阈值与 signed int 进度比较，非有限阈值也保留。首次落空槽原生限 64，已有输出直接做有符号数量变更。这里只展示条件原型和完整规则。"
+        :"The first matching registration wins. Slot 3 is the base; reagent stacks in slots 0..2 become identity-keyed HashMap entries. Every requirement chooses the first matching key in native map order, even if already used; every non-null key must eventually be marked. Reused stack-object aliases collapse into one key. Overlap therefore depends on runtime identity-hash order, not ordinary shapeless allocation. Matching uses full content equality (ignoring count) or shared ore membership. Completion removes one from each slot 0..3 without containers. A changed result object resets/updates the cache only if its output fits. The same reference does not recheck output space; an incompatible new result may leave the old cached result running. The signed-int timer compares to the native float threshold, including non-finite values. First insertion clamps to 64; existing output applies signed count mutation. Displayed output is a conditional prototype.");
+    return true;
+  }
+  private void input(RecipeRow row,Filter filter,int slot){
+    List<RecipeRow.Ingredient> choices=new ArrayList<>();choices.add(new RecipeRow.Ingredient(filter.direct.copy(),1,false,object("kind","exact")));
+    Set<String> seen=new HashSet<>();for(String ore:filter.ores)for(ItemStack template:NativeOreTable.copies(ore))for(ItemStack example:examples.permutations(template)){
+      if(choices.size()>=65536)throw new Jobs.Fault("recipe_limit","Imbuing candidates exceed budget");String key=Item.itemRegistry.getNameForObject(example.getItem())+"/"+Items.feather.getDamage(example)+"/"+ore;
+      if(seen.add(key))choices.add(new RecipeRow.Ingredient(example,1,false,object("kind","ore","name",ore,"exclusive",false)));
     }
-    ImbuingRecipes(TemplateRecipeHandler handler, List<?> registry, float threshold) {
-        if (!supports(handler) || registry == null || registry.size() > 4096) throw fault("Invalid imbuing registry");
-        this.handler = handler; this.registry = registry; this.threshold = threshold; ticks = duration(threshold);
-        Work work = new Work();
-        for (Object raw : registry) { Jobs.checkpoint(); entries.add(new Entry(raw, work)); }
-        for (int i = 0; i < entries.size(); i++) for (int j = 0; j < i; j++) {
-            Jobs.checkpoint(); Entry a = entries.get(i), b = entries.get(j);
-            work.step();
-            if (a.ingredients.size() == b.ingredients.size() && a.base.overlaps(b.base, work) && allocationOverlap(a.ingredients, b.ingredients, 0, 0, work))
-                throw fault("Imbuing recipes have overlapping first-match inventory predicates");
-        }
+    row.itemInput(slot,choices,false);for(JsonElement c:row.inputs.get(row.inputs.size()-1).getAsJsonObject().getAsJsonArray("choices"))c.getAsJsonObject().add("consume",object("kind","allocated"));
+  }
+  private final class Entry{
+    final Filter base;final List<Filter> ingredients=new ArrayList<>();final ItemStack output;final int alias;
+    Entry(Object raw){
+      if(raw==null||raw.getClass()!=type(RECIPE))throw fault("Unadapted imbuing callback owner");base=new Filter(field(raw,"toImbue"));Object inputs=field(raw,"ingredients");
+      if(inputs==null||inputs.getClass()!=ArrayList.class||((List<?>)inputs).size()>65536)throw fault("Invalid imbuing input definitions");for(Object value:(List<?>)inputs)ingredients.add(new Filter(value));
+      Object result=field(raw,"result");if(result==null||result.getClass()!=ItemStack.class)throw fault("Invalid imbuing output");NativeStackAudit.audit((ItemStack)result);output=((ItemStack)result).copy();
+      Integer group=outputAliases.get(result);if(group==null){group=outputAliases.size();outputAliases.put((ItemStack)result,group);}alias=group;
     }
-    public int size() { return entries.size(); }
-    public void verify() {
-        if (nativeRegistry && (field(type(REGISTRY), null, "imbuingRecipes") != registry
-                || Float.floatToIntBits((Float) field(type(SETTINGS), null, "IMBUING_LENGTH")) != Float.floatToIntBits(threshold))
-                || registry.size() != entries.size()) changed();
-        Work work = new Work();
-        for (int i = 0; i < entries.size(); i++) {
-            Jobs.checkpoint(); Entry entry = entries.get(i);
-            if (registry.get(i) != entry.source || !entry.signature.equals(new Entry(registry.get(i), work).signature)) changed();
-        }
+    JsonObject definition(){JsonArray inputs=array();for(Filter filter:ingredients)inputs.add(filter.definition());return object("base",base.definition(),"ingredients",inputs,"outputAlias",alias);}
+  }
+  private static final class Filter{
+    final ItemStack direct;final List<String> ores=new ArrayList<>();
+    Filter(Object value){if(value==null||value.getClass()!=ItemStack.class)throw fault("Invalid imbuing predicate stack");NativeStackAudit.audit((ItemStack)value);direct=((ItemStack)value).copy();direct.stackSize=1;
+      for(int id:OreDictionary.getOreIDs(direct))ores.add(OreDictionary.getOreName(id));if(ores.size()>4096)throw fault("Imbuing ore memberships exceed budget");
     }
-    public boolean capture(int index, RecipeRow row) {
-        Entry entry = entries.get(index);
-        if (!entry.signature.equals(new Entry(entry.source, new Work()).signature)) changed();
-        List<PositionedStack> reagents = new ArrayList<>();
-        int[][] positions = {{72, 3}, {27, 48}, {72, 93}};
-        ArrayList<ItemStack> nativeInputs = new ArrayList<>();
-        for (int slot = 0; slot < entry.ingredients.size(); slot++) {
-            Group group = entry.ingredients.get(slot); List<RecipeRow.Ingredient> choices = group.choices();
-            PositionedStack position = new PositionedStack(choices.stream().map(choice -> choice.item.copy()).toArray(ItemStack[]::new), positions[slot][0], positions[slot][1], false);
-            row.itemInput(position, slot, choices, false); reagents.add(position); nativeInputs.add(choices.get(0).item.copy());
-        }
-        List<RecipeRow.Ingredient> base = entry.base.choices();
-        PositionedStack baseDisplay = new PositionedStack(base.stream().map(choice -> choice.item.copy()).toArray(ItemStack[]::new), 72, 48, false);
-        row.itemInput(baseDisplay, 3, base, false);
-        PositionedStack result = new PositionedStack(entry.output.copy(), 117, 48, false);
-        row.itemOutput(result, 0, entry.output.copy(), 10000);
-        row.record.addProperty("duration", Integer.toString(ticks));
-        row.property("randomthings:threshold", "Configured imbuing length", threshold);
-        row.property("randomthings:allocation", "Native input slots", "Reagents occupy distinct slots among 0..2 in any order; the item to imbue occupies slot 3");
-        row.property("randomthings:emptySlots", "Required empty reagent slots", 3 - entry.ingredients.size());
-        row.property("randomthings:execution", "Native execution conditions", "Initially empty output slot; stable valid inputs until completion; one completed cycle from a reset progress counter");
-        TemplateRecipeHandler.CachedRecipe cache = (TemplateRecipeHandler.CachedRecipe) TinkerRecipes.construct(type(HANDLER + "$CachedImbuingRecipe"),
-                new Class<?>[]{handler.getClass(), ArrayList.class, ItemStack.class, ItemStack.class}, handler, nativeInputs, base.get(0).item.copy(), entry.output.copy());
-        @SuppressWarnings("unchecked") List<PositionedStack> cacheInputs = (List<PositionedStack>) field(cache, "ingredients");
-        cacheInputs.clear(); cacheInputs.addAll(reagents);
-        try {
-            java.lang.reflect.Field field = cache.getClass().getDeclaredField("toImbue"); field.setAccessible(true); field.set(cache, baseDisplay);
-        } catch (ReflectiveOperationException error) { throw fault("Imbuing cache binding changed: " + error); }
-        handler.arecipes.clear(); handler.arecipes.add(cache);
-        return true;
-    }
-    static int[][] progressBars() { return new int[][]{{74,22,176,0,12,26,12,1},{46,50,189,0,26,12,12,0},{74,65,176,24,12,24,12,3},{91,48,189,13,24,16,200,0}}; }
-    private static int duration(float threshold) {
-        if (!Float.isFinite(threshold) || threshold > (float) Integer.MAX_VALUE) throw fault("Imbuing timer cannot complete within a native signed counter cycle");
-        // Native compares an int counter after conversion to float. Math.ceil is not exact above 2^24.
-        long low = 1, high = Integer.MAX_VALUE;
-        while (low < high) {
-            long middle = low + (high - low) / 2;
-            if ((float) (int) middle >= threshold) high = middle; else low = middle + 1;
-        }
-        return (int) low;
-    }
-    private static boolean allocationOverlap(List<Group> a, List<Group> b, int at, int used, Work work) {
-        work.step();
-        if (at == a.size()) return true;
-        for (int i = 0; i < b.size(); i++) if ((used & 1 << i) == 0 && a.get(at).overlaps(b.get(i), work) && allocationOverlap(a, b, at + 1, used | 1 << i, work)) return true;
-        return false;
-    }
-    private static final class Work {
-        int remaining = 1048576;
-        void step() {
-            if (--remaining < 0) throw fault("Imbuing matching proof exceeds its comparison budget");
-            if ((remaining & 1023) == 0) Jobs.checkpoint();
-        }
-    }
-    private static final class Entry {
-        final Object source; final Group base; final List<Group> ingredients = new ArrayList<>();
-        final ItemStack output; final String signature;
-        Entry(Object source, Work work) {
-            this.source = source;
-            if (source == null || !source.getClass().getName().equals(RECIPE)) throw fault("Unadapted imbuing recipe callback");
-            base = new Group((ItemStack) field(source, "toImbue"), work);
-            List<?> raw = (List<?>) field(source, "ingredients");
-            if (raw == null || raw.size() > 3) throw fault("Imbuing ingredient count exceeds the three physical slots");
-            JsonArray inputs = new JsonArray();
-            for (Object value : raw) {
-                if (!(value instanceof ItemStack)) throw fault("Invalid imbuing ingredient");
-                Group group = new Group((ItemStack) value, work);
-                for (Group previous : ingredients) if (group.overlaps(previous, work))
-                    throw fault("Imbuing native HashMap may reuse one stack for overlapping requirements");
-                ingredients.add(group); inputs.add(value(group.signature));
-            }
-            ItemStack result = (ItemStack) field(source, "result");
-            if (result == null || result.getItem() == null || result.stackSize <= 0) throw fault("Invalid imbuing output");
-            output = result.copy(); output.stackSize = Math.min(output.stackSize, 64);
-            signature = CanonicalJson.digest(object("base", base.signature, "ingredients", inputs, "output", stackValue(result)));
-        }
-    }
-    private static final class Group {
-        final List<Pattern> patterns = new ArrayList<>(); final String signature;
-        Group(ItemStack source, Work work) {
-            audit(source); patterns.add(new Pattern(source, false, false));
-            JsonArray ores = new JsonArray(); int count = 0;
-            for (int ore : OreDictionary.getOreIDs(source)) {
-                JsonArray entries = new JsonArray();
-                for (ItemStack item : OreDictionary.getOres(OreDictionary.getOreName(ore))) {
-                    work.step();
-                    if (++count > 65536) throw fault("Imbuing ore alternatives exceed their budget");
-                    audit(item); patterns.add(new Pattern(item, item.getItemDamage() == 32767, true)); entries.add(stackValue(item));
-                }
-                ores.add(object("ore", OreDictionary.getOreName(ore), "entries", entries));
-            }
-            signature = CanonicalJson.digest(object("direct", stackValue(source), "ores", ores));
-            // A shared-ore predicate often fully includes the direct exact-NBT alternative.
-            for (int i = patterns.size() - 1; i >= 0; i--) {
-                Pattern candidate = patterns.get(i); boolean redundant = false;
-                for (int j = 0; j < patterns.size(); j++) {
-                    work.step();
-                    if (i != j && patterns.get(j).covers(candidate)
-                            && (j < i || !candidate.covers(patterns.get(j)))) { redundant = true; break; }
-                }
-                if (redundant) patterns.remove(i);
-            }
-        }
-        boolean overlaps(Group other, Work work) {
-            for (Pattern a : patterns) for (Pattern b : other.patterns) {
-                work.step(); if (a.overlaps(b)) return true;
-            }
-            return false;
-        }
-        List<RecipeRow.Ingredient> choices() {
-            List<RecipeRow.Ingredient> result = new ArrayList<>();
-            for (Pattern pattern : patterns) result.add(new RecipeRow.Ingredient(pattern.example(), 1, false, pattern.rule()));
-            return result;
-        }
-    }
-    private static final class Pattern {
-        final ItemStack item; final boolean meta, nbt;
-        Pattern(ItemStack source, boolean meta, boolean nbt) {
-            item = source.copy(); item.stackSize = 1; this.meta = meta; this.nbt = nbt;
-            if (nbt) item.setTagCompound(null);
-        }
-        boolean covers(Pattern other) { return item.getItem() == other.item.getItem() && (meta || !other.meta && item.getItemDamage() == other.item.getItemDamage())
-                && (nbt || !other.nbt && ItemStack.areItemStackTagsEqual(item, other.item)); }
-        boolean overlaps(Pattern other) { return item.getItem() == other.item.getItem() && (meta || other.meta || item.getItemDamage() == other.item.getItemDamage())
-                && (nbt || other.nbt || ItemStack.areItemStackTagsEqual(item, other.item)); }
-        JsonObject rule() { return meta || nbt ? object("kind", "wildcard", "meta", meta, "nbt", nbt) : object("kind", "exact"); }
-        ItemStack example() {
-            if (!meta) {
-                if (item.getItemDamage() == 32767) throw fault("Literal imbuing wildcard metadata has no supported concrete item display");
-                return item.copy();
-            }
-            ItemStack[] samples = new PositionedStack(item.copy(), 0, 0, true).items;
-            if (samples == null || samples.length == 0 || samples.length > 65536) throw fault("Imbuing wildcard lacks a bounded native display");
-            for (ItemStack sample : samples) if (sample != null && sample.getItem() == item.getItem() && sample.getItemDamage() != 32767) {
-                ItemStack copy = sample.copy(); copy.stackSize = 1; copy.setTagCompound(null); return copy;
-            }
-            throw fault("Imbuing wildcard lacks a concrete native display");
-        }
-    }
-    private static void audit(ItemStack item) {
-        if (item == null || item.getItem() == null) throw fault("Invalid imbuing input");
-        if (ItemCallbacks.method(item.getItem(), "getDamage", "getDamage", ItemStack.class).getDeclaringClass() != Item.class)
-            throw fault("Imbuing input overrides native metadata matching");
-    }
-    private static JsonObject stackValue(ItemStack item) { return object("item", Item.itemRegistry.getNameForObject(item.getItem()), "meta", Items.feather.getDamage(item), "amount", item.stackSize, "nbt", TypedNbt.encode(item.getTagCompound())); }
-    private static void changed() { throw new Jobs.Fault("recipe_changed", "Imbuing native registry or timer changed during capture"); }
-    private static Jobs.Fault fault(String message) { return new Jobs.Fault("recipe_unsupported", message); }
+    JsonObject definition(){JsonArray names=array();for(String ore:ores)names.add(new JsonPrimitive(ore));return object("registry",Item.itemRegistry.getNameForObject(direct.getItem()),"metadata",Items.feather.getDamage(direct),"nbt",TypedNbt.encode(direct.getTagCompound()),"ores",names);}
+  }
+  private void alive(){Jobs.checkpoint();if(closed)throw new Jobs.Fault("capture_closed","Imbuing reader is closed");}
+  public void close(){closed=true;if(bindings!=null)bindings.close();examples.close();entries.clear();outputAliases.clear();definitions=null;anchors=null;oreNames.clear();}
+  private static Jobs.Fault fault(String text){return new Jobs.Fault("recipe_unsupported",text);}
 }

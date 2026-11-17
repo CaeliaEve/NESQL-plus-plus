@@ -61,20 +61,16 @@ final class Forestry {
         if (butterflies != null) result.add(new Forestry(butterflies, "butterfly"));
         ISpeciesRoot flowers = AlleleManager.alleleRegistry.getSpeciesRoot("rootFlowers");
         if (flowers != null) {
-            ModContainer botany = Loader.instance().getIndexedModList().get("Botany");
-            if (botany == null || !"2.5.24".equals(botany.getVersion())) {
-                throw new Jobs.Fault("domain_unsupported", "Flowers require the target Botany 2.5.24");
-            }
+            TargetAdmission.require("Forestry", "Botany");
             result.add(new Forestry(flowers, "flower"));
         }
         return result;
     }
 
     static void require() {
-        ModContainer mod = Loader.instance().getIndexedModList().get("Forestry");
-        if (mod == null || !"4.10.17".equals(mod.getVersion()) || AlleleManager.alleleRegistry == null) {
-            throw new Jobs.Fault("domain_unsupported", "Genetics requires the target Forestry 4.10.17");
-        }
+        TargetAdmission.require("Forestry", "Forestry");
+        if (AlleleManager.alleleRegistry == null)
+            throw new Jobs.Fault("domain_unsupported", "Genetics requires a ready Forestry allele registry");
     }
 
     private Forestry(ISpeciesRoot root, String kind) {
@@ -132,7 +128,7 @@ final class Forestry {
             for (EnumGermlingType form : new EnumGermlingType[] {EnumGermlingType.SAPLING, EnumGermlingType.POLLEN}) {
                 members.add(member(facts, template, form.getName(), form.ordinal()));
             }
-            ITree tree = (ITree) root.templateAsIndividual(template.clone());
+            ITree tree = (ITree) ForestryMembers.create(root, template);
             products = products(tree.getProduceList(), facts);
             specialties = products(tree.getSpecialtyList(), facts);
             fruitCompatible = tree.canBearFruit();
@@ -192,7 +188,7 @@ final class Forestry {
 
     private JsonObject member(Facts facts, IAllele[] template, String form, int ordinal) {
         // Native queens mate their argument; flower seed/pollen reset its age. Use a fresh individual for every form.
-        ItemStack stack = root.getMemberStack(root.templateAsIndividual(template.clone()), ordinal);
+        ItemStack stack = root.getMemberStack(ForestryMembers.create(root, template), ordinal);
         return object("form", form, "item", facts.item(stack));
     }
 

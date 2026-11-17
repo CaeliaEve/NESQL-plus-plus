@@ -1,6 +1,8 @@
 package com.github.dcysteine.nesql.exporter.source;
 
 import com.github.dcysteine.nesql.exporter.task.Jobs;
+import com.github.dcysteine.nesql.exporter.task.CaptureOutcome;
+import com.github.dcysteine.nesql.exporter.task.CaptureAccounting;
 import com.google.gson.JsonArray;
 import com.google.gson.JsonElement;
 import com.google.gson.JsonObject;
@@ -43,9 +45,17 @@ public final class Checkpoints implements AutoCloseable {
     private String current, latest;
     private long bytes, events;
     private boolean released;
+    private boolean nativeVisuals;
+    private CaptureAccounting accounting;
 
     public interface Listener { void saved(JsonObject receipt) throws IOException; }
     public interface Validator { void check(int unit, JsonObject evidence) throws Exception; }
+    /** Only a producer-owned process capability can attest native program
+     * state. This callback is not a field or executable payload in the journal. */
+    public interface NativeReplay {
+        void verify(Path previous,String digest,int units,boolean required)throws Exception;
+        void sealed(int unit)throws Exception;
+    }
 
     public Checkpoints(Path root, JsonObject provenance, List<String> handlers, String producer, Listener listener) throws IOException {
         this.root = root.toAbsolutePath().normalize(); this.listener = listener;
@@ -63,7 +73,8 @@ public final class Checkpoints implements AutoCloseable {
             selected.add(value(handler));
         }
         order.add("base"); order.addAll(handlers);
-        identity = object("format", "nesql.checkpoint", "revision", 1, "producer", producer,
+        identity = object("format", "nesql.checkpoint", "revision", 5, "semanticRevision", 3, "continuationRevision", 1, "producer", producer,
+                "sourceRevision", Dataset.REVISION, "presentation", Dataset.PRESENTATION,
                 "provenance", copy(provenance), "handlers", selected);
         Dataset.directory(this.root.getParent()); Files.createDirectory(this.root);
         Files.createDirectory(this.root.resolve("units"));
@@ -76,6 +87,8 @@ public final class Checkpoints implements AutoCloseable {
             throw new IOException("Checkpoint units must follow the exact capture order");
         }
         current = name; bytes = 0; events = 0; digest = CanonicalJson.sha256();
+        nativeVisuals = false;
+        accounting = new CaptureAccounting();
         Dataset.plain(root.resolve("units"));
         output = new BufferedOutputStream(new DigestOutputStream(Files.newOutputStream(unit(units.size()), StandardOpenOption.CREATE_NEW), digest));
     }
@@ -84,6 +97,13 @@ public final class Checkpoints implements AutoCloseable {
         if (!Dataset.COLLECTIONS.contains(kind) || !row.has("id")) throw new IOException("Invalid checkpoint record");
         if (CanonicalJson.bytes(row).length > Dataset.RECORD_LIMIT) throw new IOException("Checkpoint record exceeds 1 MiB");
         event(object("kind", kind, "row", row));
+        if(kind.equals("visuals"))nativeVisuals=true;
+    }
+
+    /** Native dispositions are recovery evidence, never fabricated Source rows. */
+    public void outcome(int index, CaptureOutcome outcome) throws IOException {
+        event(object("kind", "outcome", "index", index, "outcome", outcome.json()));
+        accounting.append(index, outcome);
     }
 
     public void asset(Path source, String path) throws IOException {
@@ -116,9 +136,12 @@ public final class Checkpoints implements AutoCloseable {
     public void finish(JsonObject evidence) throws IOException {
         Jobs.checkpoint();
         if (released || output == null) throw new IOException("No open checkpoint unit");
+        if ((accounting.entries() != 0 || evidence.has("accounting"))
+                && !accounting.json().equals(evidence.get("accounting")))
+            throw new IOException("Checkpoint native disposition ledger does not match its accounting proof");
         output.close(); output = null; force(unit(units.size()));
         JsonObject descriptor = object("name", current, "bytes", Long.toString(bytes), "events", Long.toString(events),
-                "sha256", CanonicalJson.hex(digest.digest()), "evidence", copy(evidence));
+                "sha256", CanonicalJson.hex(digest.digest()), "nativeVisuals", nativeVisuals, "evidence", copy(evidence));
         units.add(descriptor);
         JsonObject manifest = copy(identity); manifest.add("units", units);
         byte[] encoded = CanonicalJson.bytes(manifest);
@@ -141,15 +164,11 @@ public final class Checkpoints implements AutoCloseable {
         } finally { if (interrupted) Thread.currentThread().interrupt(); }
     }
 
-    /** Replays a sealed prefix into a fresh attempt; partial files are never consulted. */
-    int replay(Path previous, String expected, Dataset dataset, Rows rows, BiConsumer<String, JsonObject> restored) throws IOException {
-        try { return replay(previous, expected, dataset, rows, restored, (unit, evidence) -> {}); }
-        catch (IOException failure) { throw failure; }
-        catch (RuntimeException failure) { throw failure; }
-        catch (Exception failure) { throw new IOException(failure); }
-    }
-
+    /** Replays a sealed prefix only after explicit native validation; partial files are never consulted. */
     public int replay(Path previous, String expected, Dataset dataset, Rows rows, BiConsumer<String, JsonObject> restored, Validator validator) throws Exception {
+        return replay(previous,expected,dataset,rows,restored,validator,null);
+    }
+    public int replay(Path previous, String expected, Dataset dataset, Rows rows, BiConsumer<String, JsonObject> restored, Validator validator,NativeReplay nativeReplay) throws Exception {
         java.util.Objects.requireNonNull(validator, "Native checkpoint validation is required");
         if (units.size() != 0 || output != null || released || previous.toAbsolutePath().normalize().equals(root)) throw new IOException("Invalid replay target");
         if (expected == null || !expected.matches("[a-f0-9]{64}")) throw new IOException("Checkpoint digest required");
@@ -160,9 +179,18 @@ public final class Checkpoints implements AutoCloseable {
         if (!CanonicalJson.digest(manifestBytes).equals(expected)) throw new IOException("Checkpoint manifest digest mismatch");
         JsonObject manifest = parse(manifestBytes);
         JsonElement sourceUnits = manifest.remove("units");
-        if (!identity.equals(manifest) || sourceUnits == null || !sourceUnits.isJsonArray()) throw new IOException("Checkpoint environment, build, session or selection changed");
+        if (!identity.equals(manifest) || sourceUnits == null || !sourceUnits.isJsonArray()) throw new IOException("Checkpoint contract, presentation, environment, build, session or selection changed");
         JsonArray saved = sourceUnits.getAsJsonArray();
         if (saved.size() < 1 || saved.size() > order.size()) throw new IOException("Invalid checkpoint unit count");
+        boolean nativeRequired=false;
+        for(JsonElement unit:saved){
+            JsonObject descriptor=unit.getAsJsonObject();
+            if(!descriptor.has("nativeVisuals")||!descriptor.get("nativeVisuals").isJsonPrimitive()
+                    ||!descriptor.getAsJsonPrimitive("nativeVisuals").isBoolean())throw new IOException("Missing native visual recovery classification");
+            nativeRequired|=descriptor.get("nativeVisuals").getAsBoolean();
+        }
+        if(nativeRequired&&nativeReplay==null)throw new IOException("Native inventory renderer/Random state has no verified recovery binding; visual JSON alone cannot replay this prefix");
+        if(nativeReplay!=null)nativeReplay.verify(previous,expected,saved.size(),nativeRequired);
         for (int index = 0; index < saved.size(); index++) {
             Jobs.checkpoint();
             JsonObject descriptor = saved.get(index).getAsJsonObject();
@@ -181,7 +209,9 @@ public final class Checkpoints implements AutoCloseable {
                     if (read > length) throw new IOException("Checkpoint unit grew");
                     hash.update(line); hash.update((byte) '\n'); count++;
                     JsonObject entry = parse(line); String kind = entry.get("kind").getAsString();
-                    if (kind.equals("blob")) {
+                    if (kind.equals("outcome")) {
+                        outcome(entry.get("index").getAsInt(), CaptureOutcome.parse(entry.getAsJsonObject("outcome")));
+                    } else if (kind.equals("blob")) {
                         String path = entry.get("path").getAsString();
                         if (!path.matches("assets/[a-f0-9]{64}\\.(png|webp)")) throw new IOException("Invalid checkpoint blob path");
                         Path blob = previous.resolve("blobs").resolve(path.substring(7));
@@ -192,6 +222,8 @@ public final class Checkpoints implements AutoCloseable {
                         if (!actual.equals(path)) throw new IOException("Checkpoint blob changed during replay");
                         asset(blob, path);
                     } else {
+                        if(kind.equals("visuals")&&(!nativeRequired||!descriptor.get("nativeVisuals").getAsBoolean()))
+                            throw new IOException("Native inventory renderer/Random state cannot be restored by relabelling visual JSON");
                         JsonObject record = entry.getAsJsonObject("row");
                         row(kind, record); rows.add(kind, record); restored.accept(kind, record);
                     }
@@ -204,6 +236,7 @@ public final class Checkpoints implements AutoCloseable {
             // Reject damaged disk evidence before doing a potentially long native
             // data recheck. All replay output is still unpublished staging here.
             validator.check(index, descriptor.getAsJsonObject("evidence"));
+            if(nativeReplay!=null)nativeReplay.sealed(index);
             finish(descriptor.getAsJsonObject("evidence"));
         }
         return saved.size();
@@ -218,6 +251,16 @@ public final class Checkpoints implements AutoCloseable {
             if (!unit.get("name").getAsString().equals("base") && !excluded.entrySet().isEmpty()) {
                 result.add(unit.get("name").getAsString(), copy(excluded));
             }
+        }
+        return result;
+    }
+
+    public JsonObject accounting() {
+        JsonObject result = new JsonObject();
+        for (JsonElement entry : units) {
+            JsonObject unit = entry.getAsJsonObject(), evidence = unit.getAsJsonObject("evidence");
+            if (!unit.get("name").getAsString().equals("base") && evidence.has("accounting"))
+                result.add(unit.get("name").getAsString(), copy(evidence.getAsJsonObject("accounting")));
         }
         return result;
     }

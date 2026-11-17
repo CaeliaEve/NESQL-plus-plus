@@ -1,6 +1,7 @@
 package com.github.dcysteine.nesql.exporter.capture;
 
 import com.github.dcysteine.nesql.exporter.source.CanonicalJson;
+import com.github.dcysteine.nesql.exporter.source.Dataset;
 import com.github.dcysteine.nesql.exporter.source.Probe;
 import com.github.dcysteine.nesql.exporter.task.ClientThread;
 import com.github.dcysteine.nesql.exporter.task.Jobs;
@@ -59,6 +60,7 @@ final class Environment {
                 "mods", mods, "inputs", files, "resources", resources, "knowledge", snapshot.knowledge,
                 "probes", probes,
                 "settings", object("profile", request.profile, "handlers", String.join(",", request.handlers),
+                        "presentation", Dataset.PRESENTATION, "sourceRevision", Integer.toString(Dataset.REVISION),
                         "iconPixels", "64", "tooltip", "advanced"));
         if (request.scope != null) environment.getAsJsonObject("settings").addProperty("scope", request.scope);
         return environment;

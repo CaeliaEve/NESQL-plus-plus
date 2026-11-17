@@ -1,0 +1,162 @@
+{
+  "WayofTime.alchemicalWizardry.common.items.sigil.SigilFluid": [
+    "5b6838ba70c741e9f4383147015b8b37c3cc2cf2879e899507dbe3d6ef7308da",
+    "7ebe9488cb9f4fe8da3a65f71e0ebf9a3becd4cbb0ebc40afb0429018fecc979"
+  ],
+  "tconstruct.smeltery.itemblocks.LavaTankItemBlock": [
+    "baab2c20fef1719bc019c6b71f762f76435fdd7ac6851b4c4423d239b69e6dca",
+    "bde70d074b482b130f78d209eec68e522e6b41c846b08b2cc80cb9d8c196275e"
+  ],
+  "com.glodblock.github.common.item.ItemCertusQuartzTank": [
+    "770bbd1cc35454086f0f97798d4ef6a509ed46c1872c34be886deb11a8c1b69b",
+    "9beb09f30ba87062a554889eb4a3bc6aad25c18f951270a863df76d6106b265b"
+  ],
+  "witchinggadgets.common.items.ItemCrystalCapsule": [
+    "06891048ec1df2dfd5b4ab5f84e5fd7fd5f4ec693be6a8fdce67b03574c8cf65",
+    "0d57b7b5fe39614d5ab54da044fbd16f4cfd7d6eb776c78e88e72f29a2a05560"
+  ],
+  "crazypants.enderio.machine.tank.BlockItemTank": [
+    "3fe32db05427d078340d4c0704cdf1c4d21b2d3c5e7b670d875a94ded8ac1e17",
+    "b8955bab600cd0bfa72d95e370f51cd0634282dc801299998a5b942f700dced5"
+  ],
+  "crazypants.enderio.machine.tank.TileTank": [
+    "384f822b9cc4a7492c700a9aa8cf1904c9a61b8506f36c86c94535ceaf9f2f32",
+    "4d776975ac8914c23991cb295332f20c593af80b7e0c57b2250409cd1a5aa28d"
+  ],
+  "crazypants.enderio.tool.SmartTank": [
+    "558c8cc2268d729fd32814021c4fa75b7dad241316d7bf81f2aa155b523ce1d9",
+    "cf4520481cd34bc033b90f9e2a2af5aed5f92ef77d5bff12386b63f9ab3c34cc"
+  ],
+  "com.rwtema.extrautils.item.ItemBlockDrum": [
+    "42d420c15677321a8552ee8eccdec5a4a866e4cf0d788ce4d2301fe98dc892cd",
+    "6b72e92ef0d23cc07e7a4963fddd98d0ddc59effdb53153a76c8c5216544675a"
+  ],
+  "com.rwtema.extrautils.tileentity.TileEntityDrum": [
+    "2d31f49c57c6897fdf995f428661cefe5f1321bfd2200b86b7f556d523a0bd27",
+    "8adc2573e26c5315a1a3ee2e9a249bfbbf1faa83cf5a8caf5e20bd44d90f94a8"
+  ],
+  "micdoodle8.mods.galacticraft.core.items.ItemCanisterGeneric": [
+    "7c50b91d43bbe0107175776cd81399a53efa77956617ea861290638ed43a8e2e",
+    "b1fa49150daba339172d93452f5744e2c4153660a78930ce3f2deee22ae61750"
+  ],
+  "galaxyspace.core.item.ItemCanisterGeneric": [
+    "5dd97465ee16d1f6e7e378e9d9ef203fee94cc88155f11d8830506b3a3dab2ba",
+    "fe951b291786e913067f0c3f4c2d00c7e1d04deabbe0ed555dcbd2c2cef8970b"
+  ],
+  "com.gtnewhorizons.gravisuiteneo.items.ItemPlasmaCell": [
+    "34777c4f97483f8301ffdfafabce1d243503bc81cbd6c24ef9c1800357ba7c38",
+    "970ad7ec0cf0db1f757fbdfa6d885fba8c7ac362bd691a8da3e0922425ec498c"
+  ],
+  "tuhljin.automagy.blocks.ItemBlockThirstyTank": [
+    "9b0e4e5bca7c5d983ae3069c2a8da1c2a5d73b3dfece5d08a574425a7ebe9122",
+    "acc5b24af625c0c7c9f6c873e4ed57ab30f5218954532d8bcf74a47b679896b5"
+  ],
+  "com.mitchej123.hodgepodge.mixins.late.automagy.MixinItemBlockThirstyTank": [
+    "cf5869505122d703e31c18668a0250525f09e85794109ccb4710c91c44db4050",
+    "fa14438803ffce028d8c5c37dcea47b204f11e0b97981712a05138fc0bd96e75"
+  ],
+  "gregtech.api.items.MetaBaseItem": [
+    "9b02220da3882fe3f193f3b2927f0f30064ad41394c788b97e90be0b0e8e01eb",
+    "bc1b3ee161aa144d15b113545b598d58194a5f5a43624f8c43f4ebd5d8226660"
+  ],
+  "gregtech.api.items.MetaGeneratedItem": [
+    "5047e5076dd255114e976181e0e5885476425afc7f30aecfc399883ff0aa12a3",
+    "7eeaf0b47cbb2a523f43f5315e3c7a001861c8b02102a93c4c70437a381929e6"
+  ],
+  "gregtech.api.items.GTGenericItem": [
+    "51c872d3f2a99a3d9b46586721d0438debc29ba5c101b00fbce2ba2ed58f0538",
+    "7e225ad555e379f0cbde6eebcce5a23f2a11fd5166248f807abbcf79510e5061"
+  ],
+  "gregtech.api.items.MetaGeneratedItemX01": [
+    "7f0a1b28ab9af9fefefeb2e51e0005100a13bc81e86cc53f6289fc6982216e4f",
+    "e80b3fa508e0db3567764709f4836c30cef152707587d39b8aa6df463072fc61"
+  ],
+  "gregtech.api.items.MetaGeneratedItemX32": [
+    "13d8860e39b65927f3e1e1e6b18dfc228b72ff46dba961524d4e9c4ebfff76d0",
+    "b75901491621c1eaedd156ef185f28d7cb8b87d7f20cc5a28dbf9570e18bc2e0"
+  ],
+  "gregtech.api.items.MetaGeneratedTool": [
+    "5308d845e6c99bdcb93376309948e266edc9dc6da2cc676ea78e93759946c14b",
+    "b3347679054d47c807ca8c6e6d432bc1e89f306482f379ae29a9290fa4651f93"
+  ],
+  "gregtech.common.items.MetaGeneratedItem01": [
+    "29fb3821aa73deb63799e511f14e2310b59ca78f8b21174595e424232a942b0b",
+    "ddda47a47955dc9960dbb5239e0a4ba1358eb2344c999540058b6dc2beecadcc"
+  ],
+  "gregtech.common.items.MetaGeneratedItem02": [
+    "29e39e00fc8f4d1da9288ed617c74bf8e00c53de2dc8b02a24ef295a75f1b8fd",
+    "344ffe89385d4119e3db6160e2a166b186d0d8069738658ae94cf6ca586b00df"
+  ],
+  "bartworks.system.material.BWMetaGeneratedItems": [
+    "94e14d4e5973e189f5597de92ac3dda59e8d03cb6dfe4985d4441f19b5b58f6c",
+    "d4f509c1292667b075055f26c8cc15f716419e97181b7c8844bffc199c15514d"
+  ],
+  "gtPlusPlus.xmod.gregtech.api.items.GTMetaItemBase": [
+    "bddfd456c4cb9de79c25e08798df9b57f0b832a98c4025a8bafec0ff083a36ef",
+    "c3b45ca61a9fb3881dce8f49e0b64f784e050438f73469cb73b07794d61d9c6c"
+  ],
+  "gtPlusPlus.xmod.gregtech.api.items.GTMetaItem": [
+    "a070f554d0fc62ae2f579f39bffb08dbde217fb357acf750d45e4c391213a7e4",
+    "b942ff041bfa121b1132f533250e535f7cbb5a1d2a615b1af8fcfd21454da4f2"
+  ],
+  "gtPlusPlus.xmod.gregtech.api.items.GTMetaItemX32": [
+    "1d47dbff9391d424e1d497039f7001247aacec4b6605c53f92d6343908ce7e86",
+    "c04e6c07678076f596fd4f50294681cbf45be6e99c21164ca0f2ea7cdebfb9b3"
+  ],
+  "gtPlusPlus.xmod.gregtech.api.items.GTGenericItem": [
+    "14d34d1dda4a48fb10a04834fbe5e6780379be8358e03401706670e13d13d99b",
+    "995a50ce5e047a326412a1225c344f8cad902bb00b65fffc89f2ab0d4398e4ba"
+  ],
+  "gregtech.common.items.behaviors.BehaviourNone": [
+    "c1d69f951c3ed49fb4c290fb227a73191bf1ae3ef83d60251ec7072377704dcc",
+    "d60fc0af387343c6d1d8b6a69c43d169d8e7165742b399e75b1d1094136bf6cd"
+  ],
+  "gregtech.common.items.ItemVolumetricFlask": [
+    "55307bb138d1d37cc5ca3c1b59c75a6bcbaada183a4b0851e358f8c1cfd6bd18",
+    "f9369f8297d55c989322100544e6b5750dc08acb91019b037c53fd84a9df43d2"
+  ],
+  "gregtech.common.blocks.ItemMachines": [
+    "38d3f6173729e3c6fa28ae79cac521011c37ca00295a2cd672cb05efd5a799cf",
+    "4c6466448d02be15af750c249a15c3099753a9621e479c1678ff8780943aa10a"
+  ],
+  "gregtech.api.util.GTUtility": [
+    "3c8e5dae9e90035eab507966ea04df9a4968d8b5de275da872fa00108f0c2632",
+    "cf54cab3b41ee9a888feb15dc06d999a44a37feac532f79178f469a0a8518a43"
+  ],
+  "gregtech.api.util.GTModHandler": [
+    "f0b0df7fae4b6e1156b1e25ea7920dff65ec0b3db0c1a20c21e8ba3e63563717",
+    "f7c0150d56e3e24ce06dd06909fa2de3fe13630941106f30775e9f40df3089bb"
+  ],
+  "gregtech.api.objects.GTItemStack": [
+    "392562d4ab99d399cf06219cbc3cf8a8b643191eb84d51a7cde5fe3510c63cbd",
+    "7c99f8bc50554256166ef5d3a407aa694b4b490328f088f01651091057fdc463"
+  ],
+  "bartworks.system.material.CircuitGeneration.BWMetaItems$BW_GT_MetaGen_Item_Hook": [
+    "8761a4d8775d1233c7b6981d4dcc06dc18bb4f05ac5f66cc444ed3d023303b0e",
+    "9665870012f5f67aec3b17a65335209139aeea26b86c870d0bb88eb36d59bc70"
+  ],
+  "ggfab.items.GGMetaItemDumbItems": [
+    "3cfb3a62475501fc1becf45cf2142a0bf993568a9f0bdbbe2856dabd830f67a7",
+    "d382ef9c4d2b211b83d003b99eb741226aeefe4a506bdaca3158cc74c6cabbdb"
+  ],
+  "gregtech.common.items.MetaGeneratedItem98": [
+    "2c24da6fa9b9b4407cdd67be3468e4a6aa11258291b37bd79b14fd3e3e9c8ca7",
+    "372e797b059a0fd22b06a908ee959952c5f7b6d934b213d15eb74b0d1e88b37d"
+  ],
+  "gregtech.common.items.MetaGeneratedItem99": [
+    "0873fb9d32ae84ff48d4c6cae3f21ed8d0b6f0451cd4e50b2786ceed66830e6c",
+    "89cd8429df17e6261c325d343df7fb601937c18b0e43926ea577e562a8604146"
+  ],
+  "gtPlusPlus.core.item.tool.misc.ItemGregtechPump": [
+    "599ba31b5a24db20302c50cc71f31658a3e96da7e867118dbb9e11d14fa4f8f7",
+    "1816d2804556bdae30fd8cb5b9306886f1d217b7e6e494609029d7eab6331379"
+  ],
+  "gtPlusPlus.core.util.minecraft.NBTUtils": [
+    "73907217fc4efb21f62612814fed757ca35c1216d4f32b7f9f4eb46c3c095409",
+    "593355c6fed1fbce7fdfdd00a871171ca747afdd448221366988da62f7438556"
+  ],
+  "gtPlusPlus.core.util.minecraft.FluidUtils": [
+    "993a410e483cd5750d834e6e4cf39dc6ad7bed37ed5a766950323cf09820d956",
+    "51cb5e933aa5579e2ea8dca1c1c5753beeb60bfbd2d0178e0b5de2dbf1632416"
+  ]
+}

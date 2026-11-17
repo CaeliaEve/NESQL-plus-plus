@@ -48,8 +48,9 @@ final class PngCache {
         int width = image.getWidth(), height = image.getHeight();
         digest.update(ByteBuffer.allocate(8).putInt(width).putInt(height).array());
         int[] row = new int[width]; ByteBuffer packed = ByteBuffer.allocate(width * 4);
+        java.nio.Buffer cursor = packed;
         for (int y = 0; y < height; y++) {
-            Jobs.checkpoint(); image.getRGB(0, y, width, 1, row, 0, width); packed.clear();
+            Jobs.checkpoint(); image.getRGB(0, y, width, 1, row, 0, width); cursor.clear();
             for (int value : row) packed.putInt(value);
             digest.update(packed.array());
         }

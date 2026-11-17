@@ -20,6 +20,11 @@ final class ProvenanceTest {
         String runtime = Provenance.runtime(data);
         require(runtime.equals(Provenance.runtime(full)), "Capture scope changed the runtime identity");
         require(!CanonicalJson.digest(data).equals(CanonicalJson.digest(full)), "Original environment identity was erased");
+        for (String capability : new String[]{"presentation", "sourceRevision"}) {
+            JsonObject changed = copy(data);
+            changed.getAsJsonObject("settings").addProperty(capability, "different");
+            require(!runtime.equals(Provenance.runtime(changed)), "Capture contract changed without changing runtime identity: " + capability);
+        }
         for (String field : new String[]{"locale", "mods", "inputs", "resources", "knowledge", "settings", "future"}) {
             JsonObject changed = copy(data);
             if (field.equals("settings")) changed.getAsJsonObject(field).addProperty("iconPixels", "128");

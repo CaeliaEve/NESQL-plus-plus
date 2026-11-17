@@ -154,6 +154,8 @@ final class NativeIntegrationTest {
         assign("buildcraft.api.transport.PipeWire","item",wire);
         codechicken.nei.recipe.TemplateRecipeHandler handler=(codechicken.nei.recipe.TemplateRecipeHandler)type("buildcraft.compat.nei.RecipeHandlerIntegrationTable").newInstance();
         require(Recipes.adapter(handler)!=null,"Integration table has no production adapter route");
+        codechicken.nei.recipe.TemplateRecipeHandler.CachedRecipe borrowed=handler.new CachedRecipe(){public codechicken.nei.PositionedStack getResult(){return null;}};
+        handler.arecipes.add(borrowed);
         List<ItemStack> facades=(List<ItemStack>)field(type(TRANSPORT+"ItemFacade"),null,"allFacades");
         List<ItemStack> prior=new ArrayList<>(facades);facades.clear();
         for(String block:new String[]{"minecraft:stone","minecraft:dirt"}){ItemStack f=new ItemStack(facade);f.setTagInfo("name",new NBTTagString(block));facades.add(f);}
@@ -181,6 +183,7 @@ final class NativeIntegrationTest {
             boolean hole=false;JsonArray records=new JsonArray();
             for(int index=0;index<adapter.size();index++){
                 RecipeRow row=knownRow(known);require(adapter.capture(index,row),"Integration row was silently excluded");
+                require(handler.arecipes.size()==1&&handler.arecipes.get(0)==borrowed,"Integration semantic reader rewrote borrowed GUI cache");
                 JsonObject process=row.record.getAsJsonObject("process"),change=row.outputs.get(0).getAsJsonObject().getAsJsonObject("change");
                 require(process.get("kind").getAsString().equals("buildcraftIntegration")&&row.record.get("duration").isJsonNull()&&row.record.get("energy").isJsonNull(),"Integration became fixed time/EU");
                 JsonArray bindings=change.getAsJsonArray("bindings"),samples=change.getAsJsonArray("samples");
@@ -197,12 +200,22 @@ final class NativeIntegrationTest {
                     ItemStack expected=rule.observe(primary,slots,false).output;
                     require(samples.get(sample).getAsJsonObject().get("id").getAsString().equals(id(expected)),"Integration correlated product differs from native craft");
                 }
-                handler.arecipes.get(0).getIngredients().get(0).items[0].stackSize=123;
-                handler.arecipes.get(0).getResult().items[0].stackSize=123;
                 RecipeRow repeated=knownRow(known);adapter.capture(index,repeated);
                 require(row.inputs.equals(repeated.inputs)&&row.outputs.equals(repeated.outputs),"Display mutation escaped into integration samples");
                 row.finish();records.add(row.record);
             }
+            adapter.finishVerification();
+            actualSource(handler,nativeRecipes,known);
+            Object gateRecipe=nativeRecipes.get(0);
+            Map<Object,ItemStack> gateEntries=(Map<Object,ItemStack>)field(gateRecipe,"recipes");
+            Object expansion=gateEntries.keySet().iterator().next();ItemStack oldChip=gateEntries.get(expansion);
+            try{gateEntries.put(expansion,oldChip.copy());fails(()->adapter.capture(0,knownRow(known)),"recipe_changed");}
+            finally{gateEntries.put(expansion,oldChip);}
+            adapter.finishVerification();
+            ItemStack example=facades.get(0);NBTTagCompound oldExample=(NBTTagCompound)example.getTagCompound().copy();
+            try{example.getTagCompound().setString("name","minecraft:glass");fails(adapter::finishVerification,"recipe_changed");}
+            finally{example.setTagCompound(oldExample);}
+            adapter.finishVerification();
             require(hole,"Integration examples lost optional physical slots");
             require(facades.get(0).getTagCompound().hasKey("name"),"Integration capture migrated borrowed facade registry");
             fails(()->adapter(handler,Arrays.asList(nativeRecipes.get(0),nativeRecipes.get(0))),"recipe_unsupported");
@@ -210,11 +223,45 @@ final class NativeIntegrationTest {
             RegistryRecipes bounded=adapter(handler,Collections.singletonList(nativeRecipes.get(1)));
             require(bounded.size()>1&&bounded.size()<20,"Facade examples form an unbounded cartesian product");
             RecipeRow tail=knownRow(known);require(bounded.capture(bounded.size()-1,tail),"Last integration batch was omitted");
+            bounded.finishVerification();bounded.close();bounded.close();
+            fails(bounded::size,"capture_closed");
             tail.finish();records.add(tail.record);
             JsonArray facts=new JsonArray();for(String key:new TreeSet<>(known.keySet()))facts.add(stack(known.get(key)));
             java.nio.file.Files.write(java.nio.file.Paths.get("build/native-tests/integration-adapter-records.json"),CanonicalJson.bytes(object("items",facts,"recipes",records)));
+            fails(adapter::finishVerification,"recipe_changed");
             nativeRecipes.remove(0);fails(()->adapter.capture(0,knownRow(known)),"recipe_changed");
+            adapter.close();adapter.close();fails(adapter::size,"capture_closed");fails(()->adapter.capture(0,knownRow(known)),"capture_closed");
+            require(nativeRecipes.size()==2&&handler.arecipes.size()==1&&handler.arecipes.get(0)==borrowed,"Integration close changed borrowed registry/GUI");
+            try(RegistryRecipes empty=adapter(handler,Collections.emptyList())){require(empty.size()==0,"Ready-empty integration failed");empty.finishVerification();}
+            fails(()->adapter(handler,null),"handler_not_ready");
         } finally {facades.clear();facades.addAll(prior);}
+    }
+    private static void actualSource(codechicken.nei.recipe.TemplateRecipeHandler handler,List<Object> recipes,Map<String,ItemStack> known)throws Exception{
+        Object manager=type("buildcraft.core.recipes.IntegrationRecipeManager").newInstance();
+        for(Object recipe:recipes)invoke(manager.getClass(),manager,"addRecipe",new Class<?>[]{type("buildcraft.api.recipes.IIntegrationRecipe")},recipe);
+        Field api=type("buildcraft.api.recipes.BuildcraftRecipeRegistry").getField("integrationTable");Object priorApi=api.get(null);
+        cpw.mods.fml.common.Loader loader=cpw.mods.fml.common.Loader.instance();
+        Map<String,cpw.mods.fml.common.ModContainer> old=cpw.mods.fml.relauncher.ReflectionHelper.getPrivateValue(cpw.mods.fml.common.Loader.class,loader,"namedMods");
+        Map<String,cpw.mods.fml.common.ModContainer> configured=new HashMap<>(old);
+        for(String[] version:new String[][]{{"BuildCraft|Silicon","7.1.44"},{"BuildCraft|Compat","7.1.18"}}){
+            cpw.mods.fml.common.ModMetadata metadata=new cpw.mods.fml.common.ModMetadata();metadata.modId=version[0];metadata.version=version[1];configured.put(version[0],new cpw.mods.fml.common.DummyModContainer(metadata));
+        }
+        try{
+            api.set(null,manager);cpw.mods.fml.relauncher.ReflectionHelper.setPrivateValue(cpw.mods.fml.common.Loader.class,loader,configured,"namedMods");
+            RegistrationBindings first=RegistrationBindings.read(handler);
+            require(first.same(RegistrationBindings.read((codechicken.nei.recipe.TemplateRecipeHandler)handler.getClass().newInstance())),"Integration independent source bindings differ");
+            try(RegistryRecipes reader=new IntegrationRecipes(handler)){
+                require(reader.size()==3&&reader.capture(0,knownRow(known)),"Actual integration native source failed");reader.finishVerification();
+                Object list=field(manager,"integrationRecipes");Field storage=manager.getClass().getDeclaredField("integrationRecipes");storage.setAccessible(true);
+                try{storage.set(manager,new LinkedList<>(recipes));require(!first.same(RegistrationBindings.read(handler)),"Replaced integration list stayed equivalent");fails(reader::verify,"recipe_changed");}
+                finally{storage.set(manager,list);}
+                try{api.set(null,manager.getClass().newInstance());fails(reader::verify,"recipe_changed");}finally{api.set(null,manager);}
+                // Pure GUI coordinates are no longer a source readiness gate.
+                int[] positions=(int[])field(type("buildcraft.silicon.gui.ContainerIntegrationTable"),null,"SLOT_X");int oldPosition=positions[0];
+                try{positions[0]=Integer.MAX_VALUE;require(reader.capture(0,knownRow(known)),"GUI-only coordinates still block semantic capture");reader.finishVerification();}
+                finally{positions[0]=oldPosition;}
+            }
+        }finally{api.set(null,priorApi);cpw.mods.fml.relauncher.ReflectionHelper.setPrivateValue(cpw.mods.fml.common.Loader.class,loader,old,"namedMods");}
     }
     private static RegistryRecipes adapter(codechicken.nei.recipe.TemplateRecipeHandler handler,List<?> recipes)throws Exception{
         Constructor<?> ctor=type("com.github.dcysteine.nesql.exporter.capture.IntegrationRecipes").getDeclaredConstructor(codechicken.nei.recipe.TemplateRecipeHandler.class,List.class);ctor.setAccessible(true);

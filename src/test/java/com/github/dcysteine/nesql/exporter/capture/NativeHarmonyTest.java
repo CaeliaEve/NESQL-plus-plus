@@ -4,7 +4,6 @@ import com.github.dcysteine.nesql.exporter.source.Identity;
 import com.github.dcysteine.nesql.exporter.task.Jobs;
 import com.google.gson.JsonObject;
 import gregtech.api.enums.Materials;
-import gregtech.api.enums.MaterialsUEVplus;
 import net.minecraft.init.Blocks;
 import net.minecraft.init.Items;
 import net.minecraft.item.ItemStack;
@@ -18,16 +17,16 @@ import static com.github.dcysteine.nesql.exporter.source.Json.*;
 final class NativeHarmonyTest {
     static void run() throws Exception {
         set(cpw.mods.fml.common.Loader.instance(), "namedMods", new HashMap<String, cpw.mods.fml.common.ModContainer>());
-        Materials.Hydrogen.toString(); // Material bootstrap owns initialization of MaterialsUEVplus.
+        Materials.Hydrogen.toString();
         for (Materials material : new Materials[]{Materials.Helium, Materials.Iron, Materials.Calcium, Materials.Niobium,
                 Materials.Nitrogen, Materials.Zinc, Materials.Silver, Materials.Titanium, Materials.Radon, Materials.Nickel,
                 Materials.Boron, Materials.Sulfur, Materials.Americium, Materials.Bismuth, Materials.Oxygen, Materials.Tin}) {
             Fluid plasma = new Fluid("fixture.plasma." + material.mName.toLowerCase(java.util.Locale.ROOT));
             FluidRegistry.registerFluid(plasma); material.mPlasma = plasma;
         }
-        for (Materials material : new Materials[] {MaterialsUEVplus.WhiteDwarfMatter, MaterialsUEVplus.BlackDwarfMatter,
-                MaterialsUEVplus.Universium, MaterialsUEVplus.RawStarMatter, MaterialsUEVplus.SpaceTime}) {
-            Fluid fluid = new Fluid(material == MaterialsUEVplus.SpaceTime ? "molten.spacetime" : material == MaterialsUEVplus.RawStarMatter ? "rawstarmatter" : material.mName.toLowerCase(java.util.Locale.ROOT));
+        for (Materials material : new Materials[] {Materials.WhiteDwarfMatter, Materials.BlackDwarfMatter,
+                Materials.Universium, Materials.RawStarMatter, Materials.SpaceTime}) {
+            Fluid fluid = new Fluid(material == Materials.SpaceTime ? "molten.spacetime" : material == Materials.RawStarMatter ? "rawstarmatter" : material.mName.toLowerCase(java.util.Locale.ROOT));
             FluidRegistry.registerFluid(fluid); material.mFluid = fluid; material.mStandardMoltenFluid = fluid;
         }
         for (Materials material : new Materials[] {Materials.Hydrogen, Materials.Helium}) {
@@ -45,7 +44,7 @@ final class NativeHarmonyTest {
         Object wrapped = type("tectech.util.ItemStackLong").getConstructor(ItemStack.class, long.class).newInstance(product, 9_007_199_254_740_993L);
         set(nativeRecipe, "outputItems", new ArrayList<>(Collections.singletonList(wrapped)));
         List<Object> nativeFluids = new ArrayList<>();
-        for (FluidStack fluid : new FluidStack[] {MaterialsUEVplus.RawStarMatter.getFluid(1), MaterialsUEVplus.WhiteDwarfMatter.getFluid(1)})
+        for (FluidStack fluid : new FluidStack[] {Materials.RawStarMatter.getFluid(1), Materials.WhiteDwarfMatter.getFluid(1)})
             nativeFluids.add(type("tectech.util.FluidStackLong").getConstructor(FluidStack.class, long.class).newInstance(fluid, 8000000L));
         set(nativeRecipe, "outputFluids", nativeFluids);
         Object storage = allocate(type("tectech.recipe.EyeOfHarmonyRecipeStorage"));
@@ -73,12 +72,12 @@ final class NativeHarmonyTest {
         projection.mSpecialItems = nativeRecipe;
         projection.mInputs = new ItemStack[]{trigger.copy()}; projection.mInputs[0].stackSize=0;
         projection.mOutputs = new ItemStack[]{product.copy()};
-        projection.mFluidInputs = new FluidStack[]{Materials.Hydrogen.getGas(0),Materials.Helium.getGas(0),MaterialsUEVplus.RawStarMatter.getFluid(0)};
-        projection.mFluidOutputs = new FluidStack[]{MaterialsUEVplus.RawStarMatter.getFluid(1),MaterialsUEVplus.WhiteDwarfMatter.getFluid(1)};
-        List<GtRecipes.Placement> inputSlots=Collections.singletonList(new GtRecipes.Placement(new GtRecipes.Binding(0,false,false,false,true,4,4),trigger,new codechicken.nei.PositionedStack(trigger,4,4)));
-        List<GtRecipes.Placement> outputSlots=Collections.singletonList(new GtRecipes.Placement(new GtRecipes.Binding(0,false,false,false,false,24,4),product,new codechicken.nei.PositionedStack(product,24,4)));
+        projection.mFluidInputs = new FluidStack[]{Materials.Hydrogen.getGas(0),Materials.Helium.getGas(0),Materials.RawStarMatter.getFluid(0)};
+        projection.mFluidOutputs = new FluidStack[]{Materials.RawStarMatter.getFluid(1),Materials.WhiteDwarfMatter.getFluid(1)};
+        List<GtRecipes.Placement> inputSlots=Collections.singletonList(new GtRecipes.Placement(new GtRecipes.Binding(0, false, false, true),trigger));
+        List<GtRecipes.Placement> outputSlots=Collections.singletonList(new GtRecipes.Placement(new GtRecipes.Binding(0, false, false, false),product));
         List<RecipeRow> projected=Harmony.capture(projection,inputSlots,outputSlots,row(trigger,product),(tectech.recipe.EyeOfHarmonyRecipeStorage)storage);
-        require(projected.get(0).outputs.size()==4 && projected.get(0).elements.size()==2, "Hidden native outputs or original slots lost");
+        require(projected.get(0).outputs.size()==4, "Hidden native outputs or original slots lost");
         projection.mOutputs[0]=new ItemStack(Items.gold_ingot);
         try { Harmony.capture(projection,inputSlots,outputSlots,row(trigger,product),(tectech.recipe.EyeOfHarmonyRecipeStorage)storage); throw new AssertionError("Changed projection accepted"); }
         catch(Jobs.Fault expected) { require(expected.code.equals("recipe_unsupported"),"Unexpected projection rejection"); }

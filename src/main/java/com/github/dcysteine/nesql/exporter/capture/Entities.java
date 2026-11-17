@@ -9,7 +9,8 @@ import gregtech.api.interfaces.tileentity.IGregTechTileEntity;
 import gregtech.common.render.BaseMetaTileEntityRenderer;
 import gregtech.common.render.IMTERenderer;
 import gregtech.common.render.LaserRenderer;
-import gregtech.common.tileentities.render.TileEntityLaser;
+import gregtech.common.tileentities.render.RenderingTileEntityLaser;
+import net.minecraft.client.Minecraft;
 import net.minecraft.client.model.ModelChest;
 import net.minecraft.client.model.ModelLargeChest;
 import net.minecraft.client.renderer.tileentity.TileEntityChestRenderer;
@@ -30,8 +31,8 @@ final class Entities {
 
     static void capture(TileEntity tile, TileEntitySpecialRenderer renderer, Models.Draft result) {
         if (emptyMachine(renderer, tile instanceof IGregTechTileEntity ? ((IGregTechTileEntity) tile).getMetaTileEntity() : null)) return;
-        if (renderer.getClass() == LaserRenderer.class && tile.getClass() == TileEntityLaser.class) {
-            laser((TileEntityLaser) tile, (LaserRenderer) renderer, result); return;
+        if (renderer.getClass() == LaserRenderer.class && tile.getClass() == RenderingTileEntityLaser.class) {
+            laser((RenderingTileEntityLaser) tile, result); return;
         }
         boolean chestRenderer = renderer.getClass() == TileEntityChestRenderer.class && tile.getClass() == TileEntityChest.class;
         boolean enderRenderer = renderer.getClass() == TileEntityEnderChestRenderer.class && tile.getClass() == TileEntityEnderChest.class;
@@ -80,11 +81,13 @@ final class Entities {
         return true;
     }
 
-    private static void laser(TileEntityLaser tile, LaserRenderer renderer, Models.Draft result) {
+    private static void laser(RenderingTileEntityLaser tile, Models.Draft result) {
         if (!tile.getShouldRender()) return;
-        // The native renderer draws with these offsets, then changes them and the tile's counter. Read only the draw state.
-        double x = ReflectionHelper.getPrivateValue(LaserRenderer.class, renderer, "xOffset");
-        double z = ReflectionHelper.getPrivateValue(LaserRenderer.class, renderer, "zOffset");
+        // Match the native float clock at settled partial tick zero, using the client's world, not the preview tile's.
+        float counter = (((float) Minecraft.getMinecraft().theWorld.getTotalWorldTime() + 0F) * 5F) % 80;
+        float tc = .05F * counter;
+        double z = .5 + .45 * Math.sin(2 * Math.PI * tc);
+        double x = .5 + .45 * Math.sin(.5 * Math.PI * tc);
         long color = ((long) channel(tile.getRed()) << 24) | ((long) channel(tile.getGreen()) << 16)
                 | ((long) channel(tile.getBlue()) << 8) | (int) (.7f * 255);
         try {

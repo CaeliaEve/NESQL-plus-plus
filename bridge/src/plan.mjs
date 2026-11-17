@@ -8,6 +8,19 @@ export const digest = bytes => createHash('sha256').update(bytes).digest('hex');
 export const sha = value => typeof value === 'string' && /^[a-f0-9]{64}$/.test(value);
 export const json = async file => JSON.parse(await readFile(file, 'utf8'));
 
+export function handlerDomain(item) {
+  return item.domain === 'structures' || ['domain:structure', 'domain:structures'].includes(item.route)
+    || item.route?.startsWith('structure:') ? 'structures' : 'recipes';
+}
+
+export function validateHandlerRoute(item) {
+  const domain = handlerDomain(item);
+  if (domain === 'recipes' && ['domain', 'interactive'].includes(item.classification)) {
+    assert.ok(item.route?.startsWith(`${item.classification}:`), `Invalid ${item.classification} route`);
+  }
+  return domain;
+}
+
 export function canonical(value) {
   if (Array.isArray(value)) return value.map(canonical);
   if (value && typeof value === 'object') return Object.fromEntries(Object.keys(value).sort().map(key => [key, canonical(value[key])]));
@@ -76,22 +89,41 @@ export async function prepare(configFile) {
     assert.ok(!ids.has(item.id), 'Duplicate handler identity'); ids.add(item.id);
     assert.ok(['recipe', 'domain', 'interactive', 'tooling'].includes(item.classification), `Missing classification for ${item.id}`);
     assert.equal(typeof item.route, 'string', `Missing route for ${item.id}`);
+    validateHandlerRoute(item);
   }
   const stageManifest = config.stages ?? {
     source: { required: true, reports: config.reports },
     compiler: { required: true, executable: path.join(config.compiler, binary) },
     web: { required: true, entry: path.join(config.web, 'frontend', 'dist', 'index.html') }
   };
+  if(config.diagnostics!==undefined){
+    assert.ok(config.diagnostics&&typeof config.diagnostics==='object'&&!Array.isArray(config.diagnostics)&&Object.keys(config.diagnostics).every(key=>['collectVisuals','visualCoverage'].includes(key))&&config.diagnostics.collectVisuals===true&&[undefined,'representative','all'].includes(config.diagnostics.visualCoverage),'Invalid diagnostic collection options');
+    assert.ok(stageManifest.source?.execute===false&&stageManifest.compiler?.execute===false&&stageManifest.source?.preflight,'Diagnostic collection requires exports disabled and rendering preflight enabled');
+  }
   assert.ok(stageManifest && typeof stageManifest === 'object', 'Stage manifest is required');
   assert.ok(stageManifest.source?.required === true, 'Source export stage is required');
+  // Catch stale export selections during dry-run, before complete native diagnostics.
+  if (stageManifest.source.handlers !== undefined || stageManifest.source.execute) {
+    const selection = stageManifest.source.handlers;
+    assert.ok(Array.isArray(selection) && selection.length, 'Source selection must be explicit and nonempty');
+    for (const id of selection) assert.match(id, /^category_[a-f0-9]{64}$/, 'Source selection has an invalid handler identity');
+    assert.equal(new Set(selection).size, selection.length, 'Duplicate source handler');
+    assert.deepEqual([...selection].sort(), worklist.handlers.filter(item => item.classification !== 'tooling').map(item => item.id).sort(),
+      'Source selection differs from the diagnostic gameplay worklist');
+  }
   assert.ok(stageManifest.compiler?.required === true && path.isAbsolute(stageManifest.compiler.executable), 'Compiler stage is not configured');
   assert.ok(stageManifest.web?.required === true && path.isAbsolute(stageManifest.web.entry), 'Web stage is not configured');
   assert.ok((await stat(stageManifest.compiler.executable)).isFile(), 'Compiler stage executable is missing');
   assert.ok((await stat(stageManifest.web.entry)).isFile(), 'Web stage entry point is missing');
+  assert.equal(await realpath(stageManifest.compiler.executable), await realpath(path.join(config.compiler, binary)),
+    'Compiler stage must execute the verified compiler bundle');
+  assert.equal(await realpath(stageManifest.web.entry), await realpath(path.join(config.web, 'frontend/dist/index.html')),
+    'Web stage must use the verified web bundle');
   const plan = {
     world: config.world, modSha256: mod.sha256, expectedExporter: config.version, expectedRevision: config.revision,
     handlers: worklist.handlers, probes: config.probes ?? [{ count: 1, channels: {} }],
     stages: stageManifest,
+    ...(config.diagnostics?{diagnostics:config.diagnostics}:{}),
     ...(memoryPolicy(config.memory) ? { memory: config.memory } : {}),
     dependencies: { packages: Object.fromEntries(Object.entries(packages).map(([name, pkg]) => [name, pkg.sha256])), worklist: digest(worklistBytes) },
   };

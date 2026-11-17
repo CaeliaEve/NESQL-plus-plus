@@ -28,9 +28,51 @@ import static com.github.dcysteine.nesql.exporter.source.Json.*;
 final class Values {
     private Values() {}
 
-    static JsonObject capture(Object value, Facts facts) { return capture(value, facts, 0); }
+    static JsonObject capture(Object value, Facts facts) {
+        return capture(value, new References() {
+            public String text(String text) { return facts.text(text); }
+            public String item(ItemStack stack) { return facts.item(stack); }
+            public String fluid(FluidStack stack) { return facts.fluid(stack); }
+        }, 0);
+    }
 
-    private static JsonObject capture(Object value, Facts facts, int depth) {
+    /** Native ownership signature; never invokes a name, tooltip or rendering callback. */
+    static JsonObject snapshot(Object value) {
+        return capture(value, new References() {
+            private int nodes;
+            private long textBytes;
+            public void visit(Object value) {
+                Jobs.checkpoint();
+                if (++nodes > 65536) throw new Jobs.Fault("metadata_limit", "Native metadata signature exceeds 65536 values");
+                if (value instanceof String) {
+                    String text = (String) value;
+                    if (text.length() > 1024 * 1024 || (textBytes += 3L * text.length()) > 4 * 1024 * 1024)
+                        throw new Jobs.Fault("metadata_limit", "Native metadata signature exceeds its text budget");
+                }
+            }
+            public String text(String text) { return CanonicalJson.digest(value(text)); }
+            public String item(ItemStack stack) {
+                JsonObject raw = RecipeRow.stackEvidence(stack);
+                raw.addProperty("instance", System.identityHashCode(stack.getItem()));
+                return CanonicalJson.digest(raw);
+            }
+            public String fluid(FluidStack stack) {
+                return CanonicalJson.digest(object("registry", stack.getFluid().getName(),
+                        "instance", System.identityHashCode(stack.getFluid()),
+                        "nbt", com.github.dcysteine.nesql.exporter.source.TypedNbt.encode(stack.tag)));
+            }
+        }, 0);
+    }
+
+    private interface References {
+        default void visit(Object value) {}
+        String text(String text);
+        String item(ItemStack stack);
+        String fluid(FluidStack stack);
+    }
+
+    private static JsonObject capture(Object value, References facts, int depth) {
+        facts.visit(value);
         if (depth > 16) throw new Jobs.Fault("metadata_limit", "Metadata exceeds 16 levels");
         if (value instanceof Byte || value instanceof Short || value instanceof Integer || value instanceof Long || value instanceof BigInteger) {
             if (value instanceof BigInteger && ((BigInteger) value).bitLength() > 63) throw new Jobs.Fault("metadata_number", "Metadata integer exceeds signed 64-bit range");
@@ -109,6 +151,7 @@ final class Values {
             JsonObject values = new JsonObject();
             for (Map.Entry<?, ?> entry : entries.entrySet()) {
                 if (!(entry.getKey() instanceof String)) throw new Jobs.Fault("metadata_type", "Metadata map requires string keys");
+                facts.visit(entry.getKey());
                 values.add((String) entry.getKey(), capture(entry.getValue(), facts, depth + 1));
             }
             return object("kind", "map", "values", values);
@@ -131,7 +174,7 @@ final class Values {
         throw new Jobs.Fault("metadata_type", "No metadata adapter for " + (value == null ? "null" : value.getClass().getName()));
     }
 
-    private static JsonObject fields(Facts facts, int depth, Object... fields) {
+    private static JsonObject fields(References facts, int depth, Object... fields) {
         JsonObject values = new JsonObject();
         for (int index = 0; index < fields.length; index += 2) {
             values.add((String) fields[index], capture(fields[index + 1], facts, depth + 1));

@@ -37,6 +37,8 @@ public final class ClientThread implements net.minecraft.client.resources.IResou
             identity = epoch.observe(world, player);
         }
         public String identity() throws Exception { return call("session", () -> identity); }
+        /** Recovery capabilities must not keep a departed world/player alive. */
+        public Guard guard(){check();return new Guard(world,player,generation,identity);}
         public <T> T call(Callable<T> action) throws Exception {
             return call("client", action);
         }
@@ -53,6 +55,19 @@ public final class ClientThread implements net.minecraft.client.resources.IResou
             if (game.theWorld != world || game.thePlayer != player) throw new Jobs.Fault("world_changed", "The export's world or player changed");
             if (generation != resources) throw new Jobs.Fault("resources_changed", "Game resources were reloaded during export");
             if (!identity.equals(epoch.observe(game.theWorld, game.thePlayer))) throw new Jobs.Fault("world_changed", "The export session ended");
+        }
+    }
+
+    public final class Guard {
+        private final java.lang.ref.WeakReference<Object> world,player;
+        private final long generation;private final String identity;
+        private Guard(Object world,Object player,long generation,String identity){this.world=new java.lang.ref.WeakReference<>(world);this.player=new java.lang.ref.WeakReference<>(player);this.generation=generation;this.identity=identity;}
+        public void check(){
+            if(Thread.currentThread()!=thread)throw new IllegalStateException("Native recovery guard requires the client thread");
+            Minecraft game=Minecraft.getMinecraft();Object expectedWorld=world.get(),expectedPlayer=player.get();
+            if(expectedWorld==null||expectedPlayer==null||game.theWorld!=expectedWorld||game.thePlayer!=expectedPlayer
+                    ||generation!=resources||!identity.equals(epoch.observe(game.theWorld,game.thePlayer)))
+                throw new Jobs.Fault("checkpoint_changed","The native visual continuation session or resource epoch ended");
         }
     }
 

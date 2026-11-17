@@ -17,6 +17,12 @@ import static com.github.dcysteine.nesql.exporter.source.Json.*;
 final class NativeBlastTest {
     private static final String API="ic2.api.recipe.", MACHINE="ic2.core.block.machine.tileentity.TileEntityBlastFurnace";
     static void run() throws Exception {
+        Class<?> items=Class.forName("ic2.core.Ic2Items"),machine=Class.forName(MACHINE);
+        Field manager=Class.forName(API+"Recipes").getField("blastfurance"),air=items.getField("airCell"),cell=items.getField("cell"),heat=machine.getField("maxHeat");
+        Object oldManager=manager.get(null),oldAir=air.get(null),oldCell=cell.get(null);int oldHeat=heat.getInt(null);
+        try{runConfigured();}finally{manager.set(null,oldManager);air.set(null,oldAir);cell.set(null,oldCell);heat.setInt(null,oldHeat);}
+    }
+    private static void runConfigured() throws Exception {
         TemplateRecipeHandler handler=(TemplateRecipeHandler)Class.forName("ic2.neiIntegration.core.recipehandler.BlastFurnaceRecipeHandler").newInstance();
         require(Recipes.adapter(handler)!=null,"IC2 blast furnace has no staged native adapter");
         Class<?> machineType=Class.forName(MACHINE), items=Class.forName("ic2.core.Ic2Items");
@@ -53,15 +59,22 @@ final class NativeBlastTest {
         ItemStack air=new ItemStack(Items.paper,1,7);air.setTagCompound(new NBTTagCompound());
         require((Boolean)accepts.invoke(airSlot,air),"Native air wrapper rejected empty tags/ignored metadata");
         air.getTagCompound().setInteger("owner",1);require(!(Boolean)accepts.invoke(airSlot,air),"Native air wrapper ignored nonempty tags");
+        TemplateRecipeHandler.CachedRecipe borrowed=handler.new CachedRecipe(){public codechicken.nei.PositionedStack getResult(){return null;}};
+        handler.arecipes.add(borrowed);
+        Object nativeCache=MagicApi.field(manager,"recipeCache");
+        Map<?,?> nativeItemCache=(Map<?,?>)((Map<?,?>)nativeCache).get(Items.iron_ingot);
+        Object selectedBefore=nativeItemCache.get(0);
         RegistryRecipes adapter=adapter(handler,manager,12345);
         RecipeRow row=row(input,product,slag,new ItemStack(Items.paper),new ItemStack(Items.bucket));adapter.capture(0,row);
-        require(row.inputs.size()==2 && row.outputs.size()==2 && row.elements.size()==4,"Blast row must keep staged air and only the first two products");
+        require(handler.arecipes.size()==1&&handler.arecipes.get(0)==borrowed,"Blast semantic capture rewrote borrowed NEI cache");
+        require(MagicApi.field(manager,"recipeCache")==nativeCache&&((Map<?,?>)nativeCache).get(Items.iron_ingot)==nativeItemCache
+                &&nativeItemCache.get(0)==selectedBefore,"Blast capture changed native selector cache");
+        require(row.inputs.size()==2 && row.outputs.size()==2,"Blast row must keep staged air and only the first two products");
         require(row.record.getAsJsonObject("process").get("heat").getAsInt()==12345 && row.record.get("duration").isJsonNull() && row.record.get("energy").isJsonNull(),"Blast heat gate became fixed duration/EU");
         require(choice(row,0).get("amount").getAsInt()==4 && choice(row,0).getAsJsonObject("consume").get("kind").getAsString().equals("staged"),"Blast registry gate was confused with final unit consumption");
         require(choice(row,1).get("amount").getAsInt()==1 && choice(row,1).getAsJsonArray("returns").size()==1
             && choice(row,1).getAsJsonObject("rule").get("kind").getAsString().equals("untagged"),"Blast air is not modeled per stage");
         require(row.outputs.get(1).getAsJsonObject().get("amount").isJsonNull() && row.outputs.get(1).getAsJsonObject().getAsJsonObject("quantity").get("nominal").getAsInt()==3,"Slag loss became an unconditional fixed output");
-        handler.arecipes.get(0).getResult().items[0].stackSize=99;
         RecipeRow repeat=row(input,product,slag,new ItemStack(Items.paper),new ItemStack(Items.bucket));adapter.capture(0,repeat);
         require(repeat.outputs.equals(row.outputs) && input.stackSize==11 && product.stackSize==2,"Blast display mutated native registry");
         put(machine,"outputSlot",null);put(machine,"slagOutputSlot",new ItemStack(Items.coal,63));set(machine,"progress",6000);work.invoke(machine);
@@ -78,9 +91,77 @@ final class NativeBlastTest {
         @SuppressWarnings("unchecked") List<Object> callbacks=(List<Object>)MagicApi.field(manager,"uncacheableRecipes");
         callbacks.add(new Object());
         try{adapter.capture(0,row(input,product,slag));throw new AssertionError("Late native callback was executed/accepted");}
-        catch(Jobs.Fault expected){require(expected.code.equals("recipe_unsupported"),"Wrong selector drift error");}finally{callbacks.clear();}
+        catch(Jobs.Fault expected){require(expected.code.equals("recipe_changed"),"Wrong selector drift error");}finally{callbacks.clear();}
+        lifecycle(handler,manager,adapter,input,product,slag);
+        actualSource(handler,manager,input,product,slag);
+        UnknownAir unknownAir=new UnknownAir();ItemStack unknown=new ItemStack(unknownAir);unknownAir.armed=true;
+        expect("recipe_unsupported",()->new BlastRecipes(handler,manager,50000,unknown,new ItemStack(Items.bucket)));
+        require(unknownAir.calls==0,"Unreviewed air metadata-policy callback was executed");
         require(Ic2Recipes.supports(handler)==false,"Blast inherited ordinary IC2 machine semantics");
-        System.out.println("Native IC2 blast: count gate, 6001 hot calls, six staged air/cell events, retained progress, wrong-slot gate/slag loss, owned projection passed");
+        System.out.println("Native IC2 blast: staged work/slag semantics, GUI/cache ownership, selector priority/drift, config/source binding, ready-empty/close and callback guards passed");
+    }
+    @SuppressWarnings("unchecked") private static void lifecycle(TemplateRecipeHandler handler,Object manager,RegistryRecipes reader,ItemStack... stacks)throws Exception{
+        reader.finishVerification();
+        Map<Object,Object> registry=(Map<Object,Object>)MagicApi.field(manager,"recipes");
+        Object predicate=registry.keySet().iterator().next(),output=registry.get(predicate);
+        List<ItemStack> products=(List<ItemStack>)MagicApi.field(output,"items");
+        ItemStack ignored=products.get(2);int originalAmount=ignored.stackSize;
+        try{ignored.stackSize++;expect("recipe_changed",reader::finishVerification);}finally{ignored.stackSize=originalAmount;}
+        Map<Object,Object> cache=(Map<Object,Object>)MagicApi.field(manager,"recipeCache");
+        Map<Object,Object> nested=(Map<Object,Object>)cache.get(Items.iron_ingot);
+        try{cache.put(Items.iron_ingot,new HashMap<>(nested));expect("recipe_changed",()->reader.capture(0,row(stacks)));}
+        finally{cache.put(Items.iron_ingot,nested);}
+        Object selected=nested.get(0);
+        Object equivalent=selected.getClass().getConstructor(Object.class,Object.class).newInstance(predicate,output);
+        try{nested.put(0,equivalent);expect("recipe_changed",reader::finishVerification);}finally{nested.put(0,selected);}
+        Object alternate=selected.getClass().getConstructor(Object.class,Object.class).newInstance(predicate,
+            Class.forName(API+"RecipeOutput").getConstructor(NBTTagCompound.class,ItemStack[].class).newInstance(null,new ItemStack[]{new ItemStack(Items.gold_ingot)}));
+        // Native wildcard lookup wins even when the exact-meta cache entry is valid.
+        try{
+            nested.put(32767,alternate);
+            require(MagicApi.invoke(manager.getClass(),manager,"getRecipe",new Class<?>[]{ItemStack.class},stacks[0].copy())==alternate,"Native wildcard selector precedence changed");
+            expect("slot_changed",()->adapter(handler,manager,12345));
+        }finally{nested.remove(32767);}
+        reader.finishVerification();reader.close();reader.close();
+        expect("capture_closed",reader::size);expect("capture_closed",()->reader.capture(0,row(stacks)));
+        require(registry.get(predicate)==output&&nested.get(0)==selected&&handler.arecipes.size()==1,"Closing blast reader altered borrowed definitions/cache");
+        RegistryRecipes empty=adapter(handler,manager.getClass().newInstance(),1);
+        try{require(empty.size()==0,"Ready-empty blast manager failed");empty.finishVerification();}finally{empty.close();}
+        expect("handler_not_ready",()->adapter(handler,null,1));
+    }
+    private static void actualSource(TemplateRecipeHandler handler,Object manager,ItemStack... stacks)throws Exception{
+        cpw.mods.fml.common.Loader loader=cpw.mods.fml.common.Loader.instance();
+        Map<String,cpw.mods.fml.common.ModContainer> old=cpw.mods.fml.relauncher.ReflectionHelper.getPrivateValue(cpw.mods.fml.common.Loader.class,loader,"namedMods");
+        Map<String,cpw.mods.fml.common.ModContainer> configured=new HashMap<>(old);
+        cpw.mods.fml.common.ModMetadata metadata=new cpw.mods.fml.common.ModMetadata();metadata.modId="IC2";metadata.version="2.2.828-experimental";
+        configured.put("IC2",new cpw.mods.fml.common.DummyModContainer(metadata));
+        cpw.mods.fml.relauncher.ReflectionHelper.setPrivateValue(cpw.mods.fml.common.Loader.class,loader,configured,"namedMods");
+        try{
+            RegistrationBindings first=RegistrationBindings.read(handler);
+            require(first.same(RegistrationBindings.read((TemplateRecipeHandler)handler.getClass().newInstance())),"Independent IC2 blast instances lost shared native source");
+            try(RegistryRecipes reader=new BlastRecipes(handler)){
+                require(reader.size()==1&&reader.capture(0,row(append(stacks,new ItemStack(Items.paper),new ItemStack(Items.bucket)))) ,"Actual blast source failed");
+                reader.finishVerification();
+                Field api=Class.forName(API+"Recipes").getField("blastfurance"),heat=Class.forName(MACHINE).getField("maxHeat"),air=Class.forName("ic2.core.Ic2Items").getField("airCell"),cell=Class.forName("ic2.core.Ic2Items").getField("cell");
+                try{api.set(null,manager.getClass().newInstance());require(!first.same(RegistrationBindings.read(handler)),"Replaced blast manager stayed equivalent");expect("recipe_changed",reader::verify);}finally{api.set(null,manager);}
+                int oldHeat=heat.getInt(null);try{heat.setInt(null,oldHeat+1);expect("recipe_changed",reader::verify);}finally{heat.setInt(null,oldHeat);}
+                ItemStack airStack=(ItemStack)air.get(null);int count=airStack.stackSize;
+                try{airStack.stackSize++;expect("recipe_changed",reader::verify);}finally{airStack.stackSize=count;}
+                Item airItem=airStack.getItem();boolean subtypes=airItem.getHasSubtypes();
+                try{airItem.setHasSubtypes(!subtypes);expect("recipe_changed",reader::verify);}finally{airItem.setHasSubtypes(subtypes);}
+                Item oldContainer=airItem.getContainerItem();
+                try{airItem.setContainerItem(Items.bucket);expect("recipe_changed",reader::verify);}finally{airItem.setContainerItem(oldContainer);}
+                ItemStack cellStack=(ItemStack)cell.get(null);try{cell.set(null,cellStack.copy());expect("recipe_changed",reader::verify);}finally{cell.set(null,cellStack);}
+                reader.finishVerification();
+            }
+        }finally{cpw.mods.fml.relauncher.ReflectionHelper.setPrivateValue(cpw.mods.fml.common.Loader.class,loader,old,"namedMods");}
+    }
+    private static ItemStack[] append(ItemStack[] input,ItemStack... extra){ItemStack[] all=Arrays.copyOf(input,input.length+extra.length);System.arraycopy(extra,0,all,input.length,extra.length);return all;}
+    private interface Probe{void run()throws Exception;}
+    private static void expect(String code,Probe probe)throws Exception{try{probe.run();throw new AssertionError("Expected blast failure: "+code);}catch(Jobs.Fault failure){require(failure.code.equals(code),"Expected "+code+": "+failure);}}
+    public static final class UnknownAir extends Item{
+        boolean armed;int calls;
+        @Override public boolean getHasSubtypes(){if(armed){calls++;throw new AssertionError("Unknown air callback executed");}return super.getHasSubtypes();}
     }
     private static RegistryRecipes adapter(TemplateRecipeHandler handler,Object manager,int heat)throws Exception {
         Constructor<?> c=Class.forName("com.github.dcysteine.nesql.exporter.capture.BlastRecipes").getDeclaredConstructor(TemplateRecipeHandler.class,Object.class,int.class,ItemStack.class,ItemStack.class);c.setAccessible(true);

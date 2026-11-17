@@ -1,0 +1,2314 @@
+{
+  "format": "nesql.pinned-usage-callbacks",
+  "sources": [
+    {
+      "mod": "appliedenergistics2",
+      "version": "rv3-beta-695-GTNH",
+      "file": "appliedenergistics2-rv3-beta-695-GTNH.jar",
+      "sha256": "1601d33565f40478a073327ab50f76a127063b8917e3a192e302d54e0ac70a44"
+    },
+    {
+      "mod": "ae2fc",
+      "version": "1.4.120-gtnh",
+      "file": "ae2fc-1.4.120-gtnh.jar",
+      "sha256": "eb28d4cd24934a1d69d4fc34d1e8022d968184d57f27a6706e54c1ba53a53b9a"
+    },
+    {
+      "mod": "OpenComputers",
+      "version": "1.11.20-GTNH",
+      "file": "OpenComputers-1.11.20-GTNH.jar",
+      "sha256": "a836a38f5ec4cf71db35c0eef5c0fa5b2a36c612ea6b52da707cf9ee04557fc5"
+    },
+    {
+      "mod": "computronics",
+      "version": "1.9.3-GTNH",
+      "file": "Computronics-1.9.3-GTNH.jar",
+      "sha256": "3b1a9b40856ca5677efb6217fbae14c91cf342b925170137acbbed171bd1f228"
+    },
+    {
+      "mod": "opensecurity",
+      "version": "1.2.0-GTNH",
+      "file": "opensecurity-1.2.0-GTNH.jar",
+      "sha256": "3b588306ac5e3ac8a73b645b165804c2e8cbeaf327348473945d9fcf2d82c54d"
+    },
+    {
+      "mod": "thaumicenergistics",
+      "version": "1.7.14-GTNH",
+      "file": "thaumicenergistics-1.7.14-GTNH.jar",
+      "sha256": "199fb55fc2e52b0bde3b600ba696ae261451e258538e4a11cdc9c896d5c1e5f8"
+    }
+  ],
+  "classes": [
+    {
+      "owner": "com.glodblock.github.crossmod.opencomputers.DriverDualFluidInterface$Provider",
+      "roles": [
+        "environment"
+      ],
+      "mod": "ae2fc",
+      "version": "1.4.120-gtnh",
+      "sha256": "ce4acde8cc4f7c403b5bd9b8d81a202b3e7c960ebb0a83e533ba2888c651ee32"
+    },
+    {
+      "owner": "com.glodblock.github.crossmod.opencomputers.DriverLevelMaintainer$Provider",
+      "roles": [
+        "environment"
+      ],
+      "mod": "ae2fc",
+      "version": "1.4.120-gtnh",
+      "sha256": "a26e29992196c623e3ed5ba69aeb03eb7f4a5f9dbd15ab113e1f328df1045131"
+    },
+    {
+      "owner": "com.glodblock.github.crossmod.opencomputers.DriverOCPatternEditor$Provider",
+      "roles": [
+        "environment"
+      ],
+      "mod": "ae2fc",
+      "version": "1.4.120-gtnh",
+      "sha256": "af3d1f95c36b6553d581237fd4a7f86eb7f6dfe9947c75ca2bcc317ac0c5db48"
+    },
+    {
+      "owner": "li.cil.oc.api.prefab.ResourceContentProvider",
+      "roles": [
+        "content"
+      ],
+      "mod": "OpenComputers",
+      "version": "1.11.20-GTNH",
+      "sha256": "fbe3a90d899822bbff9e58e578c12ad820da3a82847074cf85603b44cde96857"
+    },
+    {
+      "owner": "li.cil.oc.integration.appeng.DriverBlockInterface",
+      "roles": [
+        "tileDriver"
+      ],
+      "mod": "OpenComputers",
+      "version": "1.11.20-GTNH",
+      "sha256": "97724451404e5c75162632c6b037b1fac5cae54924a91fb2e75150e0b74d4908"
+    },
+    {
+      "owner": "li.cil.oc.integration.appeng.DriverBlockInterface$",
+      "roles": [
+        "tileDriver"
+      ],
+      "mod": "OpenComputers",
+      "version": "1.11.20-GTNH",
+      "sha256": "1b02977fecb5c648df9efbc9e32c0273fa3541c2a348752c439503c046ccc3f5"
+    },
+    {
+      "owner": "li.cil.oc.integration.appeng.DriverBlockInterface$Provider$",
+      "roles": [
+        "environment"
+      ],
+      "mod": "OpenComputers",
+      "version": "1.11.20-GTNH",
+      "sha256": "cd139bbe884c8706fcbef9abbdb4a0823672a84561c927b4945554d23609c77e"
+    },
+    {
+      "owner": "li.cil.oc.integration.appeng.DriverController",
+      "roles": [
+        "tileDriver"
+      ],
+      "mod": "OpenComputers",
+      "version": "1.11.20-GTNH",
+      "sha256": "5ce2fadda5e7907155060738387e6001e0cdd4478f27c12232569b2ad8b0a090"
+    },
+    {
+      "owner": "li.cil.oc.integration.appeng.DriverController$",
+      "roles": [
+        "tileDriver"
+      ],
+      "mod": "OpenComputers",
+      "version": "1.11.20-GTNH",
+      "sha256": "1db1dc3c2debc00257178475febf27e47583aabb7ce01becc6b8c3fe3d7f31f9"
+    },
+    {
+      "owner": "li.cil.oc.integration.appeng.DriverController$Provider$",
+      "roles": [
+        "environment"
+      ],
+      "mod": "OpenComputers",
+      "version": "1.11.20-GTNH",
+      "sha256": "7663261133455ab02341b396b2c86716a487b9d678fbf0f6f007a96e6e078507"
+    },
+    {
+      "owner": "li.cil.oc.integration.appeng.DriverExportBus$Provider$",
+      "roles": [
+        "environment"
+      ],
+      "mod": "OpenComputers",
+      "version": "1.11.20-GTNH",
+      "sha256": "37962cbcf6903570f3f8adbc16745dc770c1bb689c63ff5cc3a607691a051c36"
+    },
+    {
+      "owner": "li.cil.oc.integration.appeng.DriverImportBus$Provider$",
+      "roles": [
+        "environment"
+      ],
+      "mod": "OpenComputers",
+      "version": "1.11.20-GTNH",
+      "sha256": "5fc4b012bb4a55c38240a5fb918db288b4e8cbb87be78de440dde278bb704767"
+    },
+    {
+      "owner": "li.cil.oc.integration.appeng.DriverPartInterface$Provider$",
+      "roles": [
+        "environment"
+      ],
+      "mod": "OpenComputers",
+      "version": "1.11.20-GTNH",
+      "sha256": "bb72ab76efdf02983426f2b8a5f5c95fb21bbd4676b3239b9031672b81b3da10"
+    },
+    {
+      "owner": "li.cil.oc.integration.appeng.DriverUpgradeAE",
+      "roles": [
+        "itemDriver"
+      ],
+      "mod": "OpenComputers",
+      "version": "1.11.20-GTNH",
+      "sha256": "7b4540d3d7ae6e885764f78d59b1916faca6955fbd601b3c670e34b9ea39480c"
+    },
+    {
+      "owner": "li.cil.oc.integration.appeng.DriverUpgradeAE$",
+      "roles": [
+        "itemDriver"
+      ],
+      "mod": "OpenComputers",
+      "version": "1.11.20-GTNH",
+      "sha256": "71a84ac4697f0e57423eae9adbbb9388b8744f4df4bebaf4e6dccca8888ea6d4"
+    },
+    {
+      "owner": "li.cil.oc.integration.appeng.DriverUpgradeAE$Provider$",
+      "roles": [
+        "environment"
+      ],
+      "mod": "OpenComputers",
+      "version": "1.11.20-GTNH",
+      "sha256": "ce37941af719900caded80e42a77a2180942b85dea7ff987ff8b27b7ae828aa6"
+    },
+    {
+      "owner": "li.cil.oc.integration.avaritiaaddons.DriverExtremeAutocrafter",
+      "roles": [
+        "tileDriver"
+      ],
+      "mod": "OpenComputers",
+      "version": "1.11.20-GTNH",
+      "sha256": "629b949b5f95cfa65284ae2d9c03e6387a64109ecea9521870d9f9d42c19311d"
+    },
+    {
+      "owner": "li.cil.oc.integration.avaritiaaddons.DriverExtremeAutocrafter$",
+      "roles": [
+        "tileDriver"
+      ],
+      "mod": "OpenComputers",
+      "version": "1.11.20-GTNH",
+      "sha256": "21a4903caf9c2e9b438246c8f562aa535b4616f0c444d29757987c55b74015a1"
+    },
+    {
+      "owner": "li.cil.oc.integration.avaritiaaddons.DriverExtremeAutocrafter$Provider$",
+      "roles": [
+        "environment"
+      ],
+      "mod": "OpenComputers",
+      "version": "1.11.20-GTNH",
+      "sha256": "4883497b141b49f0fd0824979538314bcfd02848df8b36fd813ce8aea9f95615"
+    },
+    {
+      "owner": "li.cil.oc.integration.bloodmagic.DriverBloodAltar",
+      "roles": [
+        "tileDriver"
+      ],
+      "mod": "OpenComputers",
+      "version": "1.11.20-GTNH",
+      "sha256": "0fc0676a1e6b626be94dee11fe4ae156ea903df3326f5e05513d8888d4e51137"
+    },
+    {
+      "owner": "li.cil.oc.integration.bloodmagic.DriverMasterRitualStone",
+      "roles": [
+        "tileDriver"
+      ],
+      "mod": "OpenComputers",
+      "version": "1.11.20-GTNH",
+      "sha256": "a8cc21f89b73f38946cd1ba9905e9fdc2588e3c47dd9be5b1f785e22e1ca65a4"
+    },
+    {
+      "owner": "li.cil.oc.integration.buildcraft.tiles.DriverControllable",
+      "roles": [
+        "tileDriver"
+      ],
+      "mod": "OpenComputers",
+      "version": "1.11.20-GTNH",
+      "sha256": "c261c03b2ba4f105d533d1a9311894bd53e333e586687e135634430451f20ffd"
+    },
+    {
+      "owner": "li.cil.oc.integration.buildcraft.transport.DriverPipeTile",
+      "roles": [
+        "tileDriver"
+      ],
+      "mod": "OpenComputers",
+      "version": "1.11.20-GTNH",
+      "sha256": "23ef0eecfd477fc8524f7033f0ef41c11acf295a404fbb20b76c5ac360e274ac"
+    },
+    {
+      "owner": "li.cil.oc.integration.cofh.energy.DriverEnergyHandler",
+      "roles": [
+        "tileDriver"
+      ],
+      "mod": "OpenComputers",
+      "version": "1.11.20-GTNH",
+      "sha256": "1ae06f418758659f7e84ef2fed9db1e4996ac100b6b2f706d8174c8ca5f1e966"
+    },
+    {
+      "owner": "li.cil.oc.integration.cofh.energy.DriverEnergyProvider",
+      "roles": [
+        "tileDriver"
+      ],
+      "mod": "OpenComputers",
+      "version": "1.11.20-GTNH",
+      "sha256": "95579fae8556afd35d87d122fb3fed3e94ddc797cf561acd9a54eda42ac4a5d8"
+    },
+    {
+      "owner": "li.cil.oc.integration.cofh.energy.DriverEnergyReceiver",
+      "roles": [
+        "tileDriver"
+      ],
+      "mod": "OpenComputers",
+      "version": "1.11.20-GTNH",
+      "sha256": "3e01b66a5dbd770a78accb43a628a8335eb3313b73284a9037d177174f6358e3"
+    },
+    {
+      "owner": "li.cil.oc.integration.cofh.tileentity.DriverEnergyInfo",
+      "roles": [
+        "tileDriver"
+      ],
+      "mod": "OpenComputers",
+      "version": "1.11.20-GTNH",
+      "sha256": "4e3179b969ffc1c0bb9a1b2a6b0b9645da58073d861346b45ade79b00f7113e1"
+    },
+    {
+      "owner": "li.cil.oc.integration.cofh.tileentity.DriverRedstoneControl",
+      "roles": [
+        "tileDriver"
+      ],
+      "mod": "OpenComputers",
+      "version": "1.11.20-GTNH",
+      "sha256": "f7402974791fa18db445d75fc9a2e131009607fdb5bc2e4338c03e7855ff850a"
+    },
+    {
+      "owner": "li.cil.oc.integration.cofh.tileentity.DriverSecureTile",
+      "roles": [
+        "tileDriver"
+      ],
+      "mod": "OpenComputers",
+      "version": "1.11.20-GTNH",
+      "sha256": "fa5ac893b5f1c73f7ddde027113c5afaa2f2fa89d86e763d95bea36bcefe2835"
+    },
+    {
+      "owner": "li.cil.oc.integration.cofh.transport.DriverEnderEnergy",
+      "roles": [
+        "tileDriver"
+      ],
+      "mod": "OpenComputers",
+      "version": "1.11.20-GTNH",
+      "sha256": "fc343080edfa88a808868b20ef4fbc2c259f358a1babb6f2255e5a603dd1ec2e"
+    },
+    {
+      "owner": "li.cil.oc.integration.cofh.transport.DriverEnderFluid",
+      "roles": [
+        "tileDriver"
+      ],
+      "mod": "OpenComputers",
+      "version": "1.11.20-GTNH",
+      "sha256": "b013ebfc5b0a63658a683dac55dc67a41c9efd4fa104b344957dc844e8c49d78"
+    },
+    {
+      "owner": "li.cil.oc.integration.cofh.transport.DriverEnderItem",
+      "roles": [
+        "tileDriver"
+      ],
+      "mod": "OpenComputers",
+      "version": "1.11.20-GTNH",
+      "sha256": "4c8dbab158f9156e2b6f8888e478bc8459791a65b85cdfcbc7f110cf23584180"
+    },
+    {
+      "owner": "li.cil.oc.integration.computercraft.DriverComputerCraftMedia",
+      "roles": [
+        "itemDriver"
+      ],
+      "mod": "OpenComputers",
+      "version": "1.11.20-GTNH",
+      "sha256": "7c20e3d460adbe9fa96c21836a306f046239b4657c4f13fe05b0ed0d02509769"
+    },
+    {
+      "owner": "li.cil.oc.integration.computercraft.DriverComputerCraftMedia$",
+      "roles": [
+        "itemDriver"
+      ],
+      "mod": "OpenComputers",
+      "version": "1.11.20-GTNH",
+      "sha256": "3781067b0321ff87fd7ea67acc8f86b475d4852dddc75fc8c2b6b2daf8db520f"
+    },
+    {
+      "owner": "li.cil.oc.integration.dsu.DriverDeepStorageUnit",
+      "roles": [
+        "tileDriver"
+      ],
+      "mod": "OpenComputers",
+      "version": "1.11.20-GTNH",
+      "sha256": "18101638646e1a1916db16396bd61206f52c6732b2fbd720789cffab2ba93da9"
+    },
+    {
+      "owner": "li.cil.oc.integration.dsu.DriverDeepStorageUnit$",
+      "roles": [
+        "tileDriver"
+      ],
+      "mod": "OpenComputers",
+      "version": "1.11.20-GTNH",
+      "sha256": "a7105a3eeb614acff3163668694d1431965aaad0e8aa05152b46cc3e1faa3892"
+    },
+    {
+      "owner": "li.cil.oc.integration.ec.DriverBlockInterface",
+      "roles": [
+        "tileDriver"
+      ],
+      "mod": "OpenComputers",
+      "version": "1.11.20-GTNH",
+      "sha256": "5e65564eee55a7883272a871d8659fa66a70f6ff080861f318147f69d359b472"
+    },
+    {
+      "owner": "li.cil.oc.integration.ec.DriverBlockInterface$",
+      "roles": [
+        "tileDriver"
+      ],
+      "mod": "OpenComputers",
+      "version": "1.11.20-GTNH",
+      "sha256": "28edbab62ab730ce4dae59fa432d76d14487dfb97371b0156e9fb6639563b577"
+    },
+    {
+      "owner": "li.cil.oc.integration.ec.DriverBlockInterface$Provider$",
+      "roles": [
+        "environment"
+      ],
+      "mod": "OpenComputers",
+      "version": "1.11.20-GTNH",
+      "sha256": "1736323c5e78f6a90b4ad66d4adb8df7ed594eb879f543de1fb8513489b82cb3"
+    },
+    {
+      "owner": "li.cil.oc.integration.ec.DriverController",
+      "roles": [
+        "tileDriver"
+      ],
+      "mod": "OpenComputers",
+      "version": "1.11.20-GTNH",
+      "sha256": "5183db45704de49392149b67a364301241c263b85a88b5bf54fda6ca3dedeaaa"
+    },
+    {
+      "owner": "li.cil.oc.integration.ec.DriverController$",
+      "roles": [
+        "tileDriver"
+      ],
+      "mod": "OpenComputers",
+      "version": "1.11.20-GTNH",
+      "sha256": "6db3912b2c9e943bd835ed80f02e3997ed9599084ce9c39f91bd6e89a1f4657e"
+    },
+    {
+      "owner": "li.cil.oc.integration.ec.DriverController$Provider$",
+      "roles": [
+        "environment"
+      ],
+      "mod": "OpenComputers",
+      "version": "1.11.20-GTNH",
+      "sha256": "d74964f70ad360ac0acb937f536911ba3a7abc656acc7bb124fb33106d4b0718"
+    },
+    {
+      "owner": "li.cil.oc.integration.enderstorage.DriverFrequencyOwner",
+      "roles": [
+        "tileDriver"
+      ],
+      "mod": "OpenComputers",
+      "version": "1.11.20-GTNH",
+      "sha256": "ed95c2e99a60a07b9a960a7acf8f069d317a4d597ae9e389994316baa1e68576"
+    },
+    {
+      "owner": "li.cil.oc.integration.forestry.DriverAnalyzer",
+      "roles": [
+        "tileDriver"
+      ],
+      "mod": "OpenComputers",
+      "version": "1.11.20-GTNH",
+      "sha256": "cf816836fe5e8467a2a5f70de379c66945799b130e32286df20944f3b52a4be1"
+    },
+    {
+      "owner": "li.cil.oc.integration.forestry.DriverBeeHouse",
+      "roles": [
+        "tileDriver"
+      ],
+      "mod": "OpenComputers",
+      "version": "1.11.20-GTNH",
+      "sha256": "16d83a282178ebc9cc05d361f902b662502b4e6a7c4bd9e63a38a8773cdb8d5d"
+    },
+    {
+      "owner": "li.cil.oc.integration.forestry.DriverUpgradeBeekeeper",
+      "roles": [
+        "itemDriver"
+      ],
+      "mod": "OpenComputers",
+      "version": "1.11.20-GTNH",
+      "sha256": "cbb517c054ca6dd81a8abd9383db03686d6243f22178f0aac663d0098a751a35"
+    },
+    {
+      "owner": "li.cil.oc.integration.forestry.DriverUpgradeBeekeeper$",
+      "roles": [
+        "itemDriver"
+      ],
+      "mod": "OpenComputers",
+      "version": "1.11.20-GTNH",
+      "sha256": "97de6a7859a4fbaa7232a9ad7bb0e77691f7dfde503c22735195bc9106c3f69d"
+    },
+    {
+      "owner": "li.cil.oc.integration.forestry.DriverUpgradeBeekeeper$Provider$",
+      "roles": [
+        "environment"
+      ],
+      "mod": "OpenComputers",
+      "version": "1.11.20-GTNH",
+      "sha256": "1e070b0f82efef8629c91c3d28bdcb1b8b1b004fb86b144e122d73ef41d75e99"
+    },
+    {
+      "owner": "li.cil.oc.integration.gc.DriverWorldSensorCard",
+      "roles": [
+        "itemDriver"
+      ],
+      "mod": "OpenComputers",
+      "version": "1.11.20-GTNH",
+      "sha256": "6612623f4fe5a35948782f356e1e947680afa9dce0d5819412ef72f24883e59d"
+    },
+    {
+      "owner": "li.cil.oc.integration.gc.DriverWorldSensorCard$",
+      "roles": [
+        "itemDriver"
+      ],
+      "mod": "OpenComputers",
+      "version": "1.11.20-GTNH",
+      "sha256": "9ba0b73e415f7ffedc1fa6c2cdacd56313e1156de27dbc2dd91f762aef66e787"
+    },
+    {
+      "owner": "li.cil.oc.integration.gc.DriverWorldSensorCard$Provider$",
+      "roles": [
+        "environment"
+      ],
+      "mod": "OpenComputers",
+      "version": "1.11.20-GTNH",
+      "sha256": "6f4613c10237d636be932dbb89307a0b0cc7c73b141d337adfe19c88d8ccc730"
+    },
+    {
+      "owner": "li.cil.oc.integration.gregtech.DriverEnergyContainer",
+      "roles": [
+        "tileDriver"
+      ],
+      "mod": "OpenComputers",
+      "version": "1.11.20-GTNH",
+      "sha256": "402c8f4dd19051f4bda3008b39e7a7216bfe27e3a841e5cdcc1237694b3cf7ff"
+    },
+    {
+      "owner": "li.cil.oc.integration.ic2.DriverCrop",
+      "roles": [
+        "tileDriver"
+      ],
+      "mod": "OpenComputers",
+      "version": "1.11.20-GTNH",
+      "sha256": "5b478c464f9a7d7794f76ee0f534271b29913b4fce01be10879a1c469747e264"
+    },
+    {
+      "owner": "li.cil.oc.integration.ic2.DriverEnergyConductor",
+      "roles": [
+        "tileDriver"
+      ],
+      "mod": "OpenComputers",
+      "version": "1.11.20-GTNH",
+      "sha256": "4346c44026ce8bc6ef6fe567c64fdd4867867955b1a93670b21b5e43f3cd66f1"
+    },
+    {
+      "owner": "li.cil.oc.integration.ic2.DriverEnergySink",
+      "roles": [
+        "tileDriver"
+      ],
+      "mod": "OpenComputers",
+      "version": "1.11.20-GTNH",
+      "sha256": "b5c861f1770dc1afbdbb441ce4565b1c48d392da07900e313323fb4a09bf5ccd"
+    },
+    {
+      "owner": "li.cil.oc.integration.ic2.DriverEnergySource",
+      "roles": [
+        "tileDriver"
+      ],
+      "mod": "OpenComputers",
+      "version": "1.11.20-GTNH",
+      "sha256": "84eb04665e2be2f1dd24944148945e49d2c35f162c45728747cc65dca633ac2f"
+    },
+    {
+      "owner": "li.cil.oc.integration.ic2.DriverEnergyStorage",
+      "roles": [
+        "tileDriver"
+      ],
+      "mod": "OpenComputers",
+      "version": "1.11.20-GTNH",
+      "sha256": "0071bfc7303db39a817c23a9430741ed449ae63e0c2da058283ee9c7ed9e2a83"
+    },
+    {
+      "owner": "li.cil.oc.integration.ic2.DriverMassFab",
+      "roles": [
+        "tileDriver"
+      ],
+      "mod": "OpenComputers",
+      "version": "1.11.20-GTNH",
+      "sha256": "712718b345e86da8260e0cef0a16af0358e2d2ec505d43c31142b1f98451dccc"
+    },
+    {
+      "owner": "li.cil.oc.integration.ic2.DriverReactor",
+      "roles": [
+        "tileDriver"
+      ],
+      "mod": "OpenComputers",
+      "version": "1.11.20-GTNH",
+      "sha256": "dfc36b682c6ee050171bfff8b1905b2861c091b08d0e8a10bc79fe4b2ba0b210"
+    },
+    {
+      "owner": "li.cil.oc.integration.ic2.DriverReactorChamber",
+      "roles": [
+        "tileDriver"
+      ],
+      "mod": "OpenComputers",
+      "version": "1.11.20-GTNH",
+      "sha256": "1377fc95fba32c4aaf3836ecf7e4bbde31862e55dd5041e4089c8a3e689faf54"
+    },
+    {
+      "owner": "li.cil.oc.integration.ic2.DriverReactorRedstonePort",
+      "roles": [
+        "tileDriver"
+      ],
+      "mod": "OpenComputers",
+      "version": "1.11.20-GTNH",
+      "sha256": "36a07cd2b7b6757bd9d3562cb6d2819afe3685b50a14423011f3c8734e34d1a0"
+    },
+    {
+      "owner": "li.cil.oc.integration.ic2.DriverTeleporter",
+      "roles": [
+        "tileDriver"
+      ],
+      "mod": "OpenComputers",
+      "version": "1.11.20-GTNH",
+      "sha256": "c4e7b8400a12ad202e6525df7dfa32b6443b3f31096257974554936e32bad8e3"
+    },
+    {
+      "owner": "li.cil.oc.integration.opencomputers.DriverAPU",
+      "roles": [
+        "itemDriver"
+      ],
+      "mod": "OpenComputers",
+      "version": "1.11.20-GTNH",
+      "sha256": "f63485c8870d0d2b90d83de44a137655f8b5acce12f9807b74fbc6ae12d83ffa"
+    },
+    {
+      "owner": "li.cil.oc.integration.opencomputers.DriverAPU$",
+      "roles": [
+        "itemDriver"
+      ],
+      "mod": "OpenComputers",
+      "version": "1.11.20-GTNH",
+      "sha256": "ddb5cf23329e14dc528d843518f84bfd888dfe9351b60a64d8568272401c251b"
+    },
+    {
+      "owner": "li.cil.oc.integration.opencomputers.DriverAPU$Provider$",
+      "roles": [
+        "environment"
+      ],
+      "mod": "OpenComputers",
+      "version": "1.11.20-GTNH",
+      "sha256": "a3aa0bc81c15da88025c3bf6aafed825aca64f997f11979cea44cc252fb74c19"
+    },
+    {
+      "owner": "li.cil.oc.integration.opencomputers.DriverCPU$",
+      "roles": [
+        "itemDriver"
+      ],
+      "mod": "OpenComputers",
+      "version": "1.11.20-GTNH",
+      "sha256": "17ce1edecbf9da15173051bcd35f9373675b2a5dc6ee60c96dfd0685d83900ec"
+    },
+    {
+      "owner": "li.cil.oc.integration.opencomputers.DriverComponentBus",
+      "roles": [
+        "itemDriver"
+      ],
+      "mod": "OpenComputers",
+      "version": "1.11.20-GTNH",
+      "sha256": "faddbbaf8aaf7c2107fdbbb54a666f7dfb7a60cc99fb4fe7d13c9def7370679f"
+    },
+    {
+      "owner": "li.cil.oc.integration.opencomputers.DriverComponentBus$",
+      "roles": [
+        "itemDriver"
+      ],
+      "mod": "OpenComputers",
+      "version": "1.11.20-GTNH",
+      "sha256": "b04e114fb2733401b5f30bba7ff52ab8824d5745bdcabdb133a96d5348cd70a7"
+    },
+    {
+      "owner": "li.cil.oc.integration.opencomputers.DriverContainerCard",
+      "roles": [
+        "itemDriver"
+      ],
+      "mod": "OpenComputers",
+      "version": "1.11.20-GTNH",
+      "sha256": "fadc23b81235cb6cb9059015acee7d1ccc49c5c27ac81ab2e7bed4f7bc55981f"
+    },
+    {
+      "owner": "li.cil.oc.integration.opencomputers.DriverContainerCard$",
+      "roles": [
+        "itemDriver"
+      ],
+      "mod": "OpenComputers",
+      "version": "1.11.20-GTNH",
+      "sha256": "695aa9f9f4347accfa80c23413118c9728b633b1e474ecae21716aa3c659bf4d"
+    },
+    {
+      "owner": "li.cil.oc.integration.opencomputers.DriverContainerFloppy",
+      "roles": [
+        "itemDriver"
+      ],
+      "mod": "OpenComputers",
+      "version": "1.11.20-GTNH",
+      "sha256": "31b0b0847039d1dc1224a9f197d924b696032f21dd3ed8e8f2b962c7372b1903"
+    },
+    {
+      "owner": "li.cil.oc.integration.opencomputers.DriverContainerFloppy$",
+      "roles": [
+        "itemDriver"
+      ],
+      "mod": "OpenComputers",
+      "version": "1.11.20-GTNH",
+      "sha256": "0acce149568e1d132dd077c5866f2a561f9cc423ec573e5fa5b374c17990acca"
+    },
+    {
+      "owner": "li.cil.oc.integration.opencomputers.DriverContainerUpgrade",
+      "roles": [
+        "itemDriver"
+      ],
+      "mod": "OpenComputers",
+      "version": "1.11.20-GTNH",
+      "sha256": "58370fea669f82e677d71a71e1e6a467266f5294fb353b8cf1282727965338e5"
+    },
+    {
+      "owner": "li.cil.oc.integration.opencomputers.DriverContainerUpgrade$",
+      "roles": [
+        "itemDriver"
+      ],
+      "mod": "OpenComputers",
+      "version": "1.11.20-GTNH",
+      "sha256": "d5f889a2e9ca5b4c7be04d3f926f14b7f33dbd6a4414bf2fcf98daa64ab50b64"
+    },
+    {
+      "owner": "li.cil.oc.integration.opencomputers.DriverDataCard",
+      "roles": [
+        "itemDriver"
+      ],
+      "mod": "OpenComputers",
+      "version": "1.11.20-GTNH",
+      "sha256": "4c8535a83f400608907a246d1f006aa909906883f459f4e5c90359f6fcd2c72e"
+    },
+    {
+      "owner": "li.cil.oc.integration.opencomputers.DriverDataCard$",
+      "roles": [
+        "itemDriver"
+      ],
+      "mod": "OpenComputers",
+      "version": "1.11.20-GTNH",
+      "sha256": "1ca1d9f36b7c8d7c8667dc1a9946ff5e480514142fbbaac744fc35c6e87c4e12"
+    },
+    {
+      "owner": "li.cil.oc.integration.opencomputers.DriverDataCard$Provider$",
+      "roles": [
+        "environment"
+      ],
+      "mod": "OpenComputers",
+      "version": "1.11.20-GTNH",
+      "sha256": "d009cd7e770b3052ce0967663869d4fa4789808aa07f8cbd0af0d9f49c427e55"
+    },
+    {
+      "owner": "li.cil.oc.integration.opencomputers.DriverDebugCard",
+      "roles": [
+        "itemDriver"
+      ],
+      "mod": "OpenComputers",
+      "version": "1.11.20-GTNH",
+      "sha256": "df6ddbc3b9ee35e68e01936776c24b36074761f3027312568a9b4fdd60613f1b"
+    },
+    {
+      "owner": "li.cil.oc.integration.opencomputers.DriverDebugCard$",
+      "roles": [
+        "itemDriver"
+      ],
+      "mod": "OpenComputers",
+      "version": "1.11.20-GTNH",
+      "sha256": "8e03ae8b6816cc297dba5b4cf32b690b5c015f69b34a6247e5f455d95c0068c3"
+    },
+    {
+      "owner": "li.cil.oc.integration.opencomputers.DriverDebugCard$Provider$",
+      "roles": [
+        "environment"
+      ],
+      "mod": "OpenComputers",
+      "version": "1.11.20-GTNH",
+      "sha256": "4b8d54dd5a1fe356e8a2a6a95c8e881097791221c74bf62cafc2d60dda96db36"
+    },
+    {
+      "owner": "li.cil.oc.integration.opencomputers.DriverDiskDriveMountable",
+      "roles": [
+        "itemDriver"
+      ],
+      "mod": "OpenComputers",
+      "version": "1.11.20-GTNH",
+      "sha256": "b63d14c13576be0d858cfeaa9ed4475b018525a780b29fffcb816472af311ed2"
+    },
+    {
+      "owner": "li.cil.oc.integration.opencomputers.DriverDiskDriveMountable$",
+      "roles": [
+        "itemDriver"
+      ],
+      "mod": "OpenComputers",
+      "version": "1.11.20-GTNH",
+      "sha256": "4e28d087eb0f0e5e028f1729e60c32896ea5cb5b6f2b16b39e0cdf5f91c1d140"
+    },
+    {
+      "owner": "li.cil.oc.integration.opencomputers.DriverEEPROM",
+      "roles": [
+        "itemDriver"
+      ],
+      "mod": "OpenComputers",
+      "version": "1.11.20-GTNH",
+      "sha256": "d9091225dd665d3a636a390b85122f84e2ddd1c50a0bb5d0e3584c587a6d7fdb"
+    },
+    {
+      "owner": "li.cil.oc.integration.opencomputers.DriverEEPROM$",
+      "roles": [
+        "itemDriver"
+      ],
+      "mod": "OpenComputers",
+      "version": "1.11.20-GTNH",
+      "sha256": "1ca056d2d88512bfbba344269d0c0da029e24bedb6a16be0ca742d005faec917"
+    },
+    {
+      "owner": "li.cil.oc.integration.opencomputers.DriverEEPROM$Provider$",
+      "roles": [
+        "environment"
+      ],
+      "mod": "OpenComputers",
+      "version": "1.11.20-GTNH",
+      "sha256": "91d1e6486782697b529414d993cf169f0da7517aa8cd754aff2854e153b86d44"
+    },
+    {
+      "owner": "li.cil.oc.integration.opencomputers.DriverFileSystem",
+      "roles": [
+        "itemDriver"
+      ],
+      "mod": "OpenComputers",
+      "version": "1.11.20-GTNH",
+      "sha256": "8fe133f74370da1c5e6e9c6e829c70d0d402a77f209ce200d7f36213605e5145"
+    },
+    {
+      "owner": "li.cil.oc.integration.opencomputers.DriverFileSystem$",
+      "roles": [
+        "itemDriver"
+      ],
+      "mod": "OpenComputers",
+      "version": "1.11.20-GTNH",
+      "sha256": "f2bae8707e8808bae85181d0ef182bf309d015f1d50252d37c93495967b293cb"
+    },
+    {
+      "owner": "li.cil.oc.integration.opencomputers.DriverGeolyzer",
+      "roles": [
+        "itemDriver"
+      ],
+      "mod": "OpenComputers",
+      "version": "1.11.20-GTNH",
+      "sha256": "65413c74b3e26929002167d99d811a1487be1d08860dadfc619928acc898f8ff"
+    },
+    {
+      "owner": "li.cil.oc.integration.opencomputers.DriverGeolyzer$",
+      "roles": [
+        "itemDriver"
+      ],
+      "mod": "OpenComputers",
+      "version": "1.11.20-GTNH",
+      "sha256": "02a41129ede214cd4819dfb3a36cd0587354c7f568bddb474b3f2b850617793e"
+    },
+    {
+      "owner": "li.cil.oc.integration.opencomputers.DriverGeolyzer$Provider$",
+      "roles": [
+        "environment"
+      ],
+      "mod": "OpenComputers",
+      "version": "1.11.20-GTNH",
+      "sha256": "06e12d86af23aec0d8aa8675b8592f63656231589aef4589264ee0e73af07a5b"
+    },
+    {
+      "owner": "li.cil.oc.integration.opencomputers.DriverGraphicsCard",
+      "roles": [
+        "itemDriver"
+      ],
+      "mod": "OpenComputers",
+      "version": "1.11.20-GTNH",
+      "sha256": "830381649fea1b1adf509d9b3f075c997baab5fad50913cf966210c41648a0ae"
+    },
+    {
+      "owner": "li.cil.oc.integration.opencomputers.DriverGraphicsCard$",
+      "roles": [
+        "itemDriver"
+      ],
+      "mod": "OpenComputers",
+      "version": "1.11.20-GTNH",
+      "sha256": "8157835a9518ce795ffa34322102c65788bd6396be1894744dfaf852be9b1a5e"
+    },
+    {
+      "owner": "li.cil.oc.integration.opencomputers.DriverGraphicsCard$Provider$",
+      "roles": [
+        "environment"
+      ],
+      "mod": "OpenComputers",
+      "version": "1.11.20-GTNH",
+      "sha256": "59c27133cd2e1ef6ead3a670e939f1b84d7d25366f6f13fb78e291e1a72df321"
+    },
+    {
+      "owner": "li.cil.oc.integration.opencomputers.DriverInternetCard",
+      "roles": [
+        "itemDriver"
+      ],
+      "mod": "OpenComputers",
+      "version": "1.11.20-GTNH",
+      "sha256": "4ce84728480d297f8e4a8799893bcb11533adcc143cac550a8a1f23204853d4d"
+    },
+    {
+      "owner": "li.cil.oc.integration.opencomputers.DriverInternetCard$",
+      "roles": [
+        "itemDriver"
+      ],
+      "mod": "OpenComputers",
+      "version": "1.11.20-GTNH",
+      "sha256": "2ba5462b46c430286fbb75adb012c454ce3f76ef1d1aa1e7c4d90bf26e5c8b26"
+    },
+    {
+      "owner": "li.cil.oc.integration.opencomputers.DriverInternetCard$Provider$",
+      "roles": [
+        "environment"
+      ],
+      "mod": "OpenComputers",
+      "version": "1.11.20-GTNH",
+      "sha256": "758aabb00e2955c61f5ae0a2bf95b3ab4bf54ace33121a9ee4c711464fa507c3"
+    },
+    {
+      "owner": "li.cil.oc.integration.opencomputers.DriverKeyboard",
+      "roles": [
+        "itemDriver"
+      ],
+      "mod": "OpenComputers",
+      "version": "1.11.20-GTNH",
+      "sha256": "02a59da5a96452e4f382e953decf4cd2549d454b4576a5ac70b17b6f428991c2"
+    },
+    {
+      "owner": "li.cil.oc.integration.opencomputers.DriverKeyboard$",
+      "roles": [
+        "itemDriver"
+      ],
+      "mod": "OpenComputers",
+      "version": "1.11.20-GTNH",
+      "sha256": "8897d41effd8e935884dfd1eb9297ce66ee2d749e9188935a277e155c0e91d7c"
+    },
+    {
+      "owner": "li.cil.oc.integration.opencomputers.DriverLinkedCard",
+      "roles": [
+        "itemDriver"
+      ],
+      "mod": "OpenComputers",
+      "version": "1.11.20-GTNH",
+      "sha256": "b6de72462c30b658ec165a43b346e9447d6907dc33671282b8129fcf2322d35b"
+    },
+    {
+      "owner": "li.cil.oc.integration.opencomputers.DriverLinkedCard$",
+      "roles": [
+        "itemDriver"
+      ],
+      "mod": "OpenComputers",
+      "version": "1.11.20-GTNH",
+      "sha256": "a03b7240d7c0dd62f80f26e882929802e17ee86aff12ce6dfa03e67ada833c0e"
+    },
+    {
+      "owner": "li.cil.oc.integration.opencomputers.DriverLinkedCard$Provider$",
+      "roles": [
+        "environment"
+      ],
+      "mod": "OpenComputers",
+      "version": "1.11.20-GTNH",
+      "sha256": "279f4663549a6f32c04db0fdfa8fc4c5c66f06cf4297445a9b6395e819051b80"
+    },
+    {
+      "owner": "li.cil.oc.integration.opencomputers.DriverLootDisk",
+      "roles": [
+        "itemDriver"
+      ],
+      "mod": "OpenComputers",
+      "version": "1.11.20-GTNH",
+      "sha256": "e7b38bfeee4d2c742848dae27dc3688949db0c2755c5d72a52b254124db5554d"
+    },
+    {
+      "owner": "li.cil.oc.integration.opencomputers.DriverLootDisk$",
+      "roles": [
+        "itemDriver"
+      ],
+      "mod": "OpenComputers",
+      "version": "1.11.20-GTNH",
+      "sha256": "9fd1bfb906a9f04152dbdc932b5ba409c95860e2b7b885343b821fd305d7d79b"
+    },
+    {
+      "owner": "li.cil.oc.integration.opencomputers.DriverMemory",
+      "roles": [
+        "itemDriver"
+      ],
+      "mod": "OpenComputers",
+      "version": "1.11.20-GTNH",
+      "sha256": "5dbd450a8a026538750f5b04fcf8c7bda705eed7469cb978803525c5d19a4774"
+    },
+    {
+      "owner": "li.cil.oc.integration.opencomputers.DriverMemory$",
+      "roles": [
+        "itemDriver"
+      ],
+      "mod": "OpenComputers",
+      "version": "1.11.20-GTNH",
+      "sha256": "7fc3d4050b80f801de82152171272e2c26a8e2a33be6f419881f5bf57e3a818a"
+    },
+    {
+      "owner": "li.cil.oc.integration.opencomputers.DriverMotionSensor",
+      "roles": [
+        "itemDriver"
+      ],
+      "mod": "OpenComputers",
+      "version": "1.11.20-GTNH",
+      "sha256": "e9f810cedf9ec4f91488f186dbad2a5de4ff814be5a5bc3a2d85bdf90997b188"
+    },
+    {
+      "owner": "li.cil.oc.integration.opencomputers.DriverMotionSensor$",
+      "roles": [
+        "itemDriver"
+      ],
+      "mod": "OpenComputers",
+      "version": "1.11.20-GTNH",
+      "sha256": "7f1369e69b963ae048a5e5bc87aae20be88e2c4c329c0317bb61e2e20ac86293"
+    },
+    {
+      "owner": "li.cil.oc.integration.opencomputers.DriverMotionSensor$Provider$",
+      "roles": [
+        "environment"
+      ],
+      "mod": "OpenComputers",
+      "version": "1.11.20-GTNH",
+      "sha256": "c45adcfb600b1b4a158f916e1e1707f9b0f6d10846d8f74965d2c8c704c824d1"
+    },
+    {
+      "owner": "li.cil.oc.integration.opencomputers.DriverNetworkCard",
+      "roles": [
+        "itemDriver"
+      ],
+      "mod": "OpenComputers",
+      "version": "1.11.20-GTNH",
+      "sha256": "3735a022d8894160c0e0fbff27dd9065abec7759c449b51b93169e693cde8b9d"
+    },
+    {
+      "owner": "li.cil.oc.integration.opencomputers.DriverNetworkCard$",
+      "roles": [
+        "itemDriver"
+      ],
+      "mod": "OpenComputers",
+      "version": "1.11.20-GTNH",
+      "sha256": "09794492eabf017250d613936b6d7dce9eec9d6ddacef5627c1aab096d8f5721"
+    },
+    {
+      "owner": "li.cil.oc.integration.opencomputers.DriverNetworkCard$Provider$",
+      "roles": [
+        "environment"
+      ],
+      "mod": "OpenComputers",
+      "version": "1.11.20-GTNH",
+      "sha256": "4a95fdd109e545e23c523323ef20f702383db4d985246452212e139f475f2e71"
+    },
+    {
+      "owner": "li.cil.oc.integration.opencomputers.DriverRedstoneCard",
+      "roles": [
+        "itemDriver"
+      ],
+      "mod": "OpenComputers",
+      "version": "1.11.20-GTNH",
+      "sha256": "5c1abaeba11f2b17a483fb0c2480479d7fc2d10438532663a90e1cd7bd304474"
+    },
+    {
+      "owner": "li.cil.oc.integration.opencomputers.DriverRedstoneCard$",
+      "roles": [
+        "itemDriver"
+      ],
+      "mod": "OpenComputers",
+      "version": "1.11.20-GTNH",
+      "sha256": "88a977d6cc37c41bbfeb11dee92037e9272765949c44d1dc5611a487dc7fa781"
+    },
+    {
+      "owner": "li.cil.oc.integration.opencomputers.DriverRedstoneCard$Provider$",
+      "roles": [
+        "environment"
+      ],
+      "mod": "OpenComputers",
+      "version": "1.11.20-GTNH",
+      "sha256": "77f33414a29a70b88ad6a10ffdfa3321aeab3d6a2e303483904ffc5d5fd530b3"
+    },
+    {
+      "owner": "li.cil.oc.integration.opencomputers.DriverScreen",
+      "roles": [
+        "itemDriver"
+      ],
+      "mod": "OpenComputers",
+      "version": "1.11.20-GTNH",
+      "sha256": "3b466192dd0254801fd2030285e250f73b2750c9dfdacd1b54509517e6823661"
+    },
+    {
+      "owner": "li.cil.oc.integration.opencomputers.DriverScreen$",
+      "roles": [
+        "itemDriver"
+      ],
+      "mod": "OpenComputers",
+      "version": "1.11.20-GTNH",
+      "sha256": "4df9bf3a508833cd545a0a8ca3c13472d4498d20448a0d54701b3f6653e15b3d"
+    },
+    {
+      "owner": "li.cil.oc.integration.opencomputers.DriverScreen$Provider$",
+      "roles": [
+        "environment"
+      ],
+      "mod": "OpenComputers",
+      "version": "1.11.20-GTNH",
+      "sha256": "cb40e28bbd42029ff41dab1bf7008d35b532ca1b88d60bca512f0b46e6fda2f6"
+    },
+    {
+      "owner": "li.cil.oc.integration.opencomputers.DriverServer",
+      "roles": [
+        "itemDriver"
+      ],
+      "mod": "OpenComputers",
+      "version": "1.11.20-GTNH",
+      "sha256": "8c9d20d393a5282a422b11415b23fe0e74b7077fb476d17020dec18401986ece"
+    },
+    {
+      "owner": "li.cil.oc.integration.opencomputers.DriverServer$",
+      "roles": [
+        "itemDriver"
+      ],
+      "mod": "OpenComputers",
+      "version": "1.11.20-GTNH",
+      "sha256": "b99922846906ba8a7f67ad8f492691317285ba2c7de41c44bbe96141e6a0eb92"
+    },
+    {
+      "owner": "li.cil.oc.integration.opencomputers.DriverTablet",
+      "roles": [
+        "itemDriver"
+      ],
+      "mod": "OpenComputers",
+      "version": "1.11.20-GTNH",
+      "sha256": "0c9418792f5b9ed63119c544ec8d788fa0512b99512d05d3b79f2c606901f18d"
+    },
+    {
+      "owner": "li.cil.oc.integration.opencomputers.DriverTablet$",
+      "roles": [
+        "itemDriver"
+      ],
+      "mod": "OpenComputers",
+      "version": "1.11.20-GTNH",
+      "sha256": "b41484ebb6946c4eafd524391674457ba4aa9afdace310a96180868a9f291794"
+    },
+    {
+      "owner": "li.cil.oc.integration.opencomputers.DriverTerminalServer",
+      "roles": [
+        "itemDriver"
+      ],
+      "mod": "OpenComputers",
+      "version": "1.11.20-GTNH",
+      "sha256": "ee12606d095ae1e291c0607b8aa96e6a567c3ccb2ee29a56c7f99ac0cde76d30"
+    },
+    {
+      "owner": "li.cil.oc.integration.opencomputers.DriverTerminalServer$",
+      "roles": [
+        "itemDriver"
+      ],
+      "mod": "OpenComputers",
+      "version": "1.11.20-GTNH",
+      "sha256": "9e4e5a1fd344874d939e0cd6718e624e2042d8b220d5623f5f67d78eac4a87db"
+    },
+    {
+      "owner": "li.cil.oc.integration.opencomputers.DriverTpsCard",
+      "roles": [
+        "itemDriver"
+      ],
+      "mod": "OpenComputers",
+      "version": "1.11.20-GTNH",
+      "sha256": "e0d4806c69d4f3a3b95eadd06e33e00d83b7189363025c2ced9e0f3e17f49d94"
+    },
+    {
+      "owner": "li.cil.oc.integration.opencomputers.DriverTpsCard$",
+      "roles": [
+        "itemDriver"
+      ],
+      "mod": "OpenComputers",
+      "version": "1.11.20-GTNH",
+      "sha256": "4086ae54957cb7a4018ab208980f37754a3ed6bc9b32f8eaf25903c6fbd0a7c2"
+    },
+    {
+      "owner": "li.cil.oc.integration.opencomputers.DriverTpsCard$Provider$",
+      "roles": [
+        "environment"
+      ],
+      "mod": "OpenComputers",
+      "version": "1.11.20-GTNH",
+      "sha256": "16ae388e63366e1f2ca48311fd34511996856835670c814f0a65bb7d86104429"
+    },
+    {
+      "owner": "li.cil.oc.integration.opencomputers.DriverTransposer",
+      "roles": [
+        "itemDriver"
+      ],
+      "mod": "OpenComputers",
+      "version": "1.11.20-GTNH",
+      "sha256": "052b2846b3d41eaec243ec864e0380c1ccdb037bf7121042d9fba78fe7782364"
+    },
+    {
+      "owner": "li.cil.oc.integration.opencomputers.DriverTransposer$",
+      "roles": [
+        "itemDriver"
+      ],
+      "mod": "OpenComputers",
+      "version": "1.11.20-GTNH",
+      "sha256": "38d3117343e3c72cb5aec7be4987b2534cad46e0f3bc3a5806ca640c721c0ca4"
+    },
+    {
+      "owner": "li.cil.oc.integration.opencomputers.DriverTransposer$Provider$",
+      "roles": [
+        "environment"
+      ],
+      "mod": "OpenComputers",
+      "version": "1.11.20-GTNH",
+      "sha256": "847cd6c598b4d6e396e9d306e4440f271b1f30b1f877e57cd2fdd4caa35b6535"
+    },
+    {
+      "owner": "li.cil.oc.integration.opencomputers.DriverUpgradeAngel",
+      "roles": [
+        "itemDriver"
+      ],
+      "mod": "OpenComputers",
+      "version": "1.11.20-GTNH",
+      "sha256": "2f2b2f41b7fac45dde380947ed599d22283dc0463b1f07500d71ccbb22c93afa"
+    },
+    {
+      "owner": "li.cil.oc.integration.opencomputers.DriverUpgradeAngel$",
+      "roles": [
+        "itemDriver"
+      ],
+      "mod": "OpenComputers",
+      "version": "1.11.20-GTNH",
+      "sha256": "156bbea1058366952a09dc2f57bb6845e9bac343124c8df3c40a8bc3d294ec0d"
+    },
+    {
+      "owner": "li.cil.oc.integration.opencomputers.DriverUpgradeBarcodeReader",
+      "roles": [
+        "itemDriver"
+      ],
+      "mod": "OpenComputers",
+      "version": "1.11.20-GTNH",
+      "sha256": "2352411965b87e5d957e5bc97bf6a08761eba57872101280d24fc1cee5dbca7b"
+    },
+    {
+      "owner": "li.cil.oc.integration.opencomputers.DriverUpgradeBarcodeReader$",
+      "roles": [
+        "itemDriver"
+      ],
+      "mod": "OpenComputers",
+      "version": "1.11.20-GTNH",
+      "sha256": "82f632788c70e14b37cf5a92cc034f6d2469122571c5e7e978429439389bf348"
+    },
+    {
+      "owner": "li.cil.oc.integration.opencomputers.DriverUpgradeBarcodeReader$Provider$",
+      "roles": [
+        "environment"
+      ],
+      "mod": "OpenComputers",
+      "version": "1.11.20-GTNH",
+      "sha256": "ec107d6f14159ddb3aae367c0b1891bb6e48bbd5ea5edf9f3c1b53b18bf5e6c5"
+    },
+    {
+      "owner": "li.cil.oc.integration.opencomputers.DriverUpgradeBattery",
+      "roles": [
+        "itemDriver"
+      ],
+      "mod": "OpenComputers",
+      "version": "1.11.20-GTNH",
+      "sha256": "1cbf277ba50b3bbe446fcd6c8bf14192ee6daed172b1207653ac55c387ba43ee"
+    },
+    {
+      "owner": "li.cil.oc.integration.opencomputers.DriverUpgradeBattery$",
+      "roles": [
+        "itemDriver"
+      ],
+      "mod": "OpenComputers",
+      "version": "1.11.20-GTNH",
+      "sha256": "e1b855ead54c8fe8e0e11a9257eeaa14d35b4c25dcf7324e542bdc6605c7577d"
+    },
+    {
+      "owner": "li.cil.oc.integration.opencomputers.DriverUpgradeChunkloader",
+      "roles": [
+        "itemDriver"
+      ],
+      "mod": "OpenComputers",
+      "version": "1.11.20-GTNH",
+      "sha256": "17347f0463f6976895e92ee1bf39c79327bd077532fd64bb955b565e34027bc7"
+    },
+    {
+      "owner": "li.cil.oc.integration.opencomputers.DriverUpgradeChunkloader$",
+      "roles": [
+        "itemDriver"
+      ],
+      "mod": "OpenComputers",
+      "version": "1.11.20-GTNH",
+      "sha256": "fe65bfb940ce3d34220200b200633e27a1eee38d920ffac76f3f2e8431f90745"
+    },
+    {
+      "owner": "li.cil.oc.integration.opencomputers.DriverUpgradeChunkloader$Provider$",
+      "roles": [
+        "environment"
+      ],
+      "mod": "OpenComputers",
+      "version": "1.11.20-GTNH",
+      "sha256": "124000328f94ed8526d5b312032e8885d48f798caa7595d3dcb1daa442db5f92"
+    },
+    {
+      "owner": "li.cil.oc.integration.opencomputers.DriverUpgradeConfigurator",
+      "roles": [
+        "itemDriver"
+      ],
+      "mod": "OpenComputers",
+      "version": "1.11.20-GTNH",
+      "sha256": "dce0f9495c9742e1b37e8e1907db7a3940d05fdd4c467477ace6596c2570373a"
+    },
+    {
+      "owner": "li.cil.oc.integration.opencomputers.DriverUpgradeConfigurator$",
+      "roles": [
+        "itemDriver"
+      ],
+      "mod": "OpenComputers",
+      "version": "1.11.20-GTNH",
+      "sha256": "3b8c94293185759a9528427bfa4d688d450460d018d77a0523f4683a1b1c80ab"
+    },
+    {
+      "owner": "li.cil.oc.integration.opencomputers.DriverUpgradeConfigurator$Provider$",
+      "roles": [
+        "environment"
+      ],
+      "mod": "OpenComputers",
+      "version": "1.11.20-GTNH",
+      "sha256": "87d3c4858c94abb6f68ff4464af2bd58f6604c6066988a8abd2a9fb3f680b5bf"
+    },
+    {
+      "owner": "li.cil.oc.integration.opencomputers.DriverUpgradeCrafting",
+      "roles": [
+        "itemDriver"
+      ],
+      "mod": "OpenComputers",
+      "version": "1.11.20-GTNH",
+      "sha256": "d8c74cebc9ded5538cf96d890dba5121156156002a072f959b2d653c1fee29f0"
+    },
+    {
+      "owner": "li.cil.oc.integration.opencomputers.DriverUpgradeCrafting$",
+      "roles": [
+        "itemDriver"
+      ],
+      "mod": "OpenComputers",
+      "version": "1.11.20-GTNH",
+      "sha256": "662c7538e430e0a82575edc65b35886107d3d6db9bab46d11d0c7e3e3ceb7871"
+    },
+    {
+      "owner": "li.cil.oc.integration.opencomputers.DriverUpgradeCrafting$Provider$",
+      "roles": [
+        "environment"
+      ],
+      "mod": "OpenComputers",
+      "version": "1.11.20-GTNH",
+      "sha256": "cdcc91eba9215033b6457e8250444da4bc4eed07de0cb30cf0eef78518f126b2"
+    },
+    {
+      "owner": "li.cil.oc.integration.opencomputers.DriverUpgradeDatabase",
+      "roles": [
+        "itemDriver"
+      ],
+      "mod": "OpenComputers",
+      "version": "1.11.20-GTNH",
+      "sha256": "ab1759f2639ea6314d2a6d0d4b64e52b5d1ebae0a98c7f4cdd1901754666778c"
+    },
+    {
+      "owner": "li.cil.oc.integration.opencomputers.DriverUpgradeDatabase$",
+      "roles": [
+        "itemDriver"
+      ],
+      "mod": "OpenComputers",
+      "version": "1.11.20-GTNH",
+      "sha256": "76030d6cafccdd100cf2c90ffe5b2dd880fc2afcde76255baf4cd24a4c16c0ca"
+    },
+    {
+      "owner": "li.cil.oc.integration.opencomputers.DriverUpgradeDatabase$Provider$",
+      "roles": [
+        "environment"
+      ],
+      "mod": "OpenComputers",
+      "version": "1.11.20-GTNH",
+      "sha256": "61e3ec7f612c3e9b95e4683050463df7d9bcedcc0d9b1ac3dccc9b8715e27f5f"
+    },
+    {
+      "owner": "li.cil.oc.integration.opencomputers.DriverUpgradeExperience",
+      "roles": [
+        "itemDriver"
+      ],
+      "mod": "OpenComputers",
+      "version": "1.11.20-GTNH",
+      "sha256": "f0de6f27383993ff2b823e5749ae19df37605d1e12fd6330dd4c2a8d89ff8fa5"
+    },
+    {
+      "owner": "li.cil.oc.integration.opencomputers.DriverUpgradeExperience$",
+      "roles": [
+        "itemDriver"
+      ],
+      "mod": "OpenComputers",
+      "version": "1.11.20-GTNH",
+      "sha256": "0a234440637c215dd003ea227cca5f8700dbf15671fab726c018cb7be3e1c71b"
+    },
+    {
+      "owner": "li.cil.oc.integration.opencomputers.DriverUpgradeExperience$Provider$",
+      "roles": [
+        "environment"
+      ],
+      "mod": "OpenComputers",
+      "version": "1.11.20-GTNH",
+      "sha256": "053170ab93fcef28034bcb6797697b1f7a1a1149705de89bde8ebfee31cf6bda"
+    },
+    {
+      "owner": "li.cil.oc.integration.opencomputers.DriverUpgradeGenerator",
+      "roles": [
+        "itemDriver"
+      ],
+      "mod": "OpenComputers",
+      "version": "1.11.20-GTNH",
+      "sha256": "a509180cbf02791ae0fede9940a1e3a84af243099df9e63462ba91c7f503e46c"
+    },
+    {
+      "owner": "li.cil.oc.integration.opencomputers.DriverUpgradeGenerator$",
+      "roles": [
+        "itemDriver"
+      ],
+      "mod": "OpenComputers",
+      "version": "1.11.20-GTNH",
+      "sha256": "42267ffd673f002e828b32971e57bdd0c290b2abfc805c1b0be51a0eff5f304f"
+    },
+    {
+      "owner": "li.cil.oc.integration.opencomputers.DriverUpgradeGenerator$Provider$",
+      "roles": [
+        "environment"
+      ],
+      "mod": "OpenComputers",
+      "version": "1.11.20-GTNH",
+      "sha256": "79dd247afca150511c2c7b4fe1a18dc40d93c1e8c72819d4ed743eea3da20b11"
+    },
+    {
+      "owner": "li.cil.oc.integration.opencomputers.DriverUpgradeHover",
+      "roles": [
+        "itemDriver"
+      ],
+      "mod": "OpenComputers",
+      "version": "1.11.20-GTNH",
+      "sha256": "af1fc4e4728cb78f415ae38f7253a5b2d467d24ba03379a50683a7724673a3cf"
+    },
+    {
+      "owner": "li.cil.oc.integration.opencomputers.DriverUpgradeHover$",
+      "roles": [
+        "itemDriver"
+      ],
+      "mod": "OpenComputers",
+      "version": "1.11.20-GTNH",
+      "sha256": "b33d369617ae6fcfe7367e7611449e2e645b5aad8dc66bda66f4e04c4e7d79c6"
+    },
+    {
+      "owner": "li.cil.oc.integration.opencomputers.DriverUpgradeInventory",
+      "roles": [
+        "itemDriver"
+      ],
+      "mod": "OpenComputers",
+      "version": "1.11.20-GTNH",
+      "sha256": "107c646ccc4d32daa1b8036a71484332c5b6cad2f2cd1a52e53a6eb5c8d34703"
+    },
+    {
+      "owner": "li.cil.oc.integration.opencomputers.DriverUpgradeInventory$",
+      "roles": [
+        "itemDriver"
+      ],
+      "mod": "OpenComputers",
+      "version": "1.11.20-GTNH",
+      "sha256": "118e6cf9ed2a6421a83338093ad438abfa5ae8af2765f5bc260964096162da3c"
+    },
+    {
+      "owner": "li.cil.oc.integration.opencomputers.DriverUpgradeInventoryController",
+      "roles": [
+        "itemDriver"
+      ],
+      "mod": "OpenComputers",
+      "version": "1.11.20-GTNH",
+      "sha256": "1ffa052cd9b54e1403a670589a377cf15e4400eb64d677e761a95ce1ed059866"
+    },
+    {
+      "owner": "li.cil.oc.integration.opencomputers.DriverUpgradeInventoryController$",
+      "roles": [
+        "itemDriver"
+      ],
+      "mod": "OpenComputers",
+      "version": "1.11.20-GTNH",
+      "sha256": "4d39abcc563c148397acf3156215816a35dbc2bc365fd9836ecfacca5d9fb9e3"
+    },
+    {
+      "owner": "li.cil.oc.integration.opencomputers.DriverUpgradeInventoryController$Provider$",
+      "roles": [
+        "environment"
+      ],
+      "mod": "OpenComputers",
+      "version": "1.11.20-GTNH",
+      "sha256": "df06382a91b848894edd03c807e589dd400c253377829d7427590c2b92988381"
+    },
+    {
+      "owner": "li.cil.oc.integration.opencomputers.DriverUpgradeLeash",
+      "roles": [
+        "itemDriver"
+      ],
+      "mod": "OpenComputers",
+      "version": "1.11.20-GTNH",
+      "sha256": "38b3c7444371342c426a1bb2fb1a4f443a2853b59b7d1c4ba9fd09730218b151"
+    },
+    {
+      "owner": "li.cil.oc.integration.opencomputers.DriverUpgradeLeash$",
+      "roles": [
+        "itemDriver"
+      ],
+      "mod": "OpenComputers",
+      "version": "1.11.20-GTNH",
+      "sha256": "75700176eecd27485c999c4661c178142c2b3bc1e9a9410a429a4b10918d9e5b"
+    },
+    {
+      "owner": "li.cil.oc.integration.opencomputers.DriverUpgradeLeash$Provider$",
+      "roles": [
+        "environment"
+      ],
+      "mod": "OpenComputers",
+      "version": "1.11.20-GTNH",
+      "sha256": "20ae0726c04793410222658ab688c9dbfa8a82f222bf913bd71996b355e54a63"
+    },
+    {
+      "owner": "li.cil.oc.integration.opencomputers.DriverUpgradeMF",
+      "roles": [
+        "itemDriver"
+      ],
+      "mod": "OpenComputers",
+      "version": "1.11.20-GTNH",
+      "sha256": "dae654c3fa1577dbff8b398bd750aaa51eb9dc802c2b6faf9603278ed29cddbb"
+    },
+    {
+      "owner": "li.cil.oc.integration.opencomputers.DriverUpgradeMF$",
+      "roles": [
+        "itemDriver"
+      ],
+      "mod": "OpenComputers",
+      "version": "1.11.20-GTNH",
+      "sha256": "c1aa75e40e8d5a1f6fdc5da8aa0a4eb2263f6b7b822d08486cbb8bf0f08ce63e"
+    },
+    {
+      "owner": "li.cil.oc.integration.opencomputers.DriverUpgradeMF$Provider$",
+      "roles": [
+        "environment"
+      ],
+      "mod": "OpenComputers",
+      "version": "1.11.20-GTNH",
+      "sha256": "24bf7e9647e1513ebb2aa704013ac212e67d61000a942a01341c68936460ef19"
+    },
+    {
+      "owner": "li.cil.oc.integration.opencomputers.DriverUpgradeNavigation",
+      "roles": [
+        "itemDriver"
+      ],
+      "mod": "OpenComputers",
+      "version": "1.11.20-GTNH",
+      "sha256": "5437ace61b07d2df8f942a570983f86565bf46c8a92e5f7dbf1589158236268c"
+    },
+    {
+      "owner": "li.cil.oc.integration.opencomputers.DriverUpgradeNavigation$",
+      "roles": [
+        "itemDriver"
+      ],
+      "mod": "OpenComputers",
+      "version": "1.11.20-GTNH",
+      "sha256": "d8ecf1a371b8e426994c8e92612727b3a834c3ba5df7e4280cecc86a012443eb"
+    },
+    {
+      "owner": "li.cil.oc.integration.opencomputers.DriverUpgradeNavigation$Provider$",
+      "roles": [
+        "environment"
+      ],
+      "mod": "OpenComputers",
+      "version": "1.11.20-GTNH",
+      "sha256": "c9e93ed9674ac77da86c97ec57bdfb81565f8fae23c773bdd54c6b4ffdab5df5"
+    },
+    {
+      "owner": "li.cil.oc.integration.opencomputers.DriverUpgradePiston",
+      "roles": [
+        "itemDriver"
+      ],
+      "mod": "OpenComputers",
+      "version": "1.11.20-GTNH",
+      "sha256": "4281f8ce8dc54f10d078bcba6448d28205432e98c668999e63279ecae1a6df4d"
+    },
+    {
+      "owner": "li.cil.oc.integration.opencomputers.DriverUpgradePiston$",
+      "roles": [
+        "itemDriver"
+      ],
+      "mod": "OpenComputers",
+      "version": "1.11.20-GTNH",
+      "sha256": "164f512a6c17f3d12503b1286ad829ed0ac12b4abcaaab5004592e8b77348d59"
+    },
+    {
+      "owner": "li.cil.oc.integration.opencomputers.DriverUpgradePiston$Provider$",
+      "roles": [
+        "environment"
+      ],
+      "mod": "OpenComputers",
+      "version": "1.11.20-GTNH",
+      "sha256": "e772c0da6b0434deeaa10affd92fa91f73be67c4a2cbbecdfd40ffbb02d968d4"
+    },
+    {
+      "owner": "li.cil.oc.integration.opencomputers.DriverUpgradeRITEG",
+      "roles": [
+        "itemDriver"
+      ],
+      "mod": "OpenComputers",
+      "version": "1.11.20-GTNH",
+      "sha256": "79041a960620ec80af1213daef1346961aac01207829103780e7435eb2b9ef85"
+    },
+    {
+      "owner": "li.cil.oc.integration.opencomputers.DriverUpgradeRITEG$",
+      "roles": [
+        "itemDriver"
+      ],
+      "mod": "OpenComputers",
+      "version": "1.11.20-GTNH",
+      "sha256": "89009d9ce3127dd1faf4043f3bf251dcd3fb2e6821fb6931955b86a582550128"
+    },
+    {
+      "owner": "li.cil.oc.integration.opencomputers.DriverUpgradeSign",
+      "roles": [
+        "itemDriver"
+      ],
+      "mod": "OpenComputers",
+      "version": "1.11.20-GTNH",
+      "sha256": "9508535e68efa4d65d7ce9f0b995b1b6ef40eda259a6905d97e6048fe0a35b7d"
+    },
+    {
+      "owner": "li.cil.oc.integration.opencomputers.DriverUpgradeSign$",
+      "roles": [
+        "itemDriver"
+      ],
+      "mod": "OpenComputers",
+      "version": "1.11.20-GTNH",
+      "sha256": "6f0997dbf4625c90d9ccdd87ce108edbac76abee2f3e8214289540d996000751"
+    },
+    {
+      "owner": "li.cil.oc.integration.opencomputers.DriverUpgradeSign$Provider$",
+      "roles": [
+        "environment"
+      ],
+      "mod": "OpenComputers",
+      "version": "1.11.20-GTNH",
+      "sha256": "ae7f592b37957b57b64b00a9509ce82158a4db1ce84047a180ad3728815a9bf1"
+    },
+    {
+      "owner": "li.cil.oc.integration.opencomputers.DriverUpgradeSolarGenerator",
+      "roles": [
+        "itemDriver"
+      ],
+      "mod": "OpenComputers",
+      "version": "1.11.20-GTNH",
+      "sha256": "0ebbf560dbe9b350813904a88fa15e516d79ab4a4f3142fab86d3f44c7e94cbc"
+    },
+    {
+      "owner": "li.cil.oc.integration.opencomputers.DriverUpgradeSolarGenerator$",
+      "roles": [
+        "itemDriver"
+      ],
+      "mod": "OpenComputers",
+      "version": "1.11.20-GTNH",
+      "sha256": "47b47c8efb00d5b21122a51422899b241ba29f9e84e32e5295307a20c16cf0e9"
+    },
+    {
+      "owner": "li.cil.oc.integration.opencomputers.DriverUpgradeTank",
+      "roles": [
+        "itemDriver"
+      ],
+      "mod": "OpenComputers",
+      "version": "1.11.20-GTNH",
+      "sha256": "aa0f5220b584e5bb768e67f73ad2c89855913203291fab40f81a56ce62fc871d"
+    },
+    {
+      "owner": "li.cil.oc.integration.opencomputers.DriverUpgradeTank$",
+      "roles": [
+        "itemDriver"
+      ],
+      "mod": "OpenComputers",
+      "version": "1.11.20-GTNH",
+      "sha256": "8bf9edd0b23df25e1d8e2b051ce1bebb708d51034e55e4474df48223868b668f"
+    },
+    {
+      "owner": "li.cil.oc.integration.opencomputers.DriverUpgradeTankController",
+      "roles": [
+        "itemDriver"
+      ],
+      "mod": "OpenComputers",
+      "version": "1.11.20-GTNH",
+      "sha256": "bc9b19521b2b07053940d44502eebf2cbf3638422511d66b5028aa54b0f03307"
+    },
+    {
+      "owner": "li.cil.oc.integration.opencomputers.DriverUpgradeTankController$",
+      "roles": [
+        "itemDriver"
+      ],
+      "mod": "OpenComputers",
+      "version": "1.11.20-GTNH",
+      "sha256": "3b010061d085ed4003447812b0bd24d0fd68f4da6956643c58869652437a3edc"
+    },
+    {
+      "owner": "li.cil.oc.integration.opencomputers.DriverUpgradeTankController$Provider$",
+      "roles": [
+        "environment"
+      ],
+      "mod": "OpenComputers",
+      "version": "1.11.20-GTNH",
+      "sha256": "f2e4619e2cc5caa74a9401a90abd9709e66c37a07b2610ae793a49297d0d9ef9"
+    },
+    {
+      "owner": "li.cil.oc.integration.opencomputers.DriverUpgradeTractorBeam",
+      "roles": [
+        "itemDriver"
+      ],
+      "mod": "OpenComputers",
+      "version": "1.11.20-GTNH",
+      "sha256": "59c0baa774d345f22dc8485b44f623391fb1c96f7a53f7c15102bc96bfd2e0f0"
+    },
+    {
+      "owner": "li.cil.oc.integration.opencomputers.DriverUpgradeTractorBeam$",
+      "roles": [
+        "itemDriver"
+      ],
+      "mod": "OpenComputers",
+      "version": "1.11.20-GTNH",
+      "sha256": "013ec3b4deed29085ca077f3b87950aa9e709c3a451ca3be0afd571474f6238c"
+    },
+    {
+      "owner": "li.cil.oc.integration.opencomputers.DriverUpgradeTractorBeam$Provider$",
+      "roles": [
+        "environment"
+      ],
+      "mod": "OpenComputers",
+      "version": "1.11.20-GTNH",
+      "sha256": "9b0e8622d985f33df017e364532f5391970367222a5ec53c234e90a553799265"
+    },
+    {
+      "owner": "li.cil.oc.integration.opencomputers.DriverUpgradeTrading",
+      "roles": [
+        "itemDriver"
+      ],
+      "mod": "OpenComputers",
+      "version": "1.11.20-GTNH",
+      "sha256": "e11b46ca6d2ea9d8fb09faea7ecea82c33df0e0f25e48f9757e4db1bc8b8449a"
+    },
+    {
+      "owner": "li.cil.oc.integration.opencomputers.DriverUpgradeTrading$",
+      "roles": [
+        "itemDriver"
+      ],
+      "mod": "OpenComputers",
+      "version": "1.11.20-GTNH",
+      "sha256": "d9083e6d71a7e93d8b78e02df40dae63a6bd7a52cf5d53bf8036bfd4477d40d6"
+    },
+    {
+      "owner": "li.cil.oc.integration.opencomputers.DriverUpgradeTrading$Provider$",
+      "roles": [
+        "environment"
+      ],
+      "mod": "OpenComputers",
+      "version": "1.11.20-GTNH",
+      "sha256": "99ed7ec80912ac8d587f1b4208ae4e94eb4897d2ffbb4b9aecd6eeccd0b50b22"
+    },
+    {
+      "owner": "li.cil.oc.integration.opencomputers.DriverWirelessNetworkCard",
+      "roles": [
+        "itemDriver"
+      ],
+      "mod": "OpenComputers",
+      "version": "1.11.20-GTNH",
+      "sha256": "371db5eeb30a37c7386cb6b3c282abc8df4f38246d7b6f8439346a55c95cd196"
+    },
+    {
+      "owner": "li.cil.oc.integration.opencomputers.DriverWirelessNetworkCard$",
+      "roles": [
+        "itemDriver"
+      ],
+      "mod": "OpenComputers",
+      "version": "1.11.20-GTNH",
+      "sha256": "9e287cf3d2f5b2aae8c30c3d536e60eb59fe8963a8a7a2a6ded647a15b18674c"
+    },
+    {
+      "owner": "li.cil.oc.integration.opencomputers.DriverWirelessNetworkCard$Provider$",
+      "roles": [
+        "environment"
+      ],
+      "mod": "OpenComputers",
+      "version": "1.11.20-GTNH",
+      "sha256": "0d5beffb04896cda5a63d3b13902adfd6b26a84355fa75c3a3448739c1d4fa17"
+    },
+    {
+      "owner": "li.cil.oc.integration.opencomputers.EnvironmentProviderBlocks",
+      "roles": [
+        "environment"
+      ],
+      "mod": "OpenComputers",
+      "version": "1.11.20-GTNH",
+      "sha256": "fd1655cfd4b2774f3c082c76e044c57e81c5a4d01e84540b7d07520ffcf39ce3"
+    },
+    {
+      "owner": "li.cil.oc.integration.opencomputers.EnvironmentProviderBlocks$",
+      "roles": [
+        "environment"
+      ],
+      "mod": "OpenComputers",
+      "version": "1.11.20-GTNH",
+      "sha256": "2a68ee5815b9799f9c382d3986998ace28580b74500b795c612b6933e29a7bb5"
+    },
+    {
+      "owner": "li.cil.oc.integration.opencomputers.ModOpenComputers$DefinitionPathProvider$",
+      "roles": [
+        "path"
+      ],
+      "mod": "OpenComputers",
+      "version": "1.11.20-GTNH",
+      "sha256": "34eb555e75e8f06e60ae9722729b2ea118a5863ff4e726d9bb92d144cb0ab86a"
+    },
+    {
+      "owner": "li.cil.oc.integration.railcraft.DriverAnchor",
+      "roles": [
+        "tileDriver"
+      ],
+      "mod": "OpenComputers",
+      "version": "1.11.20-GTNH",
+      "sha256": "e0a255d9e29507ce8644dcfc6de301b996db9dc86a14c93b70cdf730fafd9f12"
+    },
+    {
+      "owner": "li.cil.oc.integration.railcraft.DriverAnchor$",
+      "roles": [
+        "tileDriver"
+      ],
+      "mod": "OpenComputers",
+      "version": "1.11.20-GTNH",
+      "sha256": "567449577ba64203777256baca00a208ff3c40807cac2029050a581e2cf7a24f"
+    },
+    {
+      "owner": "li.cil.oc.integration.railcraft.DriverBoilerFirebox",
+      "roles": [
+        "tileDriver"
+      ],
+      "mod": "OpenComputers",
+      "version": "1.11.20-GTNH",
+      "sha256": "d69c65c17f10adc2870d7ac5c433170909db7351fa79cf414962da8de302b96b"
+    },
+    {
+      "owner": "li.cil.oc.integration.railcraft.DriverSteamTurbine",
+      "roles": [
+        "tileDriver"
+      ],
+      "mod": "OpenComputers",
+      "version": "1.11.20-GTNH",
+      "sha256": "790c756fb59bccda27834a9614cc6660d67e4d4e9f2b2c521a6388ef6877cdad"
+    },
+    {
+      "owner": "li.cil.oc.integration.stargatetech2.DriverAbstractBusCard",
+      "roles": [
+        "itemDriver"
+      ],
+      "mod": "OpenComputers",
+      "version": "1.11.20-GTNH",
+      "sha256": "0ccbbfa155718da5242140b2a6e33a6cf3145178429cc13a1403af38fb0a420d"
+    },
+    {
+      "owner": "li.cil.oc.integration.stargatetech2.DriverAbstractBusCard$",
+      "roles": [
+        "itemDriver"
+      ],
+      "mod": "OpenComputers",
+      "version": "1.11.20-GTNH",
+      "sha256": "8053bd870a737cc32b744dfe9142bf4d52202d45cc9a7ed54abcded61a51fde8"
+    },
+    {
+      "owner": "li.cil.oc.integration.stargatetech2.DriverAbstractBusCard$Provider$",
+      "roles": [
+        "environment"
+      ],
+      "mod": "OpenComputers",
+      "version": "1.11.20-GTNH",
+      "sha256": "a064df04dbd211784d373d8b98e9691401929c31f630da765f516899161a38ed"
+    },
+    {
+      "owner": "li.cil.oc.integration.thaumcraft.DriverAspectContainer",
+      "roles": [
+        "tileDriver"
+      ],
+      "mod": "OpenComputers",
+      "version": "1.11.20-GTNH",
+      "sha256": "751b5481437d834a6df80ff958603fc08f48583ad64c1dc9595f9225c6012310"
+    },
+    {
+      "owner": "li.cil.oc.integration.thaumicenergistics.DriverBlockInterface",
+      "roles": [
+        "tileDriver"
+      ],
+      "mod": "OpenComputers",
+      "version": "1.11.20-GTNH",
+      "sha256": "9d3cd254c7bcab897bee6402a8481961db89db70ac3ff7780d344e00e5546b7b"
+    },
+    {
+      "owner": "li.cil.oc.integration.thaumicenergistics.DriverBlockInterface$",
+      "roles": [
+        "tileDriver"
+      ],
+      "mod": "OpenComputers",
+      "version": "1.11.20-GTNH",
+      "sha256": "8373b17d68355a9474a1f48b831e46b8a7523a3c1a9a50ab5fa31fbbe5b51ffb"
+    },
+    {
+      "owner": "li.cil.oc.integration.thaumicenergistics.DriverBlockInterface$Provider$",
+      "roles": [
+        "environment"
+      ],
+      "mod": "OpenComputers",
+      "version": "1.11.20-GTNH",
+      "sha256": "4e249b8570966b2b4a93f960e8d891fee759bcb1c8f36c9ce1f0e748081e822c"
+    },
+    {
+      "owner": "li.cil.oc.integration.thaumicenergistics.DriverController",
+      "roles": [
+        "tileDriver"
+      ],
+      "mod": "OpenComputers",
+      "version": "1.11.20-GTNH",
+      "sha256": "f95d2733f55eb913e2fab811d867193b63f509e1e421a595cb277f22be12d409"
+    },
+    {
+      "owner": "li.cil.oc.integration.thaumicenergistics.DriverController$",
+      "roles": [
+        "tileDriver"
+      ],
+      "mod": "OpenComputers",
+      "version": "1.11.20-GTNH",
+      "sha256": "05bb861f56523b6d43521463316cb4413c3235affc6c7452ef18ae29ee460e5f"
+    },
+    {
+      "owner": "li.cil.oc.integration.thaumicenergistics.DriverController$Provider$",
+      "roles": [
+        "environment"
+      ],
+      "mod": "OpenComputers",
+      "version": "1.11.20-GTNH",
+      "sha256": "cdd782258f8c1483f5705382316a1310477dfee190b5545fbf1825dc3c8eee01"
+    },
+    {
+      "owner": "li.cil.oc.integration.thaumicenergistics.DriverEssentiaExportBus$Provider$",
+      "roles": [
+        "environment"
+      ],
+      "mod": "OpenComputers",
+      "version": "1.11.20-GTNH",
+      "sha256": "1a9cd013bc1071b843b083a6c64b8b77353f5e132deb9af0b78eae5ab27ef578"
+    },
+    {
+      "owner": "li.cil.oc.integration.thaumicenergistics.DriverEssentiaImportBus$Provider$",
+      "roles": [
+        "environment"
+      ],
+      "mod": "OpenComputers",
+      "version": "1.11.20-GTNH",
+      "sha256": "287bc61102a7d4bbdd6e5cf43bf06324c0746a020b690df2b7e950bc9ba72a8d"
+    },
+    {
+      "owner": "li.cil.oc.integration.thermalexpansion.DriverLamp",
+      "roles": [
+        "tileDriver"
+      ],
+      "mod": "OpenComputers",
+      "version": "1.11.20-GTNH",
+      "sha256": "9431fa8f4578e9a8ac1c5f244cd869f2914fd8673db4d963de01e24a5c25ed05"
+    },
+    {
+      "owner": "li.cil.oc.integration.tmechworks.DriverDrawBridge",
+      "roles": [
+        "tileDriver"
+      ],
+      "mod": "OpenComputers",
+      "version": "1.11.20-GTNH",
+      "sha256": "de1883bf395fd786f2e19c4fbd9d819bf65d9aeb760884207ad6d3908acf3b54"
+    },
+    {
+      "owner": "li.cil.oc.integration.vanilla.DriverBeacon",
+      "roles": [
+        "tileDriver"
+      ],
+      "mod": "OpenComputers",
+      "version": "1.11.20-GTNH",
+      "sha256": "4845470f516502be31c08321b7126f235959821be08c69b8674156ca9e8e28e2"
+    },
+    {
+      "owner": "li.cil.oc.integration.vanilla.DriverBeacon$",
+      "roles": [
+        "tileDriver"
+      ],
+      "mod": "OpenComputers",
+      "version": "1.11.20-GTNH",
+      "sha256": "426afea80e3a536a6b8c889b08cc9f466447f6889bc6f7528b15b8e9d47d03c2"
+    },
+    {
+      "owner": "li.cil.oc.integration.vanilla.DriverBeacon$Provider$",
+      "roles": [
+        "environment"
+      ],
+      "mod": "OpenComputers",
+      "version": "1.11.20-GTNH",
+      "sha256": "9311b42734cd655cc451a781f30a62056f5ba3b5da3e2e604d9e93fa764d4d43"
+    },
+    {
+      "owner": "li.cil.oc.integration.vanilla.DriverBrewingStand",
+      "roles": [
+        "tileDriver"
+      ],
+      "mod": "OpenComputers",
+      "version": "1.11.20-GTNH",
+      "sha256": "18e019e30abe390d46fa2851ccf6a3993d2d4c05af5fc5caced6c018f88d041d"
+    },
+    {
+      "owner": "li.cil.oc.integration.vanilla.DriverBrewingStand$",
+      "roles": [
+        "tileDriver"
+      ],
+      "mod": "OpenComputers",
+      "version": "1.11.20-GTNH",
+      "sha256": "51cdf2d32569b33eec84d3350eb2f56bf98c211ce0ff2b9a27f92d750b7808e5"
+    },
+    {
+      "owner": "li.cil.oc.integration.vanilla.DriverBrewingStand$Provider$",
+      "roles": [
+        "environment"
+      ],
+      "mod": "OpenComputers",
+      "version": "1.11.20-GTNH",
+      "sha256": "b2fc031d1ae718b3f672edd5779d343a2d4ec44889c490ca8e903cc444d5bab3"
+    },
+    {
+      "owner": "li.cil.oc.integration.vanilla.DriverCommandBlock",
+      "roles": [
+        "tileDriver"
+      ],
+      "mod": "OpenComputers",
+      "version": "1.11.20-GTNH",
+      "sha256": "acb2813e5aba1a7af507e81d9c8ee234e2f6aa2c669efbf94119113461691683"
+    },
+    {
+      "owner": "li.cil.oc.integration.vanilla.DriverCommandBlock$",
+      "roles": [
+        "tileDriver"
+      ],
+      "mod": "OpenComputers",
+      "version": "1.11.20-GTNH",
+      "sha256": "70ecbd9c5674e32758e319ebb7abeee651a000a6765e560631ca9fda8bc7a875"
+    },
+    {
+      "owner": "li.cil.oc.integration.vanilla.DriverCommandBlock$Provider$",
+      "roles": [
+        "environment"
+      ],
+      "mod": "OpenComputers",
+      "version": "1.11.20-GTNH",
+      "sha256": "88b20448d0e37e3d241cdb0406b54cc625ebb95ba523864414e6f1ef9904b25b"
+    },
+    {
+      "owner": "li.cil.oc.integration.vanilla.DriverComparator",
+      "roles": [
+        "tileDriver"
+      ],
+      "mod": "OpenComputers",
+      "version": "1.11.20-GTNH",
+      "sha256": "011dd6cac6489061526deb9e821db53238be3f00813fb50819854b6f7885c60e"
+    },
+    {
+      "owner": "li.cil.oc.integration.vanilla.DriverComparator$",
+      "roles": [
+        "tileDriver"
+      ],
+      "mod": "OpenComputers",
+      "version": "1.11.20-GTNH",
+      "sha256": "ca5c0e2c53a1a1b9e2f867ec1125ffefe468abf8ab13c8ebd86b594733853e39"
+    },
+    {
+      "owner": "li.cil.oc.integration.vanilla.DriverComparator$Provider$",
+      "roles": [
+        "environment"
+      ],
+      "mod": "OpenComputers",
+      "version": "1.11.20-GTNH",
+      "sha256": "f5a585e295c974fa7a196f3c484bc2973c3824f83dbcf9199d830192dbf4241e"
+    },
+    {
+      "owner": "li.cil.oc.integration.vanilla.DriverFluidHandler",
+      "roles": [
+        "tileDriver"
+      ],
+      "mod": "OpenComputers",
+      "version": "1.11.20-GTNH",
+      "sha256": "e14b78eee2a4665a4506970e649a5871be2555d29a0eb9d60e07b98e9208646f"
+    },
+    {
+      "owner": "li.cil.oc.integration.vanilla.DriverFluidTank",
+      "roles": [
+        "tileDriver"
+      ],
+      "mod": "OpenComputers",
+      "version": "1.11.20-GTNH",
+      "sha256": "a49288e5f8f2f84f771ed03bc54184013e6770cb7003cbe3597c56e6fa0f45cb"
+    },
+    {
+      "owner": "li.cil.oc.integration.vanilla.DriverFurnace",
+      "roles": [
+        "tileDriver"
+      ],
+      "mod": "OpenComputers",
+      "version": "1.11.20-GTNH",
+      "sha256": "58a1787a1a089e19b3e77936a63fd7c43793db5f0531ab2f128ad68ca99417b2"
+    },
+    {
+      "owner": "li.cil.oc.integration.vanilla.DriverFurnace$",
+      "roles": [
+        "tileDriver"
+      ],
+      "mod": "OpenComputers",
+      "version": "1.11.20-GTNH",
+      "sha256": "ae2f0a9b84e746c45315c4befe2b47c56427f3894b6ba516880baabbdfa1485c"
+    },
+    {
+      "owner": "li.cil.oc.integration.vanilla.DriverFurnace$Provider$",
+      "roles": [
+        "environment"
+      ],
+      "mod": "OpenComputers",
+      "version": "1.11.20-GTNH",
+      "sha256": "f11f25f3f507f32979b674b29a57b7021ff699d6cd4b865d0a40c2cd65ed6ba2"
+    },
+    {
+      "owner": "li.cil.oc.integration.vanilla.DriverInventory",
+      "roles": [
+        "tileDriver"
+      ],
+      "mod": "OpenComputers",
+      "version": "1.11.20-GTNH",
+      "sha256": "08fb1019ad2017cd161b0fe4f6b6f2e4450dec981fa324c4173a6f32749b8c6a"
+    },
+    {
+      "owner": "li.cil.oc.integration.vanilla.DriverMobSpawner",
+      "roles": [
+        "tileDriver"
+      ],
+      "mod": "OpenComputers",
+      "version": "1.11.20-GTNH",
+      "sha256": "042aba1e341249b073d79bda463693d781cef700c1aa494169e7604c571a75c0"
+    },
+    {
+      "owner": "li.cil.oc.integration.vanilla.DriverMobSpawner$",
+      "roles": [
+        "tileDriver"
+      ],
+      "mod": "OpenComputers",
+      "version": "1.11.20-GTNH",
+      "sha256": "c766a3fab0bb365d4f7a7f2da4c654dceefdf97bf5e1c479bdb5b74a768c5f2b"
+    },
+    {
+      "owner": "li.cil.oc.integration.vanilla.DriverMobSpawner$Provider$",
+      "roles": [
+        "environment"
+      ],
+      "mod": "OpenComputers",
+      "version": "1.11.20-GTNH",
+      "sha256": "fdac80c93a2433d847d3b9ba08569d377f21f9cb3689b5c40510fe0be40f92b8"
+    },
+    {
+      "owner": "li.cil.oc.integration.vanilla.DriverNoteBlock",
+      "roles": [
+        "tileDriver"
+      ],
+      "mod": "OpenComputers",
+      "version": "1.11.20-GTNH",
+      "sha256": "5b2a191760d74bb2f38024bb1247537507632e36a9c163eb961f5b945f2b6c6d"
+    },
+    {
+      "owner": "li.cil.oc.integration.vanilla.DriverNoteBlock$",
+      "roles": [
+        "tileDriver"
+      ],
+      "mod": "OpenComputers",
+      "version": "1.11.20-GTNH",
+      "sha256": "733628feb769d027ea9f135849eb223ef04b1bcd922a47bb52b83b0d9ee6a7b0"
+    },
+    {
+      "owner": "li.cil.oc.integration.vanilla.DriverNoteBlock$Provider$",
+      "roles": [
+        "environment"
+      ],
+      "mod": "OpenComputers",
+      "version": "1.11.20-GTNH",
+      "sha256": "cd0a5b910cce23094b1733675e87f251ff57bcbf7fb30ec3ce91502ccb8176e5"
+    },
+    {
+      "owner": "li.cil.oc.integration.vanilla.DriverRecordPlayer",
+      "roles": [
+        "tileDriver"
+      ],
+      "mod": "OpenComputers",
+      "version": "1.11.20-GTNH",
+      "sha256": "cbdb8410d0c09cc4f9348f338df5485f05f5be6528dac03886cbdbc43cd72468"
+    },
+    {
+      "owner": "li.cil.oc.integration.vanilla.DriverRecordPlayer$",
+      "roles": [
+        "tileDriver"
+      ],
+      "mod": "OpenComputers",
+      "version": "1.11.20-GTNH",
+      "sha256": "64d106889856350658cbee316ba77a221846bb413b5a0343f5171b18a23a6961"
+    },
+    {
+      "owner": "li.cil.oc.integration.vanilla.DriverRecordPlayer$Provider$",
+      "roles": [
+        "environment"
+      ],
+      "mod": "OpenComputers",
+      "version": "1.11.20-GTNH",
+      "sha256": "eb31b024f7367a8cf6fb5ad497bbbf913e05851fec112070eb6092c874582fc8"
+    },
+    {
+      "owner": "pcl.opensecurity.drivers.MoarRam",
+      "roles": [
+        "itemDriver"
+      ],
+      "mod": "opensecurity",
+      "version": "1.2.0-GTNH",
+      "sha256": "455c22a8832050ef978cd4322fea1280fcbe7e5d0e840fcb57d318d2330eafaf"
+    },
+    {
+      "owner": "pcl.opensecurity.drivers.RFIDReaderCardDriver",
+      "roles": [
+        "itemDriver"
+      ],
+      "mod": "opensecurity",
+      "version": "1.2.0-GTNH",
+      "sha256": "5fc3e4dfa5a024cf6e5208df7ea9ee0f1e2977c4f3c0a34bc32796c045195e15"
+    },
+    {
+      "owner": "pcl.opensecurity.items.ItemSecureNetworkCard",
+      "roles": [
+        "environment",
+        "itemDriver"
+      ],
+      "mod": "opensecurity",
+      "version": "1.2.0-GTNH",
+      "sha256": "86a15a8629ea57c16e43e5d3238d6a4775be20bfa46836f41333ca4151a86aee"
+    },
+    {
+      "owner": "pl.asie.computronics.integration.buildcraft.pluggable.ItemDockingUpgrade",
+      "roles": [
+        "environment",
+        "itemDriver"
+      ],
+      "mod": "computronics",
+      "version": "1.9.3-GTNH",
+      "sha256": "425ca01d237a015ee3c7349a591d5901404918815c2b8eefcfd1b8d9957d5e9a"
+    },
+    {
+      "owner": "pl.asie.computronics.item.ItemOCSpecialParts",
+      "roles": [
+        "environment"
+      ],
+      "mod": "computronics",
+      "version": "1.9.3-GTNH",
+      "sha256": "e425aa0fffb1c29f93e676acacf2d3cb621ea2572b3f4d55feee298cf9cc4910"
+    },
+    {
+      "owner": "pl.asie.computronics.item.ItemOpenComputers",
+      "roles": [
+        "environment",
+        "itemDriver"
+      ],
+      "mod": "computronics",
+      "version": "1.9.3-GTNH",
+      "sha256": "d774471e6090ad32e4fd1334999e64916244a0effb0d605e0fdd03faa3d2bf34"
+    },
+    {
+      "owner": "pl.asie.computronics.oc.block.ComputronicsBlockEnvironmentProvider",
+      "roles": [
+        "environment"
+      ],
+      "mod": "computronics",
+      "version": "1.9.3-GTNH",
+      "sha256": "d850a5aeb9784dcf744769ea5b64229b3a9a440e183f271a1f7e33536692e0ef"
+    },
+    {
+      "owner": "pl.asie.computronics.oc.driver.DriverMagicalMemory",
+      "roles": [
+        "itemDriver"
+      ],
+      "mod": "computronics",
+      "version": "1.9.3-GTNH",
+      "sha256": "faa44342cfb643d722b6e253e97068219dc0a4ad871d445941072b4470fa4128"
+    },
+    {
+      "owner": "pl.asie.computronics.oc.manual.ComputronicsPathProvider",
+      "roles": [
+        "path"
+      ],
+      "mod": "computronics",
+      "version": "1.9.3-GTNH",
+      "sha256": "145b1c5ed61b70212f315f19a1d584cf79ab20a0c272f506b23a16d9f902ce05"
+    },
+    {
+      "owner": "thaumicenergistics.common.items.ItemEssentiaCell",
+      "roles": [
+        "cellProvider"
+      ],
+      "mod": "thaumicenergistics",
+      "version": "1.7.14-GTNH",
+      "sha256": "d819ab00a291b51335837b572806f92d45e1053731fbf8e6c033488af0b976de"
+    }
+  ]
+}

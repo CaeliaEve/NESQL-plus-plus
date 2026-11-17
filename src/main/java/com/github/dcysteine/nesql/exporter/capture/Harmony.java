@@ -1,11 +1,9 @@
 package com.github.dcysteine.nesql.exporter.capture;
 
-import codechicken.nei.PositionedStack;
 import com.github.dcysteine.nesql.exporter.task.Jobs;
 import com.google.gson.JsonArray;
 import com.google.gson.JsonObject;
 import gregtech.api.enums.Materials;
-import gregtech.api.enums.MaterialsUEVplus;
 import gregtech.api.util.GTRecipe;
 import net.minecraft.item.ItemStack;
 import net.minecraftforge.fluids.FluidStack;
@@ -17,9 +15,29 @@ import tectech.util.FluidStackLong;
 import java.util.*;
 import static com.github.dcysteine.nesql.exporter.source.Json.*;
 
-/** GT 5.09.51.482: NEI is a projection of a shared, stateful machine process. */
+/** NEI is a projection of a shared, stateful machine process. */
 final class Harmony {
     private Harmony() {}
+
+    /** Owned native state signature, including long quantities; no machine or GUI callbacks. */
+    static JsonObject snapshot(EyeOfHarmonyRecipe recipe) {
+        require(recipe.getClass() == EyeOfHarmonyRecipe.class, "Unknown Harmony recipe subclass");
+        JsonArray items = array(), fluids = array();
+        require(recipe.getOutputItems().size() + recipe.getOutputFluids().size() <= 4096,
+                "Invalid Harmony output count");
+        for (ItemStackLong item : recipe.getOutputItems())
+            items.add(object("item", Values.snapshot(item.itemStack), "amount", Long.toString(item.stackSize)));
+        for (FluidStackLong fluid : recipe.getOutputFluids())
+            fluids.add(object("fluid", Values.snapshot(fluid.fluidStack), "amount", Long.toString(fluid.amount)));
+        return object("trigger", Values.snapshot(recipe.getRecipeTriggerItem()),
+                "hydrogen", Long.toString(recipe.getHydrogenRequirement()),
+                "helium", Long.toString(recipe.getHeliumRequirement()),
+                "ticks", Long.toString(recipe.getRecipeTimeInTicks()),
+                "start", Long.toString(recipe.getEUStartCost()), "energy", Long.toString(recipe.getEUOutput()),
+                "tier", Long.toString(recipe.getRocketTier()),
+                "compression", Long.toString(recipe.getSpacetimeCasingTierRequired()),
+                "chance", Double.toString(recipe.getBaseRecipeSuccessChance()), "items", items, "fluids", fluids);
+    }
 
     static List<RecipeRow> capture(GTRecipe display, List<GtRecipes.Placement> inputs,
                                   List<GtRecipes.Placement> outputs, RecipeRow row) {
@@ -39,25 +57,19 @@ final class Harmony {
                 "Harmony trigger projection changed");
         require(display.mFluidInputs.length == 3 && fluid(display.mFluidInputs[0], Materials.Hydrogen.getGas(0))
                 && fluid(display.mFluidInputs[1], Materials.Helium.getGas(0))
-                && fluid(display.mFluidInputs[2], MaterialsUEVplus.RawStarMatter.getFluid(0)), "Harmony fluid projection changed");
+                && fluid(display.mFluidInputs[2], Materials.RawStarMatter.getFluid(0)), "Harmony fluid projection changed");
         for (FluidStack f : display.mFluidInputs) require(f.amount == 0, "Harmony fluid placeholders changed");
         List<ItemStackLong> items = nativeRecipe.getOutputItems(); List<FluidStackLong> fluids = nativeRecipe.getOutputFluids();
         require(display.mOutputs.length == items.size() && display.mFluidOutputs.length == fluids.size(), "Harmony output projection changed");
         for (int i=0; i<items.size(); i++) require(same(items.get(i).itemStack, display.mOutputs[i]), "Harmony item projection changed at " + i);
         for (int i=0; i<fluids.size(); i++) require(fluid(fluids.get(i).fluidStack, display.mFluidOutputs[i]), "Harmony fluid projection changed at " + i);
-        List<RecipeRow> rows = rows(nativeRecipe, row);
-        for (RecipeRow branch : rows) {
-            GtRecipes.Placement input = inputs.get(0);
-            branch.slot("input", "item", 0, input.display.relx, input.display.rely);
-            for (GtRecipes.Placement output : outputs) {
-                GtRecipes.Binding binding = output.binding;
-                require(!binding.special && binding.index >= 0 && binding.index < (binding.fluid ? fluids.size() : items.size()), "Invalid Harmony display output");
-                require(binding.fluid ? fluid(fluids.get(binding.index).fluidStack, (FluidStack)output.source)
-                        : same(items.get(binding.index).itemStack, (ItemStack)output.source), "Harmony view changes source identity");
-                branch.slot("output", binding.fluid ? "fluid" : "item", binding.index, output.display.relx, output.display.rely);
-            }
+        for (GtRecipes.Placement output : outputs) {
+            GtRecipes.Binding binding = output.binding;
+            require(!binding.special && binding.index >= 0 && binding.index < (binding.fluid ? fluids.size() : items.size()), "Invalid Harmony display output");
+            require(binding.fluid ? fluid(fluids.get(binding.index).fluidStack, (FluidStack)output.source)
+                    : same(items.get(binding.index).itemStack, (ItemStack)output.source), "Harmony view changes source identity");
         }
-        return rows;
+        return rows(nativeRecipe, row);
     }
 
     static List<RecipeRow> rows(EyeOfHarmonyRecipe recipe, RecipeRow template) {
@@ -91,17 +103,17 @@ final class Harmony {
             for (ItemStack alternative : triggers) choices.add(object("id",row.facts.item(alternative),"amount","1","consume",object("kind","keep"),
                     "returns",array(),"rule",object("kind","wildcard","meta",true,"nbt",true)));
             row.inputs.add(object("slot",0,"kind","item","choices",choices));
-            if (parallel) buffer(row,2,MaterialsUEVplus.RawStarMatter.getFluid(1),Math.max(1,(long)Math.ceil((double)helium*1.24E-5*8.0)));
+            if (parallel) buffer(row,2,Materials.RawStarMatter.getFluid(1),Math.max(1,(long)Math.ceil((double)helium*1.24E-5*8.0)));
             else { buffer(row,0,Materials.Hydrogen.getGas(1),hydrogen); buffer(row,1,Materials.Helium.getGas(1),helium); }
             for (int i=0;i<items.size();i++) {
                 ItemStackLong output=items.get(i);
-                row.itemOutput(null,i,output.itemStack.copy(),10000,quantity("success",output.stackSize));
+                row.itemOutput(i,output.itemStack.copy(),10000,quantity("success",output.stackSize));
             }
             for (int i=0;i<fluids.size();i++) {
                 FluidStackLong output=fluids.get(i);
-                row.fluidOutput(null,i,output.fluidStack.copy(),quantity("success",output.amount));
+                row.fluidOutput(i,output.fluidStack.copy(),quantity("success",output.amount));
             }
-            row.fluidOutput(null,fluids.size(),MaterialsUEVplus.SpaceTime.getMolten(1),quantity("failure",14400L*(1L<<(tier+1))));
+            row.fluidOutput(fluids.size(),Materials.SpaceTime.getMolten(1),quantity("failure",14400L*(1L<<(tier+1))));
             row.property("tectech:mode","运行模式",parallel ? "星界阵列并行（安装 1–8637 个；8–1048576 并行）":"单次（无已安装星界阵列）");
             row.property("tectech:process","运行条件","同批产出共享成功次数；产量受稳定场、加速场、流体过量与历史保底状态影响。启动时耗尽所选内部流体存量；能量按整次结算。电路和已安装阵列不是每次消耗品。");
             result.add(row);

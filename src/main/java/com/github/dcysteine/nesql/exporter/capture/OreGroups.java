@@ -15,6 +15,7 @@ import static com.github.dcysteine.nesql.exporter.source.Json.object;
 
 /** Registry templates and optional observed display examples are separate facts. */
 final class OreGroups {
+    static final int MAX_GROUPS = 262144;
     private final String[] names;
     private final Map<Item, Examples> examples = new IdentityHashMap<>();
     private final com.google.common.collect.ListMultimap<Item, ItemStack> itemMap = ItemList.itemMap;
@@ -31,9 +32,13 @@ final class OreGroups {
 
     OreGroups() {
         names = Arrays.stream(OreDictionary.getOreNames()).filter(Objects::nonNull).sorted().toArray(String[]::new);
-        if (names.length > 65536) throw fault("Too many registered ore groups");
+        validateCount(names.length);
         snapshots = new byte[names.length][];
         sizes = new int[names.length];
+    }
+
+    static void validateCount(int count) {
+        if (count < 0 || count > MAX_GROUPS) throw fault("Too many registered ore groups");
     }
 
     int count() { return names.length; }

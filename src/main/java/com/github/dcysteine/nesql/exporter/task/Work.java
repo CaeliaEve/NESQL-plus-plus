@@ -21,6 +21,7 @@ final class Work<T> {
     private static final AtomicLong IDS = new AtomicLong();
     private static final ThreadLocal<Work<?>> CURRENT = new ThreadLocal<>();
     private final Callable<T> action;
+    private final String queueCode, queueMessage;
     private final CompletableFuture<T> result = new CompletableFuture<>();
     private final String id = Long.toString(IDS.incrementAndGet()), name, created = Instant.now().toString();
     private final long queued = System.nanoTime();
@@ -31,7 +32,12 @@ final class Work<T> {
     private boolean abandoned;
     private StackTraceElement[] stack = new StackTraceElement[0];
 
-    Work(String name, Callable<T> action) { this.name = Checks.shorten(name, 256); this.action = action; }
+    Work(String name, Callable<T> action) { this(name, action, "client_queue_timeout", "Client did not start " + name + " before the queue deadline"); }
+
+    Work(String name, Callable<T> action, String queueCode, String queueMessage) {
+        this.name = Checks.shorten(name, 256);this.action = action;
+        this.queueCode = queueCode;this.queueMessage = queueMessage;
+    }
 
     static void phase(String name) {
         Work<?> work = CURRENT.get();
@@ -87,7 +93,7 @@ final class Work<T> {
                     long remaining = queueTimeout - (System.nanoTime() - queued);
                     if (started == 0 && remaining <= 0) {
                         abandoned = true; ended = System.nanoTime(); state = "queue_timeout"; queue.remove(this);
-                        throw new Jobs.Fault("client_queue_timeout", "Client did not start " + name + " before the queue deadline");
+                        throw new Jobs.Fault(queueCode, queueMessage);
                     }
                     wait = started == 0 ? Math.max(1, Math.min(remaining, TimeUnit.MILLISECONDS.toNanos(250))) : TimeUnit.MILLISECONDS.toNanos(250);
                 }

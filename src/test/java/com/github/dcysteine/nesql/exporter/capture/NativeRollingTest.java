@@ -26,6 +26,7 @@ final class NativeRollingTest {
         String prefix = "tonius.neiintegration.mods.railcraft.RecipeHandlerRollingMachine";
         TemplateRecipeHandler shaped = (TemplateRecipeHandler) Class.forName(prefix + "Shaped").newInstance();
         TemplateRecipeHandler shapeless = (TemplateRecipeHandler) Class.forName(prefix + "Shapeless").newInstance();
+        for(TemplateRecipeHandler handler:Arrays.asList(shaped,shapeless))handler.arecipes.add(handler.new CachedRecipe(){public codechicken.nei.PositionedStack getResult(){return null;}});
         Object manager = Class.forName("mods.railcraft.common.util.crafting.RollingMachineCraftingManager").newInstance();
         List<IRecipe> registry = (List<IRecipe>) manager.getClass().getMethod("getRecipeList").invoke(manager);
         ItemStack milk = new ItemStack(Items.milk_bucket, 7), iron = new ItemStack(Items.iron_ingot, 19);
@@ -66,8 +67,7 @@ final class NativeRollingTest {
                     require(choice.getAsJsonObject("rule").get("nbt").getAsBoolean(), "Ignored native input NBT became required");
                 }
                 TemplateRecipeHandler h = candidate == shapedAdapter ? shaped : shapeless;
-                require(h.arecipes.size() == 1 && h.arecipes.get(0).getResult().relx == 88
-                        && h.arecipes.get(0).getResult().rely == (h == shaped ? 18 : 16), "Native cache projection changed");
+                require(h.arecipes.size() == 1 && h.arecipes.get(0).getResult()==null,"Rolling capture rewrote borrowed NEI cache");
                 if (sourceIndex == 0) require(row.record.getAsJsonObject("grid").getAsJsonArray("cells").toString().equals("[0,null,null,1]"),
                         "Explicit empty crafting cells were lost");
             }
@@ -95,12 +95,49 @@ final class NativeRollingTest {
                 "Native wildcard request lost its unrestricted metadata predicate");
         ShapedRecipes dynamic = new ShapedRecipes(1,1,new ItemStack[] {iron},output).func_92100_c();
         inv.setInventorySlotContents(0, iron.copy());
-        require(dynamic.getCraftingResult(inv).getTagCompound().getInteger("ignored") == 4, "Native result-NBT copy changed");
-        try { ((RegistryRecipes) adapter(shaped,Arrays.asList(dynamic),true)).capture(0,greedyRow);
-            throw new AssertionError("Input-dependent result NBT became a false fixed result"); }
-        catch (Jobs.Fault ex) { require(ex.code.equals("recipe_unsupported"), "Wrong dynamic-result failure"); }
+        ItemStack nativeResult=dynamic.getCraftingResult(inv);
+        require(nativeResult.getTagCompound().getInteger("ignored") == 4, "Native result-NBT copy changed");
+        RecipeRow dynamicRow=NativeCoreFixesTest.row(iron,output,nativeResult);
+        try(RegistryRecipes dynamicReader=(RegistryRecipes)adapter(shaped,Arrays.asList(dynamic),true)){
+            dynamicReader.capture(0,dynamicRow);dynamicReader.finishVerification();
+            require(dynamicRow.record.getAsJsonObject("process").get("kind").getAsString().equals("rolling")
+                &&dynamicRow.record.getAsJsonObject("process").get("copyNbt").getAsBoolean()
+                &&dynamicRow.outputs.get(0).getAsJsonObject().getAsJsonObject("change").getAsJsonObject("action").get("kind").getAsString().equals("craftingNbt"),"Rolling lost native LAST tag transfer or machine selection");
+        }
+        JsonObject origin=object("owner","Railcraft","handler",shaped.getClass().getName(),"key",shaped.getClass().getName());
+        dynamicRow.record.add("source",origin);dynamicRow.record.addProperty("category",Identity.origin("category",origin));
+        NativeContractFixture.writeOwned("native-rolling-nbt",dynamicRow,Arrays.asList(iron,output,nativeResult));
+        lifecycle(shaped,manager,registry,milk,iron,output);
         System.out.println("Native rolling: four recipe classes, native first-match lookup, shifted grid, holes, cross-family priority, no container returns and owned NEI projections passed");
     }
+    @SuppressWarnings("unchecked")private static void lifecycle(TemplateRecipeHandler handler,Object manager,List<IRecipe> registry,ItemStack...known)throws Exception{
+        Field api=Class.forName("mods.railcraft.api.crafting.RailcraftCraftingManager").getField("rollingMachine");Object prior=api.get(null);
+        Field power=Class.forName("mods.railcraft.common.core.RailcraftConfig").getDeclaredField("machinesRequirePower");power.setAccessible(true);boolean priorPower=power.getBoolean(null);
+        Map<String,cpw.mods.fml.common.ModContainer> mods=(Map<String,cpw.mods.fml.common.ModContainer>)MagicApi.field(cpw.mods.fml.common.Loader.instance(),"namedMods");Map<String,cpw.mods.fml.common.ModContainer> priorMods=new HashMap<>(mods);
+        Field locale=null;for(Field candidate:net.minecraft.client.resources.I18n.class.getDeclaredFields())if(candidate.getType()==net.minecraft.client.resources.Locale.class)locale=candidate;
+        require(locale!=null,"Native locale field missing");locale.setAccessible(true);Object priorLocale=locale.get(null);locale.set(null,new net.minecraft.client.resources.Locale());
+        try{
+            NativeCoreFixesTest.version("Railcraft","9.16.33");NativeCoreFixesTest.version("neiintegration","1.5.0");api.set(null,manager);power.setBoolean(null,true);
+            RegistrationBindings binding=RegistrationBindings.read(handler);require(binding.same(RegistrationBindings.read((TemplateRecipeHandler)handler.getClass().newInstance())),"Independent rolling sources differ");
+            try(RegistryRecipes reader=new RollingRecipes(handler)){
+                ItemStack raw=((ShapedRecipes)registry.get(0)).recipeItems[0];int count=raw.stackSize;
+                try{raw.stackSize++;expect("recipe_changed",reader::finishVerification);}finally{raw.stackSize=count;}
+                try{((ShapedRecipes)registry.get(0)).recipeItems[0]=raw.copy();expect("recipe_changed",reader::finishVerification);}finally{((ShapedRecipes)registry.get(0)).recipeItems[0]=raw;}
+                try{Collections.swap(registry,0,1);expect("recipe_changed",reader::finishVerification);}finally{Collections.swap(registry,0,1);}
+                try{power.setBoolean(null,false);expect("recipe_changed",reader::verify);}finally{power.setBoolean(null,true);}
+                try{api.set(null,manager.getClass().newInstance());expect("recipe_changed",reader::verify);require(!binding.same(RegistrationBindings.read(handler)),"Rolling manager replacement stayed equivalent");}finally{api.set(null,manager);}
+                reader.finishVerification();reader.close();reader.close();expect("capture_closed",reader::size);
+            }
+            try(RegistryRecipes empty=new RollingRecipes(handler,Collections.emptyList(),true)){require(empty.size()==0,"Ready-empty rolling failed");empty.finishVerification();}
+            try(Recipes.Cursor cursor=new Recipes.Handler(handler,0).open(NativeCoreFixesTest.row(known).facts)){
+                require(cursor.size()==2,"Production rolling cursor lost categories");cursor.capture(0);cursor.finishVerification();
+            }
+            expect("handler_not_ready",()->new RollingRecipes(handler,null,true));
+            try{api.set(null,null);expect("handler_not_ready",()->new RollingRecipes(handler));}finally{api.set(null,manager);}
+            require(registry.size()==4&&handler.arecipes.size()==1&&handler.arecipes.get(0).getResult()==null,"Rolling lifecycle changed borrowed data");
+        }finally{api.set(null,prior);power.setBoolean(null,priorPower);mods.clear();mods.putAll(priorMods);locale.set(null,priorLocale);}
+    }
+    private static void expect(String code,Runnable action){try{action.run();throw new AssertionError("Expected "+code);}catch(Jobs.Fault failure){require(code.equals(failure.code),"Wrong rolling failure: "+failure.code);}}
     private static Object adapter(TemplateRecipeHandler handler, List<IRecipe> registry, boolean powered) throws Exception {
         Constructor<?> constructor = Class.forName("com.github.dcysteine.nesql.exporter.capture.RollingRecipes")
                 .getDeclaredConstructor(TemplateRecipeHandler.class, List.class, boolean.class);

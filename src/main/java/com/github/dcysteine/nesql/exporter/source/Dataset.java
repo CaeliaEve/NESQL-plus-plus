@@ -24,11 +24,12 @@ import java.util.zip.GZIPOutputStream;
 /** Writes one immutable, declared source dataset. The caller owns record ordering. */
 public final class Dataset implements AutoCloseable {
     public static final String FORMAT = "elysium.source";
-    public static final int REVISION = 38;
+    public static final int REVISION = 41;
+    public static final String PRESENTATION = "semantic-content-v1";
     public static final int RECORD_LIMIT = 1024 * 1024;
     public static final int MANIFEST_LIMIT = 64 * 1024 * 1024;
     public static final List<String> COLLECTIONS = java.util.Collections.unmodifiableList(java.util.Arrays.asList(
-            "aspects", "assets", "blocks", "builds", "categories", "circuits", "fluids", "groups", "items", "materials", "models", "mutations", "ore-groups", "ore-members", "programs", "recipes", "research", "shapes", "species", "strings", "structures", "tracks", "views"));
+            "aspects", "assets", "blocks", "builds", "categories", "circuits", "fluids", "groups", "items", "materials", "models", "mutations", "ore-groups", "ore-members", "programs", "recipes", "references", "research", "shapes", "species", "strings", "structures", "visuals"));
     private static final long SHARD_LIMIT = 16L * 1024 * 1024;
     private final Path staging;
     private final JsonObject manifest = new JsonObject();
@@ -242,13 +243,14 @@ public final class Dataset implements AutoCloseable {
         private Records(String kind) throws IOException { this.kind = kind; open(); }
 
         public void write(JsonObject record) throws IOException {
+            write(new CanonicalRecord(record));
+        }
+
+        void write(CanonicalRecord record) throws IOException {
             writable();
             if (finished) throw new IllegalStateException("Collection is closed: " + kind);
-            if (!record.has("id") || !record.get("id").isJsonPrimitive()) throw new IOException("Missing record id: " + kind);
-            String key = record.get("id").getAsString();
-            if (!key.matches("[a-zA-Z0-9_:.#/@-]{1,256}")) throw new IOException("Invalid record id: " + kind);
-            byte[] row = CanonicalJson.bytes(record);
-            if (row.length > RECORD_LIMIT) throw new IOException("Record exceeds size limit: " + kind + "/" + key);
+            String key = record.id;
+            byte[] row = record.bytes;
             if (lastId != null) {
                 int order = CanonicalJson.KEY_ORDER.compare(lastId, key);
                 if (order > 0) throw new IOException("Records must be ordered by id: " + kind + "/" + key);

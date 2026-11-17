@@ -7,8 +7,6 @@ import com.github.dcysteine.nesql.exporter.task.Jobs;
 import com.google.gson.JsonArray;
 import com.google.gson.JsonObject;
 import net.minecraft.init.Items;
-import net.minecraft.inventory.IInventory;
-import net.minecraft.inventory.InventoryBasic;
 import net.minecraft.item.Item;
 import net.minecraft.item.ItemStack;
 import net.minecraft.nbt.NBTTagCompound;
@@ -38,27 +36,32 @@ import java.util.TreeSet;
 import static com.github.dcysteine.nesql.exporter.capture.MagicApi.*;
 import static com.github.dcysteine.nesql.exporter.source.Json.*;
 
-/** Salis replacements over the final component registries. One combination per
- * cursor step; only isolated stacks/inventories enter native result/cost methods. */
-final class Wands {
+/** Salis' pinned replacement law over bound component/config sources. Only owned
+ * stacks enter admitted wand accessors; result callbacks never initialize native caches. */
+final class Wands implements AutoCloseable {
     private static final String ROOT = "dev.rndmorris.salisarcana.";
     private static final String CORE = ROOT + "common.recipes.ReplaceWandCoreRecipe";
     private static final String CAPS = ROOT + "common.recipes.ReplaceWandCapsRecipe";
     private static final String BRACELET = "tb.common.item.ItemCastingBracelet";
     private static final String DISPOSABLE = "com.kentington.thaumichorizons.common.items.ItemWandCastingDisposable";
-    private final List<WandRod> rods;
-    private final List<WandCap> caps;
+    private final List<WandRod> rods=new ArrayList<>();
+    private final List<WandCap> caps=new ArrayList<>();
     private final List<ItemWandCasting> items = new ArrayList<>();
     private final Map<String, State> fixed = new TreeMap<>();
-    private final List<State> fixedStates;
+    private final List<State> fixedStates=new ArrayList<>();
     private final List<Part> parts = new ArrayList<>();
     private final Map<String, List<ItemStack>> known = new TreeMap<>();
-    private final List<Aspect> primal = new ArrayList<>(Aspect.getPrimalAspects());
+    private final List<Aspect> primal = new ArrayList<>();
     private final boolean preserve, single, enforce, materials, creative;
     private final int size;
     private final int variableStates;
     private int previous = -1;
     private List<MagicRecipes.Candidate> centers;
+    private int excludedIndex = -1;
+    private JsonObject exclusion;
+    private boolean closed;
+    private SalisWandBindings bindings;
+    private final NativeItemExamples examples;
 
     static boolean supports(Object recipe) {
         return recipe != null && (recipe.getClass().getName().equals(CORE) || recipe.getClass().getName().equals(CAPS));
@@ -66,12 +69,16 @@ final class Wands {
 
     static boolean creative() {
         if (!cpw.mods.fml.common.Loader.isModLoaded("salisarcana")) return false;
-        version("salisarcana", "1.1.33-GTNH");
+        MagicApi.version("Wands","salisarcana");
         return enabled(field(type(ROOT + "config.SalisConfig"), null, "features"), "infiniteCreativeVis");
     }
 
-    Wands(List<IArcaneRecipe> recipes) {
-        version("salisarcana", "1.1.33-GTNH"); version("gtnhtcwands", "1.4.6");
+    Wands(List<IArcaneRecipe> recipes,NativeItemExamples examples) {
+        this.examples=examples;
+        MagicApi.version("Wands","salisarcana"); MagicApi.version("Wands","gtnhtcwands");
+        try{
+        bindings=new SalisWandBindings();
+        primal.addAll(Aspect.getPrimalAspects());
         Object features = field(type(ROOT + "config.SalisConfig"), null, "features");
         preserve = enabled(features, "preserveWandVis"); single = enabled(features, "allowSingleWandReplacement");
         creative = enabled(features, "infiniteCreativeVis");
@@ -85,18 +92,18 @@ final class Wands {
             throw fault("Salis and Thaumcraft disagree on primal charge keys");
         }
         primal.sort(Comparator.comparing(Aspect::getTag));
-        rods = new ArrayList<>(new TreeMap<>(WandRod.rods).values());
-        caps = new ArrayList<>(new TreeMap<>(WandCap.caps).values());
+        rods.addAll(new TreeMap<>(WandRod.rods).values());
+        caps.addAll(new TreeMap<>(WandCap.caps).values());
         if (rods.isEmpty() || caps.isEmpty() || rods.size() > 256 || caps.size() > 256) throw fault("Invalid wand component registry size");
         for (Object item : Item.itemRegistry) if (item instanceof ItemWandCasting) {
             ItemWandCasting wand = (ItemWandCasting) item;
             if (item.getClass().getName().equals(BRACELET)) {
-                version("thaumicbases", "1.8.13");
+                MagicApi.version("Wands","thaumicbases");
                 String[] names = (String[]) field(item.getClass(), null, "names");
                 if (names.length != 13) throw fault("Unexpected casting bracelet types");
                 for (int meta = 0; meta < names.length; meta++) fixed(wand, meta);
             } else {
-                if (item.getClass().getName().equals(DISPOSABLE)) version("ThaumicHorizons", "1.7.9");
+                if (item.getClass().getName().equals(DISPOSABLE)) MagicApi.version("Wands","ThaumicHorizons");
                 else if (item.getClass() != ItemWandCasting.class) throw fault("Wand subclass requires its own state adapter: " + item.getClass().getName());
                 items.add(wand);
             }
@@ -108,45 +115,74 @@ final class Wands {
         for (ItemStack stack : ItemList.items) remember(stack);
         for (Object recipe : ThaumcraftApi.getCraftingRecipes()) {
             if (recipe.getClass() == ShapedArcaneRecipe.class || recipe.getClass() == ShapelessArcaneRecipe.class) {
-                remember(((IArcaneRecipe) recipe).getRecipeOutput());
+                remember((ItemStack)field(recipe,"output"));
             }
         }
-        fixedStates = new ArrayList<>(fixed.values());
+        fixedStates.addAll(fixed.values());
         long variable = (long) rods.size() * caps.size() * 2 * items.size();
         if (variable > 2000000) throw fault("Wand states exceed their budget");
         variableStates = (int) variable;
         long count = ((long) variableStates + fixedStates.size()) * parts.size();
         if (count > 2000000 || count == 0) throw fault("Invalid wand combination budget");
         size = (int) count;
+        }catch(RuntimeException|Error error){close();throw error;}
     }
 
-    int size() { return size; }
+    int size() { alive();return size; }
+
+    JsonObject exclusion(int index) {
+        return index == excludedIndex && exclusion != null
+                ? new com.google.gson.JsonParser().parse(exclusion.toString()).getAsJsonObject() : null;
+    }
+    private Result exclude(int index, State state, Part part, String reason) {
+        excludedIndex = index;
+        exclusion = object("reason", reason, "nativeIndex", index, "native", part.recipe.getClass().getName(),
+                "state", state.key(), "part", part.name, "core", part.core,
+                "enforceStaff", enforce, "requireMaterials", materials, "creative", creative);
+        return null;
+    }
 
     Result capture(int index, Facts facts) {
+        alive();
+        excludedIndex = -1; exclusion = null;
         Jobs.checkpoint();
         Part part = parts.get(index % parts.size());
         int group = index / parts.size();
         State state = state(group);
         ItemWandCasting wand = state.item;
         WandRod rod = state.rod; WandCap cap = state.cap; boolean sceptre = state.sceptre;
-        if (part.value == (part.core ? rod : cap)) return null;
-        if (part.core && enforce && state.staff != (part.value instanceof StaffRod)) return null;
+        if (part.value == (part.core ? rod : cap)) return exclude(index, state, part, "native_replacement_keeps_same_component");
+        if (part.core && enforce && state.staff != (part.value instanceof StaffRod))
+            return exclude(index, state, part, "native_staff_rod_enforcement_rejects_component");
         if (previous != group) { centers = centers(state); previous = group; }
+        List<MagicRecipes.Candidate> admittedCenters=centers(state,part.core,facts);
+        if(admittedCenters.isEmpty())return exclude(index,state,part,"native_component_lookup_precedes_wand_classification");
         List<List<MagicRecipes.Candidate>> inputs = new ArrayList<>();
-        inputs.add(centers); inputs.add(part.choices);
-        ItemStack center = centers.get(0).item;
+        inputs.add(admittedCenters); inputs.add(part.choices);
+        ItemStack center = admittedCenters.get(0).item;
+        JsonObject materialRule=null;
         if (part.core && materials) {
-            if (!materials(inputs, center, (WandRod) part.value, sceptre)) return null;
+            materialRule=materialRule(center,(WandRod)part.value,sceptre);
+            if (materialRule==null||!materials(inputs, center, (WandRod) part.value, sceptre,facts))
+                return exclude(index, state, part, "native_replacement_has_no_admissible_required_materials");
         } else if (!part.core) {
             for (int slot = 1; slot < (sceptre ? 3 : 2); slot++) inputs.add(part.choices);
         }
-        IInventory inventory = inventory(inputs, center);
-        ItemStack nativeOutput = part.recipe.getCraftingResult(inventory);
-        AspectList aspects = part.recipe.getAspects(inventory(inputs, center));
+        WandRod resultRod=part.core?(WandRod)part.value:rod;
+        WandCap resultCap=part.core?cap:(WandCap)part.value;
+        int cost=bindings.cost(resultRod,resultCap,state.staff,sceptre);
+        AspectList aspects=new AspectList();if(cost>=0)for(Aspect aspect:primal)aspects.add(aspect,cost);
         // Six zeroes can be paid. An empty list needs Salis' creative waiver.
-        if (nativeOutput == null || aspects == null || (aspects.size() == 0 && !creative)) return null;
+        if (aspects.size() == 0 && !creative)
+            return exclude(index, state, part, "native_arcane_empty_aspects_without_creative_waiver");
+        ItemStack beforeCost=center.copy();
+        if(part.core)wand.setRod(beforeCost,resultRod);else wand.setCap(beforeCost,resultCap);
+        // Salis clamps preserved rod charge BEFORE resetting metadata. Bracelets
+        // resolve capacity by metadata, so observing capacity afterwards is different.
+        int chargeCapacity=wand.getMaxVis(beforeCost);
+        ItemStack nativeOutput=replacement(center,part,cost);
         int capacity = wand.getMaxVis(nativeOutput);
-        if (capacity < 0) throw fault("Wand capacity overflows its native integer");
+        if (capacity < 0||chargeCapacity<0) throw fault("Wand capacity overflows its native integer");
         if (wand.getClass().getName().equals(DISPOSABLE) && capacity != 25000) throw fault("Disposable wand recipe observed outside its crafting context");
 
         ItemStack changes = new ItemStack(wand, 1, 0);
@@ -156,17 +192,19 @@ final class Wands {
         Map<String, Integer> limits = new TreeMap<>();
         for (Aspect aspect : primal) {
             if (!preserve) set.setInteger(aspect.getTag(), 0);
-            else if (part.core) limits.put(aspect.getTag(), capacity);
+            else if (part.core) limits.put(aspect.getTag(), chargeCapacity);
         }
         JsonObject limitValues = new JsonObject(); limits.forEach(limitValues::addProperty);
-        JsonObject action = object("kind", "patch", "set", TypedNbt.encode(set).getAsJsonObject().get("value"), "limits", limitValues);
-        List<ItemStack> examples = new ArrayList<>(); for (MagicRecipes.Candidate candidate : centers) examples.add(candidate.item);
-        Products product = Products.observe(examples, action, input -> {
-            AspectList cost = part.recipe.getAspects(inventory(inputs, input));
-            if (!sameCost(aspects, cost)) throw fault("Wand cost depends on undeclared input data");
-            ItemStack output = part.recipe.getCraftingResult(inventory(inputs, input));
+        int resultMetadata=Items.feather.getDamage(nativeOutput);
+        JsonObject action = object("kind", "salisWand", "set", TypedNbt.encode(set).getAsJsonObject().get("value"), "limits", limitValues,"metadata",resultMetadata);
+        List<ItemStack> specimens = new ArrayList<>(); for (MagicRecipes.Candidate candidate : admittedCenters) specimens.add(candidate.item);
+        Products product = Products.observe(specimens, action, input -> {
+            if(wand.getRod(input)!=rod||wand.getCap(input)!=cap||wand.isStaff(input)!=state.staff||wand.isSceptre(input)!=sceptre)
+                throw fault("Wand specimen differs from its bound component/type state");
+            ItemStack output = replacement(input,part,cost);
             ItemStack expected = Products.patch(input, set, limits);
-            if (output == null || !ItemStack.areItemStacksEqual(expected, output)) throw fault("Native wand result differs from its declared patch");
+            expected.setItemDamage(resultMetadata);
+            if (!ItemStack.areItemStacksEqual(expected, output)) throw fault("Pinned Salis wand law differs from its declared output edit");
             return output;
         }, facts);
         TreeSet<String> research = new TreeSet<>();
@@ -177,7 +215,24 @@ final class Wands {
             JsonObject charges = new JsonObject(); for (Aspect aspect : primal) charges.addProperty(Aspects.id(aspect), aspect.getTag());
             payment = object("input", 0, "charges", charges, "capacity", capacity, "preserve", preserve);
         }
-        return new Result(inputs, aspects.copy(), research, product, payment, part.core ? "rod" : "cap", state.meta != null);
+        JsonArray roles=new JsonArray();roles.add(value("center"));roles.add(value("part"));
+        for(int slot=2;slot<inputs.size();slot++)roles.add(value(part.core?(slot<inputs.size()-2?"screw":"conductor"):"part"));
+        JsonObject process=object("kind","salisReplacement","nativeRecipe",part.recipe.getClass().getName(),"part",part.core?"rod":"cap",
+            "staff",state.staff,"sceptre",sceptre,"enforceStaff",enforce,"targetStaff",part.core&&part.value instanceof StaffRod,
+            "staffAttributes",set.hasKey("AttributeModifiers")?TypedNbt.encode(set.getTag("AttributeModifiers")):null,
+            "roles",roles,"material",materialRule,"cost",cost,"preserve",preserve,"chargeCapacity",chargeCapacity,"resultCapacity",capacity,
+            "selfPayment",single&&!state.staff,"paymentCondition","loadedSalisWorkbenchMixinAndNativePlayerPayment");
+        return new Result(inputs, aspects.copy(), research, product, payment, process, state.meta != null);
+    }
+
+    /** Exact getCraftingResult order on an owned stack; no world/research/config callback. */
+    private ItemStack replacement(ItemStack input,Part part,int cost){
+        NativeStackAudit.audit(input);ItemStack output=input.copy();ItemWandCasting wand=(ItemWandCasting)output.getItem();
+        if(part.core)wand.setRod(output,(WandRod)part.value);else wand.setCap(output,(WandCap)part.value);
+        if(!preserve){AspectList cleared=new AspectList();for(Aspect aspect:primal)cleared.add(aspect,0);wand.storeAllVis(output,cleared);}
+        else if(part.core){int max=wand.getMaxVis(output);AspectList stored=wand.getAllVis(output),clamped=new AspectList();
+            for(Map.Entry<Aspect,Integer> entry:stored.aspects.entrySet())clamped.add(entry.getKey(),Math.min(max,entry.getValue()));wand.storeAllVis(output,clamped);}
+        output.setItemDamage(Math.max(cost,0));return output;
     }
 
     private State state(int index) {
@@ -223,29 +278,41 @@ final class Wands {
         return result;
     }
 
-    private boolean materials(List<List<MagicRecipes.Candidate>> inputs, ItemStack center, WandRod target, boolean sceptre) {
-        Class<?> form = type(ROOT + "lib.WandType");
-        Object shape = invoke(form, null, "getWandType", new Class<?>[] {ItemStack.class}, center.copy());
-        Object wrapper = invoke(type(ROOT + "common.compat.GTNHTCWandsCompat"), null, "getWandWrapper", new Class<?>[] {WandRod.class, form}, target, shape);
-        if (wrapper == null) return false;
-        Object details = invoke(wrapper.getClass(), wrapper, "getDetails", new Class<?>[0]);
-        String ore = (String) invoke(details.getClass(), details, "getScrew", new Class<?>[0]);
-        ItemStack conductor = (ItemStack) invoke(details.getClass(), details, "getConductor", new Class<?>[0]);
+    private JsonObject materialRule(ItemStack center,WandRod target,boolean sceptre){
+        SalisWandBindings.Material material=bindings.material(target,((ItemWandCasting)center.getItem()).isStaff(center),sceptre);
+        if(material==null||material.conductor==null)return null;
+        return object("screw",material.screw,"conductor",InfusionLegacyInputs.template(material.conductor),"screws",sceptre?2:4);
+    }
+    private boolean materials(List<List<MagicRecipes.Candidate>> inputs, ItemStack center, WandRod target, boolean sceptre,Facts facts) {
+        SalisWandBindings.Material material=bindings.material(target,((ItemWandCasting)center.getItem()).isStaff(center),sceptre);
+        if(material==null)return false;String ore=material.screw;ItemStack conductor=material.conductor;
         if (conductor == null || !OreDictionary.doesOreNameExist(ore)) return false;
         if (conductor.getItem() instanceof ItemWandCasting || mappedRod(conductor) != null) return false;
         List<MagicRecipes.Candidate> screws = new ArrayList<>();
-        for (ItemStack screw : OreDictionary.getOres(ore)) {
-            if (screw == null || screw.getItem() == null || screw.getItem() instanceof ItemWandCasting) continue;
-            boolean wildcard = Items.feather.getDamage(screw) == OreDictionary.WILDCARD_VALUE;
-            if (wildcard && (screw.getItem() == conductor.getItem() || mappedRodItem(screw.getItem()))) {
-                throw fault("Wildcard screw ingredient overlaps a conductor or wand rod: " + ore);
-            }
-            if (mappedRod(screw) != null || screw.isItemEqual(conductor)) continue;
-            // Enumerated item/metadata alternatives preserve OreDictionary semantics
-            // without accidentally accepting an excluded conductor/rod through the ore name.
-            screws.add(candidate(screw, wildcard));
+        NativeStackAudit.audit(conductor);
+        boolean wildcardSource=false;Map<String,MagicRecipes.Candidate> unique=new TreeMap<>();
+        List<ItemStack> members=NativeOreTable.copies(ore);
+        // Ore is a cross-item predicate. Its exclusions must cover the whole
+        // registered domain, not just the item used by this display specimen.
+        Map<String,Item> domain=new TreeMap<>();
+        for(ItemStack member:members){NativeStackAudit.audit(member);domain.put(Item.itemRegistry.getNameForObject(member.getItem()),member.getItem());}
+        JsonArray excluded=new JsonArray();
+        for(Item item:domain.values()){
+            if(item instanceof ItemWandCasting)addExclusion(excluded,new ItemStack(item,1,0),facts,true);
+            else for(com.google.gson.JsonElement entry:componentExclusions(item,true,facts))addExclusion(excluded,entry.getAsJsonObject());
         }
-        if (screws.isEmpty()) return false;
+        addExclusion(excluded,conductor,facts,false);
+        JsonObject screwRule=object("kind","except","base",object("kind","ore","name",ore,"exclusive",false),"exclude",excluded);
+        for (ItemStack member : members) {
+            NativeStackAudit.audit(member);wildcardSource|=Items.feather.getDamage(member)==32767;
+            for(ItemStack screw:examples.permutations(member)){
+                if(screw.getItem() instanceof ItemWandCasting||mappedRod(screw)!=null||screw.isItemEqual(conductor))continue;
+                unique.putIfAbsent(identity(screw),new MagicRecipes.Candidate(screw.copy(),screwRule));
+                if(unique.size()>65536)throw fault("Salis screw specimens exceed budget");
+            }
+        }
+        screws.addAll(unique.values());
+        if (screws.isEmpty()) {if(wildcardSource)throw fault("Wildcard screw domain has no safe native specimen; this is not an unreachable-recipe proof");return false;}
         for (int slot = 0; slot < (sceptre ? 2 : 4); slot++) inputs.add(screws);
         List<MagicRecipes.Candidate> conductors = Collections.singletonList(candidate(conductor, false));
         inputs.add(conductors); inputs.add(conductors);
@@ -255,17 +322,14 @@ final class Wands {
     private List<Part> parts(IArcaneRecipe recipe) {
         boolean core = recipe.getClass().getName().equals(CORE);
         Map<?, ?> mapping = (Map<?, ?>) field(type(ROOT + "lib.WandHelper"), null, core ? "WAND_RODS" : "WAND_CAPS");
-        List<Object> diagnostic = Arrays.asList(field(type(ROOT + "lib.WandHelper"), null, "CAP_UNKNOWN"),
-                field(type(ROOT + "lib.WandHelper"), null, "ROD_UNKNOWN"), field(type(ROOT + "lib.WandHelper"), null, "STAFF_UNKNOWN"));
         Map<String, Part> parts = new TreeMap<>();
         for (Map.Entry<?, ?> item : mapping.entrySet()) {
-            if (!(item.getKey() instanceof Item) || item.getKey() instanceof ItemWandCasting) throw fault("Wand component mapping overlaps a wand item");
-            for (Map.Entry<?, ?> variant : ((Map<?, ?>) item.getValue()).entrySet()) {
+            if (!(item.getKey() instanceof Item)) throw fault("Invalid wand component item key");
+            for (Map.Entry<?, ?> variant : componentMap((Item)item.getKey(),core).entrySet()) {
+                if(!(variant.getKey() instanceof Integer))throw fault("Invalid Salis component metadata key");
                 Object component = variant.getValue();
-                // Salis maps these diagnostic sentinels to bedrock. They have no
-                // obtainable component research and are not replacement materials.
-                // Keep registered sentinel states as possible OLD components.
-                if (diagnostic.contains(component)) continue;
+                if(component==null)continue; // Native lookup treats null as unmapped.
+                if(!(core?component instanceof WandRod:component instanceof WandCap))throw fault("Invalid Salis component mapping value");
                 String name = core ? ((WandRod) component).getTag() : ((WandCap) component).getTag();
                 Part part = parts.computeIfAbsent(name, ignored -> new Part(recipe, core, component, name));
                 if (part.value != component) throw fault("Distinct mapped wand components share a tag: " + name);
@@ -278,6 +342,7 @@ final class Wands {
 
     private void remember(ItemStack stack) {
         if (stack == null || !(stack.getItem() instanceof ItemWandCasting)) return;
+        NativeStackAudit.audit(stack);
         ItemWandCasting wand = (ItemWandCasting) stack.getItem();
         WandRod rod = wand.getRod(stack); WandCap cap = wand.getCap(stack);
         boolean bracelet = wand.getClass().getName().equals(BRACELET);
@@ -299,30 +364,55 @@ final class Wands {
     }
     private static void put(Map<String, ItemStack> values, ItemStack item) { values.putIfAbsent(identity(item), item.copy()); }
     private static MagicRecipes.Candidate candidate(ItemStack item, boolean meta) {
+        NativeStackAudit.audit(item);
         ItemStack copy = item.copy(); copy.stackSize = 1;
         return new MagicRecipes.Candidate(copy, object("kind", "wildcard", "meta", meta, "nbt", true));
     }
-    private static IInventory inventory(List<List<MagicRecipes.Candidate>> inputs, ItemStack center) {
-        InventoryBasic inventory = new InventoryBasic("NEI wand replacement", false, 11);
-        inventory.setInventorySlotContents(0, center.copy());
-        for (int slot = 1; slot < inputs.size(); slot++) inventory.setInventorySlotContents(slot, inputs.get(slot).get(0).item.copy());
-        return inventory;
-    }
-    private static boolean sameCost(AspectList left, AspectList right) {
-        if (right == null || left.size() != right.size()) return false;
-        for (Aspect aspect : left.getAspects()) if (left.getAmount(aspect) != right.getAmount(aspect)) return false;
-        return true;
-    }
     private static boolean enabled(Object group, String name) {
-        Object setting = field(group, name); return (Boolean) invoke(setting.getClass(), setting, "isEnabled", new Class<?>[0]);
+        return SalisWandBindings.enabled(group,name);
     }
     private static Object mappedRod(ItemStack item) {
-        return invoke(type(ROOT + "lib.WandHelper"), null, "getWandRodFromItem", new Class<?>[] {ItemStack.class}, item.copy());
+        NativeStackAudit.audit(item);
+        return componentMap(item.getItem(),true).get(Items.feather.getDamage(item));
     }
-    private static boolean mappedRodItem(Item item) {
-        return ((Map<?, ?>) field(type(ROOT + "lib.WandHelper"), null, "WAND_RODS")).containsKey(item);
+    private List<MagicRecipes.Candidate> centers(State state,boolean core,Facts facts){
+        JsonArray excluded=componentExclusions(state.item,core,facts);List<MagicRecipes.Candidate> result=new ArrayList<>();
+        Map<?,?> mapped=componentMap(state.item,core);
+        for(MagicRecipes.Candidate candidate:centers)if(mapped.get(Items.feather.getDamage(candidate.item))==null)
+            result.add(new MagicRecipes.Candidate(candidate.item.copy(),excluded.size()==0?candidate.rule:object("kind","except","base",candidate.rule,"exclude",excluded)));
+        if(result.isEmpty()&&state.meta==null){
+            int meta=0;while(mapped.get(meta)!=null){if(++meta>4096)throw fault("Salis unmapped center metadata search exceeds budget");}
+            MagicRecipes.Candidate seed=centers.get(0);ItemStack witness=seed.item.copy();witness.setItemDamage(meta);
+            result.add(new MagicRecipes.Candidate(witness,object("kind","except","base",seed.rule,"exclude",excluded)));
+        }
+        return result;
+    }
+    private static Map<?,?> componentMap(Item item,boolean core){
+        if(ItemCallbacks.method(item,"getDamage","getDamage",ItemStack.class).getDeclaringClass()!=Item.class)
+            throw fault("Salis component metadata lookup needs an adapter: "+item.getClass().getName());
+        Map<?,?> mapping=(Map<?,?>)field(type(ROOT+"lib.WandHelper"),null,core?"WAND_RODS":"WAND_CAPS");
+        Object raw=mapping.get(item);if(raw==null)return Collections.emptyMap();
+        if(raw.getClass()!=java.util.HashMap.class||((Map<?,?>)raw).size()>4096)throw fault("Unadapted Salis component metadata backing");return (Map<?,?>)raw;
+    }
+    private static JsonArray componentExclusions(Item item,boolean core,Facts facts){
+        JsonArray result=new JsonArray();for(Map.Entry<?,?> entry:componentMap(item,core).entrySet())if(entry.getValue()!=null){
+            if(!(entry.getKey() instanceof Integer))throw fault("Invalid Salis component metadata key");
+            addExclusion(result,new ItemStack(item,1,(Integer)entry.getKey()),facts,false);
+        }return result;
+    }
+    private static void addExclusion(JsonArray cases,ItemStack stack,Facts facts,boolean allMetadata){
+        JsonObject entry=object("id",facts.item(stack),"rule",object("kind","wildcard","meta",allMetadata,"nbt",true));
+        addExclusion(cases,entry);
+    }
+    private static void addExclusion(JsonArray cases,JsonObject entry){
+        for(com.google.gson.JsonElement prior:cases)if(prior.equals(entry))return;
+        if(cases.size()>=4096)throw fault("Salis classification exclusions exceed budget");cases.add(entry);
     }
     private static void addResearch(TreeSet<String> keys, String key) { if (key != null && !key.isEmpty()) keys.add(key); }
+    private void alive(){Jobs.checkpoint();if(closed)throw new Jobs.Fault("capture_closed","Native wand reader is closed");}
+    void verify(){alive();bindings.verify();}
+    void finishVerification(){verify();bindings.finishVerification();}
+    public void close(){closed=true;if(bindings!=null)bindings.close();rods.clear();caps.clear();items.clear();fixed.clear();fixedStates.clear();parts.clear();known.clear();primal.clear();centers=null;exclusion=null;}
     private static Jobs.Fault fault(String message) { return new Jobs.Fault("recipe_unsupported", message); }
 
     private static final class Part {
@@ -351,10 +441,10 @@ final class Wands {
         final TreeSet<String> research;
         final Products product;
         final JsonObject payment;
-        final String part;
+        final JsonObject process;
         final boolean fixed;
-        Result(List<List<MagicRecipes.Candidate>> inputs, AspectList aspects, TreeSet<String> research, Products product, JsonObject payment, String part, boolean fixed) {
-            this.inputs = inputs; this.aspects = aspects; this.research = research; this.product = product; this.payment = payment; this.part = part; this.fixed = fixed;
+        Result(List<List<MagicRecipes.Candidate>> inputs, AspectList aspects, TreeSet<String> research, Products product, JsonObject payment,JsonObject process, boolean fixed) {
+            this.inputs = inputs; this.aspects = aspects; this.research = research; this.product = product; this.payment = payment;this.process=process; this.fixed = fixed;
         }
     }
 }

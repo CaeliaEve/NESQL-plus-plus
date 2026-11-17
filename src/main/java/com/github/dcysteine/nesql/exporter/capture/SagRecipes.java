@@ -1,6 +1,5 @@
 package com.github.dcysteine.nesql.exporter.capture;
 
-import codechicken.nei.PositionedStack;
 import codechicken.nei.recipe.ICraftingHandler;
 import codechicken.nei.recipe.TemplateRecipeHandler;
 import com.github.dcysteine.nesql.exporter.task.Jobs;
@@ -15,37 +14,57 @@ import static com.github.dcysteine.nesql.exporter.source.Json.*;
 /** Registered SAG recipes; ball state belongs to the shared process, not per-slot chances. */
 final class SagRecipes implements RegistryRecipes {
     private static final String ROOT="crazypants.enderio.machine.", HANDLER="crazypants.enderio.nei.SagMillRecipeHandler";
-    private final TemplateRecipeHandler handler;
     private final List<Entry> entries=new ArrayList<>();
     private final List<Ball> balls=new ArrayList<>();
     private final List<EnderInputs.Pattern> stock=new ArrayList<>(),blocked=new ArrayList<>(),oreBlocked;
     static boolean supports(ICraftingHandler h){return h.getClass().getName().equals(HANDLER);}
-    SagRecipes(TemplateRecipeHandler h){this(h,registry());}
-    private SagRecipes(TemplateRecipeHandler h,Object manager){this(h,(List<?>)call(manager,"getRecipes"),(List<?>)call(manager,"getBalls"),(List<?>)field(manager,"ballExcludes"));}
+    private NativeDefinitionGraph bindings;
+    private final List<EnderInputs.Pattern> relevant=new ArrayList<>();
+    private boolean closed;
+    SagRecipes(TemplateRecipeHandler h){
+        if(!supports(h))throw fault("Unknown SAG handler");
+        try{
+            Object manager=registry();List<?> source=(List<?>)field(manager,"recipes"),ballSource=(List<?>)field(manager,"balls"),exclusions=(List<?>)field(manager,"ballExcludes");
+            if(source.getClass()!=ArrayList.class||source.size()>262144||ballSource.getClass()!=ArrayList.class||ballSource.size()>4096||exclusions.getClass()!=ArrayList.class||exclusions.size()>65536)throw fault("Invalid SAG source storage");
+            bindings=new NativeDefinitionGraph(SagRecipes::registrationAnchors,definitionFields());
+            for(Object record:source){Jobs.checkpoint();Entry e=new Entry(record);entries.add(e);if(e.inputs.size()==1)relevant.addAll(e.inputs.get(0).patterns);}
+            for(Object record:ballSource){Ball b=new Ball(record);balls.add(b);stock.addAll(b.patterns);}
+            for(Object record:exclusions)if(record!=null){EnderInputs.check(record);blocked.addAll(EnderInputs.patterns(record));}
+            relevant.addAll(stock);oreBlocked=oreBlocks(relevant);
+        }catch(RuntimeException|Error failure){close();throw failure;}
+    }
+    static boolean supportsClass(String name){return HANDLER.equals(name);}
+    static Object[] registrationAnchors(){Object manager=registry();return new Object[]{manager,field(manager,"recipes"),field(manager,"balls"),field(manager,"ballExcludes")};}
+    private static Map<String,String[]> definitionFields(){
+        Map<String,String[]> fields=NativeDefinitionGraph.shapes(ROOT+"crusher.CrusherRecipeManager","recipes","balls","ballExcludes");
+        fields.put(ROOT+"recipe.Recipe",new String[]{"inputs","outputs","energyRequired","bonusType"});
+        fields.put(ROOT+"recipe.RecipeInput",new String[]{"slot","input","useMeta","fluid","multiplier"});
+        fields.put(ROOT+"recipe.OreDictionaryRecipeInput",new String[]{"slot","input","useMeta","fluid","multiplier","oreId"});
+        fields.put(ROOT+"recipe.RecipeOutput",new String[]{"outputFluid","output","chance","exp"});
+        fields.put(ROOT+"recipe.RecipeBonusType",new String[]{});
+        fields.put(ROOT+"crusher.GrindingBall",new String[]{"ri","chanceMultiplier","powerMultiplier","grindingMultiplier","durationMJ"});return fields;
+    }
+    public void verify(){alive();bindings.verifyRoots();}
+    public void finishVerification(){verify();bindings.verify();if(!oreSignature(oreBlocked).equals(oreSignature(oreBlocks(relevant))))throw new Jobs.Fault("environment_changed","SAG ore bonus exclusions changed");}
+    private static String oreSignature(List<EnderInputs.Pattern> patterns){JsonArray rows=array();for(EnderInputs.Pattern p:patterns)rows.add(object("item",RecipeRow.stackEvidence(p.item),"rule",p.rule()));return com.github.dcysteine.nesql.exporter.source.CanonicalJson.digest(rows);}
+    private void alive(){Jobs.checkpoint();if(closed)throw new Jobs.Fault("capture_closed","SAG reader is closed");}
+    public void close(){closed=true;if(bindings!=null)bindings.close();entries.clear();balls.clear();stock.clear();blocked.clear();relevant.clear();if(oreBlocked!=null)oreBlocked.clear();}
     private static Object registry(){
-        version("EnderIO","2.9.28");
+        MagicApi.version("SagRecipes","EnderIO");
         Object registry=field(type(ROOT+"MachineRecipeRegistry"),null,"instance");
         Object machine=field(type("crazypants.enderio.ModObject"),null,"blockSagMill");
         Map<?,?> selectors=(Map<?,?>)((Map<?,?>)field(registry,"machineRecipes")).get(field(machine,"unlocalisedName"));
         if(selectors==null||selectors.size()!=1||selectors.values().iterator().next()==null||!selectors.values().iterator().next().getClass().getName().equals(ROOT+"crusher.CrusherMachineRecipe"))
             throw fault("Unknown or absent SAG runtime selector");
-        return invoke(type(ROOT+"crusher.CrusherRecipeManager"),null,"getInstance",new Class<?>[0]);
+        Object manager=field(type(ROOT+"crusher.CrusherRecipeManager"),null,"instance");if(manager==null||manager.getClass()!=type(ROOT+"crusher.CrusherRecipeManager"))throw fault("Unadapted SAG manager owner");return manager;
     }
-    SagRecipes(TemplateRecipeHandler h,List<?> source,List<?> ballSource,List<?> exclusions){
-        if(!supports(h)||source==null||source.size()>262144||ballSource==null||ballSource.size()>4096||exclusions==null||exclusions.size()>65536)
-            throw fault("Invalid SAG registry size");
-        handler=h;
-        List<EnderInputs.Pattern> relevant=new ArrayList<>();
-        for(Object record:source){Jobs.checkpoint();Entry e=new Entry(record);entries.add(e);if(e.inputs.size()==1)relevant.addAll(e.inputs.get(0).patterns);}
-        for(Object record:ballSource){Ball b=new Ball(record);balls.add(b);stock.addAll(b.patterns);}
-        for(Object record:exclusions)if(record!=null){EnderInputs.check(record);blocked.addAll(EnderInputs.patterns(record));}
-        relevant.addAll(stock);oreBlocked=oreBlocks(relevant);
-    }
-    public int size(){return entries.size();}
+    public int size(){alive();return entries.size();}
     public boolean capture(int index,RecipeRow row){
-        Entry e=entries.get(index);
+        alive();Entry e=entries.get(index);
         // The native selector offers exactly one material stack to the positive requirements.
-        if(e.inputs.size()!=1||e.inputs.get(0).patterns.isEmpty())return false;
+        if(e.inputs.size()!=1||e.inputs.get(0).patterns.isEmpty())return row.exclude(object("native",HANDLER,
+            "reason",e.inputs.size()!=1?"native_single_input_machine_cannot_match_requirement_count":"empty_native_required_input_predicate",
+            "requirements",e.inputs.size()));
         Input in=e.inputs.get(0);
         input(row,0,in.patterns,in.amount,74,2,"allocated");
         if(!stock.isEmpty())input(row,1,stock,1,116,12,"reserve");
@@ -62,16 +81,15 @@ final class SagRecipes implements RegistryRecipes {
             "blocked",cases(row,intersections(blocked,in.patterns)),"oreBlocked",cases(row,intersections(oreBlocked,combined(in.patterns,stock)))));
         for(int i=0;i<e.outputs.size();i++){
             Output out=e.outputs.get(i);
-            row.itemOutput(i<4?new PositionedStack(out.item.copy(),43+21*i,46,false):null,i,out.item.copy(),10000,
+            row.itemOutput(i,out.item.copy(),10000,
                 object("kind","grinding","nominal",Integer.toString(out.item.stackSize),"threshold",Float.toString(out.chance)));
         }
-        handler.arecipes.clear();handler.arecipes.add(handler.new CachedRecipe(){@Override public PositionedStack getResult(){return null;}});
         return true;
     }
     private static void input(RecipeRow row,int slot,List<EnderInputs.Pattern> patterns,int amount,int x,int y,String consume){
-        List<RecipeRow.Ingredient> choices=new ArrayList<>();List<ItemStack> display=new ArrayList<>();
-        for(EnderInputs.Pattern p:patterns){choices.add(new RecipeRow.Ingredient(p.item.copy(),amount,false,p.rule()));display.add(p.item.copy());}
-        row.itemInput(new PositionedStack(display,x,y,false),slot,choices,false);
+        List<RecipeRow.Ingredient> choices=new ArrayList<>();
+        for(EnderInputs.Pattern p:patterns)choices.add(new RecipeRow.Ingredient(p.item.copy(),amount,false,p.rule()));
+        row.itemInput(slot,choices,false);
         for(JsonElement c:row.inputs.get(row.inputs.size()-1).getAsJsonObject().getAsJsonArray("choices"))c.getAsJsonObject().add("consume",object("kind",consume));
     }
     private static JsonArray cases(RecipeRow row,List<EnderInputs.Pattern> patterns){
@@ -105,12 +123,6 @@ final class SagRecipes implements RegistryRecipes {
             }
         }
         return result;
-    }
-    int[][] progressBars(){return new int[][]{{73,20,166,0,17,24,40,1},{136,12,166,24,4,16,160,11}};}
-    void draw(int index){
-        handler.drawBackground(0);Class<?> power=type("crazypants.enderio.power.PowerDisplayUtil");
-        String energy=invoke(power,null,"formatPower",new Class<?>[]{int.class},entries.get(index).energy)+" "+invoke(power,null,"abrevation",new Class<?>[0]);
-        codechicken.lib.gui.GuiDraw.drawString(energy,96,33,0x808080,false);
     }
     private static final class Entry {
         final List<Input> inputs=new ArrayList<>();final List<Output> outputs=new ArrayList<>();final int energy;final boolean bonus;

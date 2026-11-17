@@ -26,6 +26,7 @@ public final class Main {
             Minecraft game = Minecraft.getMinecraft();
             Exports exports = new Exports(game.mcDataDir.toPath());
             FMLCommonHandler.instance().bus().register(exports.client);
+            FMLCommonHandler.instance().bus().register(com.github.dcysteine.nesql.exporter.task.ServerSnapshots.INSTANCE);
             ((IReloadableResourceManager) game.getResourceManager()).registerReloadListener(exports.client);
             ClientCommandHandler.instance.registerCommand(new ExportCommand(exports));
             Runtime.getRuntime().addShutdownHook(new Thread(() -> {

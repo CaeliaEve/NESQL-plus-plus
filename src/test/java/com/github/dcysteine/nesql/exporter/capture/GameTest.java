@@ -21,17 +21,51 @@ public final class GameTest {
             java.io.PrintStream out = System.out, err = System.err;
             try (LaunchClassLoader loader = new LaunchClassLoader(urls)) {
                 Thread.currentThread().setContextClassLoader(loader);
+                if ("observed-callbacks-bracelet".equals(System.getProperty("nesql.nativeFamily")))
+                    loader.registerTransformer(NativeObservedCallbacksTest.class.getName()+"$BraceletRoles");
+                if ("observed-callbacks-focus-container".equals(System.getProperty("nesql.nativeFamily")))
+                    loader.registerTransformer(NativeObservedCallbacksTest.class.getName()+"$FocusDefinitions");
+                if (Boolean.getBoolean("nesql.nativeOreOptimized"))
+                    loader.registerTransformer(NativeOreStorageTest.Hodgepodge.class.getName());
+                if ("harvest-storage".equals(System.getProperty("nesql.nativeFamily")))
+                    loader.registerTransformer(NativeHarvestStorageTest.class.getName()+"$Definitions");
+                if ("forestry-container-canisters".equals(System.getProperty("nesql.nativeFamily")) || "forestry-container-automagy".equals(System.getProperty("nesql.nativeFamily")))
+                    loader.registerTransformer(NativeSqueezerFamiliesTest.class.getName() + "$Definitions");
+                if ("banner".equals(System.getProperty("nesql.nativeFamily")))
+                    loader.registerTransformer(NativeBannerTest.class.getName() + "$Definitions");
+                if ("cal-imprint".equals(System.getProperty("nesql.nativeFamily")))
+                    loader.registerTransformer(NativeCalImprintTest.class.getName() + "$Definitions");
+                if ("ae-remaining".equals(System.getProperty("nesql.nativeFamily")) || "ae-world-ore".equals(System.getProperty("nesql.nativeFamily")))
+                    loader.registerTransformer(NativeAeRemainingTest.class.getName() + "$IsolatedDefinitions");
+                if ("inscriber".equals(System.getProperty("nesql.nativeFamily")))
+                    loader.registerTransformer(NativeAeRemainingTest.class.getName() + "$IsolatedDefinitions");
+                if ("betterquesting".equals(System.getProperty("nesql.nativeFamily")))
+                    loader.registerTransformer(BetterQuestingTest.class.getName() + "$UnusedGuiConstants");
+                if ("nei-information".equals(System.getProperty("nesql.nativeFamily")))
+                    loader.registerTransformer(InformationReferencesTest.class.getName() + "$NoInfoGuiInitialization");
+                if ("usage-queries".equals(System.getProperty("nesql.nativeFamily")))
+                    loader.registerTransformer(NativeUsageTest.class.getName() + "$NoGuiInitialization");
+                if ("fireworks-fixed".equals(System.getProperty("nesql.nativeFamily")))
+                    loader.registerTransformer(FireworkReferencesTest.class.getName() + "$NativeAccess");
+                if ("tool-materials".equals(System.getProperty("nesql.nativeFamily")))
+                    loader.registerTransformer(NativeToolMaterialsTest.class.getName() + "$PartBootstrap");
+                if ("witchery-cooking".equals(System.getProperty("nesql.nativeFamily")))
+                    loader.registerTransformer(GameTest.class.getName() + "$WitcheryRegistryDefaults");
                 if ("tconstruct".equals(System.getProperty("nesql.nativeFamily")) || "core-fixes-casting".equals(System.getProperty("nesql.nativeFamily")) || "scrapbox".equals(System.getProperty("nesql.nativeFamily")))
                     loader.registerTransformer("cpw.mods.fml.common.asm.transformers.EventSubscriptionTransformer");
+                if ("nei-diagram-generators".equals(System.getProperty("nesql.nativeFamily")))
+                    loader.registerTransformer("cpw.mods.fml.common.asm.transformers.EventSubscriptionTransformer");
+                if ("gt-crafting-declarations".equals(System.getProperty("nesql.nativeFamily")))
+                    loader.registerTransformer(NativeGtCraftingTest.class.getName() + "$ElectricDefinitions");
                 if ("core-fixes-casting".equals(System.getProperty("nesql.nativeFamily")))
                     loader.registerTransformer(GameTest.class.getName() + "$ExtraUtilitiesConfig");
-                if ("inscriber".equals(System.getProperty("nesql.nativeFamily")))
+                if ("inscriber".equals(System.getProperty("nesql.nativeFamily")) || "matter-manipulator".equals(System.getProperty("nesql.nativeFamily")))
                     loader.registerTransformer(GameTest.class.getName() + "$NbtListAccess");
                 if ("soul".equals(System.getProperty("nesql.nativeFamily")))
                     loader.registerTransformer(GameTest.class.getName() + "$EnderRegistry");
                 if ("genetics-roots".equals(System.getProperty("nesql.nativeFamily")))
                     loader.registerTransformer(NativeGeneticsTest.class.getName() + "$Defaults");
-                if ("space".equals(System.getProperty("nesql.nativeFamily")) || "galaxy-assembly".equals(System.getProperty("nesql.nativeFamily")) || "circuits".equals(System.getProperty("nesql.nativeFamily")) || "rail-wildcard".equals(System.getProperty("nesql.nativeFamily")) || System.getProperty("nesql.nativeFamily", "").startsWith("fluid-icons"))
+                if ("infusion-tools".equals(System.getProperty("nesql.nativeFamily")) || "space".equals(System.getProperty("nesql.nativeFamily")) || "galaxy-assembly".equals(System.getProperty("nesql.nativeFamily")) || "circuits".equals(System.getProperty("nesql.nativeFamily")) || "rail-wildcard".equals(System.getProperty("nesql.nativeFamily")) || System.getProperty("nesql.nativeFamily", "").startsWith("fluid-icons"))
                     loader.registerTransformer(GameTest.class.getName() + "$OptionalApis");
                 if ("core-fixes-blast".equals(System.getProperty("nesql.nativeFamily")))
                     loader.registerTransformer(GameTest.class.getName() + "$Ic2Cells");
@@ -50,6 +84,12 @@ public final class GameTest {
         cpw.mods.fml.relauncher.ReflectionHelper.setPrivateValue(Loader.class,Loader.instance(),new java.util.HashMap<String,cpw.mods.fml.common.ModContainer>(),"namedMods");
         cpw.mods.fml.relauncher.ReflectionHelper.setPrivateValue(cpw.mods.fml.relauncher.FMLRelaunchLog.class, null,
                 cpw.mods.fml.relauncher.Side.CLIENT, "side");
+        if(Boolean.getBoolean("nesql.nativeOreOptimized")){
+            java.io.File directory=new java.io.File("build/native-tests/ore-storage-profile");
+            if(!directory.isDirectory()&&!directory.mkdirs())throw new IllegalStateException("Cannot create isolated config directory");
+            java.lang.reflect.Field home=cpw.mods.fml.relauncher.FMLInjectionData.class.getDeclaredField("minecraftHome");
+            home.setAccessible(true);home.set(null,directory);
+        }
         Bootstrap.func_151354_b();
         Facts.Batch batch = new Facts.Batch();
         com.google.gson.JsonObject nativeRecord = com.github.dcysteine.nesql.exporter.source.Json.object("id", "fixture", "value", 1);
@@ -59,10 +99,15 @@ public final class GameTest {
         if (Boolean.getBoolean("nesql.nativeFilterTests")) { NativeFilterTest.run(); return; }
         if (Boolean.getBoolean("nesql.nativeInfusionTests")) { NativeInfusionTest.run(); return; }
         if (Boolean.getBoolean("nesql.nativeAeTests")) { NativeAeTest.run(); return; }
+        if (Boolean.getBoolean("nesql.nativeScanTests")) { NativeScanTest.run(); return; }
+        if (Boolean.getBoolean("nesql.nativeStructureTests")) { CompatStructureTest.run(); return; }
         if (Boolean.getBoolean("nesql.nativeMachineTests")) { NativeMachinesTest.run(); return; }
         CluesTest.run();
         StructuresTest.run();
         PreviewTest.run();
+        CompatStructureTest.run();
+        FuelReferencesTest.run();
+        FireworkReferencesTest.run();
         ValuesTest.run();
         SlotsTest.run();
         CraftingTest.run();
@@ -106,15 +151,16 @@ public final class GameTest {
         }
     }
 
-    /** The isolated dev jar lacks pack access transforms. Expose only the list field read by native AE2. */
+    /** The isolated dev jar lacks pack ATs. Native AE2 needs tagList;
+     * the installed Matter Manipulator mm_at.cfg also exposes tagMap. */
     public static final class NbtListAccess implements net.minecraft.launchwrapper.IClassTransformer {
         @Override public byte[] transform(String name, String transformedName, byte[] bytes) {
-            if (bytes == null || !name.equals("net.minecraft.nbt.NBTTagList")) return bytes;
+            if (bytes == null || !(name.equals("net.minecraft.nbt.NBTTagList") || name.equals("net.minecraft.nbt.NBTTagCompound"))) return bytes;
             org.objectweb.asm.tree.ClassNode node = new org.objectweb.asm.tree.ClassNode();
             new org.objectweb.asm.ClassReader(bytes).accept(node, 0);
             for (Object value : node.fields) {
                 org.objectweb.asm.tree.FieldNode field = (org.objectweb.asm.tree.FieldNode) value;
-                if (field.name.equals("tagList")) field.access = (field.access & ~6) | 1;
+                if (field.name.equals("tagList") || field.name.equals("tagMap")) field.access = (field.access & ~6) | 1;
             }
             org.objectweb.asm.ClassWriter writer = new org.objectweb.asm.ClassWriter(0);
             node.accept(writer); return writer.toByteArray();
@@ -142,6 +188,28 @@ public final class GameTest {
     }
 
     /** Use FML's own @Optional processing in the isolated NASA test loader, without launching FML discovery. */
+    /** Skip unrelated full-mod recipe registration in this isolated JVM only.
+     * Real registry types and all lookup/execution methods remain unchanged. */
+    public static final class WitcheryRegistryDefaults implements net.minecraft.launchwrapper.IClassTransformer {
+        @Override public byte[] transform(String name,String transformedName,byte[] bytes){
+            if(!name.equals("com.emoniph.witchery.brewing.WitcheryBrewRegistry"))return bytes;
+            org.objectweb.asm.ClassWriter output=new org.objectweb.asm.ClassWriter(0);
+            new org.objectweb.asm.ClassReader(bytes).accept(new org.objectweb.asm.ClassVisitor(org.objectweb.asm.Opcodes.ASM5,output){
+                @Override public org.objectweb.asm.MethodVisitor visitMethod(int access,String name,String descriptor,String signature,String[] exceptions){
+                    return name.equals("<clinit>")?null:super.visitMethod(access,name,descriptor,signature,exceptions);
+                }
+                @Override public void visitEnd(){
+                    String owner="com/emoniph/witchery/brewing/WitcheryBrewRegistry";
+                    org.objectweb.asm.MethodVisitor method=super.visitMethod(org.objectweb.asm.Opcodes.ACC_STATIC,"<clinit>","()V",null,null);
+                    method.visitCode();method.visitLdcInsn(org.objectweb.asm.Type.getObjectType(owner));
+                    method.visitMethodInsn(org.objectweb.asm.Opcodes.INVOKESTATIC,"com/github/dcysteine/nesql/exporter/capture/WitcheryTestSource","emptyBrewRegistry","(Ljava/lang/Class;)Ljava/lang/Object;",false);
+                    method.visitTypeInsn(org.objectweb.asm.Opcodes.CHECKCAST,owner);
+                    method.visitFieldInsn(org.objectweb.asm.Opcodes.PUTSTATIC,owner,"INSTANCE","L"+owner+";");
+                    method.visitInsn(org.objectweb.asm.Opcodes.RETURN);method.visitMaxs(1,0);method.visitEnd();super.visitEnd();
+                }
+            },0);return output.toByteArray();
+        }
+    }
     public static final class OptionalApis implements net.minecraft.launchwrapper.IClassTransformer {
         @Override public byte[] transform(String name, String transformedName, byte[] bytes) {
             if (bytes == null || !(name.startsWith("galaxyspace.") || name.startsWith("micdoodle8.") || name.startsWith("de.katzenpapst.amunra."))) return bytes;

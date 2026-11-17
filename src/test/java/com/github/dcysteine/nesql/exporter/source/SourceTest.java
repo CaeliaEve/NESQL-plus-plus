@@ -38,14 +38,13 @@ public final class SourceTest {
         probabilities();
         geometry();
         com.github.dcysteine.nesql.exporter.capture.ModelsTest.run();
-        com.github.dcysteine.nesql.exporter.capture.UiTest.run();
         com.github.dcysteine.nesql.exporter.capture.ProductsTest.run();
         com.github.dcysteine.nesql.exporter.capture.ForestryJubilanceTest.run();
-        com.github.dcysteine.nesql.exporter.capture.MagicRecipesTest.run();
         com.github.dcysteine.nesql.exporter.capture.EnvironmentTest.run(root.resolve("environment"));
         com.github.dcysteine.nesql.exporter.capture.StudiesTest.run();
         com.github.dcysteine.nesql.exporter.capture.AspectsTest.run();
         com.github.dcysteine.nesql.exporter.capture.ColorsTest.run();
+        com.github.dcysteine.nesql.exporter.capture.ImagesFallbackTest.run();
         com.github.dcysteine.nesql.exporter.capture.GameTest.run();
         com.github.dcysteine.nesql.exporter.capture.HandlersTest.run();
         sorting(root);
@@ -157,6 +156,8 @@ public final class SourceTest {
             dataset.records("circuits").write(object("id", Identity.origin("circuit", circuitSource), "source", circuitSource,
                     "name", text.apply("Fixture circuit 电路"), "kind", "line", "boards", new JsonArray(), "steps", steps, "order", 0));
             genetics(dataset, stone, text);
+            try (Dataset.Records references = dataset.records("references")) { }
+            try (Dataset.Records visuals = dataset.records("visuals")) { }
             ores(dataset, paper);
             structures(dataset, stone, asset, text);
             magic(dataset, stone, asset, text);
@@ -195,7 +196,7 @@ public final class SourceTest {
 
     private static void recipes(Dataset dataset, String stone, String paper, String water, String texture,
                                 java.util.function.Function<String, String> text, java.util.List<JsonObject> items) throws Exception {
-        java.util.List<JsonObject> recipes = new java.util.ArrayList<>(), categories = new java.util.ArrayList<>(), views = new java.util.ArrayList<>();
+        java.util.List<JsonObject> recipes = new java.util.ArrayList<>(), categories = new java.util.ArrayList<>();
         String aspect = Identity.origin("aspect", object("owner", "fixture", "handler", "aspects", "key", "fire"));
         String research = Identity.origin("research", object("owner", "fixture", "handler", "research", "key", "BASICS"));
         JsonObject priorNbt = object("type", "compound", "value", object("priority", object("type", "int", "value", "1")));
@@ -210,7 +211,7 @@ public final class SourceTest {
             String item = machine ? stone : paper;
             JsonObject origin = object("owner", "fixture", "handler", "fixture:" + kind, "key", kind);
             String category = Identity.origin("category", origin);
-            JsonArray inputs = new JsonArray(), outputs = new JsonArray(), elements = new JsonArray();
+            JsonArray inputs = new JsonArray(), outputs = new JsonArray();
             JsonArray choices = array(object("id", item, "amount", machine ? "9007199254740993" : "1", "consume", object("kind", "consume"),
                     "returns", new JsonArray(), "rule", machine ? object("kind", "exact") : object("kind", "tags", "meta", false, "keys", new JsonArray(), "present", new JsonArray(), "absent", new JsonArray())));
             if (!machine) choices.add(object("id", item, "amount", "1", "consume", object("kind", "consume"), "returns", new JsonArray(),
@@ -227,9 +228,6 @@ public final class SourceTest {
             inputs.add(object("slot", 0, "kind", "item", "choices", choices));
             outputs.add(object("slot", 0, "kind", machine ? "fluid" : "item", "id", machine ? water : paper,
                     "amount", machine ? "1000" : "2", "quantity", null, "chance", object("numerator", "1", "denominator", machine ? "3" : "1"), "role", "result", "change", null));
-            elements.add(object("kind", "slot", "direction", "input", "substance", "item", "slot", 0, "x", 8, "y", 20, "width", 18, "height", 18, "z", 1));
-            elements.add(object("kind", "slot", "direction", "output", "substance", machine ? "fluid" : "item", "slot", 0,
-                    "x", 110, "y", 20, "width", 18, "height", 18, "z", 1));
             if (machine) {
                 // Additional semantic slots need no invented native UI coordinates.
                 inputs.add(object("slot", 0, "kind", "fluid", "choices", array(object("id", water, "amount", "100",
@@ -243,29 +241,21 @@ public final class SourceTest {
                 outputs.add(object("slot", 3, "kind", "fluid", "id", water, "amount", null,
                         "quantity", object("kind", "draw", "input", 0, "after", array(2), "limit", "20"),
                         "chance", Chance.of(1, 1), "role", "result", "change", null));
-                JsonObject track = object("frames", array(object("ticks", 4, "areas", new JsonArray()),
-                            object("ticks", 4, "areas", array(array("0.0", "0.0", "0.5", "1.0"))),
-                            object("ticks", 4, "areas", array(array("0.5", "0.0", "1.0", "0.5"), array("0.0", "0.5", "0.5", "1.0"))),
-                            object("ticks", 4, "areas", array(array("0.0", "0.0", "1.0", "1.0")))));
-                String trackId = Identity.content("track", track); track.addProperty("id", trackId); dataset.records("tracks").write(track);
-                elements.add(object("kind", "clip", "asset", texture, "x", 48, "y", 20, "width", 48, "height", 18, "z", 0, "track", trackId));
-                elements.add(object("kind", "clip", "asset", texture, "x", 48, "y", 42, "width", 48, "height", 18, "z", 0, "track", trackId));
             }
-            if (!machine) elements.add(object("kind", "cost", "index", 0, "x", 54, "y", 50, "width", 16, "height", 16, "z", 2));
-            JsonObject view = object("width", 176, "height", 85, "elements", elements);
-            String viewId = Identity.content("view", view); view.addProperty("id", viewId); views.add(view);
             categories.add(object("id", category, "name", text.apply(names[order]), "source", origin, "icon", object("kind", "item", "id", item),
-                    "machines", new JsonArray(), "view", null, "order", order));
+                    "machines", new JsonArray(), "order", order));
             JsonObject recipe = object("category", category, "source", origin, "inputs", inputs, "outputs", outputs,
                     "duration", machine ? "20" : null, "energy", machine ? "9223372036854775807" : null,
                     "grid", order == 1 ? object("width", 2, "height", 2, "cells", array(0, null, null, null), "mirror", true) : null,
                     "magic", machine ? null : object("kind", order <= 2 ? "arcane" : kind, "payment", null, "creative", false, "aspects", array(object("aspect", aspect, "amount", "7")),
                             "research", array(object("key", "BASICS", "id", research, "completed", null), object("key", "@fixture_scanned", "id", null, "completed", false)),
                             "instability", infusion ? 5 : null, "central", infusion ? 0 : null),
-                    "properties", new JsonObject(), "view", viewId, "order", 0);
+                    "properties", new JsonObject(), "order", 0);
+            if(machine)recipe.add("notes",array(object("key","fixture:sharedTank","source","fixture:machine#nativeNote",
+                    "text",text.apply("Native note fixture: shared input tank / 共用输入槽"))));
             recipe.addProperty("id", Identity.recipe(recipe)); recipes.add(recipe);
         }
-        Changes.fixture(items, recipes, categories, views, paper, texture, text);
+        Changes.fixture(items, recipes, categories, paper, texture, text);
         Changes.scans(items, recipes, categories, Identity.fluid("honey", null), texture, text);
         harmony(dataset, recipes, categories, stone, paper, texture, text);
         Changes.runic(items, recipes, categories, texture, text);
@@ -292,17 +282,14 @@ public final class SourceTest {
         String program=Programs.squeezer(object("ordinary",array(rule),"containers",array(),"filled",array(),"dynamic",array(object("registry","fixture:empty_reader","kind","noFluid"))),chunks::add);
         JsonObject sharedOrigin=object("owner","fixture","handler","fixture:sharedRules","key","sharedRules");
         categories.add(object("id",Identity.origin("category",sharedOrigin),"source",sharedOrigin,"name",text.apply("Shared machine rules 共享规则"),
-                "icon",null,"machines",array(),"view",null,"order",categories.size(),"program",program));
+                "icon",null,"machines",array(),"order",categories.size(),"program",program));
         records(dataset,"programs",chunks);
         JsonObject squeezed=object("source",sharedOrigin,"category",Identity.origin("category",sharedOrigin),"order",0,"inputs",array(object("kind","item","slot",0,"choices",array(object("id",paper,"amount","1","rule",object("kind","forestry"),"consume",object("kind","allocated"),"returns",array())))),
                 "outputs",array(object("kind","fluid","slot",0,"id",water,"amount",null,"quantity",object("kind","squeezer","nominal","100"),"chance",Chance.of(1,1),"role","result","change",null)),
                 "process",object("kind","forestrySqueezer","program",program,"selector",object("kind","ordinary","index",0),"time",3,"chance",Chance.of(0,1)),
-                "duration",null,"energy",null,"grid",null,"magic",null,"view",null,"properties",object());
+                "duration",null,"energy",null,"grid",null,"magic",null,"properties",object());
         squeezed.addProperty("id",Identity.recipe(squeezed));recipes.add(squeezed);
         records(dataset, "recipes", recipes); records(dataset, "categories", categories);
-        java.util.TreeMap<String, JsonObject> unique = new java.util.TreeMap<>();
-        for (JsonObject view : views) unique.put(view.get("id").getAsString(), view);
-        records(dataset, "views", new java.util.ArrayList<>(unique.values()));
     }
 
     private static void harmony(Dataset dataset, java.util.List<JsonObject> recipes, java.util.List<JsonObject> categories,
@@ -310,7 +297,7 @@ public final class SourceTest {
         JsonObject origin=object("owner","fixture","handler","harmony","key","planet");
         String category=Identity.origin("category",origin);
         categories.add(object("id",category,"name",text.apply("Harmony 鸿蒙之眼"),"source",origin,
-                "icon",object("kind","item","id",trigger),"machines",array(),"view",null,"order",categories.size()));
+                "icon",object("kind","item","id",trigger),"machines",array(),"order",categories.size()));
         for (int mode=0;mode<2;mode++) {
             JsonArray inputs=array(object("slot",0,"kind","item","choices",array(object("id",trigger,"amount","1",
                     "consume",object("kind","keep"),"returns",array(),"rule",object("kind","wildcard","meta",true,"nbt",true)))));
@@ -323,7 +310,7 @@ public final class SourceTest {
                     object("slot",0,"kind","fluid","id",Identity.fluid("molten.spacetime",null),"amount",null,"change",null,"role","result",
                     "chance",Chance.of(1,1),"quantity",object("kind","harmony","outcome","failure","nominal","57600")));
             JsonObject recipe=object("source",origin,"category",category,"inputs",inputs,"outputs",outputs,"duration",null,"energy",null,
-                    "grid",null,"magic",null,"view",null,"order",mode,"properties",new JsonObject(),
+                    "grid",null,"magic",null,"order",mode,"properties",new JsonObject(),
                     "process",object("kind","harmony","mode",mode==0?"single":"parallel","hydrogen","1000000000","helium","1000000000",
                             "ticks","360000","startEu","123456789012345","outputEu","234567890123456","chance","0.95","rocketTier",1,"compressionTier",1));
             recipe.addProperty("id",Identity.recipe(recipe));recipes.add(recipe);
@@ -583,6 +570,9 @@ public final class SourceTest {
     }
 
     private static void sorting(Path root) throws Exception {
+        try (Rows rows = new Rows(root.resolve("invalid-sort-key"))) {
+            expectFailure(() -> rows.add("strings", object("id", "text_\tinvalid", "text", "bad key")));
+        }
         Path memory = root.resolve("memory-check");
         try (Rows rows = new Rows(memory)) {
             rows.add("strings", object("id", "text_a", "text", "same"));
@@ -624,6 +614,16 @@ public final class SourceTest {
             }
         }
         require(count == 41, "External sorting lost unique records");
+        try (Dataset direct = new Dataset(root.resolve("direct-sorted"), "sort", environment(), true)) {
+            for (String kind : Dataset.COLLECTIONS) {
+                try (Dataset.Records records = direct.records(kind)) {
+                    if (kind.equals("strings")) for (int index = 0; index <= 40; index++) {
+                        records.write(object("id", String.format(java.util.Locale.ROOT, "text_%03d", index), "text", padding));
+                    }
+                }
+            }
+            require(direct.seal().equals(result.id), "Sorting changed canonical bytes or shard digests");
+        }
         Path aborted = root.resolve("sort-conflict"), conflictWork = root.resolve("conflict-work");
         try (Dataset dataset = new Dataset(aborted, "sort", environment(), false);
              Rows rows = new Rows(conflictWork, 256)) {
@@ -650,6 +650,17 @@ public final class SourceTest {
     }
 
     private static void identities() {
+        JsonObject recipe = object("source", object("owner", "fixture", "handler", "gt", "key", "identity"),
+                "category", "category_fixture", "inputs", array(), "outputs", array(), "duration", null,
+                "energy", null, "grid", null, "magic", null, "properties", object());
+        String ordinary = Identity.recipe(recipe);
+        recipe.add("gtNative", object("fluidInputChances", array(5000, 0)));
+        String nativeId = Identity.recipe(recipe);
+        require(!nativeId.equals(ordinary), "GT native evidence was omitted from recipe identity");
+        recipe.getAsJsonObject("gtNative").add("fluidInputChances", array(5000, 1));
+        require(!nativeId.equals(Identity.recipe(recipe)), "Unprojected native chance drift retained the old recipe identity");
+        recipe.remove("gtNative");
+        require(ordinary.equals(Identity.recipe(recipe)), "Non-GT recipe identity changed");
         String[][] registryIds = {
                 {"BiblioCraft:Armor Stand", "item_49eeed3f0c9fd63f329598282a1406c58accbe6729a6195ebef95e6c4dcd84c1"},
                 {"ProjRed|Core:projectred.core.part", "item_cc00b969a3e38a4bd9e7c34a9a4ce0d01befa1703559b3ed4b06a95031801347"},

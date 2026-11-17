@@ -27,9 +27,8 @@ final class JsonSnapshot {
         for (Facts.Record record : batch.records) copy(record.value);
         for (Facts.Icon icon : batch.icons) copy(icon.record);
         for (Facts.Picture picture : batch.pictures) copy(picture.record);
-        for (Facts.Scene scene : batch.scenes) { copy(scene.recipe); copy(scene.elements); }
-        // Reserve space for the content IDs populated by queued asset/view commits.
-        weight += 512L * (batch.icons.size() + batch.pictures.size() + batch.scenes.size());
+        // Reserve space for the content IDs populated by queued asset commits.
+        weight += 512L * (batch.icons.size() + batch.pictures.size());
         frozen = true;
     }
     private JsonElement copy(JsonElement value) {

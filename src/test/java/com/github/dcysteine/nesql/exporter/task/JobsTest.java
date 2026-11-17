@@ -16,6 +16,7 @@ public final class JobsTest {
         Path root = Files.createTempDirectory("nesql-jobs-");
         snapshots(root.resolve("snapshots"));
         WorkTest.run();
+        ServerSnapshotsTest.run();
         EpochTest.run();
         Path checks = root.resolve("diagnostics"); Files.createDirectories(checks); ChecksTest.run(checks);
         CountDownLatch began = new CountDownLatch(1);

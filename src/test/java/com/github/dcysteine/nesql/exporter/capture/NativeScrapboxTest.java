@@ -15,36 +15,66 @@ import static com.github.dcysteine.nesql.exporter.source.Json.*;
 final class NativeScrapboxTest {
     @SuppressWarnings("unchecked")
     static void run() throws Exception {
+        try(NativeRegistryScope scope=new NativeRegistryScope()){
+        NativeCoreFixesTest.version("IC2","2.2.828-experimental");
         Class<?> managerType=type("ic2.core.item.ItemScrapbox$ScrapboxRecipeManager");
         require(managerType.getProtectionDomain().getCodeSource().getLocation().toString().contains("/native-tests/ic2.jar!"),"Pinned IC2 jar required");
         Constructor<?> constructor=managerType.getDeclaredConstructor();constructor.setAccessible(true);
         Object manager=constructor.newInstance();
         Field total=type("ic2.core.item.ItemScrapbox$Drop").getDeclaredField("topChance");total.setAccessible(true);
         float previous=total.getFloat(null);
-        ItemStack box=new ItemStack(Items.paper,9), iron=new ItemStack(Items.iron_ingot,2), gold=new ItemStack(Items.gold_ingot,3);
+        ItemStack iron=new ItemStack(Items.iron_ingot,2), gold=new ItemStack(Items.gold_ingot,3);
         Field boxField=type("ic2.core.Ic2Items").getField("scrapBox");Object priorBox=boxField.get(null);
-        boxField.set(null,box.copy());
-        TemplateRecipeHandler handler=(TemplateRecipeHandler)type("ic2.neiIntegration.core.recipehandler.ScrapboxRecipeHandler").newInstance();
-        require(Recipes.adapter(handler)!=null,"Missing scrapbox adapter");
         Object common=cpw.mods.fml.common.FMLCommonHandler.instance();
-        Field side=common.getClass().getDeclaredField("sidedDelegate");side.setAccessible(true);Object priorSide=side.get(common);
-        side.set(common,Proxy.newProxyInstance(side.getType().getClassLoader(),new Class<?>[]{side.getType()},(p,m,args)->{
+        Field side=common.getClass().getDeclaredField("sidedDelegate");side.setAccessible(true);
+        scope.replace(common.getClass(),common,"sidedDelegate",Proxy.newProxyInstance(side.getType().getClassLoader(),new Class<?>[]{side.getType()},(p,m,args)->{
             if(m.getName().equals("getSide"))return cpw.mods.fml.relauncher.Side.SERVER;
             throw new UnsupportedOperationException("Unexpected FML side call: "+m.getName());
         }));
         cpw.mods.fml.common.Loader loader=cpw.mods.fml.common.Loader.instance();
-        Field controller=loader.getClass().getDeclaredField("modController");controller.setAccessible(true);Object priorController=controller.get(loader);
         cpw.mods.fml.common.LoadController ownedController=new cpw.mods.fml.common.LoadController(loader);
         Field active=ownedController.getClass().getDeclaredField("activeContainer");active.setAccessible(true);
         cpw.mods.fml.common.ModMetadata metadata=new cpw.mods.fml.common.ModMetadata();metadata.modId="nesql_native_fixture";metadata.name="Native fixture";
-        active.set(ownedController,new cpw.mods.fml.common.DummyModContainer(metadata));controller.set(loader,ownedController);
+        active.set(ownedController,new cpw.mods.fml.common.DummyModContainer(metadata));scope.replace(loader.getClass(),loader,"modController",ownedController);
+        Class<?> internal=type("ic2.core.init.InternalName");
+        Item nativeBox=(Item)type("ic2.core.item.ItemScrapbox").getConstructor(internal).newInstance(Enum.valueOf((Class)internal,"itemScrapbox"));
+        ItemStack box=new ItemStack(nativeBox,9);
+        scope.replace(type("ic2.core.Ic2Items"),null,"scrapBox",box.copy());
+        scope.replace(type("ic2.api.recipe.Recipes"),null,"scrapboxDrops",manager);
+        TemplateRecipeHandler handler=(TemplateRecipeHandler)type("ic2.neiIntegration.core.recipehandler.ScrapboxRecipeHandler").newInstance();
+        require(Recipes.adapter(handler)!=null,"Missing scrapbox adapter");
         Random random=(Random)field(type("ic2.core.IC2"),null,"random");
         Field seedField=Random.class.getDeclaredField("seed");seedField.setAccessible(true);
         java.util.concurrent.atomic.AtomicLong seed=(java.util.concurrent.atomic.AtomicLong)seedField.get(random);long priorSeed=seed.get();
         try {
             total.setFloat(null,0);boxField.set(null,box.copy());
             for(int i=0;i<4;i++) invoke(managerType,manager,"addDrop",new Class<?>[]{ItemStack.class,float.class},i==2?gold:iron,new float[]{0,0.1f,0.2f,0.7f}[i]);
-            ScrapboxRecipes cursor=new ScrapboxRecipes(handler,manager,box);
+            TemplateRecipeHandler usage=(TemplateRecipeHandler)handler.getClass().newInstance();
+            List<Recipes.Handler> discovered=Recipes.handlers(Collections.singletonList(handler),Collections.emptyList(),
+                    Collections.singletonList(usage),Collections.emptyList());
+            require(discovered.size()==1,"Independent scrapbox registrations duplicated the native identity");
+            Recipes.Handler registration=discovered.get(0);
+            require(registration.describe().get("registrationEquivalence").getAsString().equals("shared-native-bindings"),
+                    "Equal reflected scrapbox weights were treated as different native sources");
+            RegistrationBindings binding=RegistrationBindings.read(handler);
+            float weight=total.getFloat(null);
+            try {
+                total.setFloat(null,weight+1f);
+                require(!binding.same(RegistrationBindings.read(usage)),"Changed scrapbox weight stayed registration-equivalent");
+                expect("environment_changed",registration::describe);
+            } finally {total.setFloat(null,weight);}
+            Field dropField=managerType.getDeclaredField("drops");dropField.setAccessible(true);
+            Object nativeDrops=dropField.get(manager);
+            try {
+                dropField.set(manager,new ArrayList<>((List<?>)nativeDrops));
+                require(!binding.same(RegistrationBindings.read(usage)),"Same-content replacement drop registry stayed equivalent");
+                expect("environment_changed",registration::describe);
+            } finally {dropField.set(manager,nativeDrops);}
+            registration.describe();
+            ScrapboxRecipes cursor=new ScrapboxRecipes(handler);
+            cursor.verify();cursor.finishVerification();
+            try {total.setFloat(null,weight+1f);expect("environment_changed",cursor::verify);}
+            finally {total.setFloat(null,weight);}
             require(cursor.size()==2,"Equal outcome branches were not aggregated");
             int a=ScrapboxRecipes.below(total.getFloat(null),0.1f), b=ScrapboxRecipes.below(total.getFloat(null),0.1f+0.2f);
             for(int k:new int[]{0,a-1,a,a+1,b-1,b,b+1,(1<<24)-1}) {
@@ -71,22 +101,28 @@ final class NativeScrapboxTest {
             }
             require(sum==(1<<24)&&box.stackSize==9&&iron.stackSize==2&&gold.stackSize==3,"Probability mass or ownership lost");
             total.setFloat(null,Float.NaN);
-            try { new ScrapboxRecipes(handler,manager,box);throw new AssertionError("NaN total accepted"); }
+            try { new ScrapboxRecipes(handler);throw new AssertionError("NaN total accepted"); }
             catch(com.github.dcysteine.nesql.exporter.task.Jobs.Fault error) {require(error.code.equals("recipe_unsupported"),"Wrong bad-total rejection");}
             total.setFloat(null,0);
             Object zero=constructor.newInstance();
             invoke(managerType,zero,"addDrop",new Class<?>[]{ItemStack.class,float.class},iron,0f);
             invoke(managerType,zero,"addDrop",new Class<?>[]{ItemStack.class,float.class},gold,0f);
-            ScrapboxRecipes zeroCursor=new ScrapboxRecipes(handler,zero,box);
+            scope.replace(type("ic2.api.recipe.Recipes"),null,"scrapboxDrops",zero);
+            ScrapboxRecipes zeroCursor=new ScrapboxRecipes(handler);
             RecipeRow unused=new RecipeRow(new Facts("en_US"),object("owner","fixture","handler","scrapbox","key","scrapbox"),"fixture",0);
             require(!zeroCursor.capture(0,unused),"Unreachable zero-weight first outcome exported");
             require(((ItemStack)invoke(managerType,zero,"getDrop",new Class<?>[]{ItemStack.class,boolean.class},box.copy(),false)).getItem()==Items.gold_ingot,"Native zero-total tail rule changed");
             Object first=((List<?>)field(zero,"drops")).get(0);
             Field upper=first.getClass().getDeclaredField("upperChanceBound");upper.setAccessible(true);upper.setFloat(first,1f);
-            try {new ScrapboxRecipes(handler,zero,box);throw new AssertionError("Nonmonotone thresholds accepted");}
+            try {new ScrapboxRecipes(handler);throw new AssertionError("Nonmonotone thresholds accepted");}
             catch(com.github.dcysteine.nesql.exporter.task.Jobs.Fault error) {require(error.code.equals("recipe_unsupported"),"Wrong threshold rejection");}
-            System.out.println("Scrapbox native manager: exact float boundaries, repeated outcomes, zero weight, quantity, consumption and ownership passed");
-        } finally {total.setFloat(null,previous);boxField.set(null,priorBox);seed.set(priorSeed);side.set(common,priorSide);controller.set(loader,priorController);}
+            System.out.println("Scrapbox native manager: crafting/usage equivalence, scalar/source drift, exact float boundaries, repeated outcomes, zero weight, quantity, consumption and ownership passed");
+        } finally {total.setFloat(null,previous);boxField.set(null,priorBox);seed.set(priorSeed);}
+        }
+    }
+    private static void expect(String code,Runnable action) {
+        try {action.run();throw new AssertionError("Expected "+code);}
+        catch(com.github.dcysteine.nesql.exporter.task.Jobs.Fault error) {require(error.code.equals(code),"Wrong rejection: "+error.code);}
     }
     private static void require(boolean value,String message) {if(!value)throw new AssertionError(message);}
 }

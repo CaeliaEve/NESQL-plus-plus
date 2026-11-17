@@ -3,26 +3,16 @@ package com.github.dcysteine.nesql.exporter.capture;
 import bartworks.neiHandler.BioLabNEIHandler;
 import bartworks.neiHandler.BioVatNEIHandler;
 import codechicken.nei.recipe.ICraftingHandler;
-import codechicken.nei.PositionedStack;
-import com.github.dcysteine.nesql.exporter.source.Identity;
-import com.github.dcysteine.nesql.exporter.source.TypedNbt;
 import com.github.dcysteine.nesql.exporter.task.Jobs;
 import com.google.gson.JsonObject;
-import com.gtnewhorizons.modularui.api.screen.ModularWindow;
-import com.gtnewhorizons.modularui.api.drawable.IDrawable;
-import com.gtnewhorizons.modularui.api.math.Pos2d;
-import com.gtnewhorizons.modularui.api.widget.Widget;
-import com.gtnewhorizons.modularui.common.widget.SlotWidget;
 import cpw.mods.fml.relauncher.ReflectionHelper;
 import gregtech.api.recipe.NEIRecipeProperties;
-import gregtech.api.recipe.BasicUIProperties;
-import gregtech.api.enums.SteamVariant;
+import gregtech.api.recipe.RecipeCategory;
 import gregtech.api.recipe.RecipeMetadataKey;
 import gregtech.api.util.GTRecipe;
 import gregtech.api.util.GTRecipeConstants;
 import gregtech.api.util.GTOreDictUnificator;
 import gregtech.nei.GTNEIDefaultHandler;
-import gregtech.common.gui.modularui.UIHelper;
 import net.minecraft.init.Items;
 import net.minecraft.item.Item;
 import net.minecraft.item.ItemStack;
@@ -37,12 +27,13 @@ import java.util.Set;
 
 import static com.github.dcysteine.nesql.exporter.source.Json.*;
 
-/** GTNH 2.8.4 adapter: inventory bindings define slot roles; display items never define fluid identity. */
-final class GtRecipes implements AutoCloseable {
+/** Pinned native semantic arrays define roles and quantities; no GUI/cache is constructed. */
+final class GtRecipes implements RegistryRecipes, AutoCloseable {
     private final GTNEIDefaultHandler handler;
-    private final List<Binding> bindings = new ArrayList<>();
-    private final ModularWindow window;
-    final Ui ui;
+    private final GtRecipeSelection selection;
+    private final List<ItemStack> panel;
+    private final int panelSize;
+    private final NativeItemExamples examples=new NativeItemExamples();
 
     static boolean supports(ICraftingHandler handler) {
         // Audited against 2.8.4: these two BartWorks subclasses only specialize item lookups.
@@ -50,78 +41,68 @@ final class GtRecipes implements AutoCloseable {
                 || handler.getClass() == BioVatNEIHandler.class;
     }
 
-    GtRecipes(GTNEIDefaultHandler handler, boolean views, String location) {
+    GtRecipes(GTNEIDefaultHandler handler) {
+        this(admitted(handler), () -> {
+            if (gregtech.GTMod.proxy == null) throw new Jobs.Fault("recipe_unready", "GT native proxy is unavailable");
+            return gregtech.GTMod.proxy.getNEIReloadCount();
+        });
+    }
+
+    private static GTNEIDefaultHandler admitted(GTNEIDefaultHandler handler) {
+        TargetAdmission.require("gt.recipes", "gregtech_nh");
+        return handler;
+    }
+
+    GtRecipes(GTNEIDefaultHandler handler, java.util.function.IntSupplier reloadVersion) {
         this.handler = handler;
-        window = field("modularWindow");
-        try {
-            Object itemInputs = field("itemInputsInventory"), itemOutputs = field("itemOutputsInventory");
-            Object fluidInputs = field("fluidInputsInventory"), fluidOutputs = field("fluidOutputsInventory");
-            Object special = field("specialSlotInventory");
-            if (window.getChildren().size() > 4096) throw new Jobs.Fault("view_limit", "GT window exceeds 4096 widgets");
-            // Pinned CachedDefaultRecipe visits the direct children in this order,
-            // then appends overflow slots. Screen positions are not slot identities.
-            for (Widget widget : window.getChildren()) {
-                if (!(widget instanceof SlotWidget)) continue;
-                SlotWidget slot = (SlotWidget) widget;
-                Object inventory = slot.getMcSlot().getItemHandler();
-                boolean input = inventory == itemInputs || inventory == fluidInputs || inventory == special;
-                boolean fluid = inventory == fluidInputs || inventory == fluidOutputs;
-                if (!input && inventory != itemOutputs && inventory != fluidOutputs) continue;
-                bindings.add(new Binding(slot.getMcSlot().getSlotIndex(), fluid, inventory == special, false, input,
-                        widget.getPos().x + 1, widget.getPos().y + 1));
-            }
-            ui = views ? new Ui(handler, location) : null;
-        } catch (RuntimeException | Error failure) {
-            try { Ui.destroy(window); } catch (RuntimeException | Error cleanup) { failure.addSuppressed(cleanup); }
-            throw failure;
-        }
+        panel = codechicken.nei.ItemList.items;
+        if (!codechicken.nei.ItemList.loadFinished || panel == null)
+            throw new Jobs.Fault("recipe_unready", "GT ingredient permutation requires the complete native item list");
+        panelSize = panel.size();
+        RecipeCategory category = ReflectionHelper.getPrivateValue(GTNEIDefaultHandler.class, handler, "recipeCategory");
+        if (category.recipeMap != handler.getRecipeMap())
+            throw new Jobs.Fault("handler_changed", "GT handler changed its native recipe map");
+        selection = new GtRecipeSelection(category, reloadVersion);
     }
 
-    @Override public void close() {
-        try { if (ui != null) ui.close(); }
-        finally { Ui.destroy(window); }
+    @Override public int size() { return selection.size(); }
+    @Override public void verify() {
+        selection.verify();
+        if (!codechicken.nei.ItemList.loadFinished || codechicken.nei.ItemList.items != panel || panel.size() != panelSize)
+            throw new Jobs.Fault("recipe_changed", "GT native ingredient panel readiness or ownership changed");
+    }
+    @Override public void finishVerification() { verify(); selection.finishVerification();examples.verify(); }
+    @Override public void close() { selection.close();examples.close(); }
+
+    @Override public boolean capture(int index, RecipeRow row) {
+        throw new IllegalStateException("GT semantic rows must use captureRows");
     }
 
-    void foreground(int index, RecipeRow row) {
-        GTNEIDefaultHandler.CachedDefaultRecipe cached = (GTNEIDefaultHandler.CachedDefaultRecipe) handler.arecipes.get(index);
-        GTRecipe nativeRecipe = cached.mRecipe;
-        if (row.record.get("duration").isJsonNull() || row.record.get("energy").isJsonNull()) {
-            ui.context(nativeRecipe, () -> handler.drawForeground(index));
-            return;
-        }
-        int duration = row.record.get("duration").getAsInt(), energy = row.record.get("energy").getAsInt();
-        if (duration == nativeRecipe.mDuration && energy == nativeRecipe.mEUt) {
-            ui.context(nativeRecipe, () -> handler.drawForeground(index));
-            return;
-        }
-        // This handler and its list belong to the capture. Never mutate the shared GT cache recipe.
-        GTRecipe branch = nativeRecipe.copy(); branch.mDuration = duration; branch.mEUt = energy;
-        try {
-            handler.arecipes.set(index, handler.new CachedDefaultRecipe(branch));
-            ui.context(branch, () -> handler.drawForeground(index));
-        } finally { handler.arecipes.set(index, cached); }
+    @Override public List<RecipeRow> captureRows(int index, RecipeRow row) {
+        verify();
+        GTRecipe recipe = selection.recipe(index);
+        JsonObject proof = Replaced.inspect(recipe, row.record.getAsJsonObject("source").get("key").getAsString());
+        if (proof != null) { row.exclude(proof); return java.util.Collections.emptyList(); }
+        List<RecipeRow> result = capture(recipe, row);
+        selection.recipe(index); // A semantic callback may not mutate the owned native definition.
+        return result;
     }
 
-    List<RecipeRow> capture(GTNEIDefaultHandler.CachedDefaultRecipe cached, RecipeRow row) {
-        GTRecipe recipe = cached.mRecipe;
+    List<RecipeRow> capture(GTRecipe recipe, RecipeRow row) {
         NEIRecipeProperties presentation = handler.getRecipeMap().getFrontend().getNEIProperties();
-        Object[] itemInputs = inputs(recipe, presentation);
-        ItemStack[] itemOutputs = presentation.itemOutputsGetter.apply(recipe);
-        FluidStack[] fluidInputs = presentation.fluidInputsGetter.apply(recipe);
-        FluidStack[] fluidOutputs = presentation.fluidOutputsGetter.apply(recipe);
-        Map<Integer, JsonObject> quantities = quantities(recipe);
-        List<Binding> slots = slots(recipe);
-        java.util.function.Function<Binding, Object> source = binding -> {
-            if (binding.special) return recipe.mSpecialItems;
-            if (binding.fluid) return optional(binding.input
-                    ? binding.overflow ? recipe.mFluidInputs : fluidInputs
-                    : binding.overflow ? recipe.mFluidOutputs : fluidOutputs, binding.index);
-            return optional(binding.input ? binding.overflow ? recipe.mInputs : itemInputs
-                    : binding.overflow ? recipe.mOutputs : itemOutputs, binding.index);
-        };
-        List<Placement> projectedInputs = project(slots, source, cached.mInputs, true);
-        List<Placement> projectedOutputs = project(slots, source, cached.mOutputs, false);
+        boolean harmony = "gt.recipe.eyeofharmony".equals(handler.getRecipeMap().unlocalizedName);
         String root = Scan.root(handler.getRecipeMap().unlocalizedName, recipe);
+        boolean specialized = harmony || root != null;
+        JsonObject nativeFacts = GtProbability.capture(recipe, row.facts, specialized);
+        GtProbability.validateProjection(recipe);
+        Object[] itemInputs = specialized ? inputs(recipe, presentation) : nativeInputs(recipe);
+        ItemStack[] itemOutputs = specialized ? presentation.itemOutputsGetter.apply(recipe) : recipe.mOutputs;
+        FluidStack[] fluidInputs = specialized ? presentation.fluidInputsGetter.apply(recipe) : recipe.mFluidInputs;
+        FluidStack[] fluidOutputs = specialized ? presentation.fluidOutputsGetter.apply(recipe) : recipe.mFluidOutputs;
+        Map<Integer, JsonObject> quantities = quantities(recipe);
+        List<Placement> projectedInputs = placements(itemInputs, harmony ? new FluidStack[0] : fluidInputs,
+                harmony ? null : recipe.mSpecialItems, true);
+        List<Placement> projectedOutputs = placements(itemOutputs, fluidOutputs, null, false);
         Set<String> captured = new HashSet<>();
         row.record.addProperty("duration", Integer.toString(recipe.mDuration));
         row.record.addProperty("energy", Integer.toString(recipe.mEUt));
@@ -136,34 +117,56 @@ final class GtRecipes implements AutoCloseable {
             // GT identifies keys by both their declared type and name.
             row.property("gregtech:metadata/" + type.getName().replace('[', '_').replace(';', '_') + "/" + name, name, metadata.getValue());
         }
-        if ("gt.recipe.eyeofharmony".equals(handler.getRecipeMap().unlocalizedName))
-            return Harmony.capture(recipe, projectedInputs, projectedOutputs, row);
-        if (root != null) return Scan.capture(root, recipe, projectedInputs, projectedOutputs, row);
+        if (specialized) {
+            List<RecipeRow> rows = harmony ? Harmony.capture(recipe, projectedInputs, projectedOutputs, row)
+                    : Scan.capture(root, recipe, projectedInputs, projectedOutputs, row,examples);
+            for (RecipeRow branch : rows) branch.record.add("gtNative", nativeFacts);
+            return rows;
+        }
+        row.record.add("gtNative", nativeFacts);
         for (Placement placement : projectedInputs) {
-            PositionedStack display = placement.display;
             Binding binding = placement.binding;
             if (!captured.add(binding.identity())) throw new Jobs.Fault("slot_conflict", "GT recipe repeats an input binding");
             if (binding.special) {
-                int amount = fixed(display).realStackSize;
-                requireAmount(amount);
-                row.itemInput(display, 65535, Math.max(1, amount), true, false, object("kind", "exact"));
+                row.itemInput(65535, special(placement.source), false);
             } else if (binding.fluid) {
                 FluidStack fluid = (FluidStack) placement.source;
                 requireAmount(fluid.amount);
-                row.fluidInput(display, binding.index, fluid);
+                FluidStack[] alternatives = recipe.mAltFluidInputs != null && binding.index < recipe.mAltFluidInputs.length
+                        ? recipe.mAltFluidInputs[binding.index] : null;
+                // A nonnull empty native alternative array disables the slot; the UI getter
+                // may instead fall back to a representative, so it is not used here.
+                if (alternatives != null && alternatives.length == 0) continue;
+                if (fluid.amount == 0) row.zeroFluidInput(binding.index, fluid,
+                        "gtpp.recipe.multiblockrockbreaker".equals(handler.getRecipeMap().unlocalizedName)
+                                ? "gregtechPresence" : "gregtechCost");
+                else if (alternatives == null) row.fluidInput(binding.index, fluid, false,
+                        object("kind", "wildcard", "meta", false, "nbt", true));
+                else {
+                    com.google.gson.JsonArray choices = array();
+                    for (FluidStack alternative : alternatives) {
+                        if (alternative == null || alternative.getFluid() == null || alternative.amount <= 0)
+                            throw new Jobs.Fault("recipe_unsupported", "GT fluid alternative is null or nonpositive");
+                        choices.add(object("id", row.facts.fluid(alternative), "amount", Integer.toString(alternative.amount),
+                                "consume", object("kind", "consume"), "returns", array(),
+                                "rule", object("kind", "wildcard", "meta", false, "nbt", true)));
+                    }
+                    row.inputs.add(object("slot", binding.index, "kind", "fluid", "choices", choices));
+                }
+                GtProbability.inputChance(row.inputs.get(row.inputs.size() - 1).getAsJsonObject(),
+                        recipe.getFluidInputChance(binding.index));
             } else {
                 List<RecipeRow.Ingredient> ingredients = ingredients(placement.source, recipe.isNBTSensitive,
-                        item -> new PositionedStack(GTOreDictUnificator.getNonUnifiedStacks(item), display.relx, display.rely, true).items);
-                checkedDisplay(binding.index, display, ingredients, placement.source, recipe.getClass().getName(),
-                        () -> handler.new CachedDefaultRecipe(recipe).mInputs.get(projectedInputs.indexOf(placement)));
-                row.itemInput(display, binding.index, ingredients, false);
+                        item -> alternatives(item,examples));
+                row.itemInput(binding.index, ingredients, false);
+                GtProbability.inputChance(row.inputs.get(row.inputs.size() - 1).getAsJsonObject(),
+                        recipe.getInputChance(binding.index));
             }
         }
         String mapName = handler.getRecipeMap().unlocalizedName;
         String frontendName = handler.getRecipeMap().getFrontend().getClass().getName();
         boolean isTreeFarm = "gtpp.recipe.treefarm".equals(mapName) || frontendName.contains("TreeFarm");
         for (Placement placement : projectedOutputs) {
-            PositionedStack display = placement.display;
             Binding binding = placement.binding;
             if (!captured.add(binding.identity())) throw new Jobs.Fault("slot_conflict", "GT recipe repeats an output binding");
             JsonObject qty = quantities.get(binding.index);
@@ -174,7 +177,9 @@ final class GtRecipes implements AutoCloseable {
                     JsonObject q = quantities.get(binding.index);
                     if (q != null && q.has("nominal")) exactAmount = q.get("nominal").getAsString();
                 }
-                row.fluidOutput(display, binding.index, fluid, exactAmount, qty);
+                row.fluidOutput(binding.index, fluid, exactAmount, qty);
+                row.outputs.get(row.outputs.size() - 1).getAsJsonObject().add("chance",
+                        com.github.dcysteine.nesql.exporter.source.Chance.of(recipe.getFluidOutputChance(binding.index), 10000));
             } else {
                 ItemStack item = (ItemStack) placement.source;
                 if (item.stackSize < 0) {
@@ -184,36 +189,9 @@ final class GtRecipes implements AutoCloseable {
                     qty = getTreeFarmFruitPotential(recipe, item);
                 }
                 String exactAmount = null;
-                row.itemOutput(display, binding.index, item, recipe.getOutputChance(binding.index), exactAmount, qty);
+                row.itemOutput(binding.index, item, recipe.getOutputChance(binding.index), exactAmount, qty);
             }
         }
-        BasicUIProperties ui = handler.getRecipeMap().getFrontend().getUIProperties();
-        covered(captured, itemInputs, recipe.mInputs, ui.maxItemInputs, false, true, null);
-        boolean supportsUnbound = frontendName.equals("gtPlusPlus.api.recipe.ZhuhaiFrontend");
-        covered(captured, itemOutputs, recipe.mOutputs, ui.maxItemOutputs, false, false,
-                supportsUnbound ? (slot, value) -> {
-                    ItemStack item = (ItemStack) value;
-                    if (item.stackSize < 0) {
-                        throw new Jobs.Fault("invalid_quantity", "Negative unbound GT output item stackSize: " + item.stackSize);
-                    }
-                    JsonObject qty = quantities.get(slot);
-                    if (qty == null && item.stackSize == 0 && isTreeFarm) {
-                        qty = getTreeFarmFruitPotential(recipe, item);
-                    }
-                    String exactAmount = null;
-                    row.itemOutput(null, slot, item, recipe.getOutputChance(slot), exactAmount, qty);
-                } : null);
-        covered(captured, fluidInputs, recipe.mFluidInputs, ui.maxFluidInputs, true, true, null);
-        covered(captured, fluidOutputs, recipe.mFluidOutputs, ui.maxFluidOutputs, true, false,
-                supportsUnbound ? (slot, value) -> {
-                    FluidStack fluid = (FluidStack) value;
-                    String exactAmount = null;
-                    if (exactAmount == null && quantities.containsKey(slot)) {
-                        JsonObject q = quantities.get(slot);
-                        if (q != null && q.has("nominal")) exactAmount = q.get("nominal").getAsString();
-                    }
-                    row.fluidOutput(null, slot, fluid, exactAmount, quantities.get(slot));
-                } : null);
         return java.util.Collections.singletonList(row);
     }
 
@@ -227,7 +205,7 @@ final class GtRecipes implements AutoCloseable {
         if (sapling != null) {
             try {
                 Forestry.require();
-                forestry.api.genetics.IIndividual ind = forestry.api.arboriculture.TreeManager.treeRoot.getMember(sapling);
+                forestry.api.genetics.IIndividual ind = ForestryMembers.read(forestry.api.arboriculture.TreeManager.treeRoot,sapling);
                 if (ind instanceof forestry.api.arboriculture.ITree) {
                     forestry.api.arboriculture.ITree tree = (forestry.api.arboriculture.ITree) ind;
                     forestry.api.arboriculture.ITreeGenome genome = tree.getGenome();
@@ -359,47 +337,71 @@ final class GtRecipes implements AutoCloseable {
         return plasma ? amount / 1000L : amount;
     }
 
-    private List<Binding> slots(GTRecipe recipe) {
-        List<Binding> slots = new ArrayList<>(bindings);
-        BasicUIProperties ui = handler.getRecipeMap().getFrontend().getUIProperties();
-        Pos2d offset = field("WINDOW_OFFSET");
-        // CachedDefaultRecipe adds these overflow stacks separately from the fixed ModularUI slots.
-        UIHelper.forEachSlots(
-                (index, backgrounds, position) -> overflow(slots, position, index, ui.maxItemInputs, false, true),
-                (index, backgrounds, position) -> overflow(slots, position, index, ui.maxItemOutputs, false, false),
-                (index, backgrounds, position) -> {},
-                (index, backgrounds, position) -> overflow(slots, position, index, ui.maxFluidInputs, true, true),
-                (index, backgrounds, position) -> overflow(slots, position, index, ui.maxFluidOutputs, true, false),
-                IDrawable.EMPTY, IDrawable.EMPTY, ui, recipe.mInputs.length, recipe.mOutputs.length,
-                recipe.mFluidInputs.length, recipe.mFluidOutputs.length, SteamVariant.NONE, offset);
-        return slots;
-    }
-
-    private void overflow(List<Binding> slots, Pos2d position, int index, int fixed, boolean fluid, boolean input) {
-        if (index >= fixed) slots.add(new Binding(index, fluid, false, true, input, position.x + 1, position.y + 1));
-    }
-
-    static List<Placement> project(List<Binding> slots, java.util.function.Function<Binding, Object> source,
-                                   List<PositionedStack> displays, boolean input) {
+    static List<Placement> placements(Object[] items, FluidStack[] fluids, Object special, boolean input) {
+        if (items == null || fluids == null || items.length > (special == null ? 65536 : 65535)
+                || fluids.length > 65536 || items.length + fluids.length > 65536)
+            throw new Jobs.Fault("recipe_limit", "GT semantic slots are null or exceed their index/count budget");
         List<Placement> result = new ArrayList<>();
-        for (Binding binding : slots) {
-            if (binding.input != input) continue;
-            Object value = source.apply(binding);
-            if (value == null || value instanceof FluidStack && ((FluidStack) value).getFluid() == null) continue;
-            if (result.size() >= displays.size()) throw new Jobs.Fault("slot_missing", "GT view omits native binding " + binding.identity());
-            PositionedStack display = displays.get(result.size());
-            if (display.relx != binding.x || display.rely != binding.y) {
-                throw new Jobs.Fault("slot_changed", "GT native slot order or position changed: " + binding.identity());
-            }
-            result.add(new Placement(binding, value, display));
+        for (int index = 0; index < items.length; index++) {
+            Jobs.checkpoint();
+            Object item = items[index];
+            if (item != null) result.add(new Placement(new Binding(index, false, false, input),
+                    item));
         }
-        if (result.size() != displays.size()) throw new Jobs.Fault("slot_missing", "GT view contains a stack without a native binding");
+        if (special != null) result.add(new Placement(new Binding(65535, false, true, input),
+                special));
+        for (int index = 0; index < fluids.length; index++) {
+            Jobs.checkpoint();
+            FluidStack fluid = fluids[index];
+            if (fluid == null) continue;
+            if (fluid.getFluid() == null) throw new Jobs.Fault("recipe_invalid", "GT native fluid has no registry identity");
+            result.add(new Placement(new Binding(index, true, false, input), fluid));
+        }
+        return result;
+    }
+
+    private static List<RecipeRow.Ingredient> special(Object source) {
+        // Native special-slot matching retains the offered stack; quantities belong to each candidate.
+        ItemStack[] items;
+        if (source instanceof ItemStack) items = new ItemStack[] {(ItemStack) source};
+        else if (source instanceof ItemStack[]) items = (ItemStack[]) source;
+        else if (source instanceof List<?>) {
+            List<?> values = (List<?>) source;
+            if (values.size() > 65536) throw new Jobs.Fault("recipe_limit", "GT special choices exceed 65536");
+            items = new ItemStack[values.size()];
+            for (int index = 0; index < items.length; index++) {
+                if (!(values.get(index) instanceof ItemStack))
+                    throw new Jobs.Fault("recipe_unsupported", "GT special input is not an item stack");
+                items[index] = (ItemStack) values.get(index);
+            }
+        } else throw new Jobs.Fault("recipe_unsupported", "Unknown GT special input semantics: " + source.getClass().getName());
+        if (items.length == 0 || items.length > 65536)
+            throw new Jobs.Fault("empty_ingredient", "GT special input has no bounded candidates");
+        List<RecipeRow.Ingredient> result = new ArrayList<>();
+        for (ItemStack item : items) {
+            Jobs.checkpoint();
+            if (item == null || item.getItem() == null) throw new Jobs.Fault("empty_ingredient", "Empty GT special item");
+            requireAmount(item.stackSize);
+            result.add(new RecipeRow.Ingredient(item.copy(), Math.max(1, item.stackSize), true, object("kind", "exact")));
+        }
         return result;
     }
 
     private static Object[] inputs(GTRecipe recipe, NEIRecipeProperties presentation) {
         if (!(recipe instanceof GTRecipe.GTRecipe_WithAlt)) return presentation.itemInputsGetter.apply(recipe);
         return inputs(recipe.mInputs, ((GTRecipe.GTRecipe_WithAlt) recipe).mOreDictAlt);
+    }
+
+    static Object[] nativeInputs(GTRecipe recipe) {
+        if (!(recipe instanceof GTRecipe.GTRecipe_WithAlt)) return recipe.mInputs;
+        ItemStack[][] alternatives = ((GTRecipe.GTRecipe_WithAlt) recipe).mOreDictAlt;
+        if (alternatives == null) return recipe.mInputs;
+        if (alternatives.length > recipe.mInputs.length)
+            throw new Jobs.Fault("recipe_unsupported", "GT item alternatives extend beyond native quantity slots");
+        for (int slot = 0; slot < alternatives.length; slot++)
+            if (recipe.mInputs[slot] == null && alternatives[slot] != null && alternatives[slot].length != 0)
+                throw new Jobs.Fault("recipe_unsupported", "GT alternatives have no native quantity representative");
+        return inputs(recipe.mInputs, alternatives);
     }
 
     /** Same source choice/copy boundary as GTRecipe_WithAlt.getAltRepresentativeInput. */
@@ -421,6 +423,20 @@ final class GtRecipes implements AutoCloseable {
     }
 
     private static ItemStack copy(ItemStack item) { return item == null ? null : item.copy(); }
+
+    static ItemStack[] alternatives(ItemStack source,NativeItemExamples examples){
+        List<ItemStack> expanded=new ArrayList<>();
+        List<ItemStack> aliases=GTOreDictUnificator.getNonUnifiedStacks(source);
+        if(aliases==null||aliases.size()>65536)throw new Jobs.Fault("recipe_limit","GT native aliases exceed budget");
+        for(ItemStack alias:aliases){
+            if(alias==null)continue;
+            for(ItemStack item:examples.permutations(alias)){
+                if(expanded.size()==65536)throw new Jobs.Fault("recipe_limit","GT native permutations exceed budget");expanded.add(item);
+            }
+        }
+        if(expanded.isEmpty())throw new Jobs.Fault("empty_ingredient","GT native aliases have no item content");
+        return expanded.toArray(new ItemStack[0]);
+    }
 
     static List<RecipeRow.Ingredient> ingredients(Object source, boolean sensitive,
                                                  java.util.function.Function<ItemStack, ItemStack[]> expand) {
@@ -451,142 +467,6 @@ final class GtRecipes implements AutoCloseable {
         return result;
     }
 
-    static void checkedDisplay(int slot, PositionedStack display, List<RecipeRow.Ingredient> ingredients,
-                               Object source, String recipeType, java.util.function.Supplier<PositionedStack> currentNative) {
-        try { displayed(slot, display, ingredients); }
-        catch (Jobs.Fault failure) {
-            if (!"slot_changed".equals(failure.code)) throw failure;
-            // Failure-only probe. A newly built native view is evidence, never a
-            // replacement for the rejected shared cache or a reason to pass it.
-            ItemStack[] raw = source instanceof ItemStack ? new ItemStack[] {(ItemStack) source}
-                    : source instanceof ItemStack[] ? (ItemStack[]) source : null;
-            evidence(failure, "gt_input_source", () -> {
-                JsonObject note = stackEvidence(raw);
-                note.addProperty("recipeType", evidenceText(recipeType));
-                return note;
-            });
-            evidence(failure, "gt_input_expansion", () -> stackEvidence(ingredients.stream()
-                    .map(ingredient -> ingredient.display).toArray(ItemStack[]::new)));
-            evidence(failure, "gt_input_cached", () -> stackEvidence(display.items));
-            evidence(failure, "gt_input_current_native", () -> {
-                PositionedStack current = currentNative.get();
-                JsonObject note = stackEvidence(current.items);
-                note.addProperty("displayType", evidenceText(current.getClass().getName()));
-                try { displayed(slot, current, ingredients); note.addProperty("matchesExpansion", true); }
-                catch (Jobs.Fault mismatch) {
-                    note.addProperty("matchesExpansion", false);
-                    note.addProperty("comparisonError", mismatch.code);
-                }
-                return note;
-            });
-            throw failure;
-        }
-    }
-
-    private static void evidence(Jobs.Fault failure, String code, java.util.function.Supplier<JsonObject> probe) {
-        JsonObject note;
-        try { note = probe.get(); }
-        catch (java.util.concurrent.CancellationException cancelled) { throw cancelled; }
-        catch (RuntimeException unavailable) {
-            note = object("probeFailure", evidenceText(unavailable.getClass().getName()));
-        }
-        if (note.toString().length() > 1900 && note.has("samples")) {
-            note.add("samples", new com.google.gson.JsonArray());
-            note.add("samplesOmitted", note.get("count"));
-        }
-        failure.addSuppressed(new Jobs.Fault(code, note.toString()));
-    }
-
-    private static JsonObject stackEvidence(ItemStack[] stacks) {
-        com.google.gson.JsonArray samples = new com.google.gson.JsonArray();
-        int count = stacks == null ? 0 : stacks.length;
-        // Checks.failure keeps at most 2000 characters per exception. Two small
-        // samples retain registry/meta/amount and typed-NBT identity without tooltips.
-        for (int i = 0; i < Math.min(2, count); i++) {
-            ItemStack stack = stacks[i];
-            if (stack == null || stack.getItem() == null) { samples.add(value(null)); continue; }
-            samples.add(object("registry", evidenceText(Item.itemRegistry.getNameForObject(stack.getItem())),
-                    "meta", Items.feather.getDamage(stack), "amount", stack.stackSize,
-                    "id", displayKey(stack, false), "hasNbt", stack.hasTagCompound(),
-                    "itemListVariants", codechicken.nei.ItemList.itemMap.get(stack.getItem()).size()));
-        }
-        return object("count", count, "nullArray", stacks == null, "samples", samples,
-                "samplesOmitted", Math.max(0, count - 2));
-    }
-
-    private static String evidenceText(String text) {
-        return text == null || text.length() <= 160 ? text : text.substring(0, 160);
-    }
-
-    static void displayed(int slot, PositionedStack display, List<RecipeRow.Ingredient> ingredients) {
-        String location = "GT input slot=" + slot;
-        if (display.items == null || display.items.length != ingredients.size()) {
-            throw new Jobs.Fault("slot_changed", location + "; source alternatives=" + ingredients.size()
-                    + "; cached alternatives=" + (display.items == null ? "null" : display.items.length));
-        }
-        // GT reuses mutable NEI display caches. Permutation order is presentation,
-        // not a binding to a source candidate's quantity, consumption or predicate.
-        // Native exact NBT matching distinguishes a missing compound from an empty one.
-        // Tolerate that display-only difference only when every source predicate ignores NBT.
-        boolean emptyTags = !ingredients.isEmpty() && ingredients.stream().allMatch(ingredient ->
-                "wildcard".equals(ingredient.rule.get("kind").getAsString())
-                        && ingredient.rule.has("nbt") && ingredient.rule.get("nbt").getAsBoolean());
-        Map<String, Integer> remaining = new java.util.LinkedHashMap<>();
-        for (int index = 0; index < ingredients.size(); index++) {
-            RecipeRow.Ingredient ingredient = ingredients.get(index);
-            Jobs.checkpoint();
-            remaining.merge(displayKey(ingredient.display, emptyTags, location + "; source expansion alternative=" + index
-                    + "; source=" + itemContext(ingredient.item)), 1, Integer::sum);
-        }
-        for (int index = 0; index < display.items.length; index++) {
-            Jobs.checkpoint();
-            ItemStack shown = display.items[index];
-            String key = displayKey(shown, emptyTags, location + "; cached alternative=" + index);
-            Integer count = remaining.get(key);
-            if (count == null) {
-                String expected = "none";
-                RecipeRow.Ingredient unmatchedIngredient = null;
-                RecipeRow.Ingredient sameItemIngredient = null;
-                String shownRegistry = shown != null && shown.getItem() != null
-                        ? Item.itemRegistry.getNameForObject(shown.getItem()) : null;
-                int shownMeta = shown != null ? Items.feather.getDamage(shown) : 0;
-                for (RecipeRow.Ingredient ingredient : ingredients) {
-                    if (remaining.containsKey(displayKey(ingredient.display, emptyTags))) {
-                        if (unmatchedIngredient == null) unmatchedIngredient = ingredient;
-                        if (sameItemIngredient == null && ingredient.display != null && ingredient.display.getItem() != null
-                                && shownRegistry != null && shownRegistry.equals(Item.itemRegistry.getNameForObject(ingredient.display.getItem()))
-                                && shownMeta == Items.feather.getDamage(ingredient.display)) {
-                            sameItemIngredient = ingredient;
-                            break;
-                        }
-                    }
-                }
-                RecipeRow.Ingredient reported = sameItemIngredient != null ? sameItemIngredient : unmatchedIngredient;
-                if (reported != null) expected = describe(reported.display);
-                String diff = reported != null && sameItemIngredient != null ? nbtDiff(shown, reported.display) : null;
-                throw new Jobs.Fault("slot_changed", location + "; cached alternative=" + index
-                        + " is absent from the source or repeated too often: " + describe(shown)
-                        + "; unmatched source example: " + expected
-                        + (diff == null ? "" : "; " + diff));
-            }
-            if (count == 1) remaining.remove(key); else remaining.put(key, count - 1);
-        }
-    }
-
-    private static String displayKey(ItemStack stack, boolean emptyTags) {
-        return displayKey(stack, emptyTags, "GT display");
-    }
-
-    private static String displayKey(ItemStack stack, boolean emptyTags, String location) {
-        if (stack == null || stack.getItem() == null) return "empty";
-        String registry = registeredName(stack, location);
-        // This projection never changes item facts, source predicates or source amounts.
-        // Nonempty tags always retain their complete typed identity, even for an NBT-ignoring input.
-        net.minecraft.nbt.NBTTagCompound tag = stack.getTagCompound();
-        com.google.gson.JsonElement nbt = tag == null || emptyTags && tag.hasNoTags() ? null : TypedNbt.encode(tag);
-        return Identity.item(registry, Items.feather.getDamage(stack), nbt);
-    }
-
     private static String registeredName(ItemStack stack, String location) {
         String registry = Item.itemRegistry.getNameForObject(stack.getItem());
         if (registry == null || Item.itemRegistry.getObject(registry) != stack.getItem()) {
@@ -603,102 +483,15 @@ final class GtRecipes implements AutoCloseable {
                 + "; amount=" + stack.stackSize;
     }
 
-    private static String describe(ItemStack stack) {
-        if (stack == null || stack.getItem() == null) return "empty";
-        return Item.itemRegistry.getNameForObject(stack.getItem()) + "; meta=" + Items.feather.getDamage(stack)
-                + "; id=" + displayKey(stack, false);
-    }
-
-    private static String nbtDiff(ItemStack cached, ItemStack source) {
-        if (cached == null || source == null) return null;
-        net.minecraft.nbt.NBTTagCompound tagA = cached.getTagCompound();
-        net.minecraft.nbt.NBTTagCompound tagB = source.getTagCompound();
-        boolean emptyA = tagA == null || tagA.hasNoTags();
-        boolean emptyB = tagB == null || tagB.hasNoTags();
-        if (emptyA && emptyB) return tagA == tagB ? null : "nbt diff: [root: cached="
-                + (tagA == null ? "absent" : "compound={}") + " vs source="
-                + (tagB == null ? "absent" : "compound={}") + "]";
-        java.util.Set<String> keys = new java.util.TreeSet<>();
-        if (!emptyA) for (Object key : tagA.func_150296_c()) keys.add((String) key);
-        if (!emptyB) for (Object key : tagB.func_150296_c()) keys.add((String) key);
-        List<String> diffs = new ArrayList<>();
-        int totalDiffs = 0;
-        for (String key : keys) {
-            net.minecraft.nbt.NBTBase valA = !emptyA && tagA.hasKey(key) ? tagA.getTag(key) : null;
-            net.minecraft.nbt.NBTBase valB = !emptyB && tagB.hasKey(key) ? tagB.getTag(key) : null;
-            if (valA == null && valB != null) {
-                totalDiffs++;
-                if (diffs.size() < 3) diffs.add(brief(key) + ": cached=absent vs source=" + describeTag(valB));
-            } else if (valA != null && valB == null) {
-                totalDiffs++;
-                if (diffs.size() < 3) diffs.add(brief(key) + ": cached=" + describeTag(valA) + " vs source=absent");
-            } else if (valA != null && valB != null && !valA.equals(valB)) {
-                totalDiffs++;
-                if (diffs.size() < 3) diffs.add(brief(key) + ": cached=" + describeTag(valA) + " vs source=" + describeTag(valB));
-            }
-        }
-        if (diffs.isEmpty()) return null;
-        String result = "nbt diff: [" + String.join(", ", diffs) + "]";
-        if (totalDiffs > 3) result += " (+" + (totalDiffs - 3) + " more)";
-        return result;
-    }
-
-    private static String describeTag(net.minecraft.nbt.NBTBase tag) {
-        if (tag == null) return "absent";
-        int id = tag.getId();
-        String typeName = id >= 0 && id < TAG_TYPES.length ? TAG_TYPES[id] : ("type_" + id);
-        String text;
-        // Summarize containers instead of formatting an entire subtree or array before truncation.
-        switch (id) {
-            case 7: text = "length=" + ((net.minecraft.nbt.NBTTagByteArray) tag).func_150292_c().length + " (values omitted)"; break;
-            case 8: text = brief(((net.minecraft.nbt.NBTTagString) tag).func_150285_a_()); break;
-            case 9: text = "length=" + ((net.minecraft.nbt.NBTTagList) tag).tagCount() + " (values omitted)"; break;
-            case 10: text = "keys=" + ((net.minecraft.nbt.NBTTagCompound) tag).func_150296_c().size() + " (values omitted)"; break;
-            case 11: text = "length=" + ((net.minecraft.nbt.NBTTagIntArray) tag).func_150302_c().length + " (values omitted)"; break;
-            default: text = tag.toString(); break; // Primitive numeric tags only; no recursive rendering.
-        }
-        return typeName + "=" + text;
-    }
-
-    private static String brief(String text) {
-        return value(text.length() > 32 ? text.substring(0, 32) + "..." : text).toString();
-    }
-
-    private static final String[] TAG_TYPES = {
-            "end", "byte", "short", "int", "long", "float", "double", "byte_array", "string", "list", "compound", "int_array"
-    };
-
-    static void covered(Set<String> captured, Object[] shown, Object[] source, int fixed, boolean fluid, boolean input,
-                        java.util.function.BiConsumer<Integer, Object> omitted) {
-        int length = Math.max(Math.min(shown.length, fixed), source.length);
-        for (int index = 0; index < length; index++) {
-            Object value = index < fixed ? index < shown.length ? shown[index] : null : index < source.length ? source[index] : null;
-            if (value != null && !captured.contains(new Binding(index, fluid, false, false, input, 0, 0).identity())) {
-                if (omitted == null) throw new Jobs.Fault("slot_missing", "GT recipe contains a value without an exported slot: " + index);
-                omitted.accept(index, value);
-                captured.add(new Binding(index, fluid, false, false, input, 0, 0).identity());
-            }
-        }
-    }
-
-    private static Object optional(Object[] values, int index) { return index >= 0 && index < values.length ? values[index] : null; }
-
-    private static GTNEIDefaultHandler.FixedPositionedStack fixed(PositionedStack value) {
-        if (!(value instanceof GTNEIDefaultHandler.FixedPositionedStack)) throw new Jobs.Fault("slot_type", "Unsupported GT display stack");
-        return (GTNEIDefaultHandler.FixedPositionedStack) value;
-    }
-
     private static void requireAmount(int amount) {
         if (amount < 0) throw new Jobs.Fault("invalid_amount", "GT recipe has a negative ingredient quantity");
     }
 
-    private <T> T field(String name) { return ReflectionHelper.getPrivateValue(GTNEIDefaultHandler.class, handler, name); }
     static final class Binding {
-        final int index, x, y;
-        final boolean fluid, special, overflow, input;
-        Binding(int index, boolean fluid, boolean special, boolean overflow, boolean input, int x, int y) {
-            this.index = index; this.fluid = fluid; this.special = special; this.overflow = overflow; this.input = input;
-            this.x = x; this.y = y;
+        final int index;
+        final boolean fluid, special, input;
+        Binding(int index, boolean fluid, boolean special, boolean input) {
+            this.index = index; this.fluid = fluid; this.special = special; this.input = input;
         }
         String identity() { return input + "/" + fluid + "/" + special + "/" + index; }
     }
@@ -706,7 +499,6 @@ final class GtRecipes implements AutoCloseable {
     static final class Placement {
         final Binding binding;
         final Object source;
-        final PositionedStack display;
-        Placement(Binding binding, Object source, PositionedStack display) { this.binding = binding; this.source = source; this.display = display; }
+        Placement(Binding binding,Object source){this.binding=binding;this.source=source;}
     }
 }

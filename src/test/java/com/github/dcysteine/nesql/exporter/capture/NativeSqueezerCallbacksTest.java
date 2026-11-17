@@ -21,10 +21,12 @@ final class NativeSqueezerCallbacksTest {
         cpw.mods.fml.relauncher.ReflectionHelper.setPrivateValue(cpw.mods.fml.common.Loader.class,cpw.mods.fml.common.Loader.instance(),mods,"namedMods");
         Item forge=new ItemFluidContainer(1000);
         Item ic2=(Item)NativeSqueezerWorkTest.allocate(type("ic2.core.item.ItemFluidCell"));
+        Item sprayer=(Item)NativeSqueezerWorkTest.allocate(type("ic2.core.item.tool.ItemSprayer"));
         require(ic2.getClass().getProtectionDomain().getCodeSource().getLocation().toString().contains("/native-tests/ic2.jar!"),"Pinned IC2 test jar required");
         // Unsafe omits Item's registry delegate, but keeps the real IC2 callback methods.
         java.lang.reflect.Field delegate=Item.class.getField("delegate");delegate.setAccessible(true);
         delegate.set(ic2,new cpw.mods.fml.common.registry.RegistryDelegate.Delegate<>(ic2,Item.class));
+        delegate.set(sprayer,new cpw.mods.fml.common.registry.RegistryDelegate.Delegate<>(sprayer,Item.class));
         Item unknown=new ItemFluidContainer(1000){public FluidStack getFluid(ItemStack stack){throw new AssertionError("Unknown callback executed during classification");}};
         Item unknownDrain=new ItemFluidContainer(1000){public FluidStack drain(ItemStack stack,int amount,boolean apply){throw new AssertionError("Unknown drain executed during classification");}};
         net.minecraft.block.Block enderBlock=new net.minecraft.block.Block(net.minecraft.block.material.Material.rock){};
@@ -35,8 +37,10 @@ final class NativeSqueezerCallbacksTest {
         Item.itemRegistry.addObject(30102,"fixture:ic2_container",ic2);
         Item.itemRegistry.addObject(30103,"fixture:unknown_container",unknown);
         Item.itemRegistry.addObject(30104,"fixture:unknown_drain",unknownDrain);
+        Item.itemRegistry.addObject(30105,"fixture:ic2_sprayer",sprayer);
         Item.itemRegistry.addObject(3900,"fixture:ender_block",ender);
         Class<?> manager=type("forestry.factory.recipes.SqueezerRecipeManager");
+        type("forestry.api.recipes.RecipeManagers").getField("squeezerManager").set(null,manager.newInstance());
         Set<ISqueezerRecipe> ordinary=(Set<ISqueezerRecipe>)field(manager,null,"recipes");
         Map<Object,Object> containers=(Map<Object,Object>)field(manager,null,"containerRecipes");
         ordinary.clear();containers.clear();
@@ -49,6 +53,7 @@ final class NativeSqueezerCallbacksTest {
         JsonObject program=rules.context();
         require(kind(program,forge).equals("forge"),"Inherited Forge callback is still unmodeled");
         require(kind(program,ic2).equals("ic2"),"IC2 empty-tag effect is still unmodeled");
+        require(kind(program,sprayer).equals("ic2"),"Pinned IC2 tool.ItemSprayer callback was not adapted");
         require(kind(program,unknown).equals("unsupported"),"Overridden callback acquired an unproved rule");
         require(kind(program,unknownDrain).equals("unsupported"),"Overridden drain acquired an unproved rule");
         require(kind(program,ender).equals("noFluid"),"Native null reader was not identified");
@@ -59,6 +64,9 @@ final class NativeSqueezerCallbacksTest {
         observe(cases,"empty-tag-read-allows-condensation",program,new ItemStack[]{new ItemStack(ic2,1),empty},null,manager);
         observe(cases,"retained-before-callback",program,new ItemStack[]{new ItemStack(ic2,2)},recipe,manager);
         observe(cases,"forge-reader-keeps-null-tag",program,new ItemStack[]{new ItemStack(forge,1)},null,manager);
+        ItemStack spray=new ItemStack(sprayer);
+        observe(cases,"ic2-sprayer-read-creates-empty-tag",program,new ItemStack[]{spray},null,manager);
+        require(spray.getTagCompound()!=null&&spray.getTagCompound().hasNoTags(),"Actual IC2 sprayer reader lost its empty-tag mutation");
         ItemStack filled=new ItemStack(forge);((IFluidContainerItem)forge).fill(filled,new FluidStack(FluidRegistry.WATER,600),true);
         observe(cases,"forge-container-without-matching-key",program,new ItemStack[]{filled},null,manager);
         observe(cases,"ender-reader-never-drains",program,new ItemStack[]{new ItemStack(ender)},null,manager);
@@ -66,6 +74,7 @@ final class NativeSqueezerCallbacksTest {
         observe(cases,"fixed-container-before-callback",program,new ItemStack[]{new ItemStack(net.minecraft.init.Items.water_bucket),new ItemStack(ic2)},null,manager);
         metadata.version="unknown";
         require(kind(new SqueezerRules(ordinary,containers).context(),ic2).equals("unsupported"),"Unpinned IC2 version acquired a callback proof");
+        require(kind(new SqueezerRules(ordinary,containers).context(),sprayer).equals("unsupported"),"Unpinned IC2 sprayer acquired a callback proof");
         metadata.version="2.2.828-experimental";
         containers.put(new ItemStack(forge),type("forestry.factory.recipes.SqueezerContainerRecipe").getConstructor(ItemStack.class,int.class,ItemStack.class,float.class).newInstance(new ItemStack(forge),5,null,0f));
         require(kind(new SqueezerRules(ordinary,containers).context(),forge).equals("unsupported"),"Matching empty key was incorrectly proved irrelevant");

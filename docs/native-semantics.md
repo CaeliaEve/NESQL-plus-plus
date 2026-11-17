@@ -1,8 +1,25 @@
-# Consolidated repair: native magic semantics
+# Historical native semantic mechanisms
 
-Development version 0.18.0 writes source revision 16. It requires Compiler and
-contract package 0.16.0 (catalog revision 15). This source version change is not
-a game installation or a declaration that all adapters are complete.
+The version references below describe the introduction of these mechanisms,
+not the current candidate. See [the README](../README.md) for the current
+Source/Catalog/contracts chain. Current semantic capture does not construct
+native recipe GUI or use NEI cached display stacks as recipe authority.
+
+## Registration roots and reflected scalars
+
+Starting with 0.45.0-semantic.5, four-registry discovery and definition drift
+guards share one root comparison. String and exact primitive wrapper classes
+compare by value; float/double compare raw IEEE bits, retaining signed zero
+and NaN payload distinctions. All other sources keep object identity semantics.
+No collection or foreign object's equality callback is invoked.
+
+IC2 Scrapbox exposes the primitive `Drop.topChance` among its source anchors.
+Reflection creates new Float objects on each read; equal values from separate
+crafting/usage handlers therefore represent the same binding. A changed weight
+or replaced drop list still rejects the registration or invalidates discovery.
+The native Scrapbox fixture covers discovery, repeated verification, drift and
+the existing exact drop probability/consumption oracle. This local mechanism
+check does not establish that the complete live registry or export has passed.
 
 ## Selective NBT matching and the drying rack
 
@@ -204,18 +221,26 @@ consumption. A wildcard mould ignores NBT/count in the native early match branch
 an ordinary exact mould needs exactly one item because the machine's slot limit
 is one. `ignoreNBT` preserves metadata. Null mould with `ignoreNBT` and nonpositive
 cooling time cannot complete natively and are excluded. The empty-mould condition
-is explicit for cast-free recipes. Preserve native layouts and fluid flow artwork.
+is explicit for cast-free recipes. Content item/fluid visuals remain separate from
+the recipe UI; new capture does not retain native layout artwork.
 
 The native machine posts `SmelteryCastEvent` (may deny) and `SmelteryCastedEvent`
-(may change consumption/output). Capture runs the actual active listener snapshot
-on deep copied recipe/event data, after validating **every** callback. Support
+(may change consumption/output). The current unverified batch reads the actual active
+listener snapshot and projects each admitted law on deep copied recipe/event data,
+after validating **every** callback. No listener is invoked. The projection supports
 the reviewed TConstruct `WeaponryHandler.weaponryPartCast`, Iguana 2.6.6
 `PartRestrictionHandler.onPartCasting` / `CastHandler.onCasted`, and the two
 ExtraUtilities 1.2.12 casting-table callbacks described below. Verify the exact
 target class and FML's Method-to-generated-wrapper cache, not a method-name string
-alone. Unknown callbacks fail before any listener runs. Callback Errors/faults
-propagate normally. Original recipes, stacks and global event registration remain
-unchanged. Full initialized material restrictions still need real-game acceptance.
+alone. Listener/wrapper/target identities and the relevant Method-to-wrapper cache
+entries are sealed. Unknown callbacks fail before any callback executes. Native
+null/invalid restriction states remain faults, not successful exclusions. Original
+recipes, stacks and global event registration remain unchanged. Bound dependencies
+include tool/bow/arrow registries, weapon part roles, restriction keys/lists/material
+names, ExtraUtilities material IDs and stable attribute/UUID data. Cheap batch guards
+check roots; sealing checks the full relevant graph. Full initialized material
+restrictions and the new projections still need concentrated verification and
+real-game acceptance.
 
 `TConEvents.addBedrockiumPartSlowness` retains the native stable attribute NBT.
 For `addUnstableTimer`, Source 36 exports an `unstableCasting` process and an
@@ -472,37 +497,95 @@ adapters, not an assertion that every recipe in the loaded pack is supported.
   and the registered empty-clay-jar count. Reagent order is interchangeable,
   input NBT is ignored, and metadata is compared only for subtype items. Four
   output positions retain gaps. Work requires altar power (0.6 per successful
-  tick, 800 ticks); this is not EU. Both native progress tracks are retained,
-  including the original power-meter UV starting at -2. Outputs describe empty
+  tick, 800 ticks); this is not EU. Native progress remains a machine-state
+  condition; the current semantic path does not capture GUI progress images. Outputs describe empty
   output slots: native incompatible occupied slots can suppress individual outputs.
 * Witching Gadgets 1.7.25-GTNH spinning consumes one item per occupied reagent
   slot, irrespective of template counts. Forge ore predicates ignore NBT. A
   wildcard predicate uses a concrete NEI example without narrowing the predicate.
-  Its native counter completes after 121 updates from zero (120 increments and
-  one completion update). The 166 by 106 background and native slot positions
-  are retained. Outputs describe an empty output slot.
+  Default work from zero requires 121 consecutive valid calls (120 increments and
+  one completion call). Actual progress/maxProgress and output stock remain
+  external conditions. The semantic path creates no recipe background or GUI
+  slots. Outputs describe an empty output slot. See `native-witching-spinning.md`.
 * Witchery spinning consumes the registered fibre quantity and one of each
   modifier. Modifier order and surplus unmatched modifier slots are allowed;
   unmatched modifiers are not consumed. Literal metadata and ignored NBT are
   retained. Work takes 300 successful altar-powered ticks at 0.6 power per tick.
-  Its slot layout and progress track remain separate from Witching Gadgets.
+  Its counted fibre/modifier law is separate from Witching Gadgets and does not
+  require a native GUI layout or progress capture.
 
-All three check registry drift and reject overlapping first-match recipes rather
-than exporting mutually incompatible outputs as independently obtainable. The
-Witching Gadgets native list matcher can remove multiple requirements for one
-offered slot: even equal overlapping ore lists are unsafe. The adapter supports
-disjoint lists and equal/disjoint scalar predicates; other cases still need a
-dedicated conditional representation. Witchery literal metadata 32767 currently
-fails pending a verified display example. Unknown callbacks, empty ingredient
-domains and unsupported shapes remain explicit failures, never zero-row success.
+All three check registry drift. Witching Gadgets now has the dedicated
+`witchingSpinning` conditional representation: list matching can remove multiple
+requirements for one offer, and the native hit flag persists across offers.
+Overlapping lists and earlier registrations are retained rather than rejected
+as a group. Completion consumes every occupied physical slot, including offers
+which did not remove a requirement. Witchery has its separate `witcherySpinning`
+process and literal metadata contract, including 32767. Unknown callback/storage
+owners remain failures; intrinsic unmatchability needs an explicit native proof.
 
-Lightweight tests load the pinned native recipe classes and execute their matchers
-before checking exported consumption, layout, output quantities and registry
-drift. The spinning suite includes a native greedy-removal counterexample. These
-tests do not bootstrap the full mod registries, render GL pixels or certify live
-export. Registry overlap restrictions must be assessed against loaded pack data.
+The current lightweight spinning cases use the actual scoped registry and pinned
+native matcher, including the list-removal/sticky-hit counterexample, strict
+process gates, unknown-storage rejection, drift and close. New cases and the
+updated three-project contract are queued for the single final verification
+batch; old local evidence does not establish that these changes pass. No GUI
+layout callback is used to verify the semantic reader, and no live export is
+certified here.
 
 Remaining dedicated work includes dynamic banner patterns and gene-template NBT,
 Witching Gadgets infernal furnace bellows/vis-dependent duration and bonus rolls,
 LogisticsPipes result callbacks, and the unadapted genetic/ritual/domain handlers.
 Route coverage must remain separate from per-entry semantic and live acceptance.
+
+## semantic.12 returned-native adapters
+
+The 2026-10-31 candidate keeps logical item getters separate from physical item
+identity, publishes exact Et Futurum metadata partitions, and represents
+Thaumic Bases mortar / Railcraft firestone returns as input-dependent native
+rules. Blood Orb recipes use the shared workbench tool/container lifecycle,
+retaining actual GT tool wear instead of invoking it as a static container.
+OpenComputers delegates are admitted only by their pinned native bridge owners.
+
+MagicBees cache definitions bind configuration, source recipes and ticker
+identity, while serial accesses and eviction in the live cache do not themselves
+constitute recipe drift. Genuine registry/source/ticker changes still fail.
+The vanilla furnace table binds both physical entries and its independent native
+bookkeeping counter, without treating the counter as the raw entry count.
+
+Microblock examples share immutable layout patterns and reconstruct owned stacks
+only for capture. Concrete GT diagram queries reference full canonical item facts,
+preserving all NBT without repeating it across bindings and lookups. Neither
+optimization increases semantic byte limits or converts partial coverage into
+full coverage. The client queue deadline is unchanged.
+
+The infuser excludes a null native center only where the pinned matcher proves
+that its first gate returns false. Other invalid costs/research retain a detailed
+error with native owner and field types; the old return lacked enough context to
+prove that its particular failure was the null-center case. All candidate changes
+still require a fresh, single-session full-pack diagnosis before export.
+
+## semantic.13 targeted return fixes
+
+The next candidate addresses the fourteen failures returned by the targeted
+semantic.12 run. Native callback admission remains pinned to audited owners:
+EnderZoo confusing dust, the remaining vanilla enchantment maxima, BOP food
+stack limits, and Botania tiny-planet / black-hole container behavior.
+Forestry accepts its actual Hashtable product storage and a null remainder
+from an empty Galacticraft canister. CreativeCore reads the native baked-ore
+storage shape. ProjectBlue rejects unrelated inputs before inspecting metadata.
+Furnace wildcard inputs expand owned NEI examples with their original NBT.
+GT diagram content references complete item facts instead of repeating tool
+NBT in each content element; semantic byte limits remain unchanged.
+
+AE2FC wireless-terminal upgrades use a dedicated fixed-cell process rather
+than the superclass's shapeless display list. Output copies the offered
+terminal's complete NBT and count. Gadomancy random infusion costs export the
+base table and native refresh rule without sampling RNG-backed getters.
+Compiler contracts `0.40.0-semantic.85` retain both laws, and NeoNEI displays
+random cost ranges and conditional output specimens in the selected language.
+
+Microblock Crafting is completed by explicit user disposition, with measured
+coverage retained separately. It and the seven data-passed identities are not
+selected for the next fourteen-handler regression. This is a scope decision,
+not a claim that unexamined recipes or full visual coverage passed. Historical
+reports and writing captures are unchanged. The main development agent builds
+and verifies the candidate locally; native checks remain with the export agent.

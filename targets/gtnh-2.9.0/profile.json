@@ -1,0 +1,773 @@
+{
+  "format": "nesql.target-profile",
+  "id": "gtnh-2.9.0",
+  "release": "2.9.0",
+  "manifestSha256": "e2c7396c7121c86668ce3f93216f2bde71984a7ecd34ed5d231f8888ce3d13fa",
+  "artifacts": [
+    {
+      "key": "NotEnoughItems",
+      "containers": [
+        "NotEnoughItems"
+      ],
+      "build": {
+        "id": "nei",
+        "group": "com.github.GTNewHorizons",
+        "artifact": "NotEnoughItems",
+        "classifier": "dev"
+      },
+      "file": "NotEnoughItems-2.8.171-GTNH.jar",
+      "sha256": "9a822134bda6cbaf4f414b825fc10dcde8e2944cc366f96df92420e54c88b5a3"
+    },
+    {
+      "key": "GT5-Unofficial",
+      "containers": [
+        "gregtech",
+        "gregtech_nh",
+        "bartworks",
+        "miscutils",
+        "tectech"
+      ],
+      "ambiguous": [
+        "gregtech"
+      ],
+      "build": {
+        "id": "gregtech",
+        "group": "com.github.GTNewHorizons",
+        "artifact": "GT5-Unofficial",
+        "classifier": "dev"
+      },
+      "file": "gregtech-5.09.54.265.jar",
+      "sha256": "b969e11625a0298416a75b6e39703da795233edb71cb66f25fb9bbf654d75528"
+    },
+    {
+      "key": "ForestryMC",
+      "containers": [
+        "Forestry"
+      ],
+      "build": {
+        "id": "forestry",
+        "group": "com.github.GTNewHorizons",
+        "artifact": "ForestryMC",
+        "classifier": "api"
+      },
+      "file": "Forestry-4.11.40.jar",
+      "sha256": "5d2fc33046bdce188f281892c429ac4b1cd3b3833b66cbf013600e0d66c47058"
+    },
+    {
+      "key": "CodeChickenCore",
+      "containers": [
+        "CodeChickenCore"
+      ],
+      "build": {
+        "id": "ccc",
+        "group": "com.github.GTNewHorizons",
+        "artifact": "CodeChickenCore",
+        "classifier": "dev"
+      },
+      "file": "CodeChickenCore-1.4.22.jar",
+      "sha256": "0ff66294703701f156fb493265bf5b3572c4566127ce895095332d2cfe9205c1"
+    },
+    {
+      "key": "GTNHLib",
+      "containers": [
+        "gtnhlib"
+      ],
+      "build": {
+        "id": "gtnhlib",
+        "group": "com.github.GTNewHorizons",
+        "artifact": "GTNHLib",
+        "classifier": "dev"
+      },
+      "file": "gtnhlib-0.11.54.jar",
+      "sha256": "61340948f200ce52f210380ec00ec763fe867fac10c6342743e04c1688e85039"
+    },
+    {
+      "key": "ModularUI",
+      "containers": [
+        "modularui"
+      ],
+      "build": {
+        "id": "modularui",
+        "group": "com.github.GTNewHorizons",
+        "artifact": "ModularUI",
+        "classifier": "dev"
+      },
+      "file": "modularui-1.3.4.jar",
+      "sha256": "9221b07c9b09725fc4e935cf63e8116751667fe9c0e7a98bd523a6411141b33f"
+    },
+    {
+      "key": "ModularUI2",
+      "containers": [
+        "modularui2"
+      ],
+      "build": {
+        "id": "modularui2",
+        "group": "com.github.GTNewHorizons",
+        "artifact": "ModularUI2",
+        "classifier": "dev"
+      }
+    },
+    {
+      "key": "StructureLib",
+      "containers": [
+        "structurelib"
+      ],
+      "build": {
+        "id": "structurelib",
+        "group": "com.github.GTNewHorizons",
+        "artifact": "StructureLib",
+        "classifier": "dev"
+      }
+    },
+    {
+      "key": "BlockRenderer6343",
+      "containers": [
+        "blockrenderer6343"
+      ],
+      "build": {
+        "id": "blockrenderer",
+        "group": "com.github.GTNewHorizons",
+        "artifact": "BlockRenderer6343",
+        "classifier": "dev"
+      },
+      "file": "blockrenderer6343-1.4.25.jar",
+      "sha256": "8608bddf642a8e92ce611ad206464c03c197be3d31c20aa924593f9f9f2315b9"
+    },
+    {
+      "key": "waila",
+      "containers": [
+        "Waila"
+      ],
+      "build": {
+        "id": "waila",
+        "group": "com.github.GTNewHorizons",
+        "artifact": "waila",
+        "classifier": "dev"
+      }
+    },
+    {
+      "section": "external_mods",
+      "key": "Thaumcraft",
+      "containers": [
+        "Thaumcraft"
+      ],
+      "ambiguous": [
+        "Thaumcraft"
+      ],
+      "build": {
+        "id": "thaumcraft",
+        "group": "thaumcraft",
+        "artifact": "Thaumcraft",
+        "classifier": "dev",
+        "minecraftPrefix": true
+      }
+    },
+    {
+      "section": "external_mods",
+      "key": "Industrial Craft 2",
+      "containers": [
+        "IC2"
+      ],
+      "exceptions": {
+        "IC2": "2.2.828-experimental"
+      }
+    },
+    {
+      "section": "external_mods",
+      "key": "Tinkers-Gregworks",
+      "containers": [
+        "TGregworks"
+      ],
+      "exceptions": {
+        "TGregworks": "1.7.10-GTNH-1.0.34"
+      },
+      "file": "TGregworks-1.7.10-GTNH-1.0.34.jar",
+      "sha256": "2ec79a3ff66d91be086fe425deacebda0d2f12e2aa08d7ea08d07b0f0b39745f"
+    },
+    {
+      "key": "Binnie",
+      "containers": [
+        "BinnieCore",
+        "ExtraBees",
+        "ExtraTrees",
+        "Botany",
+        "Genetics"
+      ],
+      "file": "binnie-mods-2.6.51.jar",
+      "sha256": "724cca52f9de0f7dadec321f7716fd45b358d2be9dd698d87decb1a632d8007e"
+    },
+    {
+      "key": "Galacticraft",
+      "containers": [
+        "GalacticraftCore",
+        "GalacticraftMars"
+      ],
+      "file": "Galacticraft-3.4.37-GTNH.jar",
+      "sha256": "15058fd52b3527c80b4a8280a499cea0c9226a72946945736c5d4980d9350374"
+    },
+    {
+      "key": "Applied-Energistics-2-Unofficial",
+      "containers": [
+        "appliedenergistics2"
+      ],
+      "file": "appliedenergistics2-rv3-beta-1095-GTNH.jar",
+      "sha256": "f66e1d5db3496a209f48e6264c566264c50b0f00f071e2a29efc93611696dbea"
+    },
+    {
+      "key": "AE2FluidCraft-Rework",
+      "containers": [
+        "ae2fc"
+      ],
+      "file": "ae2fc-1.5.116-gtnh.jar",
+      "sha256": "ce71695d3ce1c5369cfe5e3af008f86d6a8efa76948a9484ec914214565bd760"
+    },
+    {
+      "key": "AspectRecipeIndex",
+      "containers": [
+        "aspectrecipeindex"
+      ],
+      "file": "aspectrecipeindex-1.1.6.jar",
+      "sha256": "283374a463195fdb2a1aa4ce8989fc89976e7b1702121f3f9f86714c8110d055"
+    },
+    {
+      "key": "CropsNH",
+      "containers": ["cropsnh"],
+      "file": "cropsnh-2.0.140.jar",
+      "sha256": "f3cfd564b438b9669be927f27bae93a8fbe77797bfd89886d6d9683c451d2e9e"
+    },
+    {
+      "key": "BloodMagic",
+      "containers": [
+        "AWWayofTime"
+      ]
+    },
+    {
+      "key": "BuildCraft",
+      "containers": [
+        "BuildCraft|Core",
+        "BuildCraft|Factory",
+        "BuildCraft|Silicon",
+        "BuildCraft|Builders",
+        "BuildCraft|Transport",
+        "BuildCraft|Energy"
+      ],
+      "file": "buildcraft-7.1.65.jar",
+      "sha256": "ff03c42d429609d77610236c2902250b7ad4fb29d05048f9f9b242b6f9283ddd"
+    },
+    {
+      "key": "BuildCraftCompat",
+      "containers": [
+        "BuildCraft|Compat"
+      ]
+    },
+    {
+      "key": "ProjectRed",
+      "containers": [
+        "ProjRed|Core",
+        "ProjRed|Exploration",
+        "ProjRed|Illumination",
+        "ProjRed|Transmission",
+        "ProjRed|Transportation",
+        "ProjRed|Integration",
+        "ProjRed|Fabrication"
+      ],
+      "file": "ProjRed-4.12.50-GTNH.jar",
+      "sha256": "db2dde71cc9276c62b4c6f131f6155a319633c86419c9c01dca616c3f29dd642"
+    },
+    {
+      "key": "WirelessCraftingTerminal",
+      "containers": [
+        "ae2wct"
+      ]
+    },
+    {
+      "key": "Angelica",
+      "containers": [
+        "angelica"
+      ],
+      "file": "angelica-2.2.43.jar",
+      "sha256": "d72ea5bea07943729cf38e4e6a72c4d09987f96bb7ad4e94f42b07f9397a8958"
+    },
+    {
+      "key": "Avaritia",
+      "containers": [
+        "Avaritia"
+      ],
+      "file": "Avaritia-1.100.jar",
+      "sha256": "6d69f28a34a4409e1da08a10aa454c5cc154f59b023caab1a7b8206becd2f139"
+    },
+    {
+      "key": "bdlib",
+      "containers": [
+        "bdlib"
+      ]
+    },
+    {
+      "key": "BloodArsenal",
+      "containers": [
+        "BloodArsenal"
+      ]
+    },
+    {
+      "key": "Botania",
+      "containers": [
+        "Botania"
+      ]
+    },
+    {
+      "key": "Chisel",
+      "containers": [
+        "chisel"
+      ]
+    },
+    {
+      "key": "EnderCore",
+      "containers": [
+        "endercore"
+      ]
+    },
+    {
+      "key": "EnderIO",
+      "containers": [
+        "EnderIO"
+      ]
+    },
+    {
+      "key": "EnderStorage",
+      "containers": [
+        "EnderStorage"
+      ]
+    },
+    {
+      "key": "EnderZoo",
+      "containers": [
+        "EnderZoo"
+      ]
+    },
+    {
+      "key": "EnhancedLootBags",
+      "containers": [
+        "enhancedlootbags"
+      ]
+    },
+    {
+      "key": "Et-Futurum-Requiem",
+      "containers": [
+        "etfuturum"
+      ]
+    },
+    {
+      "key": "ForbiddenMagic",
+      "containers": [
+        "ForbiddenMagic"
+      ]
+    },
+    {
+      "key": "ForgeMultipart",
+      "containers": [
+        "ForgeMultipart"
+      ],
+      "file": "ForgeMultipart-1.7.18.jar",
+      "sha256": "5e57550b5e81062fdf3100c0f404d010d06da1e603c60f159c4f4519f1b44c94"
+    },
+    {
+      "key": "Gadomancy",
+      "containers": [
+        "gadomancy"
+      ],
+      "file": "gadomancy-1.5.17.jar",
+      "sha256": "677c1afb12e26c324d7b9e34f20876ccb4d027b7c8058d3c8baa46a9274faf8d"
+    },
+    {
+      "key": "amunra",
+      "containers": [
+        "GalacticraftAmunRa"
+      ],
+      "file": "AmunRa-GC-0.8.14.jar",
+      "sha256": "bc9e0ce4e1d52e0627116c29255a61a60a173e5893272caf5cf9e0eea1f8b9f3"
+    },
+    {
+      "key": "Galaxy-Space-GTNH",
+      "containers": [
+        "GalaxySpace"
+      ],
+      "file": "GalaxySpace-1.1.144-GTNH.jar",
+      "sha256": "bad7e1453c6d1e22e429a0d87c0325f8294f8059ff3dbd48142cb8fe92047b6f"
+    },
+    {
+      "key": "gendustry",
+      "containers": [
+        "gendustry"
+      ],
+      "file": "gendustry-1.9.13-GTNH.jar",
+      "sha256": "ff90d1e17189d09447a41ac684d98b8352f0665b4e42390108e237409a590efa"
+    },
+    {
+      "key": "GTNH-TC-Wands",
+      "containers": [
+        "gtnhtcwands"
+      ]
+    },
+    {
+      "key": "harvestcraft",
+      "containers": [
+        "harvestcraft"
+      ]
+    },
+    {
+      "key": "Hodgepodge",
+      "containers": [
+        "hodgepodge"
+      ]
+    },
+    {
+      "key": "IguanaTweaksTConstruct",
+      "containers": [
+        "IguanaTweaksTConstruct"
+      ]
+    },
+    {
+      "key": "LogisticsPipes",
+      "containers": [
+        "LogisticsPipes"
+      ]
+    },
+    {
+      "key": "MagicBees",
+      "containers": [
+        "MagicBees"
+      ]
+    },
+    {
+      "key": "Mantle",
+      "containers": [
+        "Mantle"
+      ]
+    },
+    {
+      "key": "MatterManipulator",
+      "containers": [
+        "matter-manipulator"
+      ],
+      "file": "matter-manipulator-0.1.75-GTNH.jar",
+      "sha256": "fa29b3a6fa4204ca3c35ecdce644e48bc5e912a453bcb4c87ffe33656f1d58d8"
+    },
+    {
+      "key": "ModTweaker",
+      "containers": [
+        "modtweaker2"
+      ]
+    },
+    {
+      "key": "Natura",
+      "containers": [
+        "Natura"
+      ]
+    },
+    {
+      "key": "neiaddons",
+      "containers": [
+        "NEIAddons"
+      ],
+      "file": "NEIAddons-1.18.8.jar",
+      "sha256": "640d4eab1b3dbe85995b30b0eb737aacc1f985df1f779c009ba82f92c3f94b32"
+    },
+    {
+      "key": "NEI-Integration",
+      "containers": [
+        "neiintegration"
+      ],
+      "file": "NEIIntegration-1.5.3.jar",
+      "sha256": "dcb47385a4c5cb4e01e1a6464285b581e565dbee0a6d8e4166c6c5b4eb1e53d5"
+    },
+    {
+      "key": "NewHorizonsCoreMod",
+      "containers": [
+        "dreamcraft"
+      ]
+    },
+    {
+      "key": "OpenComputers",
+      "containers": [
+        "OpenComputers"
+      ]
+    },
+    {
+      "key": "Railcraft",
+      "containers": [
+        "Railcraft"
+      ]
+    },
+    {
+      "key": "Random-Things",
+      "containers": [
+        "RandomThings"
+      ]
+    },
+    {
+      "key": "StructureCompat",
+      "containers": [
+        "structurecompat"
+      ],
+      "file": "structurecompat-0.7.5.jar",
+      "sha256": "667c6e0ef5a498606045005a449aee8224419285f039e963579bddcfa07b5758"
+    },
+    {
+      "key": "TinkersConstruct",
+      "containers": [
+        "TConstruct"
+      ]
+    },
+    {
+      "key": "ThaumicBases",
+      "containers": [
+        "thaumicbases"
+      ]
+    },
+    {
+      "key": "ThaumicHorizons",
+      "containers": [
+        "ThaumicHorizons"
+      ]
+    },
+    {
+      "key": "ThaumicMachina",
+      "containers": [
+        "ThaumicMachina"
+      ]
+    },
+    {
+      "key": "Universal-Singularities",
+      "containers": [
+        "universalsingularities"
+      ]
+    },
+    {
+      "key": "WitcheryExtras",
+      "containers": [
+        "WitcheryExtras"
+      ]
+    },
+    {
+      "key": "WitchingGadgets",
+      "containers": [
+        "WitchingGadgets"
+      ]
+    },
+    {
+      "key": "Yamcl",
+      "containers": [
+        "YAMCore"
+      ]
+    },
+    {
+      "key": "MalisisDoors",
+      "containers": [
+        "malisisdoors"
+      ],
+      "file": "malisisdoors-1.19.13-GTNH.jar",
+      "sha256": "49ee04dbfe9e124640bbc4ddafc3a75c35dd66f72e06f59d193cbde13051375b"
+    },
+    {
+      "key": "Gravitation-Suite-Neo",
+      "containers": [
+        "gravisuiteneo"
+      ],
+      "file": "gravisuiteneo-1.3.16.jar",
+      "sha256": "cb3b80662ac3653a6f76c4a77d1a3b3c8fd33b46aecc7ecdd37dcb4dcfe8ef17"
+    },
+    {
+      "key": "Automagy-GTNH",
+      "containers": [
+        "Automagy"
+      ],
+      "file": "Automagy-0.29.8-GTNH.jar",
+      "sha256": "867e3282b0e3ebc0307ebbf3db72f19f7438648026233d8b1afdb8120d0ed6f1"
+    },
+    {
+      "section": "external_mods",
+      "key": "Biomes O' Plenty",
+      "containers": [
+        "BiomesOPlenty"
+      ]
+    },
+    {
+      "section": "external_mods",
+      "key": "CoFH Core",
+      "containers": [
+        "CoFHCore"
+      ]
+    },
+    {
+      "section": "external_mods",
+      "key": "Extra Utilities",
+      "containers": [
+        "ExtraUtilities"
+      ]
+    },
+    {
+      "section": "external_mods",
+      "key": "TC-4-Tweaks",
+      "containers": [
+        "tc4tweak"
+      ]
+    },
+    {
+      "section": "external_mods",
+      "key": "Witchery",
+      "containers": [
+        "witchery"
+      ]
+    },
+    {
+      "section": "external_mods",
+      "key": "Salis Arcana",
+      "containers": [
+        "salisarcana"
+      ],
+      "file": "salisarcana-v2.7.0.jar",
+      "sha256": "d4c0a9216973cb460a0553147b1ebb396113810eae7b64231a89a7f26c993b74"
+    },
+    {
+      "section": "external_mods",
+      "key": "Advanced Solar Panel For 1.7.10 (Unofficial)",
+      "containers": [
+        "AdvancedSolarPanel"
+      ]
+    },
+    {"key":"nei-custom-diagram","containers":["neicustomdiagram"],"file":"NEICustomDiagram-1.8.36.jar","sha256":"cf407d26d69e409e9a9fa523746fb73c7f14c71dec67c3b84eb7f1489ba7e7c0"},
+    {"key":"Draconic-Evolution","containers":["DraconicEvolution"]},
+    {"key":"Eternal-Singularity","containers":["eternalsingularity"]},
+    {"key":"Computronics","containers":["computronics"]},
+    {"key":"OpenSecurity","containers":["opensecurity"]},
+    {"key":"ThaumicEnergistics","containers":["thaumicenergistics"]}
+  ],
+  "historicalInventories": {
+    "native-usage-admission.json": "historical-native-usage-admission.json",
+    "squeezer-callback-classes.json": "historical-squeezer-callback-classes.json"
+  },
+  "families": {
+    "AeFacadeRecipes": "unverified",
+    "AeRecipes": "unverified",
+    "AeWorldRecipes": "unverified",
+    "AeWorldSource": "unverified",
+    "AspectRecipeIndexReferences": "unverified",
+    "Aspects": "unverified",
+    "BannerRecipes": "unverified",
+    "BinnieGeneticsRecipes": "unverified",
+    "BlastRecipes": "unverified",
+    "BloodAlchemyRecipes": "unverified",
+    "BloodCalcinatorRecipes": "unverified",
+    "BloodOrbCraftingRecipes": "unverified",
+    "BloodOrbShapedRecipes": "unverified",
+    "BotaniaPoolRecipes": "unverified",
+    "BotaniaRecipeBindings": "unverified",
+    "BotaniaWorldRecipes": "unverified",
+    "BrewingItemCallbacks": "unverified",
+    "BuildcraftRecipes": "unverified",
+    "CalImprintRecipes": "unverified",
+    "CannerRecipes": "unverified",
+    "ChiselRecipes": "unverified",
+    "ChiselSource": "unverified",
+    "CircuitRecipes": "unverified",
+    "CosmicShaders": "unverified",
+    "CreativeCoreRecipes": "unverified",
+    "CropsNHReferences": "unverified",
+    "DecayableRecipes": "unverified",
+    "DisabledRecipes": "unverified",
+    "DisguiseInfusionRecipes": "unverified",
+    "DistilleryRecipes": "unverified",
+    "EnchanterSource": "unverified",
+    "EnderAssemblyRecipes": "unverified",
+    "ExtraUtilsSoulRecipes": "unverified",
+    "ExtremeRecipes": "unverified",
+    "Facts": "unverified",
+    "FireworkRecipes": "unverified",
+    "FmpMaterialSnapshot": "unverified",
+    "FmpMicroblockRecipes": "unverified",
+    "FmpSawSnapshot": "unverified",
+    "Forestry": "unverified",
+    "ForestryAddonsReferences": "unverified",
+    "ForestryInventory": "unverified",
+    "ForestryMembers": "unverified",
+    "ForestryProcessingRecipes": "unverified",
+    "ForestryRecipes": "unverified",
+    "ForestryRemainingRecipes": "unverified",
+    "FuelContainerRules": "unverified",
+    "GalaxyAssemblyRecipes": "unverified",
+    "GendustryFluidRecipes": "unverified",
+    "GendustryGeneticsRecipes": "unverified",
+    "GtCircuits": "unverified",
+    "GtItemListBinding": "unverified",
+    "gt.recipes": "unverified",
+    "GtVisualBinding": "unverified",
+    "HarvestCraftRecipes": "unverified",
+    "Ic2Recipes": "unverified",
+    "Images": "unverified",
+    "ImbuingRecipes": "unverified",
+    "InfusionCostRules": "unverified",
+    "InscriberSource": "unverified",
+    "IntegrationRecipes": "unverified",
+    "InventoryVisual": "unverified",
+    "ItemCallbacks": "unverified",
+    "LogisticsPipesRecipes": "unverified",
+    "LootBagItems": "unverified",
+    "LootBagRecipes": "unverified",
+    "LumbermillSource": "unverified",
+    "MachinaInfusionSource": "unverified",
+    "MagicBeesPoolRecipe": "unverified",
+    "MagicBeesPoolSource": "unverified",
+    "MagicRecipes": "unverified",
+    "MatterManipulatorSource": "unverified",
+    "NativeAnimation": "unverified",
+    "NativeCellQueries": "unverified",
+    "NativeCraftingContainers": "unverified",
+    "NativeCraftingRecipes": "unverified",
+    "NativeEnderStorageReferences": "unverified",
+    "NativeHarvest": "unverified",
+    "NativeItemMetadata": "unverified",
+    "NativeModelBuffers": "unverified",
+    "NativeOcContainers": "unverified",
+    "NativeOcQueries": "unverified",
+    "NativeSamplers": "unverified",
+    "NativeStackAudit": "unverified",
+    "NativeToolMaterialDisplay": "unverified",
+    "NativeToolMaterialsReferences": "unverified",
+    "NativeUsageAdmission": "unverified",
+    "QedRecipes": "unverified",
+    "RailBlastFuelDefaults": "unverified",
+    "RailBlastFuelSource": "unverified",
+    "RailRecipes": "unverified",
+    "RefiningRecipes": "unverified",
+    "Replaced": "unverified",
+    "RollingRecipes": "unverified",
+    "SagRecipes": "unverified",
+    "SalisWandBindings": "unverified",
+    "ScrapboxRecipes": "unverified",
+    "SmeltingItemCallbacks": "unverified",
+    "SmeltingRecipes": "unverified",
+    "SolarRecipes": "unverified",
+    "SoulRecipes": "unverified",
+    "SpaceAcquisitionRecipes": "unverified",
+    "SpaceRecipes": "unverified",
+    "SpinningRecipes": "unverified",
+    "SqueezerCallbacks": "unverified",
+    "SqueezerForeignContainers": "unverified",
+    "SqueezerRules": "unverified",
+    "Structures": "unverified",
+    "TinkerCasting": "unverified",
+    "TinkerRecipes": "unverified",
+    "VatRecipes": "unverified",
+    "Wands": "unverified",
+    "WirelessTerminalCrafting": "unverified",
+    "WitcheryBrewActions": "unverified",
+    "WitcheryCauldronRecipes": "unverified",
+    "WitcheryCookingRecipes": "unverified",
+    "WitcheryOvenRecipes": "unverified",
+    "WitcherySpinningRecipes": "unverified",
+    "XuMicroblockItem": "unverified",
+    "XuMicroblockRecipes": "unverified",
+    "RefineryRecipes": "unverified"
+  },
+  "evidence": "All target adapter families remain unverified. Archive observations are not callback or runtime Loader evidence."
+}

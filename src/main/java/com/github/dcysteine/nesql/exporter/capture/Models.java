@@ -5,7 +5,7 @@ import com.google.gson.JsonArray;
 import com.google.gson.JsonObject;
 import com.gtnewhorizon.gtnhlib.client.renderer.CapturingTessellator;
 import com.gtnewhorizon.gtnhlib.client.renderer.TessellatorManager;
-import com.gtnewhorizon.gtnhlib.client.renderer.quad.QuadView;
+import com.gtnewhorizon.gtnhlib.client.renderer.cel.model.quad.ModelQuadView;
 import cpw.mods.fml.client.registry.ISimpleBlockRenderingHandler;
 import cpw.mods.fml.client.registry.RenderingRegistry;
 import cpw.mods.fml.relauncher.ReflectionHelper;
@@ -48,7 +48,7 @@ final class Models implements AutoCloseable {
     private final Map<Integer, ISimpleBlockRenderingHandler> renderers;
 
     Models() {
-        Structures.version("gtnhlib", "0.7.10");
+        Structures.version("gtnhlib");
         TextureMap atlas = (TextureMap) Minecraft.getMinecraft().getTextureManager().getTexture(TextureMap.locationBlocksTexture);
         Map<String, TextureAtlasSprite> uploaded = ReflectionHelper.getPrivateValue(TextureMap.class, atlas, "mapUploadedSprites", "field_94252_e");
         if (uploaded.size() > 65536) throw fault("Block atlas exceeds its sprite budget");
@@ -148,7 +148,7 @@ final class Models implements AutoCloseable {
             renderer.renderBlockByRenderType(block, x, y, z);
             if (!TessellatorManager.isCurrentlyCapturing()) throw fault("World renderer changed capture ownership");
             if (((TesselatorAccessor) tessellator).gt5u$isDrawing()) tessellator.draw();
-            for (QuadView quad : tessellator.getQuads()) {
+            for (ModelQuadView quad : tessellator.getQuads()) {
                 if (draft.faces.size() >= 1024) throw fault("Block model exceeds 1024 faces");
                 TextureAtlasSprite sprite = sprite(quad);
                 JsonArray vertices = new JsonArray();
@@ -171,7 +171,7 @@ final class Models implements AutoCloseable {
         }
     }
 
-    private TextureAtlasSprite sprite(QuadView quad) {
+    private TextureAtlasSprite sprite(ModelQuadView quad) {
         float minU = Float.POSITIVE_INFINITY, minV = Float.POSITIVE_INFINITY, maxU = Float.NEGATIVE_INFINITY, maxV = Float.NEGATIVE_INFINITY;
         for (int index = 0; index < 4; index++) {
             float u = quad.getTexU(index), v = quad.getTexV(index);

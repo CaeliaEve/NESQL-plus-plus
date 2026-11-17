@@ -27,14 +27,24 @@ final class NativeCastingEventsTest {
         List<ASMEventHandler> listeners=new ArrayList<>();
         for(String callback:new String[]{"addUnstableTimer","addBedrockiumPartSlowness"})
             listeners.add(new ASMEventHandler(target,target.getClass().getMethod(callback,eventType),null));
-        Method dispatch=TinkerCasting.class.getDeclaredMethod("dispatch",Event.class);dispatch.setAccessible(true);
+        Method dispatch=TinkerCasting.class.getDeclaredMethod("dispatch",Event.class,TinkerCasting.Events.class);dispatch.setAccessible(true);
         try {
             for(int meta:new int[]{0,314,315}) {
                 ItemStack result=meta==0?new ItemStack(Items.diamond):new ItemStack(part,1,meta);
                 Object recipe=constructor.newInstance(result,new FluidStack(FluidRegistry.LAVA,144),new ItemStack(Items.paper),false,80,null,false);
                 Event event=(Event)eventType.getConstructor(recipeType,ItemStack.class).newInstance(recipe,result.copy());
                 for(ASMEventHandler listener:listeners)event.getListenerList().register(bus,EventPriority.NORMAL,listener);
-                boolean unstable=(Boolean)dispatch.invoke(null,event);
+                boolean unstable;
+                try(TinkerCasting.Events bindings=new TinkerCasting.Events()){
+                    unstable=(Boolean)dispatch.invoke(null,event,bindings);
+                    bindings.finishVerification();
+                    if(meta==314){
+                        config.getField("tcon_unstable_material_id").setInt(null,316);
+                        try{bindings.finishVerification();throw new AssertionError("Casting config drift was not sealed");}
+                        catch(com.github.dcysteine.nesql.exporter.task.Jobs.Fault expected){require(expected.code.equals("environment_changed"),"Wrong casting drift code");}
+                        finally{config.getField("tcon_unstable_material_id").setInt(null,314);}
+                    }
+                }
                 require(unstable==(meta==314),"Unstable timer affected the wrong output");
                 ItemStack captured=(ItemStack)field(event,"output");
                 if(meta==315) {
@@ -48,8 +58,23 @@ final class NativeCastingEventsTest {
                 require(result.getTagCompound()==null,"Event mutated the registry output");
                 for(ASMEventHandler listener:listeners)ListenerList.unregisterAll(bus,listener);
             }
+            UnknownCastingOwner unknown=new UnknownCastingOwner();
+            ASMEventHandler listener=new ASMEventHandler(unknown,UnknownCastingOwner.class.getMethod("cast",Event.class),null);
+            ItemStack result=new ItemStack(Items.diamond);
+            Object recipe=constructor.newInstance(result,new FluidStack(FluidRegistry.LAVA,144),new ItemStack(Items.paper),false,80,null,false);
+            Event event=(Event)eventType.getConstructor(recipeType,ItemStack.class).newInstance(recipe,result.copy());
+            event.getListenerList().register(bus,EventPriority.NORMAL,listener);
+            try(TinkerCasting.Events bindings=new TinkerCasting.Events()){
+                try{dispatch.invoke(null,event,bindings);throw new AssertionError("Unknown casting callback accepted");}
+                catch(InvocationTargetException expected){require(expected.getCause() instanceof com.github.dcysteine.nesql.exporter.task.Jobs.Fault,"Unexpected casting owner failure");}
+                require(unknown.calls==0,"Unknown casting callback was executed");
+            }finally{ListenerList.unregisterAll(bus,listener);}
         } finally { for(ASMEventHandler listener:listeners)ListenerList.unregisterAll(bus,listener); }
         System.out.println("Core regression: ExtraUtilities inert, bedrockium and unstable casting effects passed");
+    }
+    public static final class UnknownCastingOwner {
+        int calls;
+        @SubscribeEvent public void cast(Event event){calls++;}
     }
     private static void require(boolean value,String message){if(!value)throw new AssertionError(message);}
 }

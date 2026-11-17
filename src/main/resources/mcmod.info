@@ -2,7 +2,7 @@
 {
     "modid": "nesql-exporter",
     "name": "NESQL++",
-    "description": "Local single-player MCP exports of GTNH game facts, textures and recipe views into the Elysium source format.",
+    "description": "Local single-player MCP exports of GTNH game facts, native content visuals and source-bound notes into the Elysium source format.",
     "version": "${version}",
     "mcversion": "${mcversion}",
     "url": "https://github.com/CaeliaEve/NESQL-plus-plus",

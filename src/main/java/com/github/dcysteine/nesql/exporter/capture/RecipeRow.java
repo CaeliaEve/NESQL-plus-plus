@@ -1,6 +1,5 @@
 package com.github.dcysteine.nesql.exporter.capture;
 
-import codechicken.nei.PositionedStack;
 import com.github.dcysteine.nesql.exporter.source.Identity;
 import com.github.dcysteine.nesql.exporter.source.Chance;
 import com.github.dcysteine.nesql.exporter.source.CanonicalJson;
@@ -12,41 +11,47 @@ import net.minecraft.item.ItemStack;
 import net.minecraftforge.fluids.FluidStack;
 
 import java.util.HashSet;
-import java.util.ArrayList;
 import java.util.List;
 import java.util.Set;
 
 import static com.github.dcysteine.nesql.exporter.source.Json.*;
 
-/** Builds one recipe from adapter-owned game semantics and positions. */
+/** Builds one recipe from adapter-owned game semantics. */
 final class RecipeRow {
     final Facts facts;
     final JsonObject record;
-    final JsonArray inputs = new JsonArray(), outputs = new JsonArray(), elements = new JsonArray();
+    final JsonArray inputs = new JsonArray(), outputs = new JsonArray();
     final JsonObject properties = new JsonObject();
+    JsonObject exclusion;
+    private final JsonArray notes = new JsonArray();
+    private final Set<String> noteKeys = new HashSet<>();
 
     RecipeRow(Facts facts, JsonObject origin, String category, int order) {
         this.facts = facts;
         record = object("source", origin, "category", category, "inputs", inputs, "outputs", outputs,
-                "duration", null, "energy", null, "properties", properties, "grid", null, "magic", null, "view", null, "order", order);
+                "duration", null, "energy", null, "properties", properties, "grid", null, "magic", null, "order", order);
     }
 
-    void itemInput(PositionedStack display, int slot, long amount, boolean keep, boolean crafting, JsonObject rule) {
-        itemInput(display, slot, amount, keep, crafting, (item, index) -> rule);
+    /** A rejected native predicate still has an immutable, inspectable disposition. */
+    boolean exclude(JsonObject proof) {
+        exclusion = com.github.dcysteine.nesql.exporter.task.CaptureOutcome.excluded(proof).json().getAsJsonObject("proof");
+        return false;
     }
 
-    void itemInput(PositionedStack display, int slot, long amount, boolean keep, boolean crafting,
-                   java.util.function.BiFunction<ItemStack, Integer, JsonObject> rule) {
-        if (display.items == null || display.items.length == 0) throw new Jobs.Fault("empty_ingredient", "Recipe ingredient has no choices");
-        List<Ingredient> ingredients = new ArrayList<>();
-        for (int index = 0; index < display.items.length; index++) {
-            ItemStack item = display.items[index];
-            ingredients.add(new Ingredient(item, amount, keep, rule.apply(item, index)));
-        }
-        itemInput(display, slot, ingredients, crafting);
+    static JsonObject stackEvidence(ItemStack item) {
+        if (item == null) return null;
+        return object("registry", item.getItem() == null ? null : net.minecraft.item.Item.itemRegistry.getNameForObject(item.getItem()),
+                "meta", Items.feather.getDamage(item), "amount", Integer.toString(item.stackSize),
+                "nbt", com.github.dcysteine.nesql.exporter.source.TypedNbt.encode(item.getTagCompound()));
     }
 
-    void itemInput(PositionedStack display, int slot, List<Ingredient> ingredients, boolean crafting) {
+    void itemInput(int slot, List<Ingredient> ingredients, boolean crafting) {
+        itemInput(slot,ingredients,crafting,false);
+    }
+    void nativeCraftingInput(int slot,List<Ingredient> ingredients) {
+        itemInput(slot,ingredients,true,true);
+    }
+    private void itemInput(int slot,List<Ingredient> ingredients,boolean crafting,boolean nativeCrafting) {
         if (ingredients.isEmpty() || ingredients.size() > 65536) throw new Jobs.Fault("empty_ingredient", "Invalid recipe ingredient choice count");
         JsonArray choices = new JsonArray();
         Set<String> seen = new HashSet<>();
@@ -56,9 +61,17 @@ final class RecipeRow {
             String id = facts.item(item);
             JsonObject consumption = object("kind", ingredient.keep ? "keep" : "consume");
             JsonArray returns = new JsonArray();
-            if (crafting && item.getItem().hasContainerItem(item)) {
-                ItemStack original = item.copy(); original.stackSize = 1;
-                ItemStack returned = original.getItem().getContainerItem(original.copy());
+            if (crafting && !ingredient.keep) {
+                ItemStack original = item.copy(); original.stackSize = 1;ItemStack returned=null;
+                if(nativeCrafting && GtToolConsumption.supports(original)) {
+                    JsonObject tool=new GtToolConsumption(original).consumption();
+                    if(tool!=null)consumption=tool;
+                } else if(nativeCrafting) {
+                    JsonObject dynamic=NativeCraftingContainers.consumption(original);
+                    if(dynamic!=null)consumption=dynamic;
+                    else returned=ItemCallbacks.container(original,false);
+                }
+                else if(original.getItem().hasContainerItem(original.copy()))returned=original.getItem().getContainerItem(original.copy());
                 if (returned != null && returned.getItem() != null && returned.stackSize > 0) {
                     if (returned.getItem() == original.getItem() && ItemStack.areItemStackTagsEqual(original, returned)) {
                         int damage = Items.feather.getDamage(returned) - Items.feather.getDamage(original);
@@ -75,36 +88,46 @@ final class RecipeRow {
             if (seen.add(CanonicalJson.digest(choice))) choices.add(choice);
         }
         inputs.add(object("slot", slot, "kind", "item", "choices", choices));
-        slot(display, "input", "item", slot);
     }
 
-    void fluidInput(PositionedStack display, int slot, FluidStack fluid) {
-        fluidInput(display, slot, fluid, fluid.amount == 0);
+    void fluidInput(int slot, FluidStack fluid) {
+        fluidInput(slot, fluid, false);
     }
 
-    void fluidInput(PositionedStack display, int slot, FluidStack fluid, boolean keep) {
-        fluidInput(display, slot, fluid, keep, object("kind", "exact"));
+    void fluidInput(int slot, FluidStack fluid, boolean keep) {
+        fluidInput(slot, fluid, keep, object("kind", "exact"));
     }
 
-    void fluidInput(PositionedStack display, int slot, FluidStack fluid, boolean keep, JsonObject rule) {
+    void fluidInput(int slot, FluidStack fluid, boolean keep, JsonObject rule) {
+        if (fluid.amount < 0) throw new Jobs.Fault("invalid_amount", "Negative fluid input slot=" + slot
+                + "; registry=" + fluid.getFluid().getName() + "; amount=" + fluid.amount);
         JsonArray choices = new JsonArray();
-        choices.add(object("id", facts.fluid(fluid), "amount", positive(Math.max(1, fluid.amount)),
+        String amount = positive(fluid.amount); // Zero semantics require an explicit native family.
+        choices.add(object("id", facts.fluid(fluid), "amount", amount,
                 "consume", object("kind", keep ? "keep" : "consume"), "returns", new JsonArray(), "rule", rule));
         inputs.add(object("slot", slot, "kind", "fluid", "choices", choices));
-        slot(display, "input", "fluid", slot);
     }
 
-    void itemOutput(PositionedStack display, int slot, ItemStack item, int chance) {
-        itemOutput(display, slot, item, chance, null, null);
+    void zeroFluidInput(int slot, FluidStack fluid, String policy) {
+        if (fluid == null || fluid.getFluid() == null || fluid.amount != 0
+                || !("gregtechCost".equals(policy) || "gregtechPresence".equals(policy) || "vatMatch".equals(policy) || "binnieIncubator".equals(policy)))
+            throw new Jobs.Fault("invalid_amount", "Zero fluid input requires a verified native zero-cost policy");
+        inputs.add(object("slot", slot, "kind", "fluid", "choices", array(object(
+                "id", facts.fluid(fluid), "amount", "0", "consume", object("kind", "keep"),
+                "returns", array(), "rule", object("kind", "nativeZeroFluid", "policy", policy)))));
     }
 
-    void itemOutput(PositionedStack display, int slot, ItemStack item, int chance, JsonObject quantity) {
-        itemOutput(display, slot, item, chance, null, quantity);
+    void itemOutput(int slot, ItemStack item, int chance) {
+        itemOutput(slot, item, chance, null, null);
     }
 
-    void itemOutput(PositionedStack display, int slot, ItemStack item, int chance, String amount, JsonObject quantity) {
+    void itemOutput(int slot, ItemStack item, int chance, JsonObject quantity) {
+        itemOutput(slot, item, chance, null, quantity);
+    }
+
+    void itemOutput(int slot, ItemStack item, int chance, String amount, JsonObject quantity) {
         if (quantity != null) {
-            output(display, slot, "item", facts.item(item), null, chance, quantity);
+            output(slot, "item", facts.item(item), null, chance, quantity);
         } else {
             String exactAmount = amount != null ? amount : Integer.toString(item.stackSize);
             if (exactAmount.startsWith("-") || exactAmount.equals("0")) {
@@ -112,46 +135,35 @@ final class RecipeRow {
                         + net.minecraft.item.Item.itemRegistry.getNameForObject(item.getItem()) + "; meta=" + Items.feather.getDamage(item)
                         + "; amount=" + exactAmount + ": a fixed recipe output must be positive");
             }
-            output(display, slot, "item", facts.item(item), exactAmount, chance, null);
+            output(slot, "item", facts.item(item), exactAmount, chance, null);
         }
     }
 
-    void fluidOutput(PositionedStack display, int slot, FluidStack fluid) {
-        fluidOutput(display, slot, fluid, null, null);
+    void fluidOutput(int slot, FluidStack fluid) {
+        fluidOutput(slot, fluid, null, null);
     }
 
-    void fluidOutput(PositionedStack display, int slot, FluidStack fluid, JsonObject quantity) {
-        fluidOutput(display, slot, fluid, null, quantity);
+    void fluidOutput(int slot, FluidStack fluid, JsonObject quantity) {
+        fluidOutput(slot, fluid, null, quantity);
     }
 
-    void fluidOutput(PositionedStack display, int slot, FluidStack fluid, String amount, JsonObject quantity) {
+    void fluidOutput(int slot, FluidStack fluid, String amount, JsonObject quantity) {
         if (quantity != null) {
-            output(display, slot, "fluid", facts.fluid(fluid), null, 10000, quantity);
+            output(slot, "fluid", facts.fluid(fluid), null, 10000, quantity);
         } else {
             String exactAmount = amount != null ? amount : Integer.toString(fluid.amount);
             if (exactAmount.startsWith("-") || exactAmount.equals("0")) {
                 throw new Jobs.Fault("invalid_amount", "Fluid output slot=" + slot + "; registry="
                         + fluid.getFluid().getName() + "; amount=" + exactAmount + ": a fixed recipe output must be positive");
             }
-            output(display, slot, "fluid", facts.fluid(fluid), exactAmount, 10000, null);
+            output(slot, "fluid", facts.fluid(fluid), exactAmount, 10000, null);
         }
     }
 
-    private void output(PositionedStack display, int slot, String kind, String id, String amount, int chance, JsonObject quantity) {
+    private void output(int slot, String kind, String id, String amount, int chance, JsonObject quantity) {
         if (chance < 0 || chance > 10000) throw new Jobs.Fault("invalid_chance", "GT recipe chance is outside 0..10000");
         outputs.add(object("slot", slot, "kind", kind, "id", id, "amount", amount, "quantity", quantity,
                 "chance", Chance.of(chance, 10000), "role", "result", "change", null));
-        slot(display, "output", kind, slot);
-    }
-
-    private void slot(PositionedStack display, String direction, String kind, int slot) {
-        if (display == null) return; // Semantic output omitted by the native UI.
-        slot(direction, kind, slot, display.relx, display.rely);
-    }
-
-    void slot(String direction, String kind, int slot, int x, int y) {
-        elements.add(object("kind", "slot", "direction", direction, "substance", kind, "slot", slot,
-                "x", x, "y", y, "width", 16, "height", 16, "z", 1));
     }
 
     void property(String key, String label, Object value) {
@@ -159,11 +171,28 @@ final class RecipeRow {
         properties.add(key, object("name", facts.text(label), "value", Values.capture(value, facts)));
     }
 
+    /** Native explanation only; machine rules belong in typed properties/process. */
+    void note(String key, String source, String text) {
+        if (key == null || key.length() > 256 || !key.matches("[A-Za-z0-9_.-]+:[A-Za-z0-9_./$-]+")
+                || source == null || source.isEmpty() || source.length() > 512
+                || source.chars().anyMatch(Character::isISOControl) || text == null || text.isEmpty())
+            throw new Jobs.Fault("metadata_invalid", "Native note needs a stable key, reader source and text");
+        if (notes.size() == 256 || !noteKeys.add(key))
+            throw new Jobs.Fault("metadata_conflict", "Too many or duplicate native notes: " + key);
+        notes.add(object("key", key, "source", source, "text", facts.text(text)));
+        record.add("notes", notes);
+    }
+
     void finish() { record.addProperty("id", Identity.recipe(record)); }
 
     RecipeRow branch() {
         RecipeRow row = new RecipeRow(facts, record.getAsJsonObject("source"), record.get("category").getAsString(), record.get("order").getAsInt());
         for (java.util.Map.Entry<String, com.google.gson.JsonElement> entry : properties.entrySet()) row.properties.add(entry.getKey(), entry.getValue());
+        for (com.google.gson.JsonElement note : notes) {
+            row.notes.add(new com.google.gson.JsonParser().parse(note.toString()));
+            row.noteKeys.add(note.getAsJsonObject().get("key").getAsString());
+        }
+        if (row.notes.size() != 0) row.record.add("notes", row.notes);
         return row;
     }
 

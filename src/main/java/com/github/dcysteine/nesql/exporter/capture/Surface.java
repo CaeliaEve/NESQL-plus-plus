@@ -64,7 +64,7 @@ final class Surface implements AutoCloseable {
             GL11.glPixelStorei(GL11.GL_PACK_SKIP_ROWS, 0);
             GL11.glPixelStorei(GL11.GL_PACK_SKIP_PIXELS, 0);
             int length = width * height * 4;
-            pixels.clear(); pixels.limit(length);
+            ((java.nio.Buffer)pixels).clear(); ((java.nio.Buffer)pixels).limit(length);
             GL11.glReadPixels(0, 0, width, height, GL11.GL_RGBA, GL11.GL_UNSIGNED_BYTE, pixels);
             GlState.check(location, "read");
             byte[] copy = new byte[length];

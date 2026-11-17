@@ -228,9 +228,9 @@ final class NativeFactoriesTest {
                 && !output.getAsJsonObject().get("chance").equals(Chance.decimal(1, 1))) {
             rareFound = true;
             require(output.getAsJsonObject().get("chance").equals(Chance.of(2071, 16777216)), "Native nextFloat probability differs from the actual 24-bit sample space");
-            for (com.google.gson.JsonElement element : row.elements) if (element.getAsJsonObject().get("direction").getAsString().equals("output"))
-                require(!element.getAsJsonObject().get("slot").equals(output.getAsJsonObject().get("slot")),
-                        "Invisible rare roll took the guaranteed duplicate's native display slot");
+            for (com.google.gson.JsonElement other : row.outputs) if (other != output)
+                require(!other.getAsJsonObject().get("slot").equals(output.getAsJsonObject().get("slot")),
+                        "Independent rare roll reused another product's logical slot");
         }
         require(rareFound, "Rare native product was lost");
         require(row.record.get("duration").isJsonNull() && row.record.get("energy").isJsonNull()

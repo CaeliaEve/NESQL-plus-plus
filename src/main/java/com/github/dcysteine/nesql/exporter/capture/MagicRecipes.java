@@ -1,9 +1,7 @@
 package com.github.dcysteine.nesql.exporter.capture;
 
-import codechicken.nei.PositionedStack;
 import codechicken.nei.recipe.ICraftingHandler;
 import codechicken.nei.recipe.TemplateRecipeHandler;
-import cpw.mods.fml.common.Loader;
 import com.github.dcysteine.nesql.exporter.task.Jobs;
 import com.google.gson.JsonArray;
 import com.google.gson.JsonObject;
@@ -20,9 +18,7 @@ import thaumcraft.api.crafting.ShapedArcaneRecipe;
 import thaumcraft.api.crafting.ShapelessArcaneRecipe;
 import thaumcraft.common.items.wands.ItemWandCasting;
 import thaumcraft.common.lib.crafting.InfusionRunicAugmentRecipe;
-import thaumcraft.common.config.ConfigItems;
 
-import java.lang.reflect.Constructor;
 import java.util.ArrayList;
 import java.util.Arrays;
 import java.util.List;
@@ -31,32 +27,46 @@ import java.util.TreeSet;
 import static com.github.dcysteine.nesql.exporter.source.Json.*;
 import static com.github.dcysteine.nesql.exporter.capture.MagicApi.*;
 
-/** Pinned Thaumcraft registries supply semantics; copied native NEI recipes supply positions and backgrounds. */
-final class MagicRecipes {
-    private static final String NEI = "ru.timeconqueror.tcneiadditions.nei.";
-    private static final String PLUGIN = "com.djgiannuzz.thaumcraftneiplugin.";
-    private static final String EXT = "net.glease.tc4tweak.api.infusionrecipe.";
+/** Pinned Thaumcraft rules and native content examples, with no recipe GUI state. */
+final class MagicRecipes implements RegistryRecipes {
+    private static final String NEI = "com.gtnewhorizons.aspectrecipeindex.nei.";
 
     private enum Family {
-        SHAPED(NEI + "arcaneworkbench.ArcaneCraftingShapedHandler", ShapedArcaneRecipe.class, "ArcaneShapedCachedRecipe"),
-        SHAPELESS(NEI + "arcaneworkbench.ArcaneCraftingShapelessHandler", ShapelessArcaneRecipe.class, "ArcaneShapelessCachedRecipe"),
-        CRUCIBLE(NEI + "TCNACrucibleRecipeHandler", CrucibleRecipe.class, "CrucibleCachedRecipe"),
-        INFUSION(NEI + "TCNAInfusionRecipeHandler", InfusionRecipe.class, "InfusionCachedRecipe");
-        final String handler, cached;
+        SHAPED(NEI + "arcaneworkbench.ShapedArcaneRecipeHandler", ShapedArcaneRecipe.class),
+        SHAPELESS(NEI + "arcaneworkbench.ShapelessArcaneRecipeHandler", ShapelessArcaneRecipe.class),
+        CRUCIBLE(NEI + "AlchemyRecipeHandler", CrucibleRecipe.class),
+        INFUSION(NEI + "InfusionRecipeHandler", InfusionRecipe.class);
+        final String handler;
         final Class<?> recipe;
-        Family(String handler, Class<?> recipe, String cached) { this.handler = handler; this.recipe = recipe; this.cached = cached; }
+        Family(String handler, Class<?> recipe) { this.handler = handler; this.recipe = recipe; }
     }
 
-    private final TemplateRecipeHandler handler;
     private final Family family;
     private final List<Object> recipes = new ArrayList<>();
-    private final Constructor<?> constructor;
-    private final List<Object> displayedCosts;
-    private final Wands wands;
-    private final boolean creative;
-    private List<Candidate> runicDiamond, runicResource;
+    private final List<NativeArcaneRecipes> nativeArcane=new ArrayList<>();
+    private final List<NativeInfusionRecipes> nativeInfusion=new ArrayList<>();
+    private final List<DisguiseInfusionRecipes> disguiseInfusion=new ArrayList<>();
+    private InfusionLegacyInputs.Context legacyInfusion;
+    private final List<Object> registrations=new ArrayList<>();
+    private List<?> registry;
+    private Object aspectRegistry;
+    private GadomancyJarSource stickySource;
+    private NativeDefinitionGraph ordinaryDefinitions;
+    private final List<Object> ordinarySources=new ArrayList<>();
+    private final NativeItemExamples examples=new NativeItemExamples();
+    private InfusionInheritance inheritance;
+    private RunicChargeSource runicCharges;
+    private final List<Runic.Source> runicSources=new ArrayList<>();
+    private final List<Runic.ContainerReturn> runicReturns=new ArrayList<>();
+    private boolean closed;
+    private Wands wands;
+    private int excludedIndex = -1;
+    private JsonObject exclusion;
+    private boolean creative;
 
     static boolean supports(ICraftingHandler handler) { return family(handler) != null; }
+    static boolean supportsClass(String name){for(Family family:Family.values())if(family.handler.equals(name))return true;return false;}
+    static Object[] registrationAnchors(){return new Object[]{ThaumcraftApi.getCraftingRecipes(),field(Aspect.class,null,"aspects")};}
     private static Family family(ICraftingHandler handler) {
         for (Family family : Family.values()) if (handler.getClass().getName().equals(family.handler)) return family;
         return null;
@@ -64,128 +74,153 @@ final class MagicRecipes {
 
     @SuppressWarnings("unchecked")
     MagicRecipes(TemplateRecipeHandler handler) {
-        this.handler = handler;
         family = family(handler);
         if (family == null) throw fault("Unrecognized Thaumcraft NEI handler");
-        version("tcneiadditions", "1.5.4");
-        version("tc4tweak", "1.5.39");
-        try {
-            Class<?> cached = Class.forName(family.handler + "$" + family.cached);
-            constructor = cached.getDeclaredConstructor(handler.getClass(), family.recipe, boolean.class);
-            constructor.setAccessible(true);
-            displayedCosts = (List<Object>) field(handler, "aspectsAmount");
-        } catch (ReflectiveOperationException error) { throw fault(error.toString()); }
+        try{
+        MagicApi.version("MagicRecipes","aspectrecipeindex");
+        MagicApi.version("MagicRecipes","tc4tweak");
         List<IArcaneRecipe> replacements = new ArrayList<>();
-        for (Object recipe : ThaumcraftApi.getCraftingRecipes()) {
-            if (family == Family.INFUSION && recipe instanceof InfusionRunicAugmentRecipe)
-                recipes.addAll(Runic.expand((InfusionRunicAugmentRecipe) recipe));
+        registry=ThaumcraftApi.getCraftingRecipes();
+        aspectRegistry=field(Aspect.class,null,"aspects");
+        if(registry==null||registry.size()>262144)throw new Jobs.Fault("handler_not_ready","Thaumcraft registration source is unavailable");
+        registrations.addAll(registry);
+        if(family==Family.INFUSION)legacyInfusion=new InfusionLegacyInputs.Context();
+        for (Object recipe : registry) {
+            if(recipe==null)throw fault("Null Thaumcraft native registration");
+            if(NativeArcaneRecipes.supports(recipe)) {
+                if(family==(recipe.getClass().getName().equals(NativeArcaneRecipes.PHOTO)?Family.SHAPELESS:Family.SHAPED)){
+                    NativeArcaneRecipes reader=new NativeArcaneRecipes(recipe);nativeArcane.add(reader);recipes.addAll(reader.branches());
+                }
+            }
+            else if(family==Family.INFUSION&&recipe.getClass().getName().equals(DisguiseInfusionRecipes.RECIPE)){
+                DisguiseInfusionRecipes reader=new DisguiseInfusionRecipes((InfusionRecipe)recipe,examples,legacyInfusion);
+                disguiseInfusion.add(reader);recipes.addAll(reader.branches());
+            }
+            else if(family==Family.INFUSION&&recipe.getClass().getName().equals(DisguiseInfusionRecipes.VISUAL))recipes.add(recipe);
+            else if(family==Family.INFUSION&&NativeInfusionRecipes.supports(recipe)){
+                NativeInfusionRecipes reader=new NativeInfusionRecipes((InfusionRecipe)recipe,examples,legacyInfusion);
+                nativeInfusion.add(reader);recipes.add(reader.branch());
+            }
+            else if (family == Family.INFUSION && recipe instanceof InfusionRunicAugmentRecipe){
+                Runic.Source source=new Runic.Source((InfusionRunicAugmentRecipe)recipe,examples,legacyInfusion);
+                runicSources.add(source);recipes.addAll(source.branches());
+            }
             else if (family.recipe.isInstance(recipe)) recipes.add(recipe);
             else if (Wands.supports(recipe)) { if (family == Family.SHAPELESS) replacements.add((IArcaneRecipe) recipe); }
             else if (family == Family.SHAPED && recipe instanceof IArcaneRecipe && !(recipe instanceof ShapelessArcaneRecipe)) {
                 recipes.add(recipe);
             }
         }
-        wands = replacements.isEmpty() ? null : new Wands(replacements);
+        if(family!=Family.INFUSION){
+            for(Object source:recipes)if(!(source instanceof NativeArcaneRecipes.Branch))ordinarySources.add(source);
+            java.util.Map<String,String[]> shapes=new java.util.HashMap<>();
+            shapes.put(ShapedArcaneRecipe.class.getName(),new String[]{"output","input","aspects","research","width","height","mirrored"});
+            shapes.put(ShapelessArcaneRecipe.class.getName(),new String[]{"output","input","aspects","research"});
+            shapes.put("tuhljin.automagy.lib.recipe.PreserveFilterRecipe",new String[]{"output","input","aspects","research"});
+            shapes.put(CrucibleRecipe.class.getName(),new String[]{"recipeOutput","catalyst","aspects","key"});
+            shapes.put(AspectList.class.getName(),new String[]{"aspects"});shapes.put(Aspect.class.getName(),new String[]{"tag"});
+            shapes.put("makeo.gadomancy.common.crafting.RecipeStickyJar",new String[0]);
+            // The visual recipe's mutable output/input/aspects are GUI-only state.
+            shapes.put("makeo.gadomancy.common.crafting.RecipeVisualStickyJar",new String[0]);
+            ordinaryDefinitions=new NativeDefinitionGraph(()->new Object[]{ordinarySources},shapes);
+        }
+        if(family==Family.INFUSION){inheritance=new InfusionInheritance();runicCharges=new RunicChargeSource();}
+        wands = replacements.isEmpty() ? null : new Wands(replacements,examples);
         creative = Wands.creative();
+        }catch(RuntimeException|Error failure){close();throw failure;}
     }
 
-    int size() { return recipes.size() + (wands == null ? 0 : wands.size()); }
-    String sourceType(int index) { return index < recipes.size() ? recipes.get(index).getClass().getName() : Wands.class.getName(); }
+    public int size() { alive();return recipes.size() + (wands == null ? 0 : wands.size()); }
+    String sourceType(int index) {if(index>=recipes.size())return Wands.class.getName();Object source=recipes.get(index);if(source instanceof Runic)return ((Runic)source).recipe.getClass().getName();if(source instanceof DisguiseInfusionRecipes.Branch)return DisguiseInfusionRecipes.RECIPE;if(source instanceof NativeInfusionRecipes.Branch)return ((NativeInfusionRecipes.Branch)source).reader.sourceType();return source instanceof NativeArcaneRecipes.Branch?((NativeArcaneRecipes.Branch)source).reader.sourceType():source.getClass().getName();}
 
-    static ShapedArcaneRecipe shapedProjection(String research, ItemStack output, AspectList aspects) {
-        // Thaumcraft's String-row parser reads the next argument without a bounds check.
-        // Pass one String[] argument so its array-row parser terminates at the array length.
-        return new ShapedArcaneRecipe(research, output.copy(), aspects, (Object) new String[] {" "});
+    public JsonObject exclusion(int index) {
+        return index == excludedIndex && exclusion != null
+                ? new com.google.gson.JsonParser().parse(exclusion.toString()).getAsJsonObject() : null;
+    }
+    private boolean exclude(int index, JsonObject proof) {
+        if (proof == null) throw new Jobs.Fault("capture_empty", "Magic adapter omitted a native entry without proof");
+        excludedIndex = index;
+        exclusion = new com.google.gson.JsonParser().parse(proof.toString()).getAsJsonObject();
+        exclusion.addProperty("nativeIndex", index);
+        return false;
     }
 
     @SuppressWarnings("unchecked")
-    boolean capture(int index, RecipeRow row) {
+    public boolean capture(int index, RecipeRow row) {
+        alive();
+        excludedIndex = -1; exclusion = null;
         boolean replacement = index >= recipes.size();
         Object source = replacement ? null : recipes.get(index);
+        if(source instanceof NativeArcaneRecipes.Branch){NativeArcaneRecipes.Branch branch=(NativeArcaneRecipes.Branch)source;return branch.reader.capture(branch.count,row,creative);}
+        if(source instanceof NativeInfusionRecipes.Branch){NativeInfusionRecipes reader=((NativeInfusionRecipes.Branch)source).reader;return reader.capture(row,inheritance)||exclude(index,reader.exclusion());}
+        if(source instanceof DisguiseInfusionRecipes.Branch){DisguiseInfusionRecipes.Branch branch=(DisguiseInfusionRecipes.Branch)source;return branch.reader.capture(branch.position,row,inheritance);}
+        if(source instanceof Runic)return ((Runic)source).capture(row,inheritance,runicCharges,runicReturns);
+        if(source!=null&&source.getClass().getName().equals(DisguiseInfusionRecipes.VISUAL))
+            return exclude(index,object("reason","native_display_only_recipe","native",DisguiseInfusionRecipes.VISUAL,"source","Gadomancy InfusionVisualDisguiseArmor is a clock/player/RNG projection; the registered InfusionDisguiseArmor is captured without its cache"));
+        if(source!=null&&source.getClass().getName().equals("makeo.gadomancy.common.crafting.RecipeVisualStickyJar"))
+            return exclude(index,object("reason","native_display_only_recipe","native",source.getClass().getName(),"source","Gadomancy RecipeVisualStickyJar#getAspects updates GUI-only examples; real RecipeStickyJar is captured separately"));
         List<List<Candidate>> inputs = new ArrayList<>();
-        List<Integer> positionsToSlots = new ArrayList<>();
         TreeSet<String> research = new TreeSet<>();
         AspectList aspects;
         ItemStack output = null;
-        Object projection;
         Products product = null;
         JsonObject payment = null;
         String kind;
         Integer central = null, instability = null;
-        Runic.Sample runic = null;
         if (replacement) {
             Wands.Result result = wands.capture(index - recipes.size(), row.facts);
-            if (result == null) return false;
+            if (result == null) return exclude(index, wands.exclusion(index - recipes.size()));
             inputs = result.inputs; aspects = result.aspects; research = result.research; product = result.product;
-            output = product.output; projection = shapeless(inputs, output, aspects); payment = result.payment; kind = "arcane";
-            row.property("salisarcana:replacement", "Replace wand part", result.part);
-            if (result.fixed) row.property("salisarcana:effect", "Part effect", "Bracelet components are fixed by its item type; replacement only writes part tags.");
+            output = product.output; payment = result.payment; kind = "arcane";
+            row.record.add("process",result.process);
+            if (result.fixed) row.note("salisarcana:effect",sourceType(index),row.facts.locale().equals("zh_CN")?"手环按元数据读取固定组件；原生替换仍写入组件标签，并按合成费用重设元数据，后续有效组件可能随之变化。":"Bracelet components are read from metadata. Native replacement writes part tags and resets metadata to the crafting cost; its subsequent effective components may therefore change.");
         } else if (family == Family.SHAPED) {
+            if(source.getClass()!=ShapedArcaneRecipe.class&&!source.getClass().getName().equals("makeo.gadomancy.common.crafting.RecipeStickyJar"))throw fault("Unknown shaped arcane inventory callback owner: "+source.getClass().getName());
             IArcaneRecipe arcane = (IArcaneRecipe) source;
             aspects = arcane.getAspects(); addResearch(research, arcane.getResearch());
             int width = 3, height = 3;
             Object[] inputArr = null;
             boolean mirror = false;
-            boolean isStickyJar = source.getClass().getName().contains("RecipeStickyJar");
+            boolean isStickyJar = source.getClass().getName().equals("makeo.gadomancy.common.crafting.RecipeStickyJar");
             List<ItemStack> jarChoices = null;
             if (isStickyJar) {
-                jarChoices = registeredStickyJars();
-                if (jarChoices.isEmpty()) throw fault("Gadomancy registered no sticky-jar recipe stacks");
+                if(stickySource==null)stickySource=new GadomancyJarSource();
+                List<Candidate> candidates=stickySource.choices(examples);
+                if(candidates.isEmpty())return exclude(index,object("reason","native_sticky_jar_registry_empty","native",source.getClass().getName()));
+                jarChoices=new ArrayList<>();for(Candidate candidate:candidates)jarChoices.add(candidate.item.copy());
 
                 product = Products.stickyJar(jarChoices, row.facts);
                 output = product.output;
-                inputArr = new Object[] {
-                    jarChoices.toArray(new ItemStack[0]), null, null,
-                    new ItemStack(Items.slime_ball), null, null,
-                    null, null, null
-                };
-                width = 3; height = 3;
+                inputArr = new Object[] {jarChoices.toArray(new ItemStack[0]),new ItemStack(Items.slime_ball)};
+                width = 1; height = 2;
+                row.record.add("process",object("kind","stickyJar","nativeRecipe","makeo.gadomancy.common.crafting.RecipeStickyJar","jars",stickySource.predicates()));
+                inputs.add(candidates);inputs.add(java.util.Collections.singletonList(new Candidate(new ItemStack(Items.slime_ball),object("kind","wildcard","meta",true,"nbt",true))));
             } else {
                 output = result(arcane.getRecipeOutput());
                 if (source instanceof ShapedArcaneRecipe) {
                     ShapedArcaneRecipe recipe = (ShapedArcaneRecipe) source;
                     width = recipe.width; height = recipe.height; inputArr = recipe.input;
                     mirror = (Boolean) field(recipe, "mirrored");
-                } else {
-                    try { width = (Integer) field(source, "width"); height = (Integer) field(source, "height"); } catch (Exception e) { throw fault("Missing width/height in arcane recipe: " + source.getClass().getName()); }
-                    try { inputArr = (Object[]) field(source, "input"); } catch (Exception e) {
-                        try {
-                            Object inp = invoke(source.getClass(), source, "getInput", new Class<?>[0]);
-                            if (inp instanceof Object[]) inputArr = (Object[]) inp;
-                            else if (inp instanceof List<?>) inputArr = ((List<?>) inp).toArray();
-                            else throw fault("Cannot obtain input array from arcane recipe: " + source.getClass().getName());
-                        } catch (Exception e2) {
-                            throw fault("Failed to reflect arcane recipe inputs: " + source.getClass().getName());
-                        }
-                    }
-                }
+                } else throw fault("Arcane inventory rules require a dedicated adapter: "+source.getClass().getName());
             }
             if (inputArr == null) throw fault("Unsupported arcane recipe inputs: " + source.getClass().getName());
             if (width < 1 || height < 1 || width > 3 || height > 3 || inputArr.length != width * height) {
-                if (inputArr.length == 9) { width = 3; height = 3; }
-                else throw fault("Invalid arcane grid");
+                throw fault("Invalid native arcane grid");
             }
             JsonArray cells = new JsonArray();
             for (int cellIndex = 0; cellIndex < inputArr.length; cellIndex++) {
                 Object ingredient = inputArr[cellIndex];
                 if (ingredient == null) cells.add(value(null));
                 else {
+                    if(isStickyJar){cells.add(value(cellIndex));continue;}
                     cells.add(value(inputs.size()));
-                    if (isStickyJar && cellIndex == 0) inputs.add(stickyJars(jarChoices));
-                    else inputs.add(ordinary(ingredient, true));
+                    inputs.add(ordinary(ingredient, true));
                 }
             }
             row.record.add("grid", object("width", width, "height", height, "cells", cells, "mirror", mirror));
-            for (int x = 0; x < width; x++) for (int y = 0; y < height; y++) {
-                if (!cells.get(y * width + x).isJsonNull()) positionsToSlots.add(cells.get(y * width + x).getAsInt());
-            }
-            ShapedArcaneRecipe copy = shapedProjection(arcane.getResearch(), output, costs(aspects));
-            copy.width = width; copy.height = height; copy.input = new Object[inputArr.length]; copy.setMirrored(mirror);
-            for (int cell = 0; cell < inputArr.length; cell++) if (!cells.get(cell).isJsonNull()) {
-                copy.input[cell] = stacks(inputs.get(cells.get(cell).getAsInt()));
-            }
-            projection = copy; kind = "arcane";
+            kind = "arcane";
         } else if (family == Family.SHAPELESS) {
+            if(source.getClass()!=ShapelessArcaneRecipe.class&&!source.getClass().getName().equals("tuhljin.automagy.lib.recipe.PreserveFilterRecipe"))throw fault("Unknown shapeless arcane inventory callback owner: "+source.getClass().getName());
             if (!(source instanceof ShapelessArcaneRecipe)) {
                 throw fault("Not a shapeless arcane recipe: " + source.getClass().getName());
             }
@@ -194,7 +229,7 @@ final class MagicRecipes {
             for (Object ingredient : recipe.getInput()) {
                 inputs.add(ordinary(ingredient, true));
             }
-            if (source.getClass().getName().contains("PreserveFilterRecipe")) {
+            if (source.getClass()!=ShapelessArcaneRecipe.class) {
                 int[] roles = Products.filterRoles(inputs);
                 if (roles[0] >= 0) {
                     product = Products.preserveFilter(source, inputs, roles[0], roles[1], row.facts);
@@ -202,85 +237,16 @@ final class MagicRecipes {
                 }
             }
             if (output == null) output = result(recipe.getRecipeOutput());
-            projection = shapeless(inputs, output, aspects); kind = "arcane";
+            kind = "arcane";
         } else if (family == Family.CRUCIBLE) {
             exact(source, CrucibleRecipe.class);
             CrucibleRecipe recipe = (CrucibleRecipe) source;
             aspects = recipe.aspects; output = result(recipe.getRecipeOutput()); addResearch(research, recipe.key);
             inputs.add(ordinary(recipe.catalyst, false));
-            projection = new CrucibleRecipe(recipe.key, output.copy(), new ArrayList<>(Arrays.asList(stacks(inputs.get(0)))), costs(aspects));
             kind = "crucible";
-        } else if (source instanceof Runic) {
-            Runic nativeRecipe = (Runic) source;
-            runic = Runic.sample(nativeRecipe.recipe, nativeRecipe.center);
-            inputs.add(java.util.Collections.singletonList(new Candidate(nativeRecipe.center.copy(),
-                    object("kind", "wildcard", "meta", true, "nbt", true))));
-            ItemStack diamond = new ItemStack(Items.diamond), resource = new ItemStack(ConfigItems.itemResource, 1, 14);
-            if (runicDiamond == null) {
-                runicDiamond = Runic.component(diamond, row.facts); runicResource = Runic.component(resource, row.facts);
-            }
-            inputs.add(runicDiamond); inputs.add(runicResource);
-            aspects = runic.aspects; instability = runic.instability; central = 0; kind = "infusion";
-            addResearch(research, nativeRecipe.recipe.getResearch());
-            product = Products.observe(java.util.Collections.singletonList(nativeRecipe.center), object("kind", "runic"),
-                    input -> (ItemStack) nativeRecipe.recipe.getRecipeOutput(input.copy()), row.facts);
-            output = product.output;
-            row.record.add("process", object("kind", "runic", "charge", runic.charge));
-            // A compact native projection of the two component groups. The repeated group is
-            // explicitly typed as pedestal multiplicity; it is never a stack of crafting items.
-            projection = new InfusionRecipe(nativeRecipe.recipe.getResearch(), output.copy(), instability,
-                    costs(aspects), nativeRecipe.center.copy(), new ItemStack[] {diamond, resource});
         } else {
-            if (!(source instanceof InfusionRecipe)) {
-                throw new Jobs.Fault("recipe_unsupported", "Not an infusion recipe: " + source.getClass().getName());
-            }
-            InfusionRecipe recipe = (InfusionRecipe) source;
-            aspects = recipe.getAspects(); addResearch(research, recipe.getResearch());
-            boolean enhancedOk = false;
-            if (Loader.isModLoaded("tc4tweak")) {
-                try {
-                    Class<?> extClass = type(EXT + "InfusionRecipeExt");
-                    Object api = invoke(extClass, null, "get", new Class<?>[0]);
-                    Object enhanced = invoke(extClass, api, "convert", new Class<?>[] {InfusionRecipe.class}, recipe);
-                    if (enhanced != null) {
-                        inputs.add(ingredient(invoke(type(EXT + "EnhancedInfusionRecipe"), enhanced, "getCentral", new Class<?>[0])));
-                        Object components = invoke(type(EXT + "EnhancedInfusionRecipe"), enhanced, "getComponentsExt", new Class<?>[0]);
-                        if (components instanceof List<?> && ((List<?>) components).size() <= 4095) {
-                            for (Object component : (List<?>) components) inputs.add(ingredient(component));
-                            enhancedOk = true;
-                        }
-                    }
-                } catch (Jobs.Fault f) {
-                    throw f;
-                } catch (Error e) {
-                    throw e;
-                } catch (RuntimeException re) {
-                    throw re;
-                } catch (Exception e) {
-                    Jobs.Fault fault = fault("Failed to convert enhanced infusion recipe: " + e.getMessage());
-                    fault.initCause(e);
-                    throw fault;
-                }
-            }
-            if (!enhancedOk) {
-                inputs.clear();
-                inputs.add(ordinary(recipe.getRecipeInput(), true));
-                if (recipe.getComponents() != null) {
-                    for (ItemStack comp : recipe.getComponents()) inputs.add(ordinary(comp, true));
-                }
-            }
-            // The pinned ERROR ingredient never matches. An empty required predicate
-            // excludes this recipe; impossible branches within a satisfiable OR do not.
-            if (inputs.stream().anyMatch(List::isEmpty)) return false;
-            product = Products.infusion(recipe, Arrays.asList(stacks(inputs.get(0))), row.facts);
-            output = product.output;
-            ItemStack[] componentsCopy = new ItemStack[inputs.size() - 1];
-            for (int part = 1; part < inputs.size(); part++) componentsCopy[part - 1] = inputs.get(part).get(0).item.copy();
-            instability = recipe.getInstability(); central = 0;
-            projection = new InfusionRecipe(recipe.getResearch(), output.copy(), instability, costs(aspects), inputs.get(0).get(0).item.copy(), componentsCopy);
-            kind = "infusion";
+            throw fault("Native infusion execution needs a source-specific reader: " + source.getClass().getName());
         }
-        if (positionsToSlots.isEmpty()) for (int slot = 0; slot < inputs.size(); slot++) positionsToSlots.add(slot);
         if (inputs.stream().mapToInt(List::size).sum() > 65536) throw fault("Recipe alternatives exceed their budget");
         if (!replacement && kind.equals("arcane") && output.getItem() instanceof ItemWandCasting) {
             ItemWandCasting wand = (ItemWandCasting) output.getItem();
@@ -291,85 +257,70 @@ final class MagicRecipes {
         JsonArray links = new JsonArray();
         for (String key : research) links.add(Magic.study(key));
         JsonArray amounts = Aspects.amounts(costs(aspects));
-        if (kind.equals("arcane") && amounts.size() == 0 && !creative) return false;
+        if (kind.equals("arcane") && amounts.size() == 0 && !creative)
+            return exclude(index, object("reason", "native_arcane_empty_aspects_without_creative_waiver", "native", sourceType(index), "creative", false));
         row.record.add("magic", object("kind", kind, "aspects", amounts, "research", links, "central", central, "instability", instability,
                 "payment", payment, "creative", kind.equals("arcane") && creative));
-        TemplateRecipeHandler.CachedRecipe nativeRecipe;
-        try { nativeRecipe = (TemplateRecipeHandler.CachedRecipe) constructor.newInstance(handler, projection, true); }
-        catch (ReflectiveOperationException error) { throw fault(error.toString()); }
-        handler.arecipes.clear(); handler.arecipes.add(nativeRecipe);
-        displayedCosts.clear();
-        if (kind.equals("arcane")) {
-            displayedCosts.add(invoke(handler.getClass().getSuperclass(), null, "getAmounts", new Class<?>[] {family.recipe}, projection));
-        } else displayedCosts.add(costs(aspects));
-        List<PositionedStack> positions = (List<PositionedStack>) field(nativeRecipe, "ingredients");
-        int slot = 0;
-        for (PositionedStack position : positions) {
-            if (position.item != null && position.item.getItem().getClass().getName().equals(PLUGIN + "items.ItemAspect")) {
-                AspectList value = (AspectList) invoke(type(PLUGIN + "items.ItemAspect"), null, "getAspects", new Class<?>[] {ItemStack.class}, position.item);
-                if (value == null || value.size() != 1) throw fault("Native cost icon has no unique aspect");
-                String aspect = Aspects.id(value.getAspects()[0]);
-                int cost = -1;
-                for (int at = 0; at < amounts.size(); at++) if (amounts.get(at).getAsJsonObject().get("aspect").getAsString().equals(aspect)) cost = at;
-                if (cost < 0) throw fault("Native view refers to an undeclared aspect cost");
-                row.elements.add(object("kind", "cost", "index", cost, "x", position.relx, "y", position.rely, "width", 16, "height", 16, "z", 2));
-            } else {
-                if (slot >= inputs.size()) throw fault("Native view contains an unexpected input slot");
-                int bound = positionsToSlots.get(slot++);
-                List<Candidate> candidates = inputs.get(bound);
-                ItemStack[] copies = stacks(candidates);
-                row.itemInput(new PositionedStack(copies, position.relx, position.rely, false), bound, 1, false, kind.equals("arcane"),
-                        (item, choice) -> candidates.get(choice).rule);
+        for(int slot=0;slot<inputs.size();slot++){
+            List<RecipeRow.Ingredient> choices=new ArrayList<>();
+            for(Candidate candidate:inputs.get(slot)){
+                // Salis' component maps use literal metadata (including 32767).
+                // Its screw permutations are already concrete owned specimens.
+                ItemStack[] samples=replacement?new ItemStack[]{candidate.item.copy()}:examples.copies(candidate.item);
+                for(ItemStack example:samples)choices.add(new RecipeRow.Ingredient(example,1,false,candidate.rule));
             }
+            if(kind.equals("arcane"))row.nativeCraftingInput(slot,choices);else row.itemInput(slot,choices,false);
         }
-        if (slot != inputs.size()) throw fault("Native view omits registered inputs");
-        PositionedStack result = nativeRecipe.getResult();
-        if (result == null) throw fault("Native view has no result slot");
-        row.itemOutput(result, 0, output, 10000);
+        row.itemOutput(0, output, 10000);
         if (product != null) product.attach(row);
-        if (runic != null) Runic.finish(row, inputs, runic);
         return true;
     }
 
-    /** Read the mod's authoritative sticky-jar registry instead of inventing a fixed sample list. */
-    @SuppressWarnings("unchecked")
-    private static List<ItemStack> registeredStickyJars() {
-        try {
-            Class<?> items = Class.forName("makeo.gadomancy.common.registration.RegisteredItems");
-            List<ItemStack> result = new ArrayList<>();
-            java.lang.reflect.Field registry = items.getDeclaredField("stickyJarItems");
-            registry.setAccessible(true);
-            Object value = registry.get(null);
-            if (!(value instanceof List<?>)) throw fault("Gadomancy sticky-jar registry returned a non-list");
-            for (Object entry : (List<?>) value) {
-                java.lang.reflect.Field itemField = entry.getClass().getField("item");
-                java.lang.reflect.Field damageField = entry.getClass().getField("damage");
-                java.lang.reflect.Field recipeField = entry.getClass().getField("recipeStack");
-                itemField.setAccessible(true); damageField.setAccessible(true); recipeField.setAccessible(true);
-                net.minecraft.item.Item item = (net.minecraft.item.Item) itemField.get(entry);
-                int damage = damageField.getInt(entry);
-                ItemStack raw = (ItemStack) recipeField.get(entry);
-                ItemStack stack = raw == null ? new ItemStack(item, 1, damage) : raw.copy();
-                if (stack.getItem() == null || stack.stackSize < 1) throw fault("Gadomancy sticky-jar registry contains an invalid item");
-                boolean duplicate = false;
-                for (ItemStack previous : result) if (previous.getItem() == stack.getItem() && previous.getItemDamage() == stack.getItemDamage()
-                        && ItemStack.areItemStackTagsEqual(previous, stack)) { duplicate = true; break; }
-                if (!duplicate) result.add(stack);
-            }
-            return result;
-        } catch (Jobs.Fault failure) {
-            throw failure;
-        } catch (ReflectiveOperationException error) {
-            Jobs.Fault failure = fault("Cannot inspect Gadomancy sticky-jar registry: " + error.getMessage());
-            failure.initCause(error);
-            throw failure;
-        }
+    public void verify(){
+        alive();
+        if(ThaumcraftApi.getCraftingRecipes()!=registry||registry.size()!=registrations.size()
+                ||field(Aspect.class,null,"aspects")!=aspectRegistry||Wands.creative()!=creative)
+            throw new Jobs.Fault("recipe_changed","Thaumcraft source or creative payment changed");
+        for(NativeArcaneRecipes reader:nativeArcane)reader.verify();
+        if(legacyInfusion!=null)legacyInfusion.verify();
+        if(stickySource!=null)stickySource.verify();
+        if(ordinaryDefinitions!=null)ordinaryDefinitions.verifyRoots();
+        if(wands!=null)wands.verify();
+        if(inheritance!=null)inheritance.verify();
+        if(runicCharges!=null)runicCharges.verify();
+        for(Runic.Source source:runicSources)source.verify();
     }
-
-    private static ShapelessArcaneRecipe shapeless(List<List<Candidate>> inputs, ItemStack output, AspectList aspects) {
-        ShapelessArcaneRecipe copy = new ShapelessArcaneRecipe("", output.copy(), costs(aspects));
-        for (List<Candidate> candidates : inputs) copy.getInput().add(new ArrayList<>(Arrays.asList(stacks(candidates))));
-        return copy;
+    public void finishVerification(){
+        verify();examples.verify();
+        for(int i=0;i<registry.size();i++)if(registry.get(i)!=registrations.get(i))
+            throw new Jobs.Fault("recipe_changed","Thaumcraft native registration changed");
+        for(NativeArcaneRecipes reader:nativeArcane)reader.finishVerification();
+        for(NativeInfusionRecipes reader:nativeInfusion)reader.finishVerification();
+        for(DisguiseInfusionRecipes reader:disguiseInfusion)reader.finishVerification();
+        if(legacyInfusion!=null)legacyInfusion.finishVerification();
+        if(stickySource!=null)stickySource.finishVerification();
+        if(ordinaryDefinitions!=null)ordinaryDefinitions.verify();
+        if(wands!=null)wands.finishVerification();
+        if(inheritance!=null)inheritance.finishVerification();
+        if(runicCharges!=null)runicCharges.finishVerification();
+        for(Runic.Source source:runicSources)source.finishVerification();
+        for(Runic.ContainerReturn returned:runicReturns)returned.verify();
+    }
+    private void alive(){Jobs.checkpoint();if(closed)throw new Jobs.Fault("capture_closed","Thaumcraft reader is closed");}
+    public void close(){
+        closed=true;recipes.clear();registrations.clear();registry=null;aspectRegistry=null;
+        for(NativeArcaneRecipes reader:nativeArcane)reader.close();nativeArcane.clear();
+        for(NativeInfusionRecipes reader:nativeInfusion)reader.close();nativeInfusion.clear();
+        for(DisguiseInfusionRecipes reader:disguiseInfusion)reader.close();disguiseInfusion.clear();
+        if(legacyInfusion!=null)legacyInfusion.close();legacyInfusion=null;
+        if(stickySource!=null)stickySource.close();stickySource=null;
+        if(ordinaryDefinitions!=null)ordinaryDefinitions.close();ordinarySources.clear();
+        if(wands!=null)wands.close();wands=null;
+        if(inheritance!=null)inheritance.close();inheritance=null;
+        if(runicCharges!=null)runicCharges.close();runicCharges=null;
+        for(Runic.Source source:runicSources)source.close();runicSources.clear();
+        runicReturns.clear();
+        examples.close();exclusion=null;
     }
 
     static JsonObject tags(ItemStack item, boolean meta) {
@@ -395,68 +346,6 @@ final class MagicRecipes {
         return result;
     }
 
-    /** Gadomancy's native sticky-jar recipe rejects an already sticky jar. */
-    private static List<Candidate> stickyJars(List<ItemStack> values) {
-        List<Candidate> result = new ArrayList<>();
-        for (ItemStack raw : values) {
-            if (raw == null || raw.getItem() == null) throw fault("Sticky-jar registry contains an invalid input");
-            ItemStack item = raw.copy(); item.stackSize = 1;
-            TreeSet<String> keys = new TreeSet<>();
-            if (item.hasTagCompound()) for (Object key : item.getTagCompound().func_150296_c()) keys.add((String) key);
-            JsonArray present = new JsonArray(); for (String key : keys) present.add(value(key));
-            JsonArray absent = new JsonArray(); absent.add(value("isStickyJar"));
-            result.add(new Candidate(item, object("kind", "tags", "meta", true, "keys", present,
-                    "present", new JsonArray(), "absent", absent)));
-        }
-        return result;
-    }
-
-    private static List<Candidate> ingredient(Object ingredient) {
-        List<Candidate> result = new ArrayList<>();
-        ingredient(ingredient, result, 0);
-        if (result.size() > 65536) throw fault("Infusion ingredient exceeds its budget");
-        return result;
-    }
-
-    private static void ingredient(Object ingredient, List<Candidate> result, int depth) {
-        Jobs.checkpoint();
-        if (ingredient == null || depth > 16 || result.size() > 65536) throw fault("Infusion ingredient exceeds its budget");
-        String name = ingredient.getClass().getName();
-        // getRepresentativeStacks() for this sentinel returns an ERROR fire icon,
-        // but matches() is constant false. That icon is not a crafting ingredient.
-        if (name.equals(EXT + "RecipeIngredient$5")) return;
-        if (name.equals(EXT + "RecipeIngredientDefer")) {
-            ingredient(invoke(ingredient.getClass(), ingredient, "get", new Class<?>[0]), result, depth + 1); return;
-        }
-        if (name.equals(EXT + "RecipeIngredientOr")) {
-            Object[] parts = (Object[]) field(ingredient, "or");
-            if (parts.length > 4096) throw fault("Infusion ingredient has too many branches");
-            for (Object part : parts) ingredient(part, result, depth + 1);
-            return;
-        }
-        if (!Arrays.asList(EXT + "RecipeIngredient$1", EXT + "RecipeIngredient$2", EXT + "RecipeIngredient$3", EXT + "RecipeIngredient$4").contains(name)) {
-            throw new Jobs.Fault("recipe_unsupported", "No predicate adapter for infusion ingredient " + name);
-        }
-        Object values = invoke(type(EXT + "RecipeIngredient"), ingredient, "getRepresentativeStacks", new Class<?>[0]);
-        List<Candidate> candidates = ordinary(values, false);
-        if (name.equals(EXT + "RecipeIngredient$1") || name.equals(EXT + "RecipeIngredient$2")) {
-            String ore = (String) field(ingredient, "val$name");
-            boolean exclusive = name.endsWith("$2");
-            for (Candidate candidate : candidates) {
-                if (exclusive && OreDictionary.getOreIDs(candidate.item).length != 1) continue;
-                result.add(new Candidate(candidate.item, object("kind", "ore", "name", ore, "exclusive", exclusive)));
-            }
-        } else if (name.equals(EXT + "RecipeIngredient$3") || name.equals(EXT + "RecipeIngredient$4")) {
-            boolean nbt = (Boolean) field(ingredient, "val$checkNBTTags");
-            for (Candidate candidate : candidates) {
-                boolean wildcard = Items.feather.getDamage(candidate.item) == OreDictionary.WILDCARD_VALUE;
-                result.add(new Candidate(candidate.item, nbt && !wildcard ? object("kind", "exact")
-                        : object("kind", "wildcard", "meta", wildcard, "nbt", !nbt)));
-            }
-        }
-    }
-
-    private static ItemStack[] stacks(List<Candidate> values) { return values.stream().map(value -> value.item.copy()).toArray(ItemStack[]::new); }
     private static ItemStack result(ItemStack item) {
         if (item == null || item.getItem() == null || item.stackSize < 1) throw fault("Magic recipe has no concrete output");
         return item.copy();

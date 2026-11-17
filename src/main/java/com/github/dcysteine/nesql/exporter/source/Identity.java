@@ -73,6 +73,7 @@ public final class Identity {
         }
         key.add("magic", magic);
         if (record.has("process") && !record.get("process").isJsonNull()) key.add("process", record.get("process"));
+        if (record.has("gtNative") && !record.get("gtNative").isJsonNull()) key.add("gtNative", record.get("gtNative"));
         return "recipe_" + CanonicalJson.digest(key);
     }
 

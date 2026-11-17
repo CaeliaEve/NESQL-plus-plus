@@ -1,7 +1,6 @@
 package com.github.dcysteine.nesql.exporter.capture;
 
-import codechicken.nei.PositionedStack;
-import codechicken.nei.recipe.ICraftingHandler;
+import codechicken.nei.recipe.IRecipeHandler;
 import codechicken.nei.recipe.TemplateRecipeHandler;
 import com.github.dcysteine.nesql.exporter.source.CanonicalJson;
 import com.github.dcysteine.nesql.exporter.source.TypedNbt;
@@ -18,130 +17,113 @@ import java.util.*;
 import static com.github.dcysteine.nesql.exporter.capture.MagicApi.*;
 import static com.github.dcysteine.nesql.exporter.source.Json.*;
 
-/** GalaxySpace ordinary assembly, after proving the native repair-first branch cannot intercept it. */
+/** GalaxySpace registered assembly with explicit repair-first and selection conditions. */
 final class GalaxyAssemblyRecipes implements RegistryRecipes {
     private static final String HANDLER = "galaxyspace.core.nei.AssemblyMachineRecipeHandler";
     private static final String REGISTRY = "galaxyspace.core.recipe.AssemblyRecipes";
     private static final String CONFIG = "micdoodle8.mods.galacticraft.core.util.ConfigManagerCore";
-    private final TemplateRecipeHandler handler;
-    private final List<?> registry;
+    private List<?> registry;
     private final List<Entry> entries = new ArrayList<>();
     private final boolean hard;
-    private boolean nativeRegistry;
+    private final boolean nativeRegistry;
+    private final NativeDefinitions definitions;
+    private boolean closed;
 
-    static boolean supports(ICraftingHandler handler) { return handler.getClass().getName().equals(HANDLER); }
+    static boolean supports(IRecipeHandler handler) { return handler.getClass().getName().equals(HANDLER); }
     GalaxyAssemblyRecipes(TemplateRecipeHandler handler) {
-        this(handler, registry(), (Boolean) field(type(CONFIG), null, "hardMode")); nativeRegistry = true;
+        this(handler, registrationSource(handler), hardMode(), true);
     }
-    private static List<?> registry() {
-        version("GalaxySpace", "1.1.121-GTNH"); version("GalacticraftCore", "3.3.13-GTNH");
-        return (List<?>) invoke(type(REGISTRY), null, "getRecipeList", new Class<?>[0]);
+    static List<?> registrationSource(IRecipeHandler handler) {
+        if (!supports(handler)) throw fault("Unadapted GalaxySpace assembly registration");
+        MagicApi.version("GalaxyAssemblyRecipes","GalaxySpace"); MagicApi.version("GalaxyAssemblyRecipes","GalacticraftCore");
+        Object source = field(type(REGISTRY), null, "RECIPES");
+        if (source == null) throw new Jobs.Fault("handler_not_ready", "GalaxySpace assembly registry is unavailable");
+        if (source.getClass() != ArrayList.class) throw fault("Unadapted assembly registry storage");
+        return (List<?>)source;
     }
+    static boolean hardMode() { return (Boolean)field(type(CONFIG), null, "hardMode"); }
     GalaxyAssemblyRecipes(TemplateRecipeHandler handler, List<?> registry, boolean hard) {
-        if (!supports(handler) || registry == null || registry.size() > 65536) throw fault("Invalid GalaxySpace assembly registry");
-        this.handler = handler; this.registry = registry; this.hard = hard;
-        Work work = new Work();
-        for (Object source : registry) { Jobs.checkpoint(); entries.add(new Entry(source, work)); }
+        this(handler, registry, hard, false);
     }
-    public int size() { return entries.size(); }
-    public void verify() {
-        if (registry.size() != entries.size() || nativeRegistry && (invoke(type(REGISTRY), null, "getRecipeList", new Class<?>[0]) != registry
-                || (Boolean) field(type(CONFIG), null, "hardMode") != hard)) changed();
+    private GalaxyAssemblyRecipes(TemplateRecipeHandler handler, List<?> registry, boolean hard, boolean nativeRegistry) {
+        if (registry == null) throw new Jobs.Fault("handler_not_ready", "GalaxySpace assembly registry is unavailable");
+        if (!supports(handler) || registry.getClass() != ArrayList.class) throw fault("Unadapted assembly handler/registry storage");
+        if (registry.size() > 65536) throw new Jobs.Fault("recipe_limit", "GalaxySpace assembly registry exceeds budget");
+        this.registry = registry; this.hard = hard; this.nativeRegistry = nativeRegistry;
         Work work = new Work();
-        for (int i = 0; i < entries.size(); i++) {
-            Jobs.checkpoint(); Entry entry = entries.get(i);
-            if (registry.get(i) != entry.source || !entry.signature.equals(new Entry(entry.source, work).signature)) changed();
-        }
+        for (Object source : registry) { Jobs.checkpoint(); entries.add(new Entry(source, entries.size(), work, true)); }
+        definitions = new NativeDefinitions("GalaxySpace assembly", entries, this::current, entry -> definition((Entry)entry));
+    }
+    private List<?> current() {
+        if (registry.size() != entries.size() || nativeRegistry && (field(type(REGISTRY), null, "RECIPES") != registry || hardMode() != hard)) changed();
+        return entries;
+    }
+    public int size() { verify(); return entries.size(); }
+    public void verify() {
+        if (closed) throw new Jobs.Fault("capture_closed", "GalaxySpace assembly reader is closed");
+        definitions.verify();
+    }
+    public void finishVerification() { verify(); definitions.finishVerification(); }
+    public void close() { if (!closed) { closed = true; definitions.close(); entries.clear(); registry = null; } }
+    private JsonObject definition(Entry entry) {
+        if (registry.get(entry.index) != entry.source) changed();
+        Entry actual;
+        try { actual = new Entry(entry.source, entry.index, new Work(), false); }
+        catch (Jobs.Fault failure) { Jobs.Fault drift = drift(); drift.initCause(failure); throw drift; }
+        if (entry.anchors.size() != actual.anchors.size()) changed();
+        for (int index = 0; index < entry.anchors.size(); index++) if (entry.anchors.get(index) != actual.anchors.get(index)) changed();
+        for (NativeItemVariants binding : entry.variants) binding.verify();
+        return object("definition", actual.signature);
     }
     public boolean capture(int index, RecipeRow row) {
+        verify();
+        return definitions.checked(index, () -> captureRow(index, row));
+    }
+    private boolean captureRow(int index, RecipeRow row) {
         Entry entry = entries.get(index); Work work = new Work();
-        if (!entry.signature.equals(new Entry(entry.source, work).signature)) changed();
-        if (entry.ignored || entry.impossible) return false;
+        if (entry.ignored || entry.impossible) return row.exclude(object("native", entry.source.getClass().getName(),
+                "reason", entry.ignored ? "native_assembly_selector_ignores_this_recipe_kind" : "empty_native_required_input_predicate",
+                "hardMode", hard, "signature", entry.signature));
         JsonArray earlier = new JsonArray();
         for (Entry prior : entries) {
             work.step(); if (prior == entry) break;
+            definitions.record(prior.index);
             if (!prior.ignored && !prior.impossible) earlier.add(prior.selector(row.facts, work));
         }
-        row.record.add("process", object("kind", "galaxyspace-assembly", "earlier", earlier));
+        row.record.add("process", object("kind", "galaxyspace-assembly", "earlier", earlier, "repair", entry.repair(row.facts)));
         if (entry.shaped) row.record.add("grid", entry.grid());
-        List<PositionedStack> display = new ArrayList<>(); int slot = 0;
+        int slot = 0;
         for (int cell = 0; cell < entry.raw.length; cell++) {
             List<ItemStack> group = entry.raw[cell]; if (group == null) continue;
             List<RecipeRow.Ingredient> choices = new ArrayList<>();
             for (ItemStack item : group) {
                 work.step(); boolean wildcard = item.getItemDamage() == 32767;
-                for (ItemStack sample : samples(item)) {
+                for (ItemStack sample : entry.samples(item)) {
                     work.step(); choices.add(new RecipeRow.Ingredient(sample, 1, false, rule(wildcard)));
                     if (choices.size() > 65536) throw fault("Assembly display alternatives exceed their budget");
                 }
             }
-            // NEIGalaxySpaceConfig indexes by three even when the semantic shaped recipe is narrower.
-            PositionedStack position = new PositionedStack(choices.stream().map(choice -> choice.item.copy()).toArray(ItemStack[]::new), 21 + cell % 3 * 18, 26 + cell / 3 * 18, false);
-            row.itemInput(position, slot++, choices, false); display.add(position);
+            row.itemInput(slot++, choices, false);
         }
-        PositionedStack result = new PositionedStack(entry.output.copy(), 140, 44, false);
-        row.itemOutput(result, 0, entry.output.copy(), 10000);
-        row.property("galaxyspace:execution", "Native execution conditions", "Initially empty output slot, stable valid crafting-grid inputs and stable supply tier other than -1, sufficient energy, reset progress counter; ordinary assembly after proving repair cannot intercept");
+        row.itemOutput(0, entry.output.copy(), 10000);
+        row.property("galaxyspace:execution", "Native execution conditions", "Initially empty output slot, stable valid crafting-grid inputs and stable supply tier other than -1, sufficient energy, reset progress counter; registered assembly only when repair-first and earlier registered selectors do not intercept");
         row.property("galaxyspace:duration", "Native completion threshold", "Each running tick increments progress, then compares against Java int 400 / (1 + poweredByTierGC); a zero or negative threshold completes on the first tick; tier -1 causes division by zero");
         row.property("galaxyspace:maxExtract", "Configured maximum energy extraction (gJ/t)", hard ? 90 : 75);
-        TemplateRecipeHandler.CachedRecipe cache;
-        try {
-            java.lang.reflect.Constructor<?> constructor = type(HANDLER + "$AssemblyMachineRecipe").getDeclaredConstructor(handler.getClass(), List.class, PositionedStack.class);
-            constructor.setAccessible(true); cache = (TemplateRecipeHandler.CachedRecipe) constructor.newInstance(handler, display, result);
-        } catch (java.lang.reflect.InvocationTargetException error) {
-            Throwable cause = error.getCause(); if (cause instanceof Error) throw (Error) cause; if (cause instanceof RuntimeException) throw (RuntimeException) cause;
-            throw fault("Native assembly view constructor failed: " + cause);
-        } catch (ReflectiveOperationException error) { throw fault("Native assembly view constructor changed: " + error); }
-        handler.arecipes.clear(); handler.arecipes.add(cache);
         return true;
-    }
-    static String texture() { return "galaxyspace:textures/gui/assembly_machine.png"; }
-    static void scene(TemplateRecipeHandler handler, Runnable draw) {
-        try {
-            java.lang.reflect.Field clock = handler.getClass().getDeclaredField("ticksPassed"); clock.setAccessible(true);
-            int previous = clock.getInt(null);
-            try { clock.setInt(null, 0); draw.run(); }
-            finally { clock.setInt(null, previous); }
-        } catch (ReflectiveOperationException error) { throw new Jobs.Fault("native_cleanup", "Could not preserve GalaxySpace assembly animation clock: " + error); }
-    }
-    static void draw(TemplateRecipeHandler handler, int index) {
-        scene(handler, () -> { handler.drawBackground(index); handler.drawForeground(index); });
-    }
-    static JsonArray frames(boolean flame) {
-        JsonArray frames = new JsonArray();
-        for (int tick = 0; tick < 70; tick++) {
-            JsonArray areas = new JsonArray();
-            if (flame && tick > 26) areas.add(array("0", "0", "1", "1"));
-            if (!flame && tick > 0) areas.add(array("0", "0", Float.toString(Math.min(tick, 53) / 53f), "1"));
-            JsonObject previous = frames.size() == 0 ? null : frames.get(frames.size() - 1).getAsJsonObject();
-            if (previous != null && previous.getAsJsonArray("areas").equals(areas)) previous.addProperty("ticks", previous.get("ticks").getAsInt() + 1);
-            else frames.add(object("ticks", 1, "areas", areas));
-        }
-        return frames;
-    }
-    static JsonArray decorations(Facts facts, String location) {
-        JsonArray result = new JsonArray(); int[][] regions = {{93,39,176,0,17,13},{79,46,176,13,53,17}};
-        for (int index = 0; index < regions.length; index++) {
-            int[] region = regions[index];
-            JsonObject element = object("kind", "clip", "asset", null, "x", region[0], "y", region[1], "width", region[4], "height", region[5],
-                    "z", index, "track", facts.track(frames(index == 0)));
-            facts.picture(new Facts.Picture(element, "asset", location + "/progress/assembly/" + index, region[4], region[5], () -> {
-                codechicken.lib.gui.GuiDraw.changeTexture(texture()); org.lwjgl.opengl.GL11.glColor4f(1, 1, 1, 1);
-                codechicken.lib.gui.GuiDraw.drawTexturedModalRect(0, 0, region[2], region[3], region[4], region[5]);
-            }));
-            result.add(element);
-        }
-        return result;
     }
     private static final class Work {
         int remaining = 1048576;
         void step() { if (--remaining < 0) throw fault("Assembly proof/candidate work exceeds its budget"); if ((remaining & 1023) == 0) Jobs.checkpoint(); }
     }
     private static final class Entry {
-        final Object source; final boolean shaped, ignored, impossible; final int width, height;
+        final Object source; final int index; final boolean shaped, ignored, impossible; final int width, height;
         final List<ItemStack>[] raw; final ItemStack output; final String signature;
-        @SuppressWarnings("unchecked") Entry(Object source, Work work) {
-            this.source = source; work.step();
+        final List<Object> anchors = new ArrayList<>();
+        final List<NativeItemVariants> variants = new ArrayList<>();
+        final List<NativeCraftingRepair> repairs = new ArrayList<>();
+        final Map<ItemStack, ItemStack[]> examples = new IdentityHashMap<>();
+        @SuppressWarnings("unchecked") Entry(Object source, int index, Work work, boolean prepare) {
+            this.source = source; this.index = index; work.step();
             if (!(source instanceof IRecipe)) throw fault("Invalid assembly recipe object");
             Class<?> kind = source.getClass();
             shaped = source instanceof ShapedRecipes;
@@ -152,22 +134,30 @@ final class GalaxyAssemblyRecipes implements RegistryRecipes {
             }
             if (kind != ShapedRecipes.class && kind != ShapelessOreRecipe.class) throw fault("Unadapted executable assembly recipe override: " + kind.getName());
             width = shaped ? ((ShapedRecipes) source).recipeWidth : 0; height = shaped ? ((ShapedRecipes) source).recipeHeight : 0;
-            Object[] cells = shaped ? ((ShapedRecipes) source).recipeItems.clone() : ((ShapelessOreRecipe) source).getInput().toArray();
+            Object nativeInputs = shaped ? ((ShapedRecipes)source).recipeItems : ((ShapelessOreRecipe)source).getInput();
+            if (nativeInputs == null) throw new Jobs.Fault("handler_not_ready", "Assembly input storage unavailable");
+            if (!shaped && nativeInputs.getClass() != ArrayList.class) throw fault("Unadapted assembly input-list callback");
+            if (shaped && nativeInputs.getClass() != ItemStack[].class) throw fault("Unadapted assembly input-array storage");
+            anchors.add(nativeInputs);
+            Object[] cells = shaped ? ((ItemStack[])nativeInputs).clone() : ((List<?>)nativeInputs).toArray();
             if (cells.length == 0 || cells.length > 9 || shaped && (width < 1 || width > 3 || height < 1 || height > 3 || width * height != cells.length))
                 throw fault("Invalid assembly ingredient grid");
             raw = (List<ItemStack>[]) new List<?>[cells.length];
             JsonArray fingerprint = new JsonArray(); int count = 0, occupied = 0; boolean empty = false;
             for (int i = 0; i < cells.length; i++) {
+                anchors.add(cells[i]);
                 if (cells[i] == null) { if (!shaped) throw fault("Null shapeless assembly ingredient"); fingerprint.add(value(null)); continue; }
                 occupied++;
                 List<?> candidates = !shaped && cells[i].getClass() == ArrayList.class ? (List<?>) cells[i] : Collections.singletonList(cells[i]);
                 raw[i] = new ArrayList<>(); JsonArray values = new JsonArray(); empty |= candidates.isEmpty();
                 for (Object candidate : candidates) {
                     work.step();
-                    if (++count > 65536 || !(candidate instanceof ItemStack) || ((ItemStack) candidate).getItem() == null) throw fault("Invalid assembly candidate");
+                    if (++count > 65536 || candidate == null || candidate.getClass() != ItemStack.class || ((ItemStack) candidate).getItem() == null) throw fault("Invalid assembly candidate");
                     ItemStack item = (ItemStack) candidate;
+                    if (Items.feather.getDamage(item) < 0) throw fault("Assembly negative metadata requires a dedicated native predicate");
                     if (ItemCallbacks.method(item.getItem(), "getDamage", "getDamage", ItemStack.class).getDeclaringClass() != Item.class)
                         throw fault("Assembly input overrides native metadata matching");
+                    anchors.add(item); anchors.add(item.getItem()); anchors.add(item.getTagCompound());
                     values.add(stackValue(item)); raw[i].add(item.copy());
                 }
                 fingerprint.add(values);
@@ -180,19 +170,46 @@ final class GalaxyAssemblyRecipes implements RegistryRecipes {
                 Set<Item> checked = Collections.newSetFromMap(new IdentityHashMap<Item, Boolean>());
                 for (ItemStack a : groups.get(0)) for (ItemStack b : groups.get(1)) {
                     work.step(); Item item = a.getItem(); if (item != b.getItem() || !checked.add(item)) continue;
-                    if (ItemCallbacks.method(item, "isRepairable", "isRepairable").getDeclaringClass() != Item.class
-                            || ItemCallbacks.method(item, "isDamageable", "func_77645_m").getDeclaringClass() != Item.class)
-                        throw fault("Assembly repair-first eligibility has an unadapted item callback");
-                    boolean eligible = item.isRepairable(); repair.add(object("item", Item.itemRegistry.getNameForObject(item), "eligible", eligible));
-                    if (eligible) throw fault("Assembly two-item inputs overlap native repair-first output transformation");
+                    NativeCraftingRepair state = new NativeCraftingRepair(item); repairs.add(state);
+                    repair.add(object("item", Item.itemRegistry.getNameForObject(item), "state", state.state));
                 }
             }
             ItemStack result = ((IRecipe) source).getRecipeOutput();
-            if (result == null || result.getItem() == null || result.stackSize <= 0) throw fault("Assembly lacks a positive fixed result");
+            if (result == null || result.getClass() != ItemStack.class || result.getItem() == null || result.stackSize <= 0) throw fault("Assembly lacks a positive fixed native result");
+            if (Items.feather.getDamage(result) < 0 || ItemCallbacks.method(result.getItem(), "getDamage", "getDamage", ItemStack.class).getDeclaringClass() != Item.class)
+                throw fault("Assembly result metadata requires a dedicated native rule");
+            anchors.add(result); anchors.add(result.getItem()); anchors.add(result.getTagCompound());
             // findMatchingRecipe uses getRecipeOutput().copy(), never getCraftingResult(): the copy-NBT flag is inert here.
             output = result.copy();
             signature = CanonicalJson.digest(object("class", kind.getName(), "width", width, "height", height, "inputs", fingerprint,
                     "copyNbtFlag", shaped && (Boolean) field(source, "field_92101_f"), "repair", repair, "output", stackValue(output)));
+            if (prepare && !impossible) for (List<ItemStack> group : raw) if (group != null) for (ItemStack template : group) {
+                boolean wildcard = template.getItemDamage() == 32767; ItemStack[] concrete;
+                if (wildcard) { NativeItemVariants binding = new NativeItemVariants(template); variants.add(binding); concrete = binding.copies(); }
+                else concrete = new ItemStack[] {template.copy()};
+                for (int n = 0; n < concrete.length; n++) {
+                    work.step(); ItemStack sample = concrete[n].copy(); sample.stackSize = 1;
+                    sample.setTagCompound(template.getTagCompound() == null ? null : (net.minecraft.nbt.NBTTagCompound)template.getTagCompound().copy());
+                    concrete[n] = sample;
+                }
+                examples.put(template, concrete);
+            }
+        }
+        ItemStack[] samples(ItemStack template) {
+            ItemStack[] values = examples.get(template);
+            if (values == null || values.length == 0) throw fault("Assembly concrete candidates are unavailable");
+            return values;
+        }
+        JsonArray repair(Facts facts) {
+            JsonArray result = new JsonArray();
+            for (NativeCraftingRepair state : repairs) {
+                ItemStack specimen = null;
+                search: for (List<ItemStack> group : raw) if (group != null)
+                    for (ItemStack template : group) if (template.getItem() == state.item) { specimen = samples(template)[0]; break search; }
+                if (specimen == null) throw fault("Assembly repair item has no concrete specimen");
+                result.add(object("item", facts.item(specimen), "enabled", state.enabled, "maximum", state.maximum));
+            }
+            return result;
         }
         JsonObject grid() {
             JsonArray cells = new JsonArray(); int slot = 0; for (List<ItemStack> group : raw) cells.add(value(group == null ? null : slot++));
@@ -212,19 +229,8 @@ final class GalaxyAssemblyRecipes implements RegistryRecipes {
         }
     }
     private static JsonObject rule(boolean wildcard) { return object("kind", "wildcard", "meta", wildcard, "nbt", true); }
-    private static ItemStack[] samples(ItemStack source) {
-        ItemStack owned = source.copy(); owned.stackSize = 1; owned.setTagCompound(null);
-        ItemStack[] samples = owned.getItemDamage() == 32767 ? new PositionedStack(owned, 0, 0, true).items : new ItemStack[]{owned};
-        if (samples == null || samples.length == 0 || samples.length > 65536) throw fault("Assembly wildcard lacks bounded native examples");
-        ItemStack[] result = new ItemStack[samples.length];
-        for (int i = 0; i < samples.length; i++) {
-            ItemStack sample = samples[i];
-            if (sample == null || sample.getItem() != owned.getItem() || sample.getItemDamage() == 32767) throw fault("Assembly wildcard lacks concrete native examples");
-            result[i] = sample.copy(); result[i].stackSize = 1; result[i].setTagCompound(null);
-        }
-        return result;
-    }
     private static JsonObject stackValue(ItemStack item) { return object("item", Item.itemRegistry.getNameForObject(item.getItem()), "meta", Items.feather.getDamage(item), "amount", item.stackSize, "nbt", TypedNbt.encode(item.getTagCompound())); }
-    private static void changed() { throw new Jobs.Fault("recipe_changed", "GalaxySpace assembly registry, repair eligibility or energy mode changed during capture"); }
+    private static Jobs.Fault drift() { return new Jobs.Fault("recipe_changed", "GalaxySpace assembly registry, repair eligibility or energy mode changed during capture"); }
+    private static void changed() { throw drift(); }
     private static Jobs.Fault fault(String message) { return new Jobs.Fault("recipe_unsupported", message); }
 }

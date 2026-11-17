@@ -14,11 +14,16 @@ final class SqueezerCallbacks {
     private static final String IC2="ic2.core.item.", ARMOR=IC2+"armor.";
     private final Set<String> containerRegistries;
     private final boolean ic2,ender;
+    private final SqueezerForeignContainers foreign;
+    private final boolean gregtech;
+    private SqueezerGtContainers gt;
     SqueezerCallbacks(JsonArray rules) {
         containerRegistries=containerRegistries(rules);
         // Loader returns a copied map; take it once for this snapshot, not once per item.
         Map<String,ModContainer> mods=Loader.instance().getIndexedModList();
-        ic2=version(mods,"IC2","2.2.828-experimental");ender=version(mods,"EnderStorage","1.7.7");
+        ic2=version(mods,"IC2");ender=version(mods,"EnderStorage");
+        foreign=new SqueezerForeignContainers(containerRegistries,mods);
+        gregtech=version(mods,"gregtech_nh");
     }
 
     JsonObject describe(String registry,Item item){
@@ -31,7 +36,7 @@ final class SqueezerCallbacks {
             if(read.equals(ItemFluidContainer.class.getName())&&drain.equals(read))kind="forge";
             else if(ic2){
                 String name=type.getName();
-                if((name.equals(IC2+"ItemFluidCell")||name.equals(IC2+"ItemSprayer"))
+                if((name.equals(IC2+"ItemFluidCell")||name.equals(IC2+"tool.ItemSprayer"))
                     &&read.equals(IC2+"ItemIC2FluidContainer")&&drain.equals(read))kind="ic2";
                 else if((name.equals(ARMOR+"ItemArmorCFPack")||name.equals(ARMOR+"ItemArmorJetpack"))
                     &&read.equals(ARMOR+"ItemArmorFluidTank")&&drain.equals(read))kind="ic2";
@@ -39,8 +44,18 @@ final class SqueezerCallbacks {
                     &&drain.equals(name))kind="ic2";
             }
         }
+        if(kind.equals("unsupported")){
+            JsonObject proof=foreign.describe(registry,item);
+            if(proof!=null)return proof;
+            if(gregtech&&(read.equals("gregtech.api.items.MetaBaseItem")||read.equals("gtPlusPlus.xmod.gregtech.api.items.GTMetaItemBase"))){
+                if(gt==null)gt=new SqueezerGtContainers(containerRegistries);
+                proof=gt.describe(registry,item);if(proof!=null)return proof;
+            }
+        }
         return object("registry",registry,"kind",kind);
     }
+    JsonArray dependencies(){return gt==null?array():gt.dependencies();}
+    void verify(){if(gt!=null)gt.verify();}
 
     private static Set<String> containerRegistries(JsonArray rules){
         Set<String> names=new HashSet<>();
@@ -59,8 +74,7 @@ final class SqueezerCallbacks {
         try{return type.getMethod(name,args).getDeclaringClass().getName();}
         catch(NoSuchMethodException error){return "";}
     }
-    private static boolean version(Map<String,ModContainer> mods,String id,String expected){
-        ModContainer mod=mods.get(id);
-        return mod!=null&&expected.equals(mod.getVersion());
+    private static boolean version(Map<String,ModContainer> mods,String id){
+        return TargetAdmission.matches("SqueezerCallbacks",id,mods.get(id));
     }
 }

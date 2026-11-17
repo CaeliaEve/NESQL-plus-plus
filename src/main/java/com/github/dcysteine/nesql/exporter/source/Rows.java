@@ -2,15 +2,12 @@ package com.github.dcysteine.nesql.exporter.source;
 
 import com.github.dcysteine.nesql.exporter.task.Jobs;
 import com.google.gson.JsonObject;
-import com.google.gson.JsonParser;
 
 import java.io.BufferedInputStream;
 import java.io.BufferedOutputStream;
-import java.io.ByteArrayOutputStream;
+import java.io.DataInputStream;
+import java.io.DataOutputStream;
 import java.io.IOException;
-import java.io.InputStream;
-import java.io.OutputStream;
-import java.nio.charset.StandardCharsets;
 import java.nio.file.Files;
 import java.nio.file.Path;
 import java.nio.file.StandardOpenOption;
@@ -49,15 +46,13 @@ public final class Rows implements AutoCloseable {
         if (finished) throw new IllegalStateException("Record sorting is complete");
         Buffer buffer = buffers.get(kind);
         if (buffer == null) throw new IllegalArgumentException("Unknown collection: " + kind);
-        String id = row.get("id").getAsString();
-        byte[] bytes = CanonicalJson.bytes(row);
-        if (bytes.length > Dataset.RECORD_LIMIT) throw new IOException("Record exceeds 1 MiB: " + kind + "/" + id);
-        byte[] previous = buffer.rows.putIfAbsent(id, bytes);
+        CanonicalRecord record = new CanonicalRecord(row);
+        CanonicalRecord previous = buffer.rows.putIfAbsent(record.id, record);
         if (previous != null) {
-            if (!Arrays.equals(previous, bytes)) throw new IOException("Conflicting " + kind + " identity: " + id);
+            if (!Arrays.equals(previous.bytes, record.bytes)) throw new IOException("Conflicting " + kind + " identity: " + record.id);
             return;
         }
-        buffer.bytes += bytes.length;
+        buffer.bytes += record.bytes.length;
         if (buffer.bytes >= bufferLimit) spill(buffer);
     }
 
@@ -69,7 +64,7 @@ public final class Rows implements AutoCloseable {
             Buffer buffer = entry.getValue();
             sort(buffer);
             try (Dataset.Records records = dataset.records(entry.getKey())) {
-                merge(buffer.runs, row -> records.write(parse(row)));
+                merge(buffer.runs, records::write);
             }
             for (Path path : buffer.runs) Files.delete(path);
             buffer.runs.clear();
@@ -109,8 +104,8 @@ public final class Rows implements AutoCloseable {
             for (int start = 0; start < buffer.runs.size(); start += FAN_IN) {
                 List<Path> batch = buffer.runs.subList(start, Math.min(start + FAN_IN, buffer.runs.size()));
                 Path target = run();
-                try (OutputStream output = new BufferedOutputStream(Files.newOutputStream(target, StandardOpenOption.CREATE_NEW))) {
-                    merge(batch, row -> { output.write(row); output.write('\n'); });
+                try (DataOutputStream output = new DataOutputStream(new BufferedOutputStream(Files.newOutputStream(target, StandardOpenOption.CREATE_NEW)))) {
+                    merge(batch, row -> row.spill(output));
                 }
                 compacted.add(target);
                 for (Path path : batch) Files.delete(path);
@@ -119,13 +114,13 @@ public final class Rows implements AutoCloseable {
         }
     }
 
-    private Path run() { return directory.resolve(String.format(java.util.Locale.ROOT, "run-%08d.jsonl", sequence++)); }
+    private Path run() { return directory.resolve(String.format(java.util.Locale.ROOT, "run-%08d.rows", sequence++)); }
 
     private void spill(Buffer buffer) throws IOException {
         if (!created) { Dataset.plain(directory.getParent()); Files.createDirectory(directory); created = true; }
         Path path = run();
-        try (OutputStream output = new BufferedOutputStream(Files.newOutputStream(path, StandardOpenOption.CREATE_NEW))) {
-            for (byte[] row : buffer.rows.values()) { output.write(row); output.write('\n'); }
+        try (DataOutputStream output = new DataOutputStream(new BufferedOutputStream(Files.newOutputStream(path, StandardOpenOption.CREATE_NEW)))) {
+            for (CanonicalRecord row : buffer.rows.values()) row.spill(output);
         }
         buffer.runs.add(path);
         buffer.rows.clear(); buffer.bytes = 0;
@@ -133,7 +128,7 @@ public final class Rows implements AutoCloseable {
 
     private static void merge(List<Path> runs, Sink output) throws IOException {
         List<Cursor> cursors = new ArrayList<>();
-        PriorityQueue<Cursor> queue = new PriorityQueue<>((left, right) -> CanonicalJson.KEY_ORDER.compare(left.id, right.id));
+        PriorityQueue<Cursor> queue = new PriorityQueue<>((left, right) -> CanonicalJson.KEY_ORDER.compare(left.row.id, right.row.id));
         Throwable failure = null;
         try {
             for (Path path : runs) {
@@ -145,11 +140,11 @@ public final class Rows implements AutoCloseable {
             while (!queue.isEmpty()) {
                 Jobs.checkpoint();
                 Cursor cursor = queue.remove();
-                if (cursor.id.equals(previousId)) {
-                    if (!Arrays.equals(cursor.row, previousRow)) throw new IOException("Conflicting record identity: " + cursor.id);
+                if (cursor.row.id.equals(previousId)) {
+                    if (!Arrays.equals(cursor.row.bytes, previousRow)) throw new IOException("Conflicting record identity: " + cursor.row.id);
                 } else {
                     output.accept(cursor.row);
-                    previousId = cursor.id; previousRow = cursor.row;
+                    previousId = cursor.row.id; previousRow = cursor.row.bytes;
                 }
                 if (cursor.next()) queue.add(cursor);
             }
@@ -174,7 +169,7 @@ public final class Rows implements AutoCloseable {
         Dataset.plain(directory);
         try (java.nio.file.DirectoryStream<Path> files = Files.newDirectoryStream(directory)) {
             for (Path file : files) {
-                if (!file.getFileName().toString().matches("run-[0-9]{8}\\.jsonl")) {
+                if (!file.getFileName().toString().matches("run-[0-9]{8}\\.rows")) {
                     throw new IOException("Unexpected file in sort workspace: " + file);
                 }
                 Files.delete(file);
@@ -184,29 +179,19 @@ public final class Rows implements AutoCloseable {
         buffers.clear();
     }
 
-    private static JsonObject parse(byte[] row) { return new JsonParser().parse(new String(row, StandardCharsets.UTF_8)).getAsJsonObject(); }
-    private interface Sink { void accept(byte[] row) throws IOException; }
+    private interface Sink { void accept(CanonicalRecord row) throws IOException; }
     private static final class Buffer {
-        final TreeMap<String, byte[]> rows = new TreeMap<>(CanonicalJson.KEY_ORDER);
+        final TreeMap<String, CanonicalRecord> rows = new TreeMap<>(CanonicalJson.KEY_ORDER);
         List<Path> runs = new ArrayList<>();
         int bytes;
     }
     private static final class Cursor {
-        final InputStream input;
-        String id;
-        byte[] row;
-        Cursor(Path path) throws IOException { input = new BufferedInputStream(Files.newInputStream(path)); }
+        final DataInputStream input;
+        CanonicalRecord row;
+        Cursor(Path path) throws IOException { input = new DataInputStream(new BufferedInputStream(Files.newInputStream(path))); }
         boolean next() throws IOException {
-            ByteArrayOutputStream bytes = new ByteArrayOutputStream();
-            int value;
-            while ((value = input.read()) != -1 && value != '\n') {
-                if (bytes.size() >= Dataset.RECORD_LIMIT) throw new IOException("Sort run record exceeds 1 MiB");
-                bytes.write(value);
-            }
-            if (bytes.size() == 0 && value == -1) return false;
-            if (value != '\n') throw new IOException("Truncated sort run record");
-            row = bytes.toByteArray(); id = parse(row).get("id").getAsString();
-            return true;
+            row = CanonicalRecord.read(input);
+            return row != null;
         }
     }
 }

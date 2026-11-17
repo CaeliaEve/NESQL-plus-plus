@@ -1,4 +1,115 @@
 import net.minecraftforge.gradle.user.UserExtension
+import groovy.json.JsonSlurper
+import groovy.json.JsonOutput
+import java.security.MessageDigest
+
+fun targetCanonical(value: Any?): Any? = when (value) {
+    is Map<*, *> -> value.entries.associate { it.key.toString() to targetCanonical(it.value) }.toSortedMap()
+    is List<*> -> value.map(::targetCanonical)
+    else -> value
+}
+fun targetJson(value: Any): String = JsonOutput.toJson(targetCanonical(value)) + "\n"
+fun targetDigest(bytes: ByteArray): String =
+    MessageDigest.getInstance("SHA-256").digest(bytes).joinToString("") { "%02x".format(it.toInt() and 255) }
+fun resolveTargetProfile(manifest: ByteArray, policy: String): Map<String, Any> {
+    fun obj(value: Any?) = value as? Map<*, *> ?: error("Target profile object missing")
+    fun text(value: Any?) = value as? String ?: error("Target profile string missing")
+    val input = obj(JsonSlurper().parseText(policy))
+    require(input.keys == setOf("format", "id", "release", "manifestSha256", "artifacts", "families", "historicalInventories", "evidence")) { "Unknown target profile fields" }
+    require(input["format"] == "nesql.target-profile" && input["id"] == "gtnh-2.9.0")
+    val digest = targetDigest(manifest)
+    require(digest == input["manifestSha256"] && digest == "e2c7396c7121c86668ce3f93216f2bde71984a7ecd34ed5d231f8888ce3d13fa") { "Target manifest digest differs" }
+    val release = obj(JsonSlurper().parseText(String(manifest, Charsets.UTF_8)))
+    require(release["version"] == input["release"] && input["release"] == "2.9.0")
+    val containers = sortedMapOf<String, Any>()
+    val coordinates = sortedMapOf<String, String>()
+    for (raw in input["artifacts"] as List<*>) {
+        val row = obj(raw)
+        require(row.keys.all { it in setOf("key", "section", "containers", "ambiguous", "exceptions", "build", "file", "sha256") })
+        val section = text(row["section"] ?: "github_mods")
+        require(section == "github_mods" || section == "external_mods")
+        val key = text(row["key"])
+        val selected = obj(release[section])[key] ?: error("Target release selector missing: $section.$key")
+        val version = text(obj(selected)["version"])
+        val exceptions = row["exceptions"]?.let(::obj) ?: emptyMap<Any, Any>()
+        val ambiguous = row["ambiguous"] as? List<*> ?: emptyList<Any>()
+        val ids = row["containers"] as List<*>
+        require(ids.isNotEmpty() && exceptions.keys.all { it in ids } && ambiguous.all { it in ids })
+        require((row["sha256"] ?: "").toString().matches(Regex("([0-9a-f]{64})?")))
+        require((row["file"] ?: "").toString().let { !it.contains('/') && !it.contains('\\') && !it.contains("..") })
+        for (id in ids) {
+            val name = text(id)
+            require(!containers.containsKey(name)) { "Duplicate target container: $name" }
+            containers[name] = linkedMapOf("artifact" to key, "version" to text(exceptions[name] ?: version),
+                "binding" to if (name in ambiguous) "unverified" else "metadataOnly",
+                "file" to (row["file"] ?: ""), "sha256" to (row["sha256"] ?: ""))
+        }
+        row["build"]?.let { rawBuild ->
+            val build = obj(rawBuild)
+            require(build.keys.all { it in setOf("id", "group", "artifact", "classifier", "minecraftPrefix") })
+            val buildVersion = if (build["minecraftPrefix"] == true) "1.7.10-$version" else version
+            val id = text(build["id"])
+            require(!coordinates.containsKey(id)) { "Duplicate build coordinate: $id" }
+            coordinates[id] = "${text(build["group"])}:${text(build["artifact"])}:$buildVersion:${text(build["classifier"])}"
+        }
+    }
+    val families = obj(input["families"])
+    // This migration cannot approve semantic/callback evidence by changing a status flag.
+    require(families.values.all { it == "unverified" }) { "Reviewed families require a separate semantic audit implementation" }
+    require(obj(input["historicalInventories"]) == mapOf(
+        "native-usage-admission.json" to "historical-native-usage-admission.json",
+        "squeezer-callback-classes.json" to "historical-squeezer-callback-classes.json"))
+    return linkedMapOf("format" to "nesql.resolved-target-profile", "id" to text(input["id"]),
+        "manifestSha256" to digest, "build" to coordinates, "containers" to containers, "families" to families)
+}
+
+val targetManifest = file("targets/gtnh-2.9.0/manifest.json")
+val targetPolicy = file("targets/gtnh-2.9.0/profile.json")
+val targetProfile = resolveTargetProfile(targetManifest.readBytes(), targetPolicy.readText()).toMutableMap()
+targetProfile["historicalInventories"] = listOf("native-usage-admission.json", "squeezer-callback-classes.json").associateWith {
+    JsonSlurper().parse(file("targets/gtnh-2.9.0/historical-$it"))
+}
+targetProfile["profileSha256"] = targetDigest(targetJson(targetProfile).toByteArray(Charsets.UTF_8))
+val targetBuild = targetProfile["build"] as Map<*, *>
+fun targetDependency(id: String) = targetBuild[id] as? String ?: error("Unknown target dependency: $id")
+
+val generatedTarget = file("$buildDir/generated/target-profile")
+val generateTargetProfile = tasks.register("generateTargetProfile") {
+    inputs.files(targetManifest, targetPolicy)
+    val inventories = listOf("native-usage-admission.json", "squeezer-callback-classes.json")
+    inventories.forEach { inputs.file(file("targets/gtnh-2.9.0/historical-$it")) }
+    outputs.dir(generatedTarget)
+    doLast {
+        generatedTarget.mkdirs()
+        file("$generatedTarget/target-profile.json").writeText(targetJson(targetProfile), Charsets.UTF_8)
+        for (name in inventories)
+            file("targets/gtnh-2.9.0/historical-$name").copyTo(file("$generatedTarget/$name"), overwrite = true)
+    }
+}
+
+tasks.register("targetProfileTest") {
+    group = "verification"
+    doLast {
+        val manifest = file("targets/gtnh-2.9.0/manifest.json").readBytes()
+        val policy = file("targets/gtnh-2.9.0/profile.json").readText()
+        val resolved = resolveTargetProfile(manifest, policy)
+        check((resolved["build"] as Map<*, *>)["gregtech"] ==
+            "com.github.GTNewHorizons:GT5-Unofficial:5.09.54.265:dev")
+        val containers = resolved["containers"] as Map<*, *>
+        check((containers["IC2"] as Map<*, *>)["version"] == "2.2.828-experimental")
+        check((containers["gregtech"] as Map<*, *>)["binding"] == "unverified")
+        check(targetJson(resolved) == targetJson(resolveTargetProfile(manifest, policy)))
+        fun refuses(bytes: ByteArray, text: String) {
+            check(runCatching { resolveTargetProfile(bytes, text) }.isFailure)
+        }
+        refuses(manifest + byteArrayOf(10), policy)
+        refuses(manifest, policy.replace("\"GT5-Unofficial\"", "\"missing-release-key\""))
+        refuses(manifest, policy.replace("\"gtnhlib\"", "\"Forestry\""))
+        refuses(manifest, policy.replaceFirst("\"unverified\"", "\"reviewed\""))
+        refuses(manifest, policy.replace("\"format\":", "\"unknown\":0,\"format\":"))
+        println("Target profile: mapping, exception, ambiguity, digest, unknown selector and deterministic generation checks passed")
+    }
+}
 
 buildscript {
     repositories {
@@ -52,22 +163,59 @@ repositories {
 
 dependencies {
     // The target game supplies every runtime library. Ship one mod jar, with no embedded mod APIs.
-    compileOnly("com.github.GTNewHorizons:NotEnoughItems:${property("neiVersion")}:dev") { isTransitive = false }
-    compileOnly("com.github.GTNewHorizons:GT5-Unofficial:${property("gregTechVersion")}:dev") { isTransitive = false }
-    compileOnly("com.github.GTNewHorizons:CodeChickenCore:1.4.10:dev") { isTransitive = false }
-    compileOnly("com.github.GTNewHorizons:GTNHLib:0.7.10:dev") { isTransitive = false }
-    compileOnly("com.github.GTNewHorizons:ModularUI:1.2.20:dev") { isTransitive = false }
-    compileOnly("com.github.GTNewHorizons:ModularUI2:2.2.18-1.7.10:dev") { isTransitive = false }
-    compileOnly("com.github.GTNewHorizons:StructureLib:1.4.23:dev") { isTransitive = false }
-    compileOnly("com.github.GTNewHorizons:BlockRenderer6343:1.3.17:dev") { isTransitive = false }
-    compileOnly("com.github.GTNewHorizons:ForestryMC:${property("forestryVersion")}:api") { isTransitive = false }
-    compileOnly("thaumcraft:Thaumcraft:${property("minecraftVersion")}-${property("thaumcraftVersion")}:dev") { isTransitive = false }
+    for (id in listOf("nei", "gregtech", "ccc", "gtnhlib", "modularui", "modularui2", "structurelib", "blockrenderer", "forestry", "thaumcraft"))
+        compileOnly(targetDependency(id)) { isTransitive = false }
+    // BlockRenderer's public construction metadata exposes FastUtil collections.
+    compileOnly("it.unimi.dsi:fastutil:8.5.18") { isTransitive = false }
     // GT's public tile interfaces expose Waila types; needed only for lifecycle test doubles.
-    testRuntimeOnly("com.github.GTNewHorizons:waila:1.8.15:dev") { isTransitive = false }
+    testRuntimeOnly(targetDependency("waila")) { isTransitive = false }
+}
+
+sourceSets.main.get().resources.srcDir(generatedTarget)
+tasks.named("processResources") { dependsOn(generateTargetProfile) }
+tasks.register("resolveTargetGt") {
+    doLast {
+        val gt = configurations.detachedConfiguration(dependencies.create(targetDependency("gregtech")))
+        gt.isTransitive = false
+        gt.files.forEach { println("Target GT dependency: ${it.absolutePath}") }
+    }
 }
 
 // Two behavior suites cover source identity/publication and the job/API lifecycle.
 val gameLibraries = sourceSets.main.get().compileClasspath
+val targetAdmissionClasses = tasks.register<JavaCompile>("compileTargetAdmissionTests") {
+    source(files("TargetProfile.java", "SqueezerCallbackClasses.java").map {
+        file("src/main/java/com/github/dcysteine/nesql/exporter/capture/${it.name}")
+    })
+    source(files("TargetProfileTest.java", "TargetClassLoaderTest.java").map {
+        file("src/test/java/com/github/dcysteine/nesql/exporter/capture/${it.name}")
+    })
+    classpath = gameLibraries
+    destinationDir = file("$buildDir/target-admission-tests")
+}
+tasks.register<JavaExec>("targetAdmissionTest") {
+    group = "verification"
+    dependsOn(targetAdmissionClasses, generateTargetProfile)
+    classpath = files(targetAdmissionClasses.get().destinationDir) + gameLibraries
+    main = "com.github.dcysteine.nesql.exporter.capture.TargetProfileTest"
+    args(file("$generatedTarget/target-profile.json").absolutePath)
+    maxHeapSize = "64m"
+}
+tasks.register<JavaExec>("targetClassLoaderTest") {
+    group = "verification"
+    dependsOn(targetAdmissionClasses)
+    classpath = files(targetAdmissionClasses.get().destinationDir, "src/test/target-profile") + gameLibraries
+    main = "com.github.dcysteine.nesql.exporter.capture.TargetClassLoaderTest"
+    maxHeapSize = "64m"
+}
+tasks.register<JavaExec>("targetArchiveTest") {
+    group = "verification"
+    dependsOn("testClasses", generateTargetProfile)
+    classpath = sourceSets.test.get().runtimeClasspath + gameLibraries
+    main = "com.github.dcysteine.nesql.exporter.capture.TargetArchiveTest"
+    args(file("$generatedTarget/target-profile.json").absolutePath)
+    maxHeapSize = "128m"
+}
 sourceSets.test.get().compileClasspath += gameLibraries
 val checks = listOf("source" to "source.SourceTest", "jobs" to "task.JobsTest").map { (name, entrypoint) ->
     tasks.register<JavaExec>("${name}Test") {
@@ -88,6 +236,31 @@ tasks.register<JavaExec>("visualThroughputTest") {
     dependsOn("testClasses")
     classpath = sourceSets.test.get().runtimeClasspath + gameLibraries
     main = "com.github.dcysteine.nesql.exporter.capture.VisualThroughputTest"
+    maxHeapSize = "128m"
+    project.findProperty("animationMods")?.toString()?.let { systemProperty("nesql.animationMods", it) }
+}
+tasks.register<JavaExec>("oreGroupsBudgetTest") {
+    group = "verification"
+    description = "Checks the bounded native ore-group registry budget."
+    dependsOn("testClasses")
+    classpath = sourceSets.test.get().runtimeClasspath + gameLibraries
+    main = "com.github.dcysteine.nesql.exporter.capture.OreGroupsBudgetTest"
+    maxHeapSize = "128m"
+}
+tasks.register<JavaExec>("captureProfileTest") {
+    group = "verification"
+    description = "Checks profile-specific capture stages."
+    dependsOn("testClasses")
+    classpath = sourceSets.test.get().runtimeClasspath + gameLibraries
+    main = "com.github.dcysteine.nesql.exporter.capture.CaptureProfileTest"
+    maxHeapSize = "128m"
+}
+tasks.register<JavaExec>("captureInspectionTest") {
+    group = "verification"
+    description = "Checks non-fatal handler diagnostics during game inspection."
+    dependsOn("testClasses")
+    classpath = sourceSets.test.get().runtimeClasspath + gameLibraries
+    main = "com.github.dcysteine.nesql.exporter.capture.CaptureInspectionTest"
     maxHeapSize = "128m"
 }
 tasks.named<JavaExec>("sourceTest") {
@@ -130,10 +303,23 @@ tasks.register<JavaExec>("nativeMachinesTest") {
     dependsOn("testClasses")
     classpath = sourceSets.test.get().runtimeClasspath + files(listOfNotNull(project.findProperty("nativeTestJar"), project.findProperty("nativeExtraTestJar"), project.findProperty("nativeCraftingTestJar"))) +
         files(project.findProperty("nativeAdditionalJars")?.toString()?.split(',') ?: emptyList<String>()) + gameLibraries
+    // Runtime-law tests must not silently prefer Gradle's Guava over the target
+    // game's library. The oracle validates the supplied artifact's exact digest.
+    project.findProperty("nativeGuavaJar")?.toString()?.let { path ->
+        val nativeGuava = file(path)
+        require(nativeGuava.isFile) { "nativeGuavaJar must name an existing game library" }
+        classpath = files(nativeGuava) + classpath.filter {
+            !it.name.matches(Regex("guava-[0-9].*\\.jar"))
+        }
+    }
+    if (project.findProperty("nativeFamily") == "usage-queries") classpath = files("build/native-tests/usage-profile") + classpath
     main = "com.github.dcysteine.nesql.exporter.capture.NativeMachinesTest"
     maxHeapSize = "256m"
     systemProperty("nesql.nativeMachineTests", "true")
     systemProperty("nesql.nativeFamily", project.findProperty("nativeFamily")?.toString() ?: "machines")
+    systemProperty("nesql.nativeOreOptimized", project.findProperty("nativeOreOptimized")?.toString() ?: "false")
+    project.findProperty("nativeUsageFixture")?.toString()?.let { systemProperty("nesql.nativeUsageFixture", it) }
+    project.findProperty("nativeFixtureDirectory")?.toString()?.let { systemProperty("nesql.nativeFixtureDirectory", it) }
 }
 
 tasks.register<JavaExec>("nativeGendustryFluidsTest") {
@@ -195,6 +381,7 @@ tasks.register<JavaExec>("glTest") {
 
 tasks.withType<Jar> {
     archiveBaseName.set("NESQL++")
+    manifest.attributes(mapOf("FMLCorePlugin" to "com.github.dcysteine.nesql.exporter.core.RendererPlugin", "FMLCorePluginContainsFMLMod" to "true"))
     filesMatching("mcmod.info") {
         expand(mapOf("version" to project.version, "mcversion" to project.property("minecraftVersion")))
     }

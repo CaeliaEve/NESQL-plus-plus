@@ -31,8 +31,11 @@ final class NativeRailWildcardTest {
         ItemStack candidate = new ItemStack(item, 12, 7);
         candidate.setTagInfo("catalogOnly", new net.minecraft.nbt.NBTTagInt(99));
         List<ItemStack> previous = ItemList.items;
+        boolean previousReady=ItemList.loadFinished;
         try {
+            ItemList.loadFinished=true;
             derived(item, candidate);
+            negativeSentinel(item,candidate);
             ItemList.items = new ArrayList<>(Arrays.asList(template.copy(), new ItemStack(Items.coal), candidate));
             for (boolean nbt : new boolean[]{false, true}) {
                 if (nbt) template.setTagInfo("grade", new net.minecraft.nbt.NBTTagInt(5));
@@ -73,8 +76,39 @@ final class NativeRailWildcardTest {
                 } catch (Jobs.Fault expected) { require(expected.code.equals("recipe_unsupported"), "Wrong missing-example failure"); }
                 ItemList.items = new ArrayList<>(Arrays.asList(template.copy(), candidate));
             }
-        } finally { ItemList.items = previous; }
+        } finally { ItemList.items = previous;ItemList.loadFinished=previousReady; }
         System.out.println("Native Railcraft/AmunRa: concrete display, wildcard/NBT semantics, absent-example rejection and source ownership passed");
+    }
+    private static void negativeSentinel(Item item,ItemStack candidate)throws Exception{
+        ItemList.items=new ArrayList<>(Collections.singletonList(candidate));
+        ItemStack raw=new ItemStack(item,9,0),output=new ItemStack(Items.coal,2,1);
+        cpw.mods.fml.relauncher.ReflectionHelper.setPrivateValue(ItemStack.class,raw,-1,"itemDamage","field_77991_e");
+        Class<?> type=Class.forName("mods.railcraft.common.util.crafting.CokeOvenCraftingManager");Object manager=type.newInstance();
+        type.getMethod("addRecipe",ItemStack.class,boolean.class,boolean.class,ItemStack.class,FluidStack.class,int.class)
+            .invoke(manager,raw,true,false,output,new FluidStack(FluidRegistry.WATER,250),51);
+        TemplateRecipeHandler handler=(TemplateRecipeHandler)Class.forName("tonius.neiintegration.mods.railcraft.RecipeHandlerCokeOven").newInstance();
+        ItemStack concrete=new ItemStack(item,1,7);
+        try(RailRecipes reader=new RailRecipes(handler,(List<?>)type.getMethod("getRecipes").invoke(manager))){
+            RecipeRow row=NativeCoreFixesTest.row(concrete,output);require(reader.capture(0,row),"Native -1 wildcard template disappeared");
+            require(row.inputs.get(0).getAsJsonObject().getAsJsonArray("choices").get(0).getAsJsonObject().get("id").getAsString().equals(id(concrete)),"Negative wildcard leaked into item facts");
+            reader.finishVerification();
+        }
+        require(Items.feather.getDamage(raw)==-1,"Owned anchor clamped borrowed negative sentinel");
+        ItemStack literal=new ItemStack(item,9,3);manager=type.newInstance();
+        type.getMethod("addRecipe",ItemStack.class,boolean.class,boolean.class,ItemStack.class,FluidStack.class,int.class)
+            .invoke(manager,literal,true,false,output,new FluidStack(FluidRegistry.WATER,250),51);
+        ItemStack display=new ItemStack(item,1,3);
+        try(RailRecipes reader=new RailRecipes(handler,(List<?>)type.getMethod("getRecipes").invoke(manager))){
+            RecipeRow row=NativeCoreFixesTest.row(display,output);require(reader.capture(0,row),"Literal native Rail rule disappeared");reader.finishVerification();
+            Set<Integer> sentinels=new HashSet<>();
+            for(com.google.gson.JsonElement choice:row.inputs.get(0).getAsJsonObject().getAsJsonArray("choices")){
+                JsonObject rule=choice.getAsJsonObject().getAsJsonObject("rule");if(rule.get("kind").getAsString().equals("metadata"))sentinels.add(rule.get("value").getAsInt());
+            }
+            require(sentinels.equals(new HashSet<>(Arrays.asList(-1,32767))),"Native offered-stack wildcard branches are incomplete");
+            JsonObject origin=com.github.dcysteine.nesql.exporter.source.Json.object("owner","Railcraft","handler",handler.getClass().getName(),"key","literal-wildcards");
+            row.record.add("source",origin);row.record.addProperty("category",Identity.content("category",origin));
+            NativeContractFixture.writeOwned("native-rail-literal-wildcards",row,Arrays.asList(display,output),new FluidStack(FluidRegistry.WATER,250));
+        }
     }
     private static void derived(Item item, ItemStack candidate) throws Exception {
         // Concrete native input creates a second, literal-32767 branch. Replacing

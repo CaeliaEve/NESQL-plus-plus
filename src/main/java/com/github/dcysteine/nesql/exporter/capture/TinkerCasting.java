@@ -1,6 +1,5 @@
 package com.github.dcysteine.nesql.exporter.capture;
 
-import codechicken.nei.PositionedStack;
 import codechicken.nei.recipe.TemplateRecipeHandler;
 import cpw.mods.fml.common.eventhandler.*;
 import com.github.dcysteine.nesql.exporter.task.Jobs;
@@ -15,12 +14,43 @@ import static com.github.dcysteine.nesql.exporter.capture.MagicApi.*;
 import static com.github.dcysteine.nesql.exporter.capture.TinkerRecipes.construct;
 import static com.github.dcysteine.nesql.exporter.source.Json.*;
 
-/** Native casting predicates and audited, actually registered event callbacks on owned data. */
+/** Native casting predicates and projections of admitted registered event laws on owned data. */
 final class TinkerCasting {
     private static final String RECIPE = "tconstruct.library.crafting.CastingRecipe";
     private static final String EVENTS = "tconstruct.library.event.";
+    /** Registered listeners and generated wrapper/target identities are borrowed and sealed. */
+    static final class Events implements AutoCloseable {
+        private final Map<Class<?>,Binding> bindings=new HashMap<>();
+        final TinkerCastingSources sources=new TinkerCastingSources();
+        private boolean closed;
+        void bind(Event event,IEventListener[] listeners,Map<IEventListener,Method> callbacks){
+            alive();Binding prior=bindings.get(event.getClass());if(prior==null){if(bindings.size()>=4)throw fault("Casting event family budget exceeded");bindings.put(event.getClass(),new Binding(event,listeners,callbacks));}else prior.verify();
+        }
+        void verify(){alive();for(Binding binding:bindings.values())binding.verify();sources.verify();}
+        void finishVerification(){verify();sources.finishVerification();}
+        private void alive(){Jobs.checkpoint();if(closed)throw new Jobs.Fault("capture_closed","Casting event bindings are closed");}
+        public void close(){closed=true;bindings.clear();sources.close();}
+    }
+    private static final class Binding {
+        final ListenerList list;final int bus;final IEventListener[] listeners;final Object[] wrappers,targets;
+        final Map<?,?> cache;final Method[] callbacks;
+        Binding(Event event,IEventListener[] listeners,Map<IEventListener,Method> methods){this.list=event.getListenerList();this.bus=(Integer)field(EventBus.class,MinecraftForge.EVENT_BUS,"busID");this.listeners=listeners.clone();wrappers=new Object[listeners.length];targets=new Object[listeners.length];callbacks=new Method[listeners.length];cache=cache();
+            for(int i=0;i<listeners.length;i++)if(listeners[i].getClass()==ASMEventHandler.class){wrappers[i]=field(listeners[i],"handler");targets[i]=field(wrappers[i],"instance");callbacks[i]=methods.get(listeners[i]);}}
+        void verify(){
+            if((Integer)field(EventBus.class,MinecraftForge.EVENT_BUS,"busID")!=bus||cache()!=cache)throw changed();IEventListener[] now=list.getListeners(bus);
+            if(now.length!=listeners.length)throw changed();for(int i=0;i<now.length;i++){
+                if(now[i]!=listeners[i])throw changed();if(wrappers[i]!=null&&(field(now[i],"handler")!=wrappers[i]||field(wrappers[i],"instance")!=targets[i]||cache.get(callbacks[i])!=wrappers[i].getClass()))throw changed();
+            }
+        }
+    }
 
     static boolean capture(TemplateRecipeHandler handler, Object source, RecipeRow row) {
+        return capture(handler.getClass().getName(),source,row);
+    }
+    static boolean capture(String handler,Object source,RecipeRow row){
+        try(NativeItemExamples examples=new NativeItemExamples();Events events=new Events()){boolean result=capture(handler,source,row,examples,events);examples.verify();events.finishVerification();return result;}
+    }
+    static boolean capture(String handler,Object source,RecipeRow row,NativeItemExamples examples,Events events){
         if (source == null || !source.getClass().getName().equals(RECIPE)) throw fault("Unadapted casting override: " + (source == null ? "null" : source.getClass().getName()));
         ItemStack cast = (ItemStack) field(source, "cast"), output = (ItemStack) field(source, "output");
         FluidStack fluid = (FluidStack) field(source, "castingMetal");
@@ -29,34 +59,29 @@ final class TinkerCasting {
         if (output == null || output.getItem() == null || output.stackSize <= 0 || fluid == null || fluid.getFluid() == null || fluid.amount <= 0)
             throw fault("Casting has no fixed output/fluid requirement");
         // Cooling is only processed while the countdown is positive. The native inventory holds one cast.
-        if (time <= 0 || cast == null && ignore) return false;
+        if (time <= 0) return row.exclude(object("native",RECIPE,"reason","native_cooling_requires_positive_countdown","coolTime",time));
+        if(cast==null&&ignore)return row.exclude(object("native",RECIPE,"reason","native_ignoreNBT_predicate_requires_nonnull_cast"));
         boolean wildcard = cast != null && cast.getItemDamage() == OreDictionary.WILDCARD_VALUE;
         if (cast != null && cast.getItem() == null) throw fault("Casting has an invalid mould");
-        if (cast != null && !wildcard && !ignore && cast.stackSize != 1) return false;
+        if (cast != null && !wildcard && !ignore && cast.stackSize != 1) return row.exclude(object("native",RECIPE,"reason","native_single_cast_inventory_cannot_match_template_count","cast",RecipeRow.stackEvidence(cast)));
         output = output.copy(); fluid = fluid.copy();
         if (cast != null) { cast = cast.copy(); cast.stackSize = 1; }
         Class<?> recipeType = type(RECIPE);
         Object projection = construct(recipeType, new Class<?>[] {ItemStack.class, FluidStack.class, ItemStack.class, boolean.class,
                 int.class, type("tconstruct.library.client.FluidRenderProperties"), boolean.class}, output.copy(), fluid.copy(),
                 cast == null ? null : cast.copy(), consume, time, null, ignore);
-        String machine = handler.getClass().getName().endsWith("Table") ? "CastingTable" : "CastingBasin";
+        String machine = handler.endsWith("Table") ? "CastingTable" : "CastingBasin";
         Event before = (Event) construct(type(EVENTS + "SmelteryCastEvent$" + machine), new Class<?>[] {recipeType, FluidStack.class}, projection, fluid.copy());
-        dispatch(before);
-        if (before.getResult() == Event.Result.DENY) return false;
+        dispatch(before,events);
+        if (before.getResult() == Event.Result.DENY) return row.exclude(object("native",before.getClass().getName(),"reason","audited_native_cast_event_denied_owned_projection"));
         Event after = (Event) construct(type(EVENTS + "SmelteryCastedEvent$" + machine), new Class<?>[] {recipeType, ItemStack.class}, projection, output.copy());
-        boolean unstable = dispatch(after);
+        boolean unstable = dispatch(after,events);
         output = (ItemStack) field(after, "output"); consume = (Boolean) field(after, "consumeCast");
         if (output == null || output.getItem() == null || output.stackSize <= 0) throw fault("Casting event produced no fixed result");
         output = output.copy();
-        // Project the effective output/consumption without changing the native recipe registry.
-        try { recipeType.getField("output").set(projection, output.copy()); recipeType.getField("consumeCast").setBoolean(projection, consume); }
-        catch (ReflectiveOperationException error) { Jobs.Fault failure = fault("Cannot project casting result"); failure.initCause(error); throw failure; }
-        TemplateRecipeHandler.CachedRecipe cached = (TemplateRecipeHandler.CachedRecipe) construct(type("tconstruct.plugins.nei.RecipeHandlerCastingBase$CachedCastingRecipe"),
-                new Class<?>[] {type("tconstruct.plugins.nei.RecipeHandlerCastingBase"), recipeType}, handler, projection);
         if (cast != null) {
-            PositionedStack position = cached.getIngredients().get(0);
             List<RecipeRow.Ingredient> choices = new ArrayList<>();
-            for (ItemStack displayed : position.items) {
+            for (ItemStack displayed : examples.copies(cast)) {
                 if (displayed.getItem() != cast.getItem() || !wildcard && displayed.getItemDamage() != cast.getItemDamage())
                     throw new Jobs.Fault("slot_changed", "Casting mould expansion changed its source");
                 ItemStack fact = displayed.copy(); fact.stackSize = 1;
@@ -64,19 +89,19 @@ final class TinkerCasting {
                 choices.add(new RecipeRow.Ingredient(fact, 1, !consume, wildcard || ignore
                         ? object("kind", "wildcard", "meta", wildcard, "nbt", true) : object("kind", "exact")));
             }
-            row.itemInput(position, 0, choices, false);
-        } else row.property("tconstruct:emptyCast", "Requires an empty casting slot", true);
-        row.fluidInput(null, 0, fluid, false); row.itemOutput(cached.getResult(), 0, output, 10000);
+            row.itemInput(0, choices, false);
+        } else row.note("tconstruct:emptyCast",RECIPE+"#matches",row.facts.locale().equals("zh_CN")?"浇铸槽必须为空，不接受额外模具或物品。":"The casting item slot must be empty; an extra mould or item prevents matching.");
+        row.fluidInput(0, fluid, false); row.itemOutput(0, output, 10000);
         row.record.addProperty("duration", Integer.toString(time));
         if (unstable) row.record.add("process", object("kind", "unstableCasting"));
-        handler.arecipes.clear(); handler.arecipes.add(cached); return true;
+        return true;
     }
 
-    private static boolean dispatch(Event event) {
+    private static boolean dispatch(Event event,Events events) {
         int bus = (Integer) field(EventBus.class, MinecraftForge.EVENT_BUS, "busID");
         IEventListener[] listeners = event.getListenerList().getListeners(bus).clone();
-        Set<IEventListener> timers = Collections.newSetFromMap(new IdentityHashMap<>());
-        Set<IEventListener> extraUtils = Collections.newSetFromMap(new IdentityHashMap<>());
+        if(listeners.length>4096)throw fault("Native casting listener budget exceeded");
+        Map<IEventListener,Method> callbacks=new IdentityHashMap<>();
         // Validate the complete snapshot before running anything. Unknown callbacks must never execute.
         for (IEventListener listener : listeners) {
             if (listener instanceof EventPriority) continue;
@@ -84,16 +109,16 @@ final class TinkerCasting {
             Object wrapper = field(listener, "handler"), target = field(wrapper, "instance");
             String name = target.getClass().getName(), callback;
             if (name.equals("com.rwtema.extrautils.modintegration.TConEvents")) {
-                version("ExtraUtilities", "1.2.12");
+                MagicApi.version("TinkerCasting","ExtraUtilities");
                 if (!event.getClass().getName().equals(EVENTS+"SmelteryCastedEvent$CastingTable"))
                     throw fault("Unexpected ExtraUtilities casting event");
                 boolean matched=false;
                 for (String candidate:new String[]{"addUnstableTimer","addBedrockiumPartSlowness"}) {
                     try {
                         Method method=target.getClass().getDeclaredMethod(candidate,event.getClass());
-                        if (((Map<?,?>)field(ASMEventHandler.class,null,"cache")).get(method)==wrapper.getClass()) {
-                            matched=true;extraUtils.add(listener);
-                            if (candidate.equals("addUnstableTimer")) timers.add(listener);
+                        if (cache().get(method)==wrapper.getClass()) {
+                            if(matched)throw fault("Casting wrapper aliases two native callbacks");
+                            matched=true;callbacks.put(listener,method);
                         }
                     } catch (NoSuchMethodException error) { throw fault("Missing pinned ExtraUtilities callback: "+candidate); }
                 }
@@ -108,41 +133,31 @@ final class TinkerCasting {
             }
             try {
                 Method method = target.getClass().getDeclaredMethod(callback, event.getClass());
-                Map<?, ?> cache = (Map<?, ?>) field(ASMEventHandler.class, null, "cache");
-                if (cache.get(method) != wrapper.getClass()) throw fault("Unadapted callback on casting event owner: " + name);
+                if (cache().get(method) != wrapper.getClass()) throw fault("Unadapted callback on casting event owner: " + name);
+                callbacks.put(listener,method);
             } catch (NoSuchMethodException error) { throw fault("Unadapted casting event callback: " + name + "/" + event.getClass().getName()); }
         }
+        events.bind(event,listeners,callbacks);
         boolean unstable=false;
         for (IEventListener listener : listeners) {
             Jobs.checkpoint();
-            if (extraUtils.contains(listener)) {
-                ItemStack output=(ItemStack)field(event,"output");
-                int material=material(output);
-                if (timers.contains(listener)) {
-                    int configured=(Integer)field(type("com.rwtema.extrautils.ExtraUtils"),null,"tcon_unstable_material_id");
-                    if (configured>0 && material==configured) {
-                        // The native callback creates a compound, then reads server clocks.
-                        // Retain its base output, and represent clock writes as process semantics.
-                        if (output.getTagCompound()==null) output.setTagCompound(new NBTTagCompound());
-                        unstable=true;
-                    }
-                    continue;
-                }
+            if(listener instanceof EventPriority)continue;
+            switch(callbacks.get(listener).getName()){
+                case "weaponryPartCast":events.sources.weaponry(event);break;
+                case "onPartCasting":events.sources.restrict(event);break;
+                case "onCasted":events.sources.consumePattern(event);break;
+                case "addUnstableTimer":unstable|=events.sources.extra(event,true);break;
+                case "addBedrockiumPartSlowness":events.sources.extra(event,false);break;
+                default:throw fault("Unknown validated casting callback");
             }
-            listener.invoke(event);
         }
         return unstable;
     }
-    private static int material(ItemStack output) {
-        if (output==null || !type("tconstruct.library.util.IToolPart").isInstance(output.getItem())) return -1;
-        try {
-            Method getter=output.getItem().getClass().getMethod("getMaterialID",ItemStack.class);
-            String owner=getter.getDeclaringClass().getName();
-            if ((!owner.equals("tconstruct.tools.items.ToolPart") && !owner.equals("tconstruct.library.tools.DynamicToolPart"))
-                    || ItemCallbacks.method(output.getItem(),"getDamage","getDamage",ItemStack.class).getDeclaringClass()!=net.minecraft.item.Item.class)
-                throw fault("Unadapted casting material predicate: "+owner);
-            return (Integer)invoke(output.getItem().getClass(),output.getItem(),"getMaterialID",new Class<?>[]{ItemStack.class},output.copy());
-        } catch (NoSuchMethodException error) { throw fault("Missing tool-part material getter"); }
+    private static Map<?,?> cache(){
+        Object raw=field(ASMEventHandler.class,null,"cache");
+        if(raw==null||raw.getClass()!=HashMap.class)throw fault("Unadapted casting ASM callback cache");
+        return (Map<?,?>)raw;
     }
+    private static Jobs.Fault changed(){return new Jobs.Fault("recipe_changed","Registered casting event listeners changed");}
     private static Jobs.Fault fault(String message) { return new Jobs.Fault("recipe_unsupported", message); }
 }

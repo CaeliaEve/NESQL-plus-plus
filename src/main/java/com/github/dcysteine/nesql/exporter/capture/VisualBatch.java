@@ -1,6 +1,6 @@
 package com.github.dcysteine.nesql.exporter.capture;
 
-import com.github.dcysteine.nesql.exporter.task.Slice;
+import com.github.dcysteine.nesql.exporter.task.Jobs;
 import java.util.ArrayList;
 import java.util.List;
 import java.util.concurrent.Callable;
@@ -18,10 +18,17 @@ final class VisualBatch {
     void add(Callable<Images.Image> draw, Save save) { draws.add(draw); saves.add(save); }
     void capture() throws Exception {
         if (!ready.isEmpty()) throw new IllegalStateException("Write the previous pixel slice before capturing another");
-        captured = Slice.run(captured, draws.size(), index -> {
-            Images.Image image = draws.get(index).call(); ready.add(image);
-            return (long) image.pixels.getWidth() * image.pixels.getHeight() * 4;
-        });
+        // A native animation yields between frame slices. Do not advance its
+        // owning recipe or publish an incomplete sheet.
+        long started = System.nanoTime(), bytes = 0; int operations = 0;
+        while (captured < draws.size() && operations++ < 32) {
+            Jobs.checkpoint();
+            Images.Image image = draws.get(captured).call();
+            if (image == null) break;
+            ready.add(image); captured++;
+            bytes += (long) image.pixels.getWidth() * image.pixels.getHeight() * 4;
+            if (bytes >= 4 * 1024 * 1024L || System.nanoTime() - started >= 4_000_000) break;
+        }
     }
     void write() throws Exception {
         for (Images.Image image : ready) saves.get(written++).accept(image);

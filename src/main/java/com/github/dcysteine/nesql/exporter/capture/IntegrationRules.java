@@ -22,6 +22,8 @@ final class IntegrationRules {
     private final JsonObject context;
     private final String fingerprint;
     private final JsonObject environment;
+    private final List<Object> boundFields,boundEntries;
+    private final Map<String,Object> boundRegistry;
 
     IntegrationRules(Object recipe) {
         this.recipe=recipe;
@@ -33,6 +35,7 @@ final class IntegrationRules {
             default:throw fault("Unadapted integration recipe: "+name);
         }
         environment=environment();context=snapshot();fingerprint=CanonicalJson.digest(context);
+        boundFields=bindingFields();boundEntries=bindingEntries();boundRegistry=registryObjects();
         // The immutable environment can contain thousands of block identities. Hash
         // only mutable recipe/board/chipset state for each observation.
         environment.entrySet().forEach(entry->context.add(entry.getKey(),entry.getValue()));
@@ -40,9 +43,26 @@ final class IntegrationRules {
 
     JsonObject context() { return new JsonParser().parse(context.toString()).getAsJsonObject(); }
 
+    void verify(){
+        if(!same(boundFields,bindingFields())||!same(boundEntries,bindingEntries())||!fingerprint.equals(CanonicalJson.digest(snapshot())))
+            throw changed("native rule fields, entries or facts changed");
+    }
+    void finishVerification(){
+        verify();Map<String,Object> current=registryObjects();
+        if(current.size()!=boundRegistry.size())throw changed("native registry identity count changed");
+        for(Map.Entry<String,Object> entry:boundRegistry.entrySet())if(current.get(entry.getKey())!=entry.getValue())throw changed("native registry identity changed");
+        if(!environment.equals(environment()))throw changed("native rule environment changed");
+    }
+
     Observation observe(ItemStack offered,List<ItemStack> slots,boolean preview) {
+        verify();Observation result;
+        try{result=observeOwned(offered,slots,preview);}catch(RuntimeException|Error failure){
+            try{verify();}catch(RuntimeException|Error drift){if(drift!=failure)failure.addSuppressed(drift);}throw failure;
+        }
+        verify();return result;
+    }
+    private Observation observeOwned(ItemStack offered,List<ItemStack> slots,boolean preview){
         if(slots==null||slots.size()>8)throw fault("Integration has exactly eight physical expansion slots");
-        if(!fingerprint.equals(CanonicalJson.digest(snapshot())))throw new Jobs.Fault("recipe_changed","Integration registry changed after rule capture");
         familyCheck(offered);
         for(ItemStack stack:slots)if(stack!=null)familyCheck(stack);
         // Copy the complete graph once: even an aliased stack in two slots retains native
@@ -65,6 +85,55 @@ final class IntegrationRules {
             Jobs.Fault wrapped=new Jobs.Fault("recipe_capture","Integration "+kind+" "+(preview?"preview":"completion")+" failed on owned inputs: "+failure);
             wrapped.initCause(failure);throw wrapped;
         }
+    }
+
+    private List<Object> bindingFields(){
+        List<Object> result=new ArrayList<>();
+        if(kind.equals("gate")){
+            result.add(field(recipe,"recipes"));result.add(field(type("buildcraft.BuildCraftSilicon"),null,"redstoneChipset"));
+        }else if(kind.equals("facade")){
+            for(String key:new String[]{"facadeItem","pipeWire","plugItem"})result.add(field(type("buildcraft.BuildCraftTransport"),null,key));
+            result.add(field(type("buildcraft.api.transport.PipeWire"),null,"item"));
+        }else{
+            for(String key:new String[]{"robotItem","redstoneBoard"})result.add(field(type("buildcraft.BuildCraftRobotics"),null,key));
+            Object registry=field(type("buildcraft.api.boards.RedstoneBoardRegistry"),null,"instance");
+            result.add(registry);result.add(field(registry,"boards"));result.add(field(registry,"emptyRobotBoardNBT"));
+        }
+        return result;
+    }
+    private List<Object> bindingEntries(){
+        List<Object> result=new ArrayList<>();
+        Object source=kind.equals("gate")?field(recipe,"recipes"):kind.equals("robot")
+            ?field(field(type("buildcraft.api.boards.RedstoneBoardRegistry"),null,"instance"),"boards"):null;
+        if(source!=null){
+            if(!(source instanceof Map<?,?>)||((Map<?,?>)source).size()>4096)throw fault("Invalid integration binding map");
+            for(Map.Entry<?,?> entry:((Map<?,?>)source).entrySet()){
+                Jobs.checkpoint();result.add(entry.getKey());result.add(entry.getValue());
+                if(kind.equals("gate")&&!(entry.getValue() instanceof ItemStack))throw fault("Invalid gate chipset binding");
+                result.add(kind.equals("gate")?((ItemStack)entry.getValue()).getItem():field(entry.getValue(),"boardNBT"));
+            }
+        }
+        return result;
+    }
+    private static boolean same(List<Object> expected,List<Object> current){
+        if(expected.size()!=current.size())return false;
+        for(int index=0;index<expected.size();index++)if(expected.get(index)!=current.get(index))return false;
+        return true;
+    }
+    private Map<String,Object> registryObjects(){
+        Map<String,Object> result=new TreeMap<>();
+        Class<?> primary=type(kind.equals("gate")?TRANSPORT+"gates.ItemGate":kind.equals("facade")?TRANSPORT+"ItemFacade":ROBOTICS+"ItemRobot");
+        Class<?> extra=kind.equals("facade")?type(TRANSPORT+"ItemPipeWire"):kind.equals("robot")?type(ROBOTICS+"ItemRedstoneBoard"):null;
+        int count=0;
+        for(Object raw:Item.itemRegistry){
+            Jobs.checkpoint();if(++count>262144)throw fault("Integration item registry budget exceeded");
+            if(primary.isInstance(raw)||extra!=null&&extra.isInstance(raw))result.put("item:"+registered((Item)raw),raw);
+        }
+        if(kind.equals("facade"))for(Object raw:net.minecraft.block.Block.blockRegistry){
+            Jobs.checkpoint();if(result.size()>262144)throw fault("Integration block registry budget exceeded");
+            result.put("block:"+net.minecraft.block.Block.getIdFromBlock((net.minecraft.block.Block)raw),raw);
+        }
+        return result;
     }
 
     private JsonObject snapshot() {
@@ -186,4 +255,5 @@ final class IntegrationRules {
         Observation(ItemStack input,List<ItemStack> expansions,ItemStack output){this.input=input;this.expansions=Collections.unmodifiableList(expansions);this.output=output;}
     }
     private static Jobs.Fault fault(String message){return new Jobs.Fault("recipe_unsupported",message);}
+    private static Jobs.Fault changed(String message){return new Jobs.Fault("recipe_changed","Integration "+message);}
 }

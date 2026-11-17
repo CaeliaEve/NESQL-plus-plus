@@ -3,7 +3,13 @@ package com.github.dcysteine.nesql.exporter.capture;
 import com.github.dcysteine.nesql.exporter.task.Jobs;
 import net.minecraft.init.Items;
 import net.minecraft.item.ItemStack;
+import thaumcraft.api.crafting.InfusionRecipe;
+import thaumcraft.api.aspects.AspectList;
 import java.lang.reflect.Method;
+import java.lang.reflect.Field;
+import java.util.ArrayList;
+import java.util.Arrays;
+import java.util.Collections;
 import java.util.List;
 
 /** Native TC4Tweaks predicates, including the intentionally impossible ERROR sentinel. */
@@ -35,17 +41,41 @@ public final class NativeInfusionTest {
         } catch (Jobs.Fault expected) {
             if (!expected.code.equals("recipe_unsupported")) throw expected;
         }
-        System.out.println("Native infusion: impossible sentinel/OR, retained exact alternatives and unknown predicate rejection passed");
+        Object center=api.getMethod("item",boolean.class,ItemStack.class).invoke(null,true,new ItemStack(Items.diamond));
+        Object carrot=api.getMethod("item",boolean.class,ItemStack.class).invoke(null,true,new ItemStack(Items.carrot));
+        InfusionRecipe recipe=definition(center,Arrays.asList(apple,carrot),new ItemStack[]{new ItemStack(Items.gold_ingot)});
+        Object network=Class.forName("net.glease.tc4tweak.network.NetworkedConfiguration");
+        Field setting=((Class<?>)network).getDeclaredField("infusionOreDictMode");setting.setAccessible(true);Object prior=setting.get(null);
+        setting.set(null,Enum.valueOf((Class)Class.forName("net.glease.tc4tweak.modules.infusionRecipe.InfusionOreDictMode"),"Default"));
+        try(NativeItemExamples examples=new NativeItemExamples();InfusionLegacyInputs.Context context=new InfusionLegacyInputs.Context();
+            NativeInfusionRecipes reader=new NativeInfusionRecipes(recipe,examples,context)){
+            List<List<ItemStack>> slots=new ArrayList<>();slots.add(new ArrayList<>(Collections.singletonList(new ItemStack(Items.diamond))));
+            slots.add(new ArrayList<>(Collections.singletonList(new ItemStack(Items.apple))));slots.add(new ArrayList<>(Collections.singletonList(new ItemStack(Items.carrot))));
+            Method witness=NativeInfusionRecipes.class.getDeclaredMethod("enhancedWitness",List.class);witness.setAccessible(true);witness.invoke(reader,slots);
+            if(slots.size()!=4||slots.get(3).get(0).getItem()!=Items.gold_ingot)throw new AssertionError("Different startup/cycle cardinalities lost independent cycle stock");
+            reader.finishVerification();context.finishVerification();examples.verify();
+        }finally{setting.set(null,prior);}
+        System.out.println("Native infusion: predicates, unknown-owner rejection and independent startup/cycle stock passed");
     }
 
     @SuppressWarnings("unchecked")
     private static List<MagicRecipes.Candidate> capture(Object predicate) throws Exception {
-        Method method = MagicRecipes.class.getDeclaredMethod("ingredient", Object.class);
-        method.setAccessible(true);
-        try { return (List<MagicRecipes.Candidate>) method.invoke(null, predicate); }
-        catch (java.lang.reflect.InvocationTargetException error) {
-            if (error.getCause() instanceof Error) throw (Error) error.getCause();
-            throw (Exception) error.getCause();
-        }
+        Field setting=Class.forName("net.glease.tc4tweak.network.NetworkedConfiguration").getDeclaredField("infusionOreDictMode");setting.setAccessible(true);Object prior=setting.get(null);
+        if(prior==null)setting.set(null,Enum.valueOf((Class)Class.forName("net.glease.tc4tweak.modules.infusionRecipe.InfusionOreDictMode"),"Default"));
+        try(NativeItemExamples examples=new NativeItemExamples();InfusionInputSource source=new InfusionInputSource(definition(predicate,Collections.emptyList(),new ItemStack[0]),examples)){
+            List<MagicRecipes.Candidate> choices=source.copies().get(0);source.finishVerification();examples.verify();return choices;
+        }finally{setting.set(null,prior);}
+    }
+    private static InfusionRecipe definition(Object central,List<?> components,ItemStack[] cycle) throws Exception {
+        Field access=sun.misc.Unsafe.class.getDeclaredField("theUnsafe");access.setAccessible(true);
+        Class<?> enhanced=Class.forName(InfusionInputSource.ENHANCED);
+        InfusionRecipe recipe=(InfusionRecipe)((sun.misc.Unsafe)access.get(null)).allocateInstance(enhanced);
+        set(enhanced,recipe,"central",central);set(enhanced,recipe,"components",new ArrayList<>(components));
+        set(InfusionRecipe.class,recipe,"recipeInput",new ItemStack(Items.diamond));set(InfusionRecipe.class,recipe,"components",cycle);
+        set(InfusionRecipe.class,recipe,"recipeOutput",new ItemStack(Items.diamond));set(InfusionRecipe.class,recipe,"research","");set(InfusionRecipe.class,recipe,"aspects",new AspectList());
+        return recipe;
+    }
+    private static void set(Class<?> owner,Object target,String name,Object value)throws Exception{
+        Field field=owner.getDeclaredField(name);field.setAccessible(true);field.set(target,value);
     }
 }

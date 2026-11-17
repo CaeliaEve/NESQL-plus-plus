@@ -95,7 +95,12 @@ final class NativeEnderMachinesTest {
     }
     private static void splice() throws Exception {
         TemplateRecipeHandler handler=(TemplateRecipeHandler)type("crazypants.enderio.nei.SliceAndSpliceRecipeHandler").newInstance();
+        TemplateRecipeHandler.CachedRecipe borrowed=handler.new CachedRecipe(){@Override public codechicken.nei.PositionedStack getResult(){return null;}};
+        handler.arecipes.add(borrowed);
         require(Recipes.adapter(handler)!=null,"Missing EnderIO slice-and-splice adapter");
+        RegistrationBindings spliceBindings=RegistrationBindings.read(handler);
+        require(spliceBindings!=null&&spliceBindings.same(RegistrationBindings.read((TemplateRecipeHandler)handler.getClass().newInstance())),
+                "Separate native assembly registrations have no audited shared source binding");
         Class<?> input=type(ROOT+"recipe.RecipeInput"),output=type(ROOT+"recipe.RecipeOutput"),raw=type(ROOT+"recipe.Recipe"),bonus=type(ROOT+"recipe.RecipeBonusType");
         Object ins=Array.newInstance(input,6),outs=Array.newInstance(output,1);
         for(int i=0;i<6;i++)Array.set(ins,i,input.getConstructor(ItemStack.class,boolean.class,float.class,int.class).newInstance(new ItemStack(Items.iron_ingot),true,1f,5-i));
@@ -106,6 +111,7 @@ final class NativeEnderMachinesTest {
         Constructor<?> factory=adapter.getDeclaredConstructor(TemplateRecipeHandler.class,List.class,boolean.class);factory.setAccessible(true);
         RegistryRecipes cursor=(RegistryRecipes)factory.newInstance(handler,Arrays.asList(wrapped),false);RecipeRow row=row();
         require(cursor.capture(0,row)&&row.inputs.size()==8,"Six splice requirements and both tools must be exported");
+        require(handler.arecipes.size()==1&&handler.arecipes.get(0)==borrowed,"Native assembly semantic reader mutated borrowed NEI cache");
         require(row.record.getAsJsonObject("process").get("kind").getAsString().equals("splice"),"Splice exported as ordinary alloy");
         require(row.record.getAsJsonObject("process").getAsJsonArray("slots").toString().equals("[5,4,3,2,1,0]"),"Splice consumption slots lost");
         for(int i=6;i<8;i++){
@@ -149,12 +155,15 @@ final class NativeEnderMachinesTest {
         require(raw.getProtectionDomain().getCodeSource().getLocation().toString().contains("/native-tests/enderio.jar!"),"Pinned native EnderIO required");
         TemplateRecipeHandler handler=(TemplateRecipeHandler)type("crazypants.enderio.nei.AlloySmelterRecipeHandler").newInstance();
         require(Recipes.adapter(handler)!=null,"Missing EnderIO alloy adapter");
+        RegistrationBindings alloyBindings=RegistrationBindings.read(handler);
+        require(alloyBindings!=null&&alloyBindings.same(RegistrationBindings.read((TemplateRecipeHandler)handler.getClass().newInstance())),
+                "Separate native Alloy registrations have no audited shared source binding");
         Object a=input.getConstructor(ItemStack.class,boolean.class,float.class,int.class).newInstance(new ItemStack(Items.iron_ingot,1),true,1f,1);
         Object b=input.getConstructor(ItemStack.class,boolean.class,float.class,int.class).newInstance(new ItemStack(Items.iron_ingot,2),true,1f,0);
         Object ins=Array.newInstance(input,2);Array.set(ins,0,a);Array.set(ins,1,b);
         Object outs=Array.newInstance(output,2);
-        Array.set(outs,0,output.getConstructor(ItemStack.class,float.class).newInstance(new ItemStack(Items.gold_ingot),0.5f));
-        Array.set(outs,1,output.getConstructor(ItemStack.class,float.class).newInstance(new ItemStack(Items.diamond),0f));
+        Array.set(outs,0,output.getConstructor(ItemStack.class,float.class,float.class).newInstance(new ItemStack(Items.gold_ingot),0.5f,0.4f));
+        Array.set(outs,1,output.getConstructor(ItemStack.class,float.class,float.class).newInstance(new ItemStack(Items.diamond),0f,0.9f));
         Object rec=raw.getConstructor(ins.getClass(),outs.getClass(),int.class,bonus).newInstance(ins,outs,1200,Enum.valueOf((Class)bonus,"NONE"));
         Object nativeRecipe=type(ROOT+"recipe.BasicManyToOneRecipe").getConstructor(raw).newInstance(rec);
         Object offered=Array.newInstance(offeredType,3);
@@ -164,6 +173,9 @@ final class NativeEnderMachinesTest {
         require(!(Boolean)invoke(raw,rec,"isInputForRecipe",new Class<?>[]{merged.getClass()},merged),"Native matcher incorrectly splits one offered stack across requirements");
         Object manager=type(ROOT+"recipe.ManyToOneRecipeManager").getConstructor(String.class,String.class,String.class).newInstance("unused","unused","fixture");
         @SuppressWarnings("unchecked") List<Object> records=(List<Object>)invoke(manager.getClass(),manager,"getRecipes",new Class<?>[0]);records.add(nativeRecipe);
+        require((Float)invoke(manager.getClass(),manager,"getExperianceForOutput",new Class<?>[]{ItemStack.class},new ItemStack(Items.gold_ingot))==0.4f
+                &&(Float)invoke(manager.getClass(),manager,"getExperianceForOutput",new Class<?>[]{ItemStack.class},new ItemStack(Items.diamond))==0f,
+                "Native assembly experience lookup no longer selects the first primary output");
         Object machine=type(ROOT+"recipe.ManyToOneMachineRecipe").getConstructor(String.class,String.class,manager.getClass()).newInstance("fixture","fixture",manager);
         List<?> used=(List<?>)invoke(machine.getClass(),machine,"getQuantitiesConsumed",new Class<?>[]{offered.getClass()},offered);
         require(used.size()==2&&((Integer)field(used.get(0),"slotNumber"))==1&&((ItemStack)field(used.get(0),"item")).stackSize==1
@@ -178,7 +190,31 @@ final class NativeEnderMachinesTest {
         require(row.record.getAsJsonObject("process").getAsJsonArray("slots").toString().equals("[1,0]"),"Declared consumption slots lost");
         require(row.inputs.get(0).getAsJsonObject().getAsJsonArray("choices").get(0).getAsJsonObject().getAsJsonObject("consume").get("kind").getAsString().equals("allocated"),"Greedy requirement was exported as fixed physical slot debit");
         require(row.outputs.size()==2&&row.outputs.get(1).getAsJsonObject().getAsJsonObject("quantity").get("threshold").getAsString().equals("0.0"),"Native zero-threshold output removed");
+        require(row.properties.has("enderio:experience"),"Native assembly experience lookup was omitted");
+        com.google.gson.JsonArray capturedExperience=row.properties.getAsJsonObject("enderio:experience").getAsJsonObject("value").getAsJsonArray("values");
+        require(capturedExperience.size()==2&&capturedExperience.get(0).getAsJsonObject().get("value").getAsString().equals("0.4")
+                &&capturedExperience.get(1).getAsJsonObject().get("value").getAsString().equals("0"),"Captured experience echoed secondary declarations instead of the native primary-output lookup");
+        row.record.add("source",object("owner","EnderIO","handler",handler.getClass().getName(),"key",handler.getHandlerId()));
+        row.record.addProperty("category",Identity.origin("category",row.record.getAsJsonObject("source")));
+        NativeContractFixture.writeOwned("ender-assembly-experience",row,Arrays.asList(new ItemStack(Items.iron_ingot),new ItemStack(Items.gold_ingot),new ItemStack(Items.diamond)));
         require(((ItemStack)invoke(input,a,"getInput",new Class<?>[0])).stackSize==1&&((ItemStack)field(Array.get(offered,1),"item")).stackSize==2,"Source or offered inputs mutated");
+        cursor.finishVerification();
+        ItemStack nativeOutput=(ItemStack)field(Array.get(outs,0),"output");
+        int priorAmount=nativeOutput.stackSize;
+        try{
+            nativeOutput.stackSize=priorAmount+1;
+            try{cursor.capture(0,row());throw new AssertionError("Changed native assembly output was silently recaptured");}
+            catch(com.github.dcysteine.nesql.exporter.task.Jobs.Fault failure){require(failure.code.equals("recipe_changed"),failure.toString());}
+            try{cursor.finishVerification();throw new AssertionError("Changed native assembly output was sealed");}
+            catch(com.github.dcysteine.nesql.exporter.task.Jobs.Fault failure){require(failure.code.equals("recipe_changed"),failure.toString());}
+        }finally{nativeOutput.stackSize=priorAmount;}
+        records.add(nativeRecipe);
+        try{cursor.verify();throw new AssertionError("Changed native assembly registry count was ignored");}
+        catch(com.github.dcysteine.nesql.exporter.task.Jobs.Fault failure){require(failure.code.equals("recipe_changed"),failure.toString());}
+        records.remove(records.size()-1);
+        cursor.close();cursor.close();
+        try{cursor.size();throw new AssertionError("Closed assembly reader still exposed rows");}
+        catch(com.github.dcysteine.nesql.exporter.task.Jobs.Fault failure){require(failure.code.equals("capture_closed"),failure.toString());}
         Object many=Array.newInstance(input,4);for(int i=0;i<4;i++)Array.set(many,i,input.getConstructor(ItemStack.class).newInstance(new ItemStack(Items.iron_ingot)));
         Object impossible=raw.getConstructor(many.getClass(),outs.getClass(),int.class,bonus).newInstance(many,outs,1200,Enum.valueOf((Class)bonus,"NONE"));
         require(!(Boolean)invoke(raw,impossible,"isInputForRecipe",new Class<?>[]{offered.getClass()},offered),"Four positive requirements unexpectedly fit three offered slots");

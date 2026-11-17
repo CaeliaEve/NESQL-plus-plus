@@ -25,10 +25,7 @@ final class GtCircuits {
     private final Method stack;
 
     GtCircuits() throws Exception {
-        ModContainer mod = Loader.instance().getIndexedModList().get("neicustomdiagram");
-        if (mod == null || !"1.7.5".equals(mod.getVersion())) {
-            throw new Jobs.Fault("domain_unsupported", "Circuit definitions require the target NEICustomDiagram 1.7.5");
-        }
+        TargetAdmission.require("GtCircuits", "neicustomdiagram");
         Class<?> type = Class.forName(HANDLER);
         Constructor<?> constructor = type.getDeclaredConstructor();
         constructor.setAccessible(true);

@@ -135,6 +135,10 @@ final class Audit {
     }
 
     private void structure(ClientThread.Session session, Jobs.Request request, Structures.Machine machine, JsonObject result, String locale, Path path, Checks.Report report) throws Exception {
+        result.addProperty("structure", machine.identity());
+        result.addProperty("controller", machine.id);
+        result.add("source", machine.origin());
+        result.addProperty("status", "running");
         Facts facts = new Facts(locale);
         String name = "structure " + machine.id;
         try (Buffer buffer = new Buffer(path)) {
@@ -150,8 +154,14 @@ final class Audit {
             result.add("limitations", buffer.limitations());
             result.addProperty("status", buffer.problems.isEmpty() ? "passed" : "unsupported");
             if (!buffer.problems.isEmpty()) {
-                report.unsupported(result, machine.id, "structure_unsupported", "Native structure preview reported: " + String.join("; ", buffer.problems));
+                report.unsupported(result, machine.id, "structure_unsupported", "Native structure preview reported: " + buffer.limitations());
             }
+        } catch (Exception | Error failure) {
+            result.addProperty("status", "failed");
+            result.add("error", Checks.failure(failure));
+            try { report.failure(result, machine.id, failure); }
+            catch (IOException reporting) { failure.addSuppressed(reporting); }
+            throw failure;
         }
     }
 
@@ -161,78 +171,118 @@ final class Audit {
         Facts opening = new Facts(locale);
         boolean render = context.request().check.render;
         Images images = render ? new Images() : null;
-        Recipes.Cursor cursor = session.call("handler " + handler.id + " open", () -> handler.open(opening, render));
         JsonArray visualSamples = new JsonArray();
         if (render) result.add("visualSamples", visualSamples);
-        try (AutoCloseable owned = () -> release("handler " + handler.id, () -> {
-            try {
-                JsonObject evidence = cursor.exclusions();
-                if (!evidence.entrySet().isEmpty()) result.add("exclusionEvidence", evidence);
-            } finally { cursor.close(); }
-        }); AutoCloseable graphics = () -> { if (images != null) release("render probe", images::close); }) {
-            Facts.Batch category = session.call("category fluid textures", () -> {
-                Facts.Batch batch = opening.drain(); Images.checkFluids(batch);
-                if (render) visualSamples.add(render(batch, images, session, -1));
-                return batch;
-            });
-            try (Buffer buffer = new Buffer(path.resolve("category"))) { buffer.write(category); result.add("categoryCounts", buffer.check()); }
-            int total = session.call("handler " + handler.id + " size", cursor::size);
-            java.util.ArrayDeque<Attempt> pending = new java.util.ArrayDeque<>();
-            int end = Math.min(total, context.request().check.offset + context.request().check.limit);
-            Checks.recipes(context, report, () -> {}, result, total, index -> {
-                if (pending.isEmpty()) session.call("recipe batch", () -> Slice.run(index, end, next -> {
-                    Attempt attempt = new Attempt(next);
-                    pending.add(attempt);
-                    try {
-                        ClientThread.phase("health"); guard.check();
-                        if(next==index)cursor.verify();
-                        Facts facts = new Facts(locale);
-                        ClientThread.phase("recipe capture"); cursor.capture(next, facts);
-                        ClientThread.phase("health"); guard.check();
-                        ClientThread.phase("snapshot");
-                        Facts.Batch batch = facts.drain();
-                        if (render) {
-                            ClientThread.phase("representative rendering");
-                            visualSamples.add(render(batch, images, session, next));
+        try (AutoCloseable graphics = () -> { if (images != null) release("render probe", images::close); }) {
+            Recipes.Cursor cursor = session.call("handler " + handler.id + " open", () -> handler.open(opening));
+            try (AutoCloseable owned = () -> release("handler " + handler.id, () -> {
+                try {
+                    JsonObject evidence = cursor.exclusions();
+                    if (!evidence.entrySet().isEmpty()) result.add("exclusionEvidence", evidence);
+                    result.add("captureAccounting", cursor.accounting());
+                } finally { cursor.close(); }
+            })) {
+                result.addProperty("recordKind", cursor.recordKind());
+                if (cursor.reference()) result.add("nativeReferenceCounts", session.call(cursor::referenceCounts));
+                Facts.Batch category = session.call("category fluid textures", () -> {
+                    Facts.Batch batch = opening.drain(); Images.checkFluids(batch);
+                    if (render) visualSamples.add(render(batch, images, session, -1));
+                    return batch;
+                });
+                try (Buffer buffer = new Buffer(path.resolve("category"))) { buffer.write(category); result.add("categoryCounts", buffer.check()); }
+                int total = session.call("handler " + handler.id + " size", cursor::size);
+                java.util.ArrayDeque<Attempt> pending = new java.util.ArrayDeque<>();
+                int end = Math.min(total, context.request().check.offset + context.request().check.limit);
+                try { Checks.recipes(context, report, () -> {}, result, total, index -> {
+                    if (pending.isEmpty()) session.call("recipe batch", () -> Slice.run(index, end, next -> {
+                        Attempt attempt = new Attempt(next);
+                        pending.add(attempt);
+                        try {
+                            ClientThread.phase("health"); guard.check();
+                            if(next==index)cursor.verify();
+                            Facts facts = new Facts(locale);
+                            ClientThread.phase("recipe capture"); attempt.capture = cursor.attempt(next, facts);
+                            ClientThread.phase("health"); guard.check();
+                            ClientThread.phase("snapshot");
+                            Facts.Batch batch = facts.drain();
+                            if (render) {
+                                ClientThread.phase("representative rendering");
+                                visualSamples.add(render(batch, images, session, next));
+                            }
+                            long size = attempt.freeze(batch);
+                            return render ? Long.MAX_VALUE : size;
+                        } catch (Exception | Error error) {
+                            if (attempt.capture != null) { attempt.capture.close(); attempt.capture = null; }
+                            attempt.error = error;
+                            return Checks.fatal(error) ? Long.MAX_VALUE : 0;
                         }
-                        long size = attempt.freeze(batch);
-                        return render ? Long.MAX_VALUE : size;
-                    } catch (Exception | Error error) {
-                        attempt.error = error;
-                        return Checks.fatal(error) ? Long.MAX_VALUE : 0;
+                    }));
+                    Attempt attempt = pending.removeFirst();
+                    if (attempt.index != index) throw new IOException("Capture batch lost its recipe index");
+                    if (attempt.error instanceof Exception) throw (Exception) attempt.error;
+                    if (attempt.error instanceof Error) throw (Error) attempt.error;
+                    try (Recipes.Cursor.Attempt capture = attempt.capture;
+                         Buffer buffer = new Buffer(path.resolve("recipe-" + index))) {
+                        buffer.write(attempt.batch);
+                        JsonObject counts = buffer.check();
+                        if (cursor.reference()) {
+                            if (!counts.has("references") || counts.get("references").getAsInt() != 1 || counts.has("recipes"))
+                                throw new IOException("Native reference cursor did not emit exactly one reference record");
+                        }
+                        else if (counts.has("references")) throw new IOException("Recipe cursor emitted a domain reference");
+                        return capture.commit();
                     }
-                }));
-                Attempt attempt = pending.removeFirst();
-                if (attempt.index != index) throw new IOException("Capture batch lost its recipe index");
-                if (attempt.error instanceof Exception) throw (Exception) attempt.error;
-                if (attempt.error instanceof Error) throw (Error) attempt.error;
-                try (Buffer buffer = new Buffer(path.resolve("recipe-" + index))) {
-                    buffer.write(attempt.batch);
-                    return buffer.check().has("recipes");
+                }); } finally {
+                    for (Attempt attempt : pending) if (attempt.capture != null) attempt.capture.close();
+                    pending.clear();
                 }
-            });
+                java.util.List<Structures.Machine> selectedStructures = session.call(() -> cursor.structures(context.request().check.offset, end));
+                checkStructures(result, selectedStructures, (source, checked) -> {
+                    session.call("structure environment guard", () -> { guard.check(); return null; });
+                    structure(session, context.request(), source, checked, locale, path.resolve(source.identity()), report);
+                });
+                session.call("handler final verification", () -> { cursor.finishVerification(); return null; });
+            }
+            if (render) {
+                NativeAuthorities.State sources = session.call("render sources seal", images.authorities::seal);
+                NativeAuthorities.Verifier verification = sources.verifier();
+                while (!session.call("render sources final verification", verification::advance)) {}
+                result.addProperty("nativeVisualSources", sources.size());
+            }
         }
+    }
+
+    interface StructureCheck { void run(Structures.Machine source, JsonObject checked) throws Exception; }
+
+    static void checkStructures(JsonObject result, List<Structures.Machine> selected, StructureCheck check) throws Exception {
+        JsonArray checks = new JsonArray();
+        if (!selected.isEmpty()) result.add("structureChecks", checks);
+        int failed = 0;
+        for (Structures.Machine source : selected) {
+            JsonObject checked = object("structure", source.identity());
+            checks.add(checked);
+            try { check.run(source, checked); }
+            catch (Exception | Error failure) {
+                checked.addProperty("status", "failed");
+                checked.add("error", Checks.failure(failure));
+                if (Checks.fatal(failure)) throw failure;
+            }
+            if (!checked.get("status").getAsString().equals("passed")) failed++;
+        }
+        if (failed != 0)
+            throw new Jobs.Fault("structure_unsupported", "Selected structure geometries failed: "
+                    + failed + "; see structureChecks and immutable failure details");
     }
 
     /** Executes owned native draw closures before the cursor can advance. No encoding or publication. */
     private static JsonObject render(Facts.Batch batch, Images images, ClientThread.Session session, int index) throws Exception {
         if (!batch.models.isEmpty()) throw new Jobs.Fault("check_unsupported", "Recipe render probes do not capture structure models");
-        long[] pixels = {0, 0};
-        for (Facts.Picture picture : batch.pictures) pixels(images.picture(picture, session), pixels);
-        for (Facts.Icon icon : batch.icons) pixels(images.capture(icon, session), pixels);
-        for (Facts.Scene scene : batch.scenes) pixels(images.scene(scene, session), pixels);
-        JsonObject result = object("index", index, "icons", batch.icons.size(), "pictures", batch.pictures.size(), "scenes", batch.scenes.size(),
-                "pixels", Long.toString(pixels[0]), "visiblePixels", Long.toString(pixels[1]));
-        batch.scenes.clear(); batch.pictures.clear();
+        VisualProbe probe = new VisualProbe();
+        for (Facts.Picture picture : batch.pictures) probe.add(images.picture(picture, session));
+        for (Facts.Icon icon : batch.icons) probe.add(images.capture(icon, session));
+        JsonObject result = probe.describe(index, batch.icons.size(), batch.pictures.size());
+        batch.pictures.clear();
         return result;
-    }
-
-    private static void pixels(Images.Image image, long[] counts) {
-        counts[0] += (long) image.pixels.getWidth() * image.pixels.getHeight();
-        for (int y = 0; y < image.pixels.getHeight(); y++) {
-            Jobs.checkpoint();
-            for (int x = 0; x < image.pixels.getWidth(); x++) if ((image.pixels.getRGB(x, y) >>> 24) != 0) counts[1]++;
-        }
     }
 
     /** Only detached JSON crosses the batch boundary; no native stack or mutable cursor state. */
@@ -240,9 +290,10 @@ final class Audit {
         final int index;
         final Facts.Batch batch = new Facts.Batch();
         Throwable error;
+        Recipes.Cursor.Attempt capture;
         Attempt(int index) { this.index = index; }
         long freeze(Facts.Batch source) throws IOException {
-            if (!source.scenes.isEmpty() || !source.models.isEmpty()) throw new IOException("Data checks unexpectedly requested graphics");
+            if (!source.models.isEmpty()) throw new IOException("Data checks unexpectedly requested graphics");
             Images.checkFluids(source);
             for (Facts.Icon icon : source.icons) source.records.add(new Facts.Record(icon.kind, icon.record));
             batch.records.addAll(source.records);
@@ -264,7 +315,7 @@ final class Audit {
         final List<String> problems = new ArrayList<>();
         Buffer(Path path) throws IOException { rows = new Rows(path); }
         void write(Facts.Batch batch) throws IOException {
-            if (!batch.scenes.isEmpty() || !batch.models.isEmpty()) throw new IOException("Data checks unexpectedly requested graphics");
+            if (!batch.models.isEmpty()) throw new IOException("Data checks unexpectedly requested graphics");
             for (Facts.Icon icon : batch.icons) rows.add(icon.kind, icon.record);
             for (Facts.Record record : batch.records) {
                 rows.add(record.kind, record.value);

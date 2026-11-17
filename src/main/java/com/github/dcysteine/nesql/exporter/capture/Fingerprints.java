@@ -86,7 +86,7 @@ final class Fingerprints implements AutoCloseable {
             if (!Files.isSameFile(witness, path) || attributes.size() != pinned.size()) throw new IOException("Input changed while acquiring its lease: " + path);
             java.security.MessageDigest digest = CanonicalJson.sha256();
             ByteBuffer buffer = ByteBuffer.allocate(65536);
-            while (channel.read(buffer) != -1) { Jobs.checkpoint(); buffer.flip(); readBytes += buffer.remaining(); digest.update(buffer); buffer.clear(); }
+            while (channel.read(buffer) != -1) { Jobs.checkpoint(); ((java.nio.Buffer)buffer).flip(); readBytes += buffer.remaining(); digest.update(buffer); ((java.nio.Buffer)buffer).clear(); }
             String hash = CanonicalJson.hex(digest.digest());
             entries.put(path, new Entry(channel, witness, pinned.size(), hash)); retained = true;
             return hash;

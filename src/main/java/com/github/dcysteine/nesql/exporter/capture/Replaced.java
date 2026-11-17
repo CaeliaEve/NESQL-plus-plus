@@ -24,7 +24,8 @@ final class Replaced {
         if (candidate(recipe) == null) return null;
         Map<String, ModContainer> mods = Loader.instance().getIndexedModList();
         // The legacy gregtech container reports MC1710; gregtech_nh identifies this build.
-        if (!version(mods.get("malisisdoors"), "1.18.2-GTNH") || !version(mods.get("gregtech_nh"), "5.09.51.482")) return null;
+        if (!TargetAdmission.matches("Replaced", "malisisdoors", mods.get("malisisdoors"))
+            || !TargetAdmission.matches("Replaced", "gregtech_nh", mods.get("gregtech_nh"))) return null;
         Class<?> tool = MagicApi.type("net.malisis.core.util.replacement.ReplacementTool");
         return inspect(recipe, item -> (Item) MagicApi.invoke(tool, null, "originalItem", new Class<?>[]{Item.class}, item));
     }
@@ -80,5 +81,4 @@ final class Replaced {
     }
 
     private static boolean target(ItemStack stack, Item item) { return stack != null && stack.getItem() == item; }
-    private static boolean version(ModContainer mod, String expected) { return mod != null && expected.equals(mod.getVersion()); }
 }

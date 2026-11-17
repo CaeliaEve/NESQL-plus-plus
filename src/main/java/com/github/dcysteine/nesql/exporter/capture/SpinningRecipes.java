@@ -1,131 +1,124 @@
 package com.github.dcysteine.nesql.exporter.capture;
 
-import codechicken.nei.PositionedStack;
-import codechicken.nei.recipe.ICraftingHandler;
-import codechicken.nei.recipe.TemplateRecipeHandler;
-import com.github.dcysteine.nesql.exporter.source.CanonicalJson;
-import com.github.dcysteine.nesql.exporter.source.TypedNbt;
-import com.github.dcysteine.nesql.exporter.task.Jobs;
-import com.google.gson.JsonArray;
-import net.minecraft.item.Item;
-import net.minecraft.item.ItemStack;
-import java.util.*;
 import static com.github.dcysteine.nesql.exporter.capture.MagicApi.*;
 import static com.github.dcysteine.nesql.exporter.source.Json.*;
 
-/** Witching Gadgets' unit-consumption machine, with its greedy predicate boundary retained. */
+import codechicken.nei.recipe.ICraftingHandler;
+import codechicken.nei.recipe.TemplateRecipeHandler;
+import com.github.dcysteine.nesql.exporter.task.Jobs;
+import com.google.gson.*;
+import java.util.*;
+import net.minecraft.item.Item;
+import net.minecraft.item.ItemStack;
+
+/** Pinned list-removal matching and five physical-slot consumption, without GUI recipe caches. */
 final class SpinningRecipes implements RegistryRecipes {
-    private static final String HANDLER="witchinggadgets.client.nei.NEISpinningWheelHandler";
-    private static final String RECIPE="witchinggadgets.common.util.recipe.SpinningRecipe";
-    private final TemplateRecipeHandler handler;
-    private final List<?> source;
-    private final List<Entry> entries;
-    private final String signature;
-    static boolean supports(ICraftingHandler h){return h.getClass().getName().equals(HANDLER);}
-    SpinningRecipes(TemplateRecipeHandler h){this(h,registry());}
-    private static List<?> registry(){
-        version("WitchingGadgets","1.7.25-GTNH");
-        return (List<?>)field(type(RECIPE),null,"recipeList");
+  private static final String HANDLER="witchinggadgets.client.nei.NEISpinningWheelHandler",
+      RECIPE="witchinggadgets.common.util.recipe.SpinningRecipe";
+  private List<?> source;
+  private final List<Entry> entries=new ArrayList<>();
+  private final NativeItemExamples examples=new NativeItemExamples();
+  private NativeDefinitionGraph graph;
+  private JsonArray definitions;
+  private boolean closed;
+
+  static boolean supportsClass(String name){return HANDLER.equals(name);}
+  static boolean supports(ICraftingHandler handler){return supportsClass(handler.getClass().getName());}
+  static Object[] registrationAnchors(){
+    MagicApi.version("SpinningRecipes","WitchingGadgets");
+    Object raw=field(type(RECIPE),null,"recipeList");
+    if(raw==null)throw new Jobs.Fault("handler_not_ready","Witching Gadgets spinning registry is unavailable");
+    if(raw.getClass()!=ArrayList.class&&raw.getClass()!=LinkedList.class)throw fault("Unadapted spinning registry storage");
+    if(((List<?>)raw).size()>4096)throw new Jobs.Fault("recipe_limit","Spinning registration budget exceeded");
+    return new Object[]{type(HANDLER),raw};
+  }
+
+  SpinningRecipes(TemplateRecipeHandler handler){
+    if(!supports(handler))throw fault("Unknown Witching Gadgets spinning handler");
+    try{
+      source=(List<?>)registrationAnchors()[1];definitions=array();int total=0;
+      for(Object raw:source){
+        Jobs.checkpoint();Entry entry=new Entry(raw);entries.add(entry);definitions.add(entry.definition);
+        for(Need need:entry.inputs)if((total+=need.templates.size())>262144)throw new Jobs.Fault("recipe_limit","Spinning cumulative predicates exceed budget");
+      }
+      Map<String,String[]> shapes=NativeDefinitionGraph.shapes(RECIPE,"input","output");
+      shapes.put("net.minecraftforge.oredict.OreDictionary$UnmodifiableArrayList",new String[]{"list"});
+      graph=new NativeDefinitionGraph(()->new Object[]{registrationAnchors()[1]},shapes);
+    }catch(RuntimeException|Error failure){close();throw failure;}
+  }
+
+  public int size(){alive();return entries.size();}
+  public void verify(){alive();if(registrationAnchors()[1]!=source)throw changed();graph.verifyRoots();}
+  public void finishVerification(){verify();graph.verify();examples.verify();}
+  public boolean capture(int index,RecipeRow row){
+    alive();Entry entry=entries.get(index);
+    if(entry.absent||entry.inputs.size()>5||entry.inputs.stream().anyMatch(n->n.never||n.templates.isEmpty()))
+      return row.exclude(object("native",RECIPE+"#inputsMatch","reason","native_requirement_cannot_be_removed_in_five_slots","index",index,"definition",entry.definition));
+    if(entry.output==null||entry.output.stackSize<=0)throw new Jobs.Fault("native_error","Selected spinning rule has no positive native output");
+    for(int slot=0;slot<entry.inputs.size();slot++){
+      List<RecipeRow.Ingredient> choices=new ArrayList<>();
+      for(ItemStack raw:entry.inputs.get(slot).templates){
+        ItemStack template=raw.copy();template.stackSize=1;template.setTagCompound(null);
+        boolean wildcard=net.minecraft.init.Items.feather.getDamage(template)==32767;
+        for(ItemStack shown:examples.copies(template))choices.add(new RecipeRow.Ingredient(shown,1,false,object("kind","wildcard","meta",wildcard,"nbt",true)));
+      }
+      row.itemInput(slot,choices,false);
     }
-    SpinningRecipes(TemplateRecipeHandler h,List<?> source){
-        if(!supports(h)||source==null||source.size()>65536)throw fault("Invalid spinning registry");
-        handler=h;this.source=source;entries=read();signature=signature(entries);
+    row.itemOutput(0,entry.output.copy(),10000);
+    row.record.add("process",object("kind","witchingSpinning","version","1.7.25-GTNH","selected",index,"definitions",definitions));
+    row.note("witchinggadgets:spinning",RECIPE+"#inputsMatch;witchinggadgets.common.blocks.tiles.TileEntitySpinningWheel#updateEntity",
+        row.facts.locale().equals("zh_CN")
+          ?"按五个物理输入槽顺序压紧非空物品，选择首个匹配注册。数量与 NBT 不参与匹配，模板 32767 是矿辞通配值。普通需求匹配后退出当前扫描；列表需求匹配并移除后继续扫描其他需求，因此一个物品可能移除多个列表需求。匹配成功标志不在下一个物品前重置。完成时所有非空输入槽各减一件，包含未匹配的物品，不返还容器。默认从 0 进度需 121 次连续有效工作调用，中断会清零；实际机器进度与 maxProgress 仍是外部状态。图示是空产物槽的结果原型；同物品／元数据合并忽略 NBT，保留已有标签并检查双方原生堆叠上限。候选组合可能被更早注册优先匹配，不保证当前展示产物。"
+          :"Pack occupied entries in the order of the five physical input slots and select the first matching registration. Count and NBT do not restrict matching; template metadata 32767 is an ore wildcard. A direct stack match removes one requirement and breaks; a list match removes that requirement and keeps scanning, so one offer may remove several list requirements. The matched flag stays set for later offers. Completion consumes one item from every occupied input slot, including unmatched offers, without containers. Default progress from zero needs 121 consecutive valid work calls; interruption resets it, while the actual progress and maxProgress remain external state. The picture is an empty-output-slot prototype. Existing equal item/metadata stock merges without comparing NBT, keeps its tags and checks both native stack limits. An earlier registration may claim a candidate combination; the shown result is conditional.");
+    return true;
+  }
+
+  private static final class Need {
+    final boolean list,never;
+    final List<ItemStack> templates=new ArrayList<>();
+    final JsonObject definition;
+    Need(Object raw){
+      list=raw instanceof ArrayList;never=!(raw instanceof ItemStack)&&!list;
+      if(never){if(raw!=null&&raw.getClass()!=LinkedList.class)throw fault("Unadapted spinning ignored-input owner");definition=object("kind","never");return;}
+      List<?> values;
+      if(list){
+        Object backing=raw;
+        if(raw.getClass().getName().equals("net.minecraftforge.oredict.OreDictionary$UnmodifiableArrayList"))backing=field(raw,"list");
+        else if(raw.getClass()!=ArrayList.class)throw fault("Unadapted spinning ingredient-list callback");
+        if(backing==null||backing.getClass()!=ArrayList.class)throw fault("Unadapted spinning ingredient-list backing");
+        values=(List<?>)backing;
+      }else values=Collections.singletonList(raw);
+      if(values.size()>65536)throw new Jobs.Fault("recipe_limit","Spinning alternatives exceed budget");
+      JsonArray selectors=array();
+      for(Object value:values){
+        Jobs.checkpoint();if(!(value instanceof ItemStack))throw fault("Invalid native spinning list member");
+        ItemStack item=(ItemStack)value;NativeStackAudit.audit(item);String registry=Item.itemRegistry.getNameForObject(item.getItem());
+        int metadata=net.minecraft.init.Items.feather.getDamage(item);
+        if(registry==null||metadata<0)throw fault("Unregistered or negative native spinning selector");
+        templates.add(item.copy());selectors.add(object("registry",registry,"metadata",metadata));
+      }
+      definition=list?object("kind","list","templates",selectors):object("kind","stack","template",selectors.get(0));
     }
-    public int size(){return entries.size();}
-    public void verify(){if(!signature.equals(signature(read())))throw new Jobs.Fault("environment_changed","Spinning registry changed");}
-    public boolean capture(int index,RecipeRow row){
-        Entry entry=entries.get(index);List<PositionedStack> positions=new ArrayList<>();
-        for(int slot=0;slot<entry.groups.size();slot++){
-            List<RecipeRow.Ingredient> choices=new ArrayList<>();List<ItemStack> display=new ArrayList<>();
-            for(ItemStack raw:entry.groups.get(slot)){
-                ItemStack item=raw.copy();item.stackSize=1;item.setTagCompound(null);
-                boolean wildcard=item.getItemDamage()==32767;
-                if(wildcard){
-                    ItemStack example=null;
-                    for(ItemStack candidate:codechicken.nei.ItemList.items){
-                        Jobs.checkpoint();
-                        if(candidate!=null&&candidate.getItem()==item.getItem()&&candidate.getItemDamage()>=0&&candidate.getItemDamage()!=32767){example=candidate;break;}
-                    }
-                    if(example==null)throw fault("Spinning wildcard has no concrete NEI display example");
-                    item.setItemDamage(example.getItemDamage());
-                }
-                display.add(item);choices.add(new RecipeRow.Ingredient(item,1,false,object("kind","wildcard","meta",wildcard,"nbt",true)));
-            }
-            PositionedStack pos=new PositionedStack(display.toArray(new ItemStack[0]),21,9+18*slot,false);
-            positions.add(pos);row.itemInput(pos,slot,choices,false);
-        }
-        PositionedStack output=new PositionedStack(entry.output.copy(),126,46,false);
-        row.itemOutput(output,0,entry.output.copy(),10000);
-        // The native counter increments from 0 through 120, then completes on the next tick.
-        row.record.addProperty("duration","121");
-        row.property("witchinggadgets:outputInventory","Output shown for an empty output slot",true);
-        handler.arecipes.clear();handler.arecipes.add(handler.new CachedRecipe(){
-            public List<PositionedStack> getIngredients(){return positions;}
-            public PositionedStack getResult(){return output;}
-        });return true;
+  }
+  private static final class Entry {
+    final List<Need> inputs=new ArrayList<>();final ItemStack output;final boolean absent;final JsonObject definition;
+    Entry(Object recipe){
+      if(recipe==null||recipe.getClass()!=type(RECIPE))throw fault("Unadapted native spinning recipe callback owner");
+      Object raw=field(recipe,"input");absent=raw==null;
+      if(raw!=null){
+        if(!(raw instanceof Object[])||((Object[])raw).length>65536)throw fault("Invalid native spinning requirement array");
+        for(Object value:(Object[])raw)inputs.add(new Need(value));
+      }
+      Object result=field(recipe,"output");
+      if(result!=null&&!(result instanceof ItemStack))throw fault("Invalid native spinning result owner");
+      if(result!=null)NativeStackAudit.audit((ItemStack)result);
+      output=result==null?null:((ItemStack)result).copy();
+      JsonArray values=array();for(Need need:inputs)values.add(need.definition);
+      definition=object("inputs",absent?null:values);
     }
-    private List<Entry> read(){
-        List<Entry> result=new ArrayList<>();int work=0;
-        for(Object recipe:source){
-            Jobs.checkpoint();Entry entry=new Entry(recipe);
-            // Preserve registry first-match semantics rather than inventing independent outputs.
-            for(Entry previous:result)if(previous.groups.size()==entry.groups.size()){
-                if(++work>262144)throw fault("Spinning registry overlap budget exceeded");
-                if(compatible(entry.groups,previous.groups,0,new boolean[entry.groups.size()]))
-                    throw fault("Spinning registry has overlapping first-match recipes");
-            }
-            result.add(entry);
-        }return result;
-    }
-    private static boolean compatible(List<List<ItemStack>> a,List<List<ItemStack>> b,int slot,boolean[] used){
-        if(slot==a.size())return true;
-        for(int i=0;i<b.size();i++)if(!used[i]&&overlap(a.get(slot),b.get(i))){
-            used[i]=true;boolean found=compatible(a,b,slot+1,used);used[i]=false;if(found)return true;
-        }return false;
-    }
-    private static final class Entry {
-        final List<List<ItemStack>> groups=new ArrayList<>();final ItemStack output;final String signature;
-        Entry(Object recipe){
-            if(recipe==null||!recipe.getClass().getName().equals(RECIPE))throw fault("Unknown spinning recipe callback");
-            Object[] raw=(Object[])field(recipe,"input");
-            if(raw.length<1||raw.length>5)throw fault("Invalid spinning input count");
-            JsonArray inputs=array();List<Boolean> listGroups=new ArrayList<>();
-            for(Object input:raw){
-                boolean list=input instanceof ArrayList;
-                if(!(input instanceof ItemStack)&&!list)throw fault("Unknown spinning ingredient predicate");
-                List<?> values=list?(List<?>)input:Collections.singletonList(input);
-                if(values.isEmpty()||values.size()>65536)throw fault("Empty or oversized spinning ingredient group");
-                List<ItemStack> group=new ArrayList<>();JsonArray encoded=array();
-                for(Object value:values){
-                    Jobs.checkpoint();if(!(value instanceof ItemStack))throw fault("Invalid spinning ingredient");
-                    ItemStack item=(ItemStack)value;
-                    encoded.add(stack(item));
-                    if(ItemCallbacks.method(item.getItem(),"getDamage","getDamage",ItemStack.class).getDeclaringClass()!=Item.class)
-                        throw fault("Spinning has a dynamic metadata predicate");
-                    group.add(item.copy());
-                }
-                // Lists do not break the outer native removal loop. Even equal lists are unsafe.
-                for(int i=0;i<groups.size();i++)if(overlap(group,groups.get(i))
-                        &&(list||listGroups.get(i)||!samePattern(group.get(0),groups.get(i).get(0))))
-                    throw fault("Spinning greedy ingredient predicates overlap");
-                groups.add(group);listGroups.add(list);inputs.add(encoded);
-            }
-            ItemStack nativeOutput=(ItemStack)field(recipe,"output");
-            if(nativeOutput==null||nativeOutput.stackSize<=0)throw fault("Spinning has no fixed output");
-            output=nativeOutput.copy();signature=CanonicalJson.digest(object("inputs",inputs,"output",stack(output)));
-        }
-    }
-    private static boolean overlap(List<ItemStack>a,List<ItemStack>b){
-        long work=0;for(ItemStack x:a)for(ItemStack y:b){
-            Jobs.checkpoint();if(++work>262144)throw fault("Spinning predicate overlap budget exceeded");
-            if(x.getItem()==y.getItem()&&(x.getItemDamage()==32767||y.getItemDamage()==32767||x.getItemDamage()==y.getItemDamage()))return true;
-        }return false;
-    }
-    private static boolean samePattern(ItemStack a,ItemStack b){return a.getItem()==b.getItem()&&a.getItemDamage()==b.getItemDamage();}
-    private static com.google.gson.JsonObject stack(ItemStack item){
-        if(item==null||item.getItem()==null||Item.itemRegistry.getNameForObject(item.getItem())==null)throw fault("Invalid spinning stack");
-        return object("item",Item.itemRegistry.getNameForObject(item.getItem()),"meta",item.getItemDamage(),"amount",item.stackSize,"nbt",TypedNbt.encode(item.getTagCompound()));
-    }
-    private static String signature(List<Entry> entries){JsonArray values=array();for(Entry e:entries)values.add(value(e.signature));return CanonicalJson.digest(values);}
-    private static Jobs.Fault fault(String message){return new Jobs.Fault("recipe_unsupported",message);}
+  }
+  private void alive(){Jobs.checkpoint();if(closed)throw new Jobs.Fault("capture_closed","Witching Gadgets spinning reader is closed");}
+  public void close(){if(closed)return;closed=true;if(graph!=null)graph.close();graph=null;source=null;definitions=null;entries.clear();examples.close();}
+  private static Jobs.Fault fault(String message){return new Jobs.Fault("recipe_unsupported",message);}
+  private static Jobs.Fault changed(){return new Jobs.Fault("environment_changed","Witching Gadgets spinning source changed");}
 }

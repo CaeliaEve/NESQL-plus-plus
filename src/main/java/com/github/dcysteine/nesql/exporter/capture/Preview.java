@@ -15,6 +15,7 @@ import com.gtnewhorizon.structurelib.StructureLibAPI;
 import com.gtnewhorizon.structurelib.alignment.constructable.ChannelDataAccessor;
 import com.gtnewhorizon.structurelib.alignment.constructable.IConstructable;
 import com.gtnewhorizon.structurelib.alignment.constructable.ISurvivalConstructable;
+import com.gtnewhorizon.structurelib.alignment.enumerable.ExtendedFacing;
 import com.gtnewhorizon.structurelib.structure.IItemSource;
 import com.gtnewhorizon.structurelib.structure.ISurvivalBuildEnvironment;
 import com.mojang.authlib.GameProfile;
@@ -51,6 +52,11 @@ import static com.github.dcysteine.nesql.exporter.source.Json.*;
 final class Preview implements AutoCloseable {
     final Space world;
     final IMetaTileEntity machine;
+    final IConstructable constructable;
+    final Object context;
+    private final Structures.Machine source;
+    private final TileEntity controllerTile;
+    private final boolean nativeUnavailableDisplay;
     private final Probe probe;
     private final Models models;
     private final boolean complete;
@@ -71,8 +77,13 @@ final class Preview implements AutoCloseable {
     private final Progress progress = new Progress();
     private Integer result;
     private boolean finished, written;
+    private boolean constructionSettled, creativeFallback;
+    private Iterator<TileEntity> completing;
 
     Preview(Structures.Machine source, Probe probe, Models models, boolean complete) {
+        source.verify();
+        this.source = source;
+        nativeUnavailableDisplay = unavailableRailDisplay(source);
         // GT's dummy-world check is an exact class lookup, not instanceof.
         GregTechAPI.addDummyWorld(Space.class);
         world = new Space(); this.probe = probe; this.trigger = trigger(probe);
@@ -87,16 +98,29 @@ final class Preview implements AutoCloseable {
         boolean enabled = RunnableMachineUpdate.isCurrentThreadEnabled();
         try {
             RunnableMachineUpdate.setCurrentThreadEnabled(false);
-            ItemStack controller = source.machine.getStackForm(1).copy();
-            if (!controller.getItem().onItemUse(controller, actor, world, 0, 64, 0, 0, 0, 64, 0)) throw fault("Controller placement failed");
-            TileEntity tile = world.getTileEntity(0, 64, 0);
-            if (!(tile instanceof IGregTechTileEntity)) throw fault("Controller did not create a GregTech tile");
-            IGregTechTileEntity base = (IGregTechTileEntity) tile;
-            base.setFrontFacing(ForgeDirection.SOUTH);
-            machine = base.getMetaTileEntity();
-            if (base.getMetaTileID() != source.id || machine == source.machine || machine.getClass() != source.machine.getClass()
-                    || !(machine instanceof IConstructable)) throw fault("Controller placement changed the machine identity");
-            if (machine instanceof INEIPreviewModifier) ((INEIPreviewModifier) machine).onPreviewConstruct(this.trigger.copy());
+            ItemStack controller = source.controller();
+            if (source.container == null) {
+                if (!controller.getItem().onItemUse(controller, actor, world, 0, 64, 0, 0, 0, 64, 0)) throw fault("Controller placement failed");
+                TileEntity tile = world.getTileEntity(0, 64, 0);
+                if (!(tile instanceof IGregTechTileEntity)) throw fault("Controller did not create a GregTech tile");
+                IGregTechTileEntity base = (IGregTechTileEntity) tile;
+                base.setFrontFacing(ForgeDirection.SOUTH);
+                machine = base.getMetaTileEntity();
+                if (base.getMetaTileID() != source.id || machine == source.machine || machine.getClass() != source.machine.getClass()
+                        || !(machine instanceof IConstructable)) throw fault("Controller placement changed the machine identity");
+                constructable = (IConstructable) machine; context = machine; controllerTile = tile;
+                if (machine instanceof INEIPreviewModifier) ((INEIPreviewModifier) machine).onPreviewConstruct(this.trigger.copy());
+            } else {
+                net.minecraft.block.Block block = ((net.minecraft.item.ItemBlock) controller.getItem()).field_150939_a;
+                if (!world.setBlock(0, 64, 0, block, controller.getItemDamage(), 3)) throw fault("Compatibility controller placement failed");
+                TileEntity tile = world.getTileEntity(0, 64, 0);
+                if (tile == null || !source.tileClass.equals(tile.getClass().getCanonicalName()))
+                    throw fault("Compatibility controller changed its native tile type");
+                source.verify();
+                machine = null; controllerTile = tile; context = tile;
+                constructable = source.container.toConstructable(tile, ExtendedFacing.DEFAULT);
+                if (constructable == null) throw fault("Compatibility provider returned no constructable");
+            }
         } catch (RuntimeException | Error failure) {
             try { world.close(); } catch (RuntimeException cleanup) { failure.addSuppressed(cleanup); }
             throw failure;
@@ -118,18 +142,50 @@ final class Preview implements AutoCloseable {
         ClientThread.phase("construct");
         if (finished) return true;
         Jobs.checkpoint();
+        source.verify();
+        if (nativeUnavailableDisplay != unavailableRailDisplay(source))
+            throw new Jobs.Fault("environment_changed", "Native structure availability changed");
         boolean enabled = RunnableMachineUpdate.isCurrentThreadEnabled();
         try {
             RunnableMachineUpdate.setCurrentThreadEnabled(false);
-            long before = world.changes;
-            if (survival()) {
-                result = ((ISurvivalConstructable) machine).survivalConstruct(trigger.copy(), 256, environment);
-                if (progress.pending(result, before, world.changes)) return false;
-            } else ((IConstructable) machine).construct(trigger.copy(), false);
-            if (machine instanceof INEIPreviewModifier) ((INEIPreviewModifier) machine).onPreviewStructureComplete(trigger.copy());
-            if (world.blocks.size() <= 1) throw fault("Construction placed no structure blocks");
+            if (!constructionSettled) {
+                long before = world.changes;
+                if (survival()) {
+                    result = ((ISurvivalConstructable) constructable).survivalConstruct(trigger.copy(), 256, environment);
+                    if (source.container != null && result == -2) {
+                        // Pinned native StructureCompatGuiHandler uses this exact fallback.
+                        creativeFallback = true; result = null;
+                        constructable.construct(trigger.copy(), false);
+                    } else if (progress.pending(result, before, world.changes)) return false;
+                } else constructable.construct(trigger.copy(), false);
+                if (machine instanceof INEIPreviewModifier) ((INEIPreviewModifier) machine).onPreviewStructureComplete(trigger.copy());
+                constructionSettled = true;
+                if (source.container != null) completing = world.ownedTiles().iterator();
+            }
+            // The native compatibility preview completes with one owned tile tick.
+            // Split that work without ticking the live player, chunks or entities.
+            if (completing != null) {
+                long deadline = System.nanoTime() + 2_000_000;
+                for (int work = 0; work < 128 && completing.hasNext(); work++) {
+                    Jobs.checkpoint();
+                    if (work > 0 && System.nanoTime() >= deadline) return false;
+                    TileEntity tile = completing.next();
+                    // Botania's native display constructor places StructureLibFlower,
+                    // not operational flowers. Its gameplay controller tick destroys
+                    // that display. Keep the pre-tick snapshot explicit in the contract.
+                    if (!(tile == controllerTile && displayBeforeControllerTick())
+                            && !(nativeUnavailableDisplay && tile.getClass() == controllerTile.getClass()))
+                        world.tickOwned(tile);
+                }
+                if (completing.hasNext()) return false;
+                completing = null;
+            }
+            if (world.blocks.size() <= 1 && !controllerOnlyTier())
+                throw fault("Construction placed no structure blocks; provider="+constructable.getClass().getName()
+                        +"; tile="+controllerTile.getClass().getName()+"; probe="+probe.count+"; result="+result+"; changes="+world.changes);
             TileEntity tile = world.getTileEntity(0, 64, 0);
-            if (!(tile instanceof IGregTechTileEntity) || ((IGregTechTileEntity) tile).getMetaTileEntity() != machine) throw fault("Construction removed its controller");
+            if (tile != controllerTile || (machine != null && (!(tile instanceof IGregTechTileEntity)
+                    || ((IGregTechTileEntity) tile).getMetaTileEntity() != machine))) throw fault("Construction removed its controller");
             List<Position> ordered = new ArrayList<>();
             for (long key : world.blocks.keySet()) {
                 Position position = new Position(x(key), y(key), z(key)); ordered.add(position);
@@ -146,6 +202,7 @@ final class Preview implements AutoCloseable {
     String capture(Facts facts, String structure) {
         ClientThread.phase("serialize");
         if (!finished || written) throw new IllegalStateException("Construction is not ready to capture");
+        source.verify();
         // Texture encoding completes on the worker between cursor calls, before palette identities are assigned.
         for (Placed placed : pending) {
             String key = CanonicalJson.digest(placed.appearance);
@@ -198,9 +255,12 @@ final class Preview implements AutoCloseable {
         for (String note : notes) messages.add(value(facts.text(note)));
         JsonObject record = object("structure", structure, "probe", probe.json(),
                 "method", survival() ? "survival" : "creative", "result", result,
+                "facing", source.container == null ? "south" : "north",
                 "size", array(maximum[0] - minimum[0] + 1, maximum[1] - minimum[1] + 1, maximum[2] - minimum[2] + 1),
                 "origin", array(minimum[0], maximum[1], maximum[2]), "controller", array(-minimum[0], maximum[1] - 64, maximum[2]),
                 "palette", appearances, "rendered", models != null, "chunks", chunks, "cells", count, "notes", messages);
+        if (displayBeforeControllerTick()) record.addProperty("completion", "nativeDisplayBeforeControllerTick");
+        if (nativeUnavailableDisplay) record.addProperty("completion", "nativeDisplayBeforeUnavailableTileTick");
         String id = Identity.content("build", record); record.addProperty("id", id); facts.row("builds", record); written = true;
         return id;
     }
@@ -236,8 +296,50 @@ final class Preview implements AutoCloseable {
         // GT 5.09.51.482's BBF chains air/lava. StructureLib 1.4.23 continues after
         // SKIP, so survival alternates accepted air and lava forever. Its bounded
         // 3x4x3 native creative constructor supplies a valid preview in one call.
-        return machine instanceof ISurvivalConstructable
-                && !machine.getClass().getName().equals("gregtech.common.tileentities.machines.multi.MTEBrickedBlastFurnace");
+        return !nativeUnavailableDisplay && !creativeFallback && constructable instanceof ISurvivalConstructable
+                && !constructable.getClass().getName().equals("gregtech.common.tileentities.machines.multi.MTEBrickedBlastFurnace");
+    }
+
+    /** Disabled Railcraft machines delete themselves on the first gameplay tick.
+     * Preserve only the pinned provider's native display construction, explicitly marked. */
+    private static boolean unavailableRailDisplay(Structures.Machine source) {
+        if (source.container == null
+                || !source.tileClass.equals("mods.railcraft.common.blocks.machine.alpha.TileRockCrusher")
+                || !source.container.getClass().getName().equals("net.glease.structurecompat.CompatRailcraft$SimpleMultiblockInfoContainer"))
+            return false;
+        Structures.version("Railcraft");
+        Structures.version("structurecompat");
+        Object machine = MagicApi.field(MagicApi.type("mods.railcraft.common.blocks.machine.alpha.EnumMachineAlpha"), null, "ROCK_CRUSHER");
+        ItemStack stack = source.controller();
+        Block block = (Block)MagicApi.invoke(MagicApi.type("mods.railcraft.common.blocks.RailcraftBlocks"),
+                null, "getBlockMachineAlpha", new Class<?>[0]);
+        if (!(stack.getItem() instanceof net.minecraft.item.ItemBlock)
+                || ((net.minecraft.item.ItemBlock)stack.getItem()).field_150939_a != block
+                || net.minecraft.init.Items.feather.getDamage(stack) != ((Enum<?>)machine).ordinal())
+            throw fault("Native Railcraft display controller differs");
+        return !((Boolean)MagicApi.invoke(machine.getClass(),machine,"isAvaliable",new Class<?>[0]));
+    }
+
+    private boolean displayBeforeControllerTick() {
+        if (source.container == null || !source.tileClass.equals("vazkii.botania.common.block.tile.TileEnchanter")
+                || !source.container.getClass().getName().equals(
+                    "vazkii.botania.api.lexicon.multiblock.compat.MultiblockCompatRegistry$BotaniaMultiblockInfoContainer")
+                || !source.identity().equals("structure_dc4e99079dc02c90c9d08225a077e2eeae5ee29bbf6c15e6b65784fd24d53a12"))
+            return false;
+        Structures.version("Botania");
+        return true;
+    }
+
+    /** Blood Magic's pinned tier1 shape is a single altar, already complete on placement. */
+    private boolean controllerOnlyTier() {
+        if (source.container == null || world.blocks.size() != 1 || probe.count != 1
+                || !Integer.valueOf(-1).equals(result)
+                || !source.tileClass.equals("WayofTime.alchemicalWizardry.common.tileEntity.TEAltar")
+                || !source.container.getClass().getName().equals(
+                    "WayofTime.alchemicalWizardry.compat.structurelib.AltarStructure$AltarMultiblockInfoContainer"))
+            return false;
+        Structures.version("AWWayofTime");
+        return true;
     }
 
     /** A claimed placement without a world change must not enqueue thousands of identical calls. */
@@ -295,6 +397,11 @@ final class Preview implements AutoCloseable {
         long changes;
         private boolean closed;
         Space() { rand.setSeed(0); }
+        List<TileEntity> ownedTiles() { return new ArrayList<>(tiles.values()); }
+        void tickOwned(TileEntity tile) {
+            if (closed || tile.getWorldObj() != this) throw fault("Preview cannot tick a tile from another world");
+            if (!tile.isInvalid() && tiles.get(key(tile.xCoord, tile.yCoord, tile.zCoord)) == tile && tile.canUpdate()) tile.updateEntity();
+        }
         private boolean inside(int x, int y, int z) { return x >= -32768 && x <= 32767 && z >= -32768 && z <= 32767 && y >= 0 && y < 256; }
         private void writable(int x, int y, int z) {
             Jobs.checkpoint();

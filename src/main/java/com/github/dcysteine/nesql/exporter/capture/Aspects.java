@@ -21,6 +21,24 @@ import static com.github.dcysteine.nesql.exporter.source.Json.object;
 final class Aspects {
     private Aspects() {}
 
+    /** GT changes only getName for localization; recipe costs consume inherited tag/components. */
+    static boolean nativeDefinition(Aspect aspect) {
+        Class<?> owner = aspect.getClass();
+        String name = "gregtech.common.GTThaumcraftCompat$LocalizedCustomAspectName";
+        if (!owner.getName().equals(name)) return false;
+        MagicApi.version("Aspects","gregtech_nh");
+        if (owner != MagicApi.type(name) || owner.getSuperclass() != Aspect.class)
+            throw new Jobs.Fault("recipe_unsupported", "GT custom aspect class identity changed");
+        try {
+            if (owner.getMethod("getTag").getDeclaringClass() != Aspect.class
+                    || owner.getMethod("getComponents").getDeclaringClass() != Aspect.class)
+                throw new Jobs.Fault("recipe_unsupported", "GT custom aspect semantic callback changed");
+        } catch (NoSuchMethodException error) {
+            throw new Jobs.Fault("recipe_unsupported", "GT custom aspect semantic callback missing");
+        }
+        return true;
+    }
+
     static JsonElement item(ItemStack item) {
         ItemStack copy = item.copy();
         AspectList base = ThaumcraftCraftingManager.getObjectTags(copy);

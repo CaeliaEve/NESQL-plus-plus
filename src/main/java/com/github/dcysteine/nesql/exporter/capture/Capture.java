@@ -9,6 +9,7 @@ import com.github.dcysteine.nesql.exporter.source.Identity;
 import com.github.dcysteine.nesql.exporter.source.Rows;
 import com.github.dcysteine.nesql.exporter.source.Fragments;
 import com.github.dcysteine.nesql.exporter.source.Checkpoints;
+import com.github.dcysteine.nesql.exporter.source.Continuations;
 import com.github.dcysteine.nesql.exporter.source.Semantic;
 import com.github.dcysteine.nesql.exporter.task.ClientThread;
 import com.github.dcysteine.nesql.exporter.task.Jobs;
@@ -32,6 +33,7 @@ import java.util.List;
 import java.util.Map;
 import java.util.Set;
 import java.util.TreeMap;
+import java.util.concurrent.Callable;
 
 import static com.github.dcysteine.nesql.exporter.source.Json.*;
 
@@ -40,6 +42,7 @@ public final class Capture implements Jobs.Task, AutoCloseable {
     private final Path instance, directory;
     private final ClientThread client;
     private final Fingerprints hashes;
+    private final Continuations<NativeCaptureState> continuations=new Continuations<>(4);
 
     public Capture(Path instance, ClientThread client) {
         this.instance = instance.toAbsolutePath().normalize();
@@ -53,6 +56,10 @@ public final class Capture implements Jobs.Task, AutoCloseable {
         for (String profile : new String[] {"full", "data", "images"}) profiles.add(value(profile));
         JsonObject result = object("game", "Minecraft 1.7.10", "target", "GTNH 2.8.4", "ready", client.ready(),
                 "exporter", Main.MOD_VERSION, "revision", Dataset.REVISION,
+                "presentation", Dataset.PRESENTATION,
+                "diagnosticAccountingRevision", 1,
+                "diagnosticContentRevision",1,
+                "checkpointRevision",5,"nativeContinuationRevision",1,"nativeContinuationRetainedJobs",4,
                 "scopes", array("recipes"),
                 "reason", client.reason(), "profiles", profiles, "queued", client.queued(),
                 "longestClientMicros", Long.toString(client.longestMicros()));
@@ -60,21 +67,77 @@ public final class Capture implements Jobs.Task, AutoCloseable {
             try {
                 JsonObject state = client.call(() -> {
                     net.minecraft.server.integrated.IntegratedServer server = net.minecraft.client.Minecraft.getMinecraft().getIntegratedServer();
-                    JsonArray handlers = new JsonArray();
-                    for (Recipes.Handler handler : Recipes.handlers()) handlers.add(handler.describe());
-                    JsonArray structures = new JsonArray();
-                    for (Structures.Machine machine : Structures.all()) structures.add(object("controller", machine.id, "type", machine.machine.getClass().getName()));
-                    return object("handlers", handlers, "itemsReady", ItemList.loadFinished && !ItemList.items.isEmpty(),
+                    JsonObject handlerState = inspectHandlers(() -> {
+                        JsonArray handlers = new JsonArray();
+                        for (Recipes.Handler handler : Recipes.handlers()) handlers.add(handler.describe());
+                        return handlers;
+                    });
+                    JsonObject stateResult = object("itemsReady", ItemList.loadFinished && !ItemList.items.isEmpty(),
                             "world", object("folder", server.getFolderName(), "name", server.getWorldName()), "items", ItemList.items.size(),
-                            "research", Studies.capture().describe(), "materials", GtMaterials.inspect(), "structures", structures);
+                            "research", null, "materials", null, "structures", new JsonArray());
+                    handlerState.entrySet().forEach(entry -> stateResult.add(entry.getKey(), entry.getValue()));
+                    JsonObject structures = inspectSection("structures", () -> {
+                        JsonArray values = new JsonArray();
+                        for (Structures.Machine machine : Structures.all()) {
+                            values.add(object("controller", machine.id, "type", machine.machine.getClass().getName()));
+                        }
+                        return values;
+                    });
+                    JsonObject research = inspectSection("research", () -> Studies.capture().describe());
+                    JsonObject materials = inspectSection("materials", GtMaterials::inspect);
+                    for (JsonObject section : new JsonObject[] {research, materials, structures}) {
+                        section.entrySet().forEach(entry -> stateResult.add(entry.getKey(), entry.getValue()));
+                    }
+                    return stateResult;
                 });
                 state.entrySet().forEach(entry -> result.add(entry.getKey(), entry.getValue()));
-                JsonObject sources = client.call(Sources::capture).inspect();
-                sources.entrySet().forEach(entry -> result.add(entry.getKey(), entry.getValue()));
             } catch (Jobs.Fault error) { throw error; }
             catch (Exception error) { throw new Jobs.Fault("inspect_failed", error.getMessage()); }
+            try {
+                JsonObject sources = client.call(Sources::capture).inspect();
+                sources.entrySet().forEach(entry -> result.add(entry.getKey(), entry.getValue()));
+                result.addProperty("sourcesReady", true);
+            } catch (Jobs.Fault error) {
+                result.addProperty("sourcesReady", false);
+                result.add("sourcesError", object("code", error.code, "message", error.getMessage()));
+            } catch (Exception error) {
+                result.addProperty("sourcesReady", false);
+                result.add("sourcesError", object("code", "inspect_sources_failed",
+                        "message", error.getMessage() == null ? error.getClass().getSimpleName() : error.getMessage()));
+            }
         }
         return result;
+    }
+
+    /**
+     * Handler discovery is useful diagnostics, but it is not a prerequisite for
+     * image-only exports. Keep an audited refusal visible without taking down the
+     * whole /game endpoint.
+     */
+    static JsonObject inspectHandlers(Callable<JsonArray> discovery) {
+        try {
+            return object("handlers", discovery.call(), "handlersReady", true);
+        } catch (Jobs.Fault error) {
+            return object("handlers", new JsonArray(), "handlersReady", false,
+                    "handlersError", object("code", error.code, "message", error.getMessage()));
+        } catch (Exception error) {
+            return object("handlers", new JsonArray(), "handlersReady", false,
+                    "handlersError", object("code", "inspect_handlers_failed",
+                            "message", error.getMessage() == null ? error.getClass().getSimpleName() : error.getMessage()));
+        }
+    }
+
+    static JsonObject inspectSection(String field, Callable<? extends JsonElement> inspection) {
+        try {
+            return object(field, inspection.call(), field + "Ready", true);
+        } catch (Jobs.Fault error) {
+            return object(field, null, field + "Ready", false,
+                    field + "Error", object("code", error.code, "message", error.getMessage()));
+        } catch (Exception error) {
+            return object(field, null, field + "Ready", false,
+                    field + "Error", object("code", "inspect_" + field + "_failed",
+                            "message", error.getMessage() == null ? error.getClass().getSimpleName() : error.getMessage()));
+        }
     }
 
     @Override public void run(Jobs.Context context) throws Exception {
@@ -82,7 +145,7 @@ public final class Capture implements Jobs.Task, AutoCloseable {
         try { capture(context); } finally { context.metric("inputHashes", hashes.statistics()); hashes.end(); }
     }
 
-    @Override public void close() throws IOException { hashes.close(); }
+    @Override public void close() throws IOException { try{hashes.close();}finally{continuations.close();} }
 
     private void capture(Jobs.Context context) throws Exception {
         if (context.request().check != null) { new Audit(instance, client, hashes).run(context); return; }
@@ -117,17 +180,22 @@ public final class Capture implements Jobs.Task, AutoCloseable {
         Path work = workRoot.resolve(context.id());
         Fragments fragments = new Fragments(directory.resolve("captures").resolve(context.id()), context.provenance(), request, context::fragments);
         List<String> order = new ArrayList<>(); for (Recipes.Handler handler : handlers) order.add(handler.id);
-        Checkpoints checkpoint = request.recipeScope() ? new Checkpoints(directory.resolve("checkpoints").resolve(context.id()),
+        Path checkpointRoot=directory.resolve("checkpoints").resolve(context.id());
+        NativeCaptureState[] pendingNative={null};
+        Checkpoints checkpoint = request.recipeScope() ? new Checkpoints(checkpointRoot,
                 context.provenance(), order, Main.MOD_VERSION, receipt -> {
+                    continuations.save(checkpointRoot,receipt.get("sha256").getAsString(),receipt.get("units").getAsInt(),pendingNative[0]);
                     receipt.addProperty("job", context.id()); context.metric("checkpoint", receipt);
                     context.progress("checkpoint", receipt.get("handlers").getAsInt(), handlers.size(), "Sealed completed Handler prefix");
                 }) : null;
+        if(checkpoint!=null)try{continuations.begin(checkpointRoot);}catch(Exception|Error failure){checkpoint.close();throw failure;}
         boolean[] nativeClean = {true};
         Throwable captureFailure = null;
         try (Dataset dataset = new Dataset(work, Main.MOD_VERSION, environment,
                 request.complete(), fragments)) {
-            Images images = new Images();
-            Models models = request.profile.equals("data") || request.recipeScope() ? null : session.call(Models::new);
+            Images images = new Images(request.profile.equals("images"));
+            boolean selectedStructures = handlers.stream().anyMatch(handler -> handler.adapter == Recipes.Adapter.STRUCTURE_REFERENCE);
+            Models models = request.profile.equals("data") || request.profile.equals("images") || request.recipeScope() && !selectedStructures ? null : session.call(Models::new);
             try (AutoCloseable visuals = () -> {
                     try { client.cleanup(() -> { try (Models owned = models) { images.close(); } }); }
                     catch (Exception | Error failure) { nativeClean[0] = false; throw failure; }
@@ -138,12 +206,13 @@ public final class Capture implements Jobs.Task, AutoCloseable {
                 if (request.resume != null) {
                     context.progress("resume", 0, handlers.size(), "Verifying completed Handler units and replaying exact records");
                     Facts validationFacts = new Facts(environment.get("locale").getAsString());
+                    NativeReplay nativeReplay=new NativeReplay(images,session,pendingNative);
                     try { restored = checkpoint.replay(directory.resolve("checkpoints").resolve(request.resume.job), request.resume.sha256, dataset, rows, facts::restore,
                             (unit, evidence) -> {
                                 JsonObject current = validateUnit(unit, handlers, validationFacts, session, context, nativeClean, researchDependencies);
                                 if (!current.equals(evidence)) throw new Jobs.Fault("checkpoint_changed", "Native facts or exclusions changed in completed unit " + unit);
                                 verifyEnvironment(session, request, environment);
-                            }); }
+                            },nativeReplay);nativeReplay.restore(); }
                     catch (java.util.concurrent.CancellationException cancelled) { throw cancelled; }
                     catch (Jobs.Fault failure) { throw failure; }
                     catch (IOException | RuntimeException failure) {
@@ -166,13 +235,17 @@ public final class Capture implements Jobs.Task, AutoCloseable {
                     if (researchDependencies) captureResearch(magic, facts, session, context, sink::write);
                     if (!request.recipeScope()) {
                         captureItems(session, facts, sink, context);
-                        OreGroups ores = session.call(OreGroups::new);
-                        boolean oresDone;
-                        do {
-                            oresDone = session.call(() -> ores.capture(facts));
-                            sink.write(facts.drain());
-                            context.progress("ores", ores.completed(), ores.count(), "Captured native ore dictionary groups and ordered templates");
-                        } while (!oresDone);
+                        if (capturesOreGroups(request.profile)) {
+                            OreGroups ores = session.call(OreGroups::new);
+                            boolean oresDone;
+                            do {
+                                oresDone = session.call(() -> ores.capture(facts));
+                                sink.write(facts.drain());
+                                context.progress("ores", ores.completed(), ores.count(), "Captured native ore dictionary groups and ordered templates");
+                            } while (!oresDone);
+                        } else {
+                            context.progress("ores", 0, 0, "Skipped ore dictionary groups for images-only export");
+                        }
                         Map<String, Fluid> fluids = session.call(() -> new TreeMap<>(FluidRegistry.getRegisteredFluids()));
                         int fluidCount = 0;
                         for (Map.Entry<String, Fluid> entry : fluids.entrySet()) {
@@ -195,64 +268,76 @@ public final class Capture implements Jobs.Task, AutoCloseable {
                             } while (!done);
                             if ((index + 1) % 16 == 0 || index + 1 == materials.size()) context.progress("materials", index + 1, materials.size(), "Captured material forms and composition");
                         }
-                        GtCircuits circuits = session.call(GtCircuits::new);
-                        for (int index = 0; index < circuits.size(); index++) {
-                            final int family = index;
-                            session.call(() -> { circuits.capture(family, facts); return null; });
-                            sink.write(facts.drain());
-                        }
-                        context.progress("circuits", circuits.size(), circuits.size(), "Captured circuit definitions from NEICustomDiagram");
-                        for (Forestry genetics : session.call(Forestry::all)) {
-                            for (int index = 0; index < genetics.speciesCount(); index++) {
-                                final int species = index;
-                                session.call(() -> { genetics.captureSpecies(species, facts); return null; });
+                        if (!request.profile.equals("images")) {
+                            GtCircuits circuits = session.call(GtCircuits::new);
+                            for (int index = 0; index < circuits.size(); index++) {
+                                final int family = index;
+                                session.call(() -> { circuits.capture(family, facts); return null; });
                                 sink.write(facts.drain());
-                                if ((index + 1) % 16 == 0 || index + 1 == genetics.speciesCount()) {
-                                    context.progress("species", index + 1, genetics.speciesCount(), genetics.name());
+                            }
+                            context.progress("circuits", circuits.size(), circuits.size(), "Captured circuit definitions from NEICustomDiagram");
+                            for (Forestry genetics : session.call(Forestry::all)) {
+                                for (int index = 0; index < genetics.speciesCount(); index++) {
+                                    final int species = index;
+                                    session.call(() -> { genetics.captureSpecies(species, facts); return null; });
+                                    sink.write(facts.drain());
+                                    if ((index + 1) % 16 == 0 || index + 1 == genetics.speciesCount()) {
+                                        context.progress("species", index + 1, genetics.speciesCount(), genetics.name());
+                                    }
+                                }
+                                for (int index = 0; index < genetics.mutationCount(); index++) {
+                                    final int mutation = index;
+                                    session.call(() -> { genetics.captureMutation(mutation, facts); return null; });
+                                    sink.write(facts.drain());
+                                    if ((index + 1) % 64 == 0 || index + 1 == genetics.mutationCount()) {
+                                        context.progress("mutations", index + 1, genetics.mutationCount(), genetics.name());
+                                    }
                                 }
                             }
-                            for (int index = 0; index < genetics.mutationCount(); index++) {
-                                final int mutation = index;
-                                session.call(() -> { genetics.captureMutation(mutation, facts); return null; });
-                                sink.write(facts.drain());
-                                if ((index + 1) % 64 == 0 || index + 1 == genetics.mutationCount()) {
-                                    context.progress("mutations", index + 1, genetics.mutationCount(), genetics.name());
+                            List<Structures.Machine> machines = session.call(() -> {
+                                boolean selectedGt = handlers.stream().anyMatch(handler -> StructureReferences.GT.equals(handler.origin.get("handler").getAsString()));
+                                boolean selectedCompat = handlers.stream().anyMatch(handler -> StructureReferences.COMPAT.equals(handler.origin.get("handler").getAsString()));
+                                List<Structures.Machine> selected = selectedGt ? new ArrayList<>() : Structures.all();
+                                if (!selectedCompat) selected.addAll(Structures.compatAll());
+                                return selected;
+                            });
+                            captureResearch(magic, facts, session, context, sink::write);
+                            context.progress("structures", 0, machines.size(), "Starting structure capture: 0/" + machines.size());
+                            for (int index = 0; index < machines.size(); index++) {
+                                final Structures.Machine machine = machines.get(index);
+                                try {
+                                    Structures.Cursor cursor = session.call("structure " + machine.identity() + " open", () -> new Structures.Cursor(machine, facts, models, request.probes, request.profile.equals("full") && request.handlers.isEmpty()));
+                                    try (AutoCloseable owned = () -> client.cleanup("structure " + machine.identity() + " release", cursor::close)) {
+                                        boolean done;
+                                        do {
+                                            done = session.call("structure " + machine.identity() + " capture", cursor::capture);
+                                            sink.write(facts.drain());
+                                        } while (!done);
+                                    }
+                                } catch (java.util.concurrent.CancellationException error) { throw error; }
+                                catch (RuntimeException error) {
+                                    throw Structures.failure("Structure index=" + index + "; controller=" + machine.identity()
+                                            + "; type=" + machine.origin().get("handler").getAsString(), error);
                                 }
+                                if ((index + 1) % 16 == 0 || index + 1 == machines.size()) context.progress("structures", index + 1, machines.size(),
+                                        "Captured structure definitions: " + (index + 1) + "/" + machines.size());
                             }
-                        }
-                        List<Structures.Machine> machines = session.call(Structures::all);
-                        captureResearch(magic, facts, session, context, sink::write);
-                        context.progress("structures", 0, machines.size(), "Starting structure capture: 0/" + machines.size());
-                        for (int index = 0; index < machines.size(); index++) {
-                            final Structures.Machine machine = machines.get(index);
-                            try {
-                                Structures.Cursor cursor = session.call("structure " + machine.id + " open", () -> new Structures.Cursor(machine, facts, models, request.probes, request.profile.equals("full") && request.handlers.isEmpty()));
-                                try (AutoCloseable owned = () -> client.cleanup("structure " + machine.id + " release", cursor::close)) {
-                                    boolean done;
-                                    do {
-                                        done = session.call("structure " + machine.id + " capture", cursor::capture);
-                                        sink.write(facts.drain());
-                                    } while (!done);
-                                }
-                            } catch (java.util.concurrent.CancellationException error) { throw error; }
-                            catch (RuntimeException error) {
-                                throw Structures.failure("Structure index=" + index + "; controller=" + machine.id
-                                        + "; type=" + machine.machine.getClass().getName(), error);
-                            }
-                            if ((index + 1) % 16 == 0 || index + 1 == machines.size()) context.progress("structures", index + 1, machines.size(),
-                                    "Captured structure definitions: " + (index + 1) + "/" + machines.size());
                         }
                     }
-                    if (checkpoint != null) { sink.encoding.flush(); verifyEnvironment(session, request, environment); checkpoint.finish(object("semantic", sink.proof.finish(), "exclusions", object())); }
+                    if (checkpoint != null) { sink.encoding.flush(); verifyEnvironment(session, request, environment);
+                        pendingNative[0]=session.call(()->NativeCaptureState.seal(images,session));
+                        checkpoint.finish(object("semantic", sink.proof.finish(), "exclusions", object())); }
                 }
                 JsonObject recipeExclusions = checkpoint == null ? new JsonObject() : checkpoint.evidence();
+                JsonObject recipeAccounting = checkpoint == null ? new JsonObject() : checkpoint.accounting();
                 if (!recipeExclusions.entrySet().isEmpty()) context.metric("recipeExclusions", recipeExclusions);
+                if (!recipeAccounting.entrySet().isEmpty()) context.metric("captureAccounting", recipeAccounting);
                 for (int handlerIndex = Math.max(0, restored - 1); handlerIndex < handlers.size(); handlerIndex++) {
                     Recipes.Handler handler = handlers.get(handlerIndex);
                     if (checkpoint != null) { checkpoint.begin(handler.id); sink.proof = new Semantic(); }
-                    context.progress("recipes", 0, 0, "Opening recipe handler: " + handler.name);
+                    context.progress("handlers", handlerIndex, handlers.size(), "Opening handler: " + handler.name);
                     Recipes.Cursor cursor;
-                    try { cursor = session.call("handler " + handler.id + " open", () -> handler.open(facts, !request.profile.equals("data"))); }
+                    try { cursor = session.call("handler " + handler.id + " open", () -> handler.open(facts)); }
                     catch (Exception | Error failure) {
                         if (failure.getSuppressed().length != 0) nativeClean[0] = false;
                         throw failure;
@@ -261,6 +346,8 @@ public final class Capture implements Jobs.Task, AutoCloseable {
                         try { client.cleanup(() -> {
                             try (Recipes.Cursor nativeCursor = cursor) {
                                 JsonObject evidence = cursor.exclusions();
+                                recipeAccounting.add(handler.id, cursor.accounting());
+                                context.metric("captureAccounting", new com.google.gson.JsonParser().parse(recipeAccounting.toString()).getAsJsonObject());
                                 if (!evidence.entrySet().isEmpty()) {
                                     recipeExclusions.add(handler.id, evidence);
                                     context.metric("recipeExclusions", new com.google.gson.JsonParser().parse(recipeExclusions.toString()).getAsJsonObject());
@@ -268,27 +355,29 @@ public final class Capture implements Jobs.Task, AutoCloseable {
                             }
                         }); } catch (Exception | Error failure) { nativeClean[0] = false; throw failure; }
                     }) {
+                        String recordKind = cursor.recordKind();
                         sink.write(facts.drain());
                         int size = session.call(cursor::size);
-                        context.progress("recipes", 0, size, handler.name);
+                        context.progress(recordKind, 0, size, handler.name);
                         for (int index = 0; index < size;) {
                             final int begin = index;
                             List<Snapshot> captured = new ArrayList<>();
                             index = session.call("recipe batch", () -> Slice.run(begin, size, recipe -> {
                                 session.check();
                                 if(recipe==begin)cursor.verify();
-                                cursor.capture(recipe);
+                                com.github.dcysteine.nesql.exporter.task.CaptureOutcome outcome = cursor.capture(recipe);
                                 session.check();
                                 Facts.Batch batch = facts.drain();
                                 VisualBatch visual = batch.models.isEmpty() ? sink.visuals(batch) : null;
                                 // Capture the first pixel slice without a second tick handoff.
                                 if (visual != null) visual.capture();
-                                captured.add(new Snapshot(batch, visual));
+                                captured.add(new Snapshot(batch, visual, recipe, outcome));
                                 // Rendering closures may depend on the cursor's current recipe.
                                 // Finish those visuals before advancing it again.
                                 return batch.hasVisuals() ? Long.MAX_VALUE : batch.freezeRecords();
                             }));
                             for (Snapshot snapshot : captured) {
+                                if (checkpoint != null) checkpoint.outcome(snapshot.index, snapshot.outcome);
                                 if (snapshot.visual == null) sink.write(snapshot.facts);
                                 else {
                                     captureProof(sink.proof, snapshot.facts);
@@ -297,26 +386,34 @@ public final class Capture implements Jobs.Task, AutoCloseable {
                                     sink.records(snapshot.facts);
                                 }
                             }
-                            if (index / 64 != begin / 64 || index == size) context.progress("recipes", index, size, handler.name);
+                            if (index / 64 != begin / 64 || index == size) context.progress(recordKind, index, size, handler.name);
                         }
+                        captureStructures(session.call(() -> cursor.structures(0, size)), facts, models, request.probes,
+                                request.profile.equals("full"), session, context, sink::write, nativeClean);
                         // Finish ordered commits before native handler teardown or publication.
+                        session.call("handler final verification", () -> { cursor.finishVerification(); return null; });
                         sink.encoding.flush();
                     }
                     if (checkpoint != null) {
                         verifyEnvironment(session, request, environment);
+                        pendingNative[0]=session.call(()->NativeCaptureState.seal(images,session));
                         checkpoint.finish(object("semantic", sink.proof.finish(), "exclusions",
-                                recipeExclusions.has(handler.id) ? recipeExclusions.getAsJsonObject(handler.id) : object()));
+                                recipeExclusions.has(handler.id) ? recipeExclusions.getAsJsonObject(handler.id) : object(),
+                                "accounting", recipeAccounting.getAsJsonObject(handler.id)));
                     }
                 }
                 context.progress("records", 0, 1, "Sorting records, checking duplicate identities and writing bounded shards");
                 rows.write(dataset);
+                NativeCaptureState terminalNative=session.call(()->NativeCaptureState.seal(images,session));
+                NativeCaptureState.Verification nativeVerification=terminalNative.verification();
+                while(!session.call("native visual source verification",nativeVerification::advance)){}
                 context.progress("verify", 0, 1, "Checking that the game environment did not change during capture");
                 JsonObject current = Environment.capture(session, instance, request, hashes);
                 if (!CanonicalJson.digest(environment).equals(CanonicalJson.digest(current))) {
                     throw new Jobs.Fault("environment_changed", "Mods, resources, configuration or player knowledge changed during export");
                 }
             }
-            if (checkpoint != null) checkpoint.release(nativeClean[0]);
+            if (checkpoint != null) {checkpoint.release(nativeClean[0]);continuations.release(checkpointRoot,nativeClean[0]);}
             dataset.seal();
             session.call(() -> null);
             dataset.archive();
@@ -327,12 +424,29 @@ public final class Capture implements Jobs.Task, AutoCloseable {
             captureFailure = failure; throw failure;
         } finally {
             if (checkpoint != null) {
-                try { try { checkpoint.release(nativeClean[0]); } finally { checkpoint.close(); } }
+                try { try { checkpoint.release(nativeClean[0]);continuations.release(checkpointRoot,nativeClean[0]); } finally { checkpoint.close(); } }
                 catch (Exception | Error failure) {
                     if (captureFailure == null) throw failure;
                     captureFailure.addSuppressed(failure);
                 }
             }
+        }
+    }
+
+    private final class NativeReplay implements Checkpoints.NativeReplay {
+        private final Images images;private final ClientThread.Session session;private final NativeCaptureState[] pending;
+        private Continuations.Lease<NativeCaptureState> lease;
+        NativeReplay(Images images,ClientThread.Session session,NativeCaptureState[] pending){this.images=images;this.session=session;this.pending=pending;}
+        @Override public void verify(Path previous,String digest,int units,boolean required)throws Exception{
+            try{lease=continuations.acquire(previous,digest,units);}catch(IOException unavailable){if(required)throw unavailable;lease=null;}
+            if(lease!=null){NativeCaptureState.Verification check=lease.terminal().verification();while(!session.call("native continuation preflight",check::advance)){};}
+        }
+        @Override public void sealed(int unit)throws Exception{
+            pending[0]=lease==null?session.call(()->NativeCaptureState.seal(images,session)):lease.state(unit);
+        }
+        void restore()throws Exception{
+            if(lease==null)return;NativeCaptureState.Verification check=lease.terminal().verification();
+            while(!session.call("native continuation final verification",()->check.advanceAndRestore(images))){};
         }
     }
 
@@ -348,6 +462,7 @@ public final class Capture implements Jobs.Task, AutoCloseable {
                                     ClientThread.Session session, Jobs.Context context, boolean[] nativeClean, boolean researchDependencies) throws Exception {
         Semantic proof = new Semantic();
         JsonObject[] exclusions = {object()};
+        JsonObject[] accounting = {null};
         if (unit == 0) {
             // Disk verification may take time: resolve live registries and the
             // clue candidate catalog now, not from the request's earlier seed.
@@ -361,11 +476,11 @@ public final class Capture implements Jobs.Task, AutoCloseable {
         } else {
             Recipes.Handler handler = handlers.get(unit - 1);
             Recipes.Cursor cursor;
-            try { cursor = session.call("resume data open " + handler.id, () -> handler.open(facts, false)); }
+            try { cursor = session.call("resume data open " + handler.id, () -> handler.open(facts)); }
             catch (Exception | Error failure) { if (failure.getSuppressed().length != 0) nativeClean[0] = false; throw failure; }
             try (AutoCloseable owned = () -> {
                 try { client.cleanup(() -> {
-                    try (Recipes.Cursor nativeCursor = cursor) { exclusions[0] = cursor.exclusions(); }
+                    try (Recipes.Cursor nativeCursor = cursor) { exclusions[0] = cursor.exclusions(); accounting[0] = cursor.accounting(); }
                 }); } catch (Exception | Error failure) { nativeClean[0] = false; throw failure; }
             }) {
                 captureProof(proof, facts.drain());
@@ -381,12 +496,39 @@ public final class Capture implements Jobs.Task, AutoCloseable {
                     for (Facts.Batch batch : batches) captureProof(proof, batch);
                     if (index / 128 != start / 128 || index == total) context.progress("resume-check", index, total, handler.name);
                 }
+                captureStructures(session.call(() -> cursor.structures(0, total)), facts, null, context.request().probes,
+                        context.request().profile.equals("full"), session, context, batch -> captureProof(proof, batch), nativeClean);
+                session.call("resume final verification", () -> { cursor.finishVerification(); return null; });
             }
         }
-        return object("semantic", proof.finish(), "exclusions", exclusions[0]);
+        JsonObject result = object("semantic", proof.finish(), "exclusions", exclusions[0]);
+        if (accounting[0] != null) result.add("accounting", accounting[0]);
+        return result;
     }
 
     private interface BatchSink { void accept(Facts.Batch batch) throws Exception; }
+
+    /** Selected structure references own the same bounded geometry path as global capture. */
+    private void captureStructures(List<Structures.Machine> sources, Facts facts, Models models, List<com.github.dcysteine.nesql.exporter.source.Probe> probes,
+                                   boolean complete, ClientThread.Session session, Jobs.Context context, BatchSink output, boolean[] nativeClean) throws Exception {
+        for (int index = 0; index < sources.size(); index++) {
+            Structures.Machine source = sources.get(index);
+            Structures.Cursor geometry;
+            try { geometry = session.call("selected structure " + source.identity() + " open", () -> new Structures.Cursor(source, facts, models, probes, complete)); }
+            catch (Exception | Error failure) { if (failure.getSuppressed().length != 0) nativeClean[0] = false; throw failure; }
+            try (AutoCloseable owned = () -> {
+                try { client.cleanup("selected structure release", geometry::close); }
+                catch (Exception | Error failure) { nativeClean[0] = false; throw failure; }
+            }) {
+                boolean done;
+                do {
+                    done = session.call("selected structure capture", geometry::capture);
+                    output.accept(facts.drain());
+                } while (!done);
+            }
+            context.progress("structures", index + 1, sources.size(), "Captured selected structure " + source.identity());
+        }
+    }
 
     private static void captureResearch(Magic magic, Facts facts, ClientThread.Session session,
                                         Jobs.Context context, BatchSink sink) throws Exception {
@@ -407,6 +549,11 @@ public final class Capture implements Jobs.Task, AutoCloseable {
         if (proof == null) return;
         for (Facts.Icon icon : batch.icons) proof.add(icon.kind, icon.record);
         for (Facts.Record record : batch.records) proof.add(record.kind, record.value);
+    }
+
+    /** Image-only exports intentionally omit the unstable ore dictionary pass. */
+    static boolean capturesOreGroups(String profile) {
+        return !"images".equals(profile);
     }
 
     private void captureItems(ClientThread.Session session, Facts facts, Sink sink, Jobs.Context context) throws Exception {
@@ -450,7 +597,11 @@ public final class Capture implements Jobs.Task, AutoCloseable {
 
     private static final class Snapshot {
         final Facts.Batch facts; final VisualBatch visual;
-        Snapshot(Facts.Batch facts, VisualBatch visual) { this.facts = facts; this.visual = visual; }
+        final int index;
+        final com.github.dcysteine.nesql.exporter.task.CaptureOutcome outcome;
+        Snapshot(Facts.Batch facts, VisualBatch visual, int index, com.github.dcysteine.nesql.exporter.task.CaptureOutcome outcome) {
+            this.facts = facts; this.visual = visual; this.index = index; this.outcome = outcome;
+        }
     }
 
     private static final class Sink implements AutoCloseable {
@@ -466,10 +617,20 @@ public final class Capture implements Jobs.Task, AutoCloseable {
         final Pipeline encoding = new Pipeline();
         final PngCache png = new PngCache(16 * 1024 * 1024L, 2048);
         final java.util.LinkedHashMap<String, Boolean> assetRows = new java.util.LinkedHashMap<>(16, .75f, true);
+        final java.util.LinkedHashMap<String,Boolean> visualRows=new java.util.LinkedHashMap<>(16,.75f,true);
+        final VisualGraph.Publisher visualPublisher;
 
         Sink(Dataset dataset, Rows rows, Images images, ClientThread.Session client, boolean textures, Checkpoints checkpoint, Path assetRoot) {
             this.dataset = dataset; this.rows = rows; this.images = images; this.client = client; this.textures = textures;
             this.checkpoint = checkpoint; this.assetRoot = assetRoot;
+            visualPublisher=new VisualGraph.Publisher(new VisualGraph.Writer(){
+                @Override public String asset(Images.Image dependency)throws Exception{return Sink.this.asset(dependency);}
+                @Override public void row(JsonObject resource)throws Exception{
+                    String id=resource.get("id").getAsString();if(visualRows.get(id)!=null)return;
+                    Sink.this.row("visuals",resource);visualRows.put(id,true);
+                    if(visualRows.size()>4096)visualRows.remove(visualRows.keySet().iterator().next());
+                }
+            });
         }
 
         void row(String kind, JsonObject value) throws IOException {
@@ -508,22 +669,22 @@ public final class Capture implements Jobs.Task, AutoCloseable {
             }
             for (Facts.Icon icon : batch.icons) {
                 JsonObject record = icon.record;
-                if (textures) visual.add(() -> images.capture(icon, client), image -> asset(image, id -> json.object(record).addProperty("icon", id)));
-            }
-            for (Facts.Scene scene : batch.scenes) {
-                JsonObject recipe = scene.recipe; JsonArray decorations = scene.elements;
-                int width = scene.width, height = scene.height, z = scene.z;
-                visual.add(() -> images.scene(scene, client), image -> asset(image, background -> {
-                JsonArray elements = new JsonArray();
-                elements.add(object("kind", "sprite", "asset", background, "x", 0, "y", 0,
-                        "width", width, "height", height, "z", z));
-                for (JsonElement element : json.array(decorations)) elements.add(element);
-                JsonObject view = object("width", width, "height", height, "elements", elements);
-                String id = Identity.content("view", view);
-                view.addProperty("id", id);
-                json.object(recipe).addProperty("view", id);
-                row("views", view);
-                }));
+                if (textures) {
+                    java.util.concurrent.Callable<Images.Image> animation = Images.progressive(images, icon, client);
+                    visual.add(animation, image -> {
+                        JsonObject target = json.object(record);
+                        if (image.error != null) {
+                            target.add("icon", null);
+                            target.add("iconError", image.error);
+                        } else {
+                            // Resolve the frozen snapshot inside the queued
+                            // asset commit. Resolving it before enqueueing
+                            // would mutate the live record after its detached
+                            // copy has already been scheduled for writing.
+                            asset(image, id -> json.object(record).addProperty("icon", id));
+                        }
+                    });
+                }
             }
             return visual;
         }
@@ -536,8 +697,8 @@ public final class Capture implements Jobs.Task, AutoCloseable {
         }
 
         void records(Facts.Batch batch) throws Exception {
-            // UI layout/track caches reuse Picture target objects in later recipes.
-            // Populate their IDs before detaching, while subsequent scene/icon work may overlap.
+            // Content picture caches may reuse target objects in later records.
+            // Populate their IDs before detaching, while subsequent icon work may overlap.
             if (!batch.pictures.isEmpty()) encoding.flush();
             batch.json.freeze(batch);
             List<Facts.Record> records = new ArrayList<>();
@@ -557,12 +718,20 @@ public final class Capture implements Jobs.Task, AutoCloseable {
         interface Asset { void accept(String id) throws IOException; }
         void asset(Images.Image image, Asset target) throws Exception {
             Jobs.checkpoint();
+            String visual = null;
+            if (image.visual != null) {
+                // Publish the exact dependency closure before the preview can
+                // refer to it. Cancellation never leaves a completed icon row.
+                visual = visualPublisher.publish(image.visual.root);
+            }
+            final String visualId = visual;
             encoding.submit((long) image.pixels.getWidth() * image.pixels.getHeight() * 4, () -> png.encode(image.pixels), bytes -> {
             try (Jobs.Timing ignored = Jobs.measure("assetWrite")) {
             String path = dataset.asset(bytes, "png");
             if (checkpoint != null) checkpoint.asset(assetRoot.resolve(path), path);
             JsonObject asset = object("path", path, "width", image.pixels.getWidth(), "height", image.pixels.getHeight(),
-                    "frames", image.frames, "interpolate", false, "source", object("kind", image.kind, "location", image.location));
+                    "frames", image.frames, "interpolate", image.interpolate, "source", object("kind", image.kind, "location", image.location));
+            if (visualId != null) asset.addProperty("visual", visualId);
             String id = Identity.content("asset", asset);
             asset.addProperty("id", id);
             if (assetRows.get(id) == null) {

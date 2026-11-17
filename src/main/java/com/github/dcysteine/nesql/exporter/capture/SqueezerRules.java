@@ -22,23 +22,25 @@ final class SqueezerRules {
     private final Map<?,?> containers;
     private final JsonObject context;
     private final String fingerprint;
+    private final SqueezerCallbacks callbackProofs;
 
     static SqueezerRules runtime(){
-        version("Forestry","4.10.17");
+        MagicApi.version("SqueezerRules","Forestry");
         if(RecipeManagers.squeezerManager==null||!RecipeManagers.squeezerManager.getClass().getName().equals(PREFIX+"SqueezerRecipeManager"))throw fault("Unadapted squeezer manager");
         return new SqueezerRules(RecipeManagers.squeezerManager.recipes(),(Map<?,?>)field(type(PREFIX+"SqueezerRecipeManager"),null,"containerRecipes"));
     }
     SqueezerRules(Collection<?> recipes,Map<?,?> containers){
         this.recipes=recipes;this.containers=containers;
-        context=snapshot();fingerprint=CanonicalJson.digest(context);
+        Snapshot snapshot=snapshot();context=snapshot.context;callbackProofs=snapshot.callbacks;fingerprint=CanonicalJson.digest(snapshot.guarded());
     }
     JsonObject context(){return new JsonParser().parse(context.toString()).getAsJsonObject();}
     SqueezerEntries entries(){checkUnchanged();SqueezerEntries result=new SqueezerEntries(recipes,containers,context);checkUnchanged();return result;}
     String publish(Facts facts){checkUnchanged();return facts.squeezerProgram(context);}
     void checkUnchanged(){
-        if(!fingerprint.equals(CanonicalJson.digest(snapshot())))throw new Jobs.Fault("recipe_changed","Squeezer rules or fluid/ore registry changed during capture");
+        callbackProofs.verify();
+        if(!fingerprint.equals(CanonicalJson.digest(snapshot().guarded())))throw new Jobs.Fault("recipe_changed","Squeezer rules or fluid/ore registry changed during capture");
     }
-    private JsonObject snapshot(){
+    private Snapshot snapshot(){
         if(recipes.size()>262144||containers.size()>4096)throw fault("Squeezer registry exceeds its budget");
         JsonArray ordinary=new JsonArray(),rules=new JsonArray(),filled=new JsonArray(),dynamic=new JsonArray();
         for(Object raw:recipes){Jobs.checkpoint();ordinary.add(recipe(raw));}
@@ -77,7 +79,7 @@ final class SqueezerRules {
         for(Map.Entry<String,Item> callback:callbacks.entrySet())dynamic.add(policy.describe(callback.getKey(),callback.getValue()));
         JsonObject value=object("ordinary",ordinary,"containers",rules,"filled",filled,"dynamic",dynamic);
         if(CanonicalJson.bytes(value).length>16*1024*1024)throw fault("Squeezer rule snapshot exceeds 16 MiB");
-        return value;
+        return new Snapshot(value,policy);
     }
     static JsonObject recipe(Object raw){
         exact(raw,"SqueezerRecipe");ISqueezerRecipe recipe=(ISqueezerRecipe)raw;
@@ -96,7 +98,7 @@ final class SqueezerRules {
         return object("registry",registered(item.getItem()),"meta",Items.feather.getDamage(item),"amount",item.stackSize,
             "nbt",TypedNbt.encode(item.getTagCompound()),"ores",ores);
     }
-    private static JsonObject fluid(FluidStack value){
+    static JsonObject fluid(FluidStack value){
         if(value==null)return null;
         if(value.getClass()!=FluidStack.class||value.getFluid()==null)throw fault("Invalid squeezer fluid");
         String name=FluidRegistry.getFluidName(value.getFluid());
@@ -111,4 +113,9 @@ final class SqueezerRules {
     private static String bits(float value){return String.format(Locale.ROOT,"%08x",Float.floatToRawIntBits(value));}
     private static void exact(Object value,String kind){if(value==null||!value.getClass().getName().equals(PREFIX+kind))throw fault("Unadapted squeezer recipe: "+(value==null?"null":value.getClass().getName()));}
     private static Jobs.Fault fault(String message){return new Jobs.Fault("recipe_unsupported",message);}
+    private static final class Snapshot {
+        final JsonObject context;final SqueezerCallbacks callbacks;
+        Snapshot(JsonObject context,SqueezerCallbacks callbacks){this.context=context;this.callbacks=callbacks;}
+        JsonObject guarded(){return object("context",context,"callbackDependencies",callbacks.dependencies());}
+    }
 }

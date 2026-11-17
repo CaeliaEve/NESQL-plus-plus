@@ -1,6 +1,5 @@
 package com.github.dcysteine.nesql.exporter.capture;
 
-import codechicken.nei.PositionedStack;
 import codechicken.nei.recipe.ICraftingHandler;
 import codechicken.nei.recipe.TemplateRecipeHandler;
 import com.github.dcysteine.nesql.exporter.task.Jobs;
@@ -13,15 +12,22 @@ import java.util.*;
 import static com.github.dcysteine.nesql.exporter.capture.MagicApi.*;
 import static com.github.dcysteine.nesql.exporter.source.Json.*;
 
-/** TConstruct 1.13.57 registries. Native layouts receive owned projections only. */
+/** TConstruct 1.13.57 definitions. Casting callbacks receive owned semantic projections. */
 final class TinkerRecipes implements RegistryRecipes {
     private static final String HANDLERS = "tconstruct.plugins.nei.";
     private static final String CRAFTING = "tconstruct.library.crafting.";
-    private final TemplateRecipeHandler handler;
+    private final String handlerClass;
     private final List<Object> recipes = new ArrayList<>();
+    private final NativeItemExamples examples=new NativeItemExamples();
+    private final TinkerCasting.Events events=new TinkerCasting.Events();
+    private Object[] anchors;
+    private NativeDefinitionGraph definitions;
+    private boolean closed;
 
     static boolean supports(ICraftingHandler handler) {
-        String name = handler.getClass().getName();
+        return supportsClass(handler.getClass().getName());
+    }
+    static boolean supportsClass(String name) {
         return name.equals(HANDLERS + "RecipeHandlerAlloying") || name.equals(HANDLERS + "RecipeHandlerMelting")
                 || name.equals(HANDLERS + "RecipeHandlerCastingTable") || name.equals(HANDLERS + "RecipeHandlerCastingBasin")
                 || name.equals(HANDLERS + "RecipeHandlerDryingRack");
@@ -31,34 +37,65 @@ final class TinkerRecipes implements RegistryRecipes {
     private static boolean alloying(TemplateRecipeHandler handler) { return handler.getClass().getName().equals(HANDLERS + "RecipeHandlerAlloying"); }
     private static boolean drying(TemplateRecipeHandler handler) { return handler.getClass().getName().equals(HANDLERS + "RecipeHandlerDryingRack"); }
     TinkerRecipes(TemplateRecipeHandler handler) {
-        version("TConstruct", "1.13.57-GTNH");
-        version("Mantle", "0.5.1");
-        this.handler = handler;
-        if (drying(handler)) recipes.addAll(dryingRecipes());
+        MagicApi.version("TinkerRecipes","TConstruct");
+        MagicApi.version("TinkerRecipes","Mantle");
+        this.handlerClass = handler.getClass().getName();
+        if(!supports(handler))throw fault("Unknown TConstruct handler");
+        try{
+        anchors=registrationAnchors(handlerClass);Object source=anchors[anchors.length-1];
+        if (drying(handler)) recipes.addAll((List<?>)source);
         else if (casting(handler)) {
-            if (cpw.mods.fml.common.Loader.isModLoaded("IguanaTweaksTConstruct")) version("IguanaTweaksTConstruct", "2.6.6");
-            Object registry = invoke(type("tconstruct.library.TConstructRegistry"), null,
-                    handler.getClass().getName().endsWith("Table") ? "getTableCasting" : "getBasinCasting", new Class<?>[0]);
-            if (registry == null || !registry.getClass().getName().equals(CRAFTING + "LiquidCasting")) throw fault("Missing or unadapted casting registry");
-            recipes.addAll((List<?>) invoke(registry.getClass(), registry, "getCastingRecipes", new Class<?>[0]));
-        } else if (alloying(handler)) recipes.addAll((List<?>) invoke(type(CRAFTING + "Smeltery"), null, "getAlloyList", new Class<?>[0]));
-        else for (Object key : ((Map<?, ?>) invoke(type(CRAFTING + "Smeltery"), null, "getSmeltingList", new Class<?>[0])).keySet()) {
+            if (cpw.mods.fml.common.Loader.isModLoaded("IguanaTweaksTConstruct")) MagicApi.version("TinkerRecipes","IguanaTweaksTConstruct");
+            recipes.addAll((List<?>)source);
+        } else if (alloying(handler)) recipes.addAll((List<?>)source);
+        else for (Object key : ((Map<?, ?>)source).keySet()) {
             Jobs.checkpoint();
             if (!key.getClass().getName().equals("mantle.utils.ItemMetaWrapper")) throw fault("Unadapted melting key: " + key.getClass().getName());
             recipes.add(new ItemStack((Item) field(key, "item"), 1, (Integer) field(key, "meta")));
         }
         if (recipes.size() > 262144) throw fault("TConstruct registry exceeds its budget");
+        Map<String,String[]> shapes=new HashMap<>();
+        shapes.put(CRAFTING+"CastingRecipe",new String[]{"output","castingMetal","cast","consumeCast","coolTime","ignoreNBT"});
+        shapes.put(CRAFTING+"AlloyMix",new String[]{"result","mixers"});
+        shapes.put(CRAFTING+"DryingRackRecipes$DryingRecipe",new String[]{"time","input","result"});
+        shapes.put("mantle.utils.ItemMetaWrapper",new String[]{"item","meta"});
+        definitions=new NativeDefinitionGraph(()->{Object[] current=registrationAnchors(handlerClass);return Arrays.copyOfRange(current,1,current.length);},shapes);
+        }catch(RuntimeException|Error failure){close();throw failure;}
     }
-    public int size() { return recipes.size(); }
-    public boolean capture(int index, RecipeRow row) { return drying(handler) ? dry(handler, recipes.get(index), row, recipes) : capture(handler, recipes.get(index), row); }
+    static Object[] registrationAnchors(String handler){
+        if(!supportsClass(handler))throw fault("Unknown TConstruct source");
+        if(handler.endsWith("RecipeHandlerDryingRack")){
+            Object list=field(type(CRAFTING+"DryingRackRecipes"),null,"recipes");requireList(list);return new Object[]{type(CRAFTING+"DryingRackRecipes"),list};
+        }
+        if(handler.endsWith("RecipeHandlerCastingTable")||handler.endsWith("RecipeHandlerCastingBasin")){
+            Object manager=field(type("tconstruct.TConstruct"),null,handler.endsWith("Table")?"tableCasting":"basinCasting");
+            if(manager==null)throw new Jobs.Fault("handler_not_ready","TConstruct casting registry is unavailable");
+            if(manager.getClass()!=type(CRAFTING+"LiquidCasting"))throw fault("Unadapted native casting owner");Object casts=field(manager,"casts");requireList(casts);return new Object[]{manager,casts};
+        }
+        Object manager=field(type(CRAFTING+"Smeltery"),null,"instance");
+        if(manager==null)throw new Jobs.Fault("handler_not_ready","TConstruct smeltery source is unavailable");
+        if(manager.getClass()!=type(CRAFTING+"Smeltery"))throw fault("Unadapted native smeltery owner");
+        if(handler.endsWith("RecipeHandlerAlloying")){Object list=field(manager,"alloys");requireList(list);return new Object[]{manager,list};}
+        Object temperatures=field(manager,"temperatureList"),fuels=field(manager,"smelteryFuels"),melting=field(manager,"smeltingList");
+        for(Object map:new Object[]{temperatures,fuels,melting})if(map==null||map.getClass()!=HashMap.class||((Map<?,?>)map).size()>262144)throw fault("Unadapted melting/temperature/fuel backing");
+        return new Object[]{manager,temperatures,fuels,melting};
+    }
+    private static void requireList(Object list){if(list==null)throw new Jobs.Fault("handler_not_ready","TConstruct source is unavailable");if(list.getClass()!=ArrayList.class||((List<?>)list).size()>262144)throw fault("Unadapted TConstruct definition list");}
+    public void verify(){alive();Object[] current=registrationAnchors(handlerClass);if(current.length!=anchors.length)throw changed();for(int i=0;i<current.length;i++)if(current[i]!=anchors[i])throw changed();definitions.verifyRoots();events.verify();}
+    public void finishVerification(){verify();definitions.verify();examples.verify();events.finishVerification();}
+    public int size() { alive();return recipes.size(); }
+    public boolean capture(int index, RecipeRow row) {alive();if(handlerClass.endsWith("RecipeHandlerCastingTable")||handlerClass.endsWith("RecipeHandlerCastingBasin"))return TinkerCasting.capture(handlerClass,recipes.get(index),row,examples,events);return capture(handlerClass,recipes.get(index),row,recipes); }
 
     static boolean capture(TemplateRecipeHandler handler, Object recipe, RecipeRow row) {
         if (!supports(handler)) throw fault("Unknown TConstruct recipe handler");
-        if (drying(handler)) return dry(handler, recipe, row, dryingRecipes());
-        if (casting(handler)) return TinkerCasting.capture(handler, recipe, row);
-        if (alloying(handler)) return alloy(handler, recipe, row);
+        return capture(handler.getClass().getName(),recipe,row,drying(handler)?dryingRecipes():Collections.emptyList());
+    }
+    private static boolean capture(String handler,Object recipe,RecipeRow row,List<?> entries){
+        if (handler.endsWith("RecipeHandlerDryingRack")) return dry(recipe, row, entries);
+        if (handler.endsWith("RecipeHandlerCastingTable")||handler.endsWith("RecipeHandlerCastingBasin")) return TinkerCasting.capture(handler, recipe, row);
+        if (handler.endsWith("RecipeHandlerAlloying")) return alloy(recipe, row);
         if (!(recipe instanceof ItemStack)) throw fault("Invalid TConstruct melting source");
-        melting(handler, (ItemStack) recipe, row); return true;
+        melting((ItemStack) recipe, row); return true;
     }
 
     private static List<?> dryingRecipes() {
@@ -72,48 +109,43 @@ final class TinkerRecipes implements RegistryRecipes {
         return entries;
     }
 
-    private static boolean dry(TemplateRecipeHandler handler, Object recipe, RecipeRow row, List<?> entries) {
+    private static boolean dry(Object recipe, RecipeRow row, List<?> entries) {
         if (!entries.contains(recipe)) throw fault("Drying recipe is not registered");
         ItemStack source = (ItemStack) field(recipe, "input");
         // The rack holds one item. The native predicate includes count and literal metadata.
-        if (source == null || source.getItem() == null || source.stackSize != 1) return false;
+        if (source == null || source.getItem() == null || source.stackSize != 1)
+            return row.exclude(object("native", CRAFTING + "DryingRackRecipes", "reason", "native_single_item_rack_cannot_match_registered_template",
+                    "input", RecipeRow.stackEvidence(source)));
         NBTTagCompound nbt = source.getTagCompound();
         // Removing frypanKill from the offered stack can never produce either template.
-        if (nbt != null && (nbt.hasNoTags() || nbt.hasKey("frypanKill"))) return false;
+        if (nbt != null && (nbt.hasNoTags() || nbt.hasKey("frypanKill")))
+            return row.exclude(object("native", CRAFTING + "DryingRackRecipes", "reason", "native_frypan_tag_removal_cannot_match_registered_nbt",
+                    "input", RecipeRow.stackEvidence(source)));
         for (Object prior : entries) {
             if (prior == recipe) break;
             Jobs.checkpoint();
-            if (ItemStack.areItemStacksEqual((ItemStack) field(prior, "input"), source)) return false;
+            if (ItemStack.areItemStacksEqual((ItemStack) field(prior, "input"), source))
+                return row.exclude(object("native", CRAFTING + "DryingRackRecipes", "reason", "earlier_native_drying_input_match_claims_template",
+                        "input", RecipeRow.stackEvidence(source), "earlierIndex", entries.indexOf(prior)));
         }
         int time = (Integer) field(recipe, "time");
-        if (time <= 0) return false; // maxTime <= 0 disables DryingRackLogic, including later matches.
+        if (time <= 0) return row.exclude(object("native", "tconstruct.blocks.logic.DryingRackLogic",
+                "reason", "nonpositive_native_maxTime_disables_drying", "time", time));
         ItemStack output = (ItemStack) field(recipe, "result");
         if (output == null || output.getItem() == null || output.stackSize <= 0) throw fault("Invalid native drying result");
-        // The native cached recipe stores its arguments by reference; supply an owned projection.
-        Class<?> recipeType = type(CRAFTING + "DryingRackRecipes$DryingRecipe");
-        Object projection;
-        try {
-            java.lang.reflect.Constructor<?> constructor = recipeType.getDeclaredConstructor(ItemStack.class, int.class, ItemStack.class);
-            constructor.setAccessible(true); projection = constructor.newInstance(source.copy(), time, output.copy());
-        } catch (ReflectiveOperationException error) {
-            Jobs.Fault failure = fault("Cannot project native drying recipe"); failure.initCause(error); throw failure;
-        }
-        TemplateRecipeHandler.CachedRecipe cached = (TemplateRecipeHandler.CachedRecipe) construct(type(HANDLERS + "RecipeHandlerDryingRack$CachedDryingRackRecipe"),
-                new Class<?>[] {handler.getClass(), recipeType}, handler, projection);
-        // PositionedStack normally expands 32767; this registry matches it literally.
-        PositionedStack position = cached.getIngredient(); position.items = new ItemStack[] {source.copy()}; position.item = position.items[0];
-        row.itemInput(position, 0, Collections.singletonList(new RecipeRow.Ingredient(source.copy(), 1, false,
+        row.itemInput(0, Collections.singletonList(new RecipeRow.Ingredient(source.copy(), 1, false,
                 object("kind", "without_tags", "keys", array("frypanKill")))), false);
-        row.itemOutput(cached.getResult(), 0, output.copy(), 10000);
+        row.itemOutput(0, output.copy(), 10000);
         row.record.addProperty("duration", Integer.toString(time));
-        replace(handler, cached); return true;
+        return true;
     }
 
-    private static boolean alloy(TemplateRecipeHandler handler, Object recipe, RecipeRow row) {
+    private static boolean alloy(Object recipe, RecipeRow row) {
         if (recipe == null || !recipe.getClass().getName().equals(CRAFTING + "AlloyMix"))
             throw fault("Unadapted alloy implementation: " + (recipe == null ? "null" : recipe.getClass().getName()));
         List<?> mixers = (List<?>) field(recipe, "mixers");
-        if (mixers.isEmpty()) return false; // The native NEI handler excludes these; mix() has no minimum batch.
+        if (mixers.isEmpty()) return row.exclude(object("native", CRAFTING + "AlloyMix",
+                "reason", "no_native_mixer_defines_minimum_alloy_batch", "mixers", 0));
         if (mixers.size() > 4096) throw fault("Alloy ingredients exceed their budget");
         List<FluidStack> inputs = new ArrayList<>();
         for (Object raw : mixers) {
@@ -124,39 +156,25 @@ final class TinkerRecipes implements RegistryRecipes {
             inputs.add(input);
         }
         FluidStack output = fluid(field(recipe, "result"));
-        List<FluidStack> copies = new ArrayList<>();
-        for (FluidStack input : inputs) copies.add(input.copy());
-        Object projection = construct(type(CRAFTING + "AlloyMix"), new Class<?>[] {FluidStack.class, List.class}, output.copy(), copies);
-        TemplateRecipeHandler.CachedRecipe cached = (TemplateRecipeHandler.CachedRecipe) construct(type(HANDLERS + "RecipeHandlerAlloying$CachedAlloyingRecipe"),
-                new Class<?>[] {handler.getClass(), projection.getClass()}, handler, projection);
-        for (int slot = 0; slot < inputs.size(); slot++) row.fluidInput(null, slot, inputs.get(slot), false);
-        row.fluidOutput(null, 0, output);
-        row.property("tconstruct:batch", "Batch policy", "Maximum whole multiples of the listed fluid quantities");
-        replace(handler, cached); return true;
+        for (int slot = 0; slot < inputs.size(); slot++) row.fluidInput(slot, inputs.get(slot), false);
+        row.fluidOutput(0, output);
+        row.note("tconstruct:batch", "tconstruct.library.crafting.AlloyMix#mix",row.facts.locale().equals("zh_CN")?"按所列流体数量的最大整数倍进行合金混合。":"Alloying uses the maximum whole multiple of the listed fluid quantities.");
+        return true;
     }
 
-    private static void melting(TemplateRecipeHandler handler, ItemStack source, RecipeRow row) {
+    private static void melting(ItemStack source, RecipeRow row) {
         if (source.getItem() == null) throw fault("Invalid melting item");
         ItemStack input = source.copy(); input.stackSize = 1; input.setTagCompound(null);
         Class<?> registry = type(CRAFTING + "Smeltery");
         FluidStack output = fluid(invoke(registry, null, "getSmelteryResult", new Class<?>[] {ItemStack.class}, input.copy()));
         int temperature = (Integer) invoke(registry, null, "getLiquifyTemperature", new Class<?>[] {ItemStack.class}, input.copy());
-        TemplateRecipeHandler.CachedRecipe cached = (TemplateRecipeHandler.CachedRecipe) construct(type(HANDLERS + "RecipeHandlerMelting$CachedMeltingRecipe"),
-                new Class<?>[] {handler.getClass(), ItemStack.class}, handler, input.copy());
-        PositionedStack display = cached.getIngredient();
         // Mantle's ItemMetaWrapper uses exact metadata, including 32767; it does not implement wildcard lookup.
         // Replace NEI's generic wildcard expansion with this exact registered input.
-        display.items = new ItemStack[] {input.copy()}; display.item = display.items[0];
-        row.itemInput(display, 0, Collections.singletonList(new RecipeRow.Ingredient(input, 1, false,
+        row.itemInput(0, Collections.singletonList(new RecipeRow.Ingredient(input, 1, false,
                 object("kind", "wildcard", "meta", false, "nbt", true))), false);
-        row.fluidOutput(null, 0, output);
-        row.property("tconstruct:temperature", "Melting temperature (C)", temperature);
+        row.fluidOutput(0, output);
+        row.note("tconstruct:temperature", "tconstruct.library.crafting.Smeltery#getLiquifyTemperature",row.facts.locale().equals("zh_CN")?"熔化温度 "+temperature+" °C；加热时间取决于燃料与当前温度。":"Melting temperature: "+temperature+" °C; heating time depends on fuel and current temperature.");
         // Heating time depends on fuel/active temperature; do not invent a constant duration or EU cost.
-        replace(handler, cached);
-    }
-
-    private static void replace(TemplateRecipeHandler handler, TemplateRecipeHandler.CachedRecipe cached) {
-        handler.arecipes.clear(); handler.arecipes.add(cached);
     }
     private static FluidStack fluid(Object raw) {
         if (!(raw instanceof FluidStack)) throw fault("Missing native TConstruct fluid");
@@ -176,4 +194,7 @@ final class TinkerRecipes implements RegistryRecipes {
         }
     }
     private static Jobs.Fault fault(String message) { return new Jobs.Fault("recipe_unsupported", message); }
+    private static Jobs.Fault changed(){return new Jobs.Fault("recipe_changed","TConstruct native source changed");}
+    private void alive(){Jobs.checkpoint();if(closed)throw new Jobs.Fault("capture_closed","TConstruct reader is closed");}
+    public void close(){closed=true;if(definitions!=null)definitions.close();examples.close();events.close();anchors=null;recipes.clear();}
 }

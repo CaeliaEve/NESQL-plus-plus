@@ -6,6 +6,35 @@ complete Handler in native order. A Handler is sealed only after its encoding
 queue drains, its native resources close and the environment guard passes.
 This is not arbitrary-range stitching or recovery across a game restart.
 
+The current development checkpoint envelope is revision 5 (semantic proof 3,
+continuation proof revision 1). Each unit declares `nativeVisuals`. Native
+inventory programs additionally require the producer's process-local state for
+the exact released path, terminal digest and unit count. JSON and file hashes
+cannot reconstruct this capability; descriptor relabelling also fails the raw
+record guard. Ordinary fact-validated prefixes retain their existing path.
+
+The producer now connects `RendererRandom.State` to per-Handler seals and
+replay. It retains original source/seed-root identities, initial/current 48-bit
+states, Gaussian caches and draw counts on the original client thread. Native
+Forge/GT renderer bindings, model/list/VBO authority, native sprite sources,
+textures, linked shaders and lookup tables are checked before replay, again
+before restoration, and before final Source publication. Current sprite phase,
+cached entity pose and the lightmap's capture-time pixels are not frozen game
+clocks. No game Random or borrowed graphics object is overwritten.
+
+Each unit retains its own boundary state. If a replay stops during a later data
+recheck, its newly sealed shorter prefix receives the earlier state, not the
+old terminal Random position. Source proofs use persistent immutable links;
+only new roots are checked at each seal and whole-prefix checks are sliced over
+client handoffs. Native continuation retains four terminal attempts per producer
+instance. Eviction, service shutdown, game restart or missing native authority
+rejects native reuse; the original files remain intact. A weak session guard
+does not keep a departed world/player alive.
+
+Local replay, corruption/drift and cleanup checks have passed. Full-pack native
+continuation still requires the external game batch. Installed older JARs or
+checkpoint revision 4 do not provide this capability.
+
 The job's `performance.checkpoint` contains its job ID, original SHA-256,
 completed Handler count and checkpoint directory. Keep this original receipt.
 On a terminal attempt, `released.json` authorizes the latest prefix only if all
@@ -32,6 +61,15 @@ For the acceptance coordinator, set `stages.source.resume` to the same reference
 and change `stages.source.key`. The coordinator retains terminal attempts and
 requires its recorded failed Source attempt and digest to match. Recovery is
 explicit; it never loops on a failed export automatically.
+
+Bridge Job isolation revision 1 hashes the full run ID, checkpoint environment,
+creation time, phase, request and explicit attempt label. `stages.source.key`
+is the attempt label; the emitted HTTP key is a bounded `src-<sha256>`. The
+recovery reference also participates in identity. Repeating the same request
+within that checkpoint remains idempotent. Old isolation-version acceptance
+checkpoints require fresh diagnostics; historical Java Jobs and sealed native
+prefixes retain their own independent validity rules. No historical file is
+rewritten or promoted by changing the Bridge key.
 
 Recovery validates producer, session, environment, runtime, selection and exact
 Handler order. It then uses **fresh Facts** to recapture every completed unit's

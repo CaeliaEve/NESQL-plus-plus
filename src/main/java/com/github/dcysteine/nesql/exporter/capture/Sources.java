@@ -88,6 +88,17 @@ final class Sources {
         return fingerprints(null);
     }
 
+    /** Same actual source ownership and validation as provenance, for one required target. */
+    String fingerprint(String id) throws IOException {
+        for (Mod mod : mods) if (mod.id.equals(id)) {
+            if (mod.error != null) throw mod.error;
+            if (mod.source == null) throw fault("Missing actual artifact for " + id);
+            mod.source.check();
+            return hash(mod.source.path);
+        }
+        throw fault("Missing actual container for " + id);
+    }
+
     JsonArray fingerprints(Fingerprints cache) throws IOException {
         JsonObject report = inspect();
         if (!report.getAsJsonObject("sources").get("valid").getAsBoolean()) {

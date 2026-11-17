@@ -26,7 +26,12 @@ final class NativeVatTest {
         Class<?> vat=type(ROOT+"vat.VatRecipe");
         require(vat.getProtectionDomain().getCodeSource().getLocation().toString().contains("/native-tests/enderio.jar!"),"Pinned EnderIO jar required");
         TemplateRecipeHandler handler=(TemplateRecipeHandler)type("crazypants.enderio.nei.VatRecipeHandler").newInstance();
+        TemplateRecipeHandler.CachedRecipe borrowed = handler.new CachedRecipe(){@Override public codechicken.nei.PositionedStack getResult(){return null;}};
+        handler.arecipes.add(borrowed);
         require(Recipes.adapter(handler)!=null,"Missing EnderIO vat adapter");
+        RegistrationBindings vatBindings=RegistrationBindings.read(handler);
+        require(vatBindings!=null&&vatBindings.same(RegistrationBindings.read((TemplateRecipeHandler)handler.getClass().newInstance())),
+                "Separate native Vat registrations have no audited shared source binding");
         type("com.enderio.core.client.render.RenderUtil").getMethod("renderGuiTank",FluidStack.class,int.class,int.class,double.class,double.class,double.class,double.class,double.class);
         type("crazypants.enderio.power.PowerDisplayUtil").getMethod("formatPower",int.class);
         Object a=item(Items.iron_ingot,3,0,1.25f), b=item(Items.gold_ingot,5,1,1.1f);
@@ -49,6 +54,11 @@ final class NativeVatTest {
             RegistryRecipes cursor=(RegistryRecipes)constructor.newInstance(handler,Arrays.asList(recipe));
             RecipeRow row=row(0);
             require(cursor.size()==1&&cursor.capture(0,row),"Expected one native table pair");
+            require(handler.arecipes.size()==1&&handler.arecipes.get(0)==borrowed,
+                    "Native Vat semantic reader mutated a borrowed NEI GUI/cache object");
+            cursor.close();
+            try{cursor.size();throw new AssertionError("Closed Vat reader still exposed owned rows");}
+            catch(com.github.dcysteine.nesql.exporter.task.Jobs.Fault failure){require(failure.code.equals("capture_closed"),failure.toString());}
             require(row.outputs.get(0).getAsJsonObject().get("amount").getAsInt()==expected.amount,"Exporter used display instead of native table output");
             JsonObject choice=row.inputs.get(0).getAsJsonObject().getAsJsonArray("choices").get(0).getAsJsonObject();
             require(choice.getAsJsonObject("consume").get("kind").getAsString().equals("upto")&&choice.get("amount").getAsInt()==3,"Understock consumption not explicit");
@@ -82,6 +92,12 @@ final class NativeVatTest {
             Object zeroIn=recipe(item(Items.iron_ingot,1,0,0.00000001f),fluid(1f));
             require(matches(zeroIn,offered(new ItemStack(Items.iron_ingot),null,new FluidStack(FluidRegistry.WATER,0))),"Native zero-volume identity no longer matches");
             cursor=(RegistryRecipes)constructor.newInstance(handler,Arrays.asList(zeroIn));row=row(0);require(cursor.capture(0,row),"Zero-input table omitted");
+            require(row.inputs.get(1).getAsJsonObject().getAsJsonArray("choices").get(0).getAsJsonObject().get("amount").getAsString().equals("0"),
+                    "Native zero-volume requirement was invented as one mB");
+            row.record.add("source",object("owner","EnderIO","handler",handler.getClass().getName(),"key","vat"));
+            row.record.addProperty("category",Identity.origin("category",row.record.getAsJsonObject("source")));
+            NativeContractFixture.writeOwned("vat-zero-fluid",row,Arrays.asList(new ItemStack(Items.iron_ingot)),
+                    new FluidStack(FluidRegistry.WATER,0),new FluidStack(FluidRegistry.LAVA,0));
             require(row.inputs.get(1).getAsJsonObject().getAsJsonArray("choices").get(0).getAsJsonObject().getAsJsonObject("consume").get("kind").getAsString().equals("keep"),"Zero input became positive consumption");
             FluidTank empty=new FluidTank(8000);
             require(empty.fill(new FluidStack(FluidRegistry.LAVA,0),true)==0&&empty.getFluid()!=null&&empty.getFluidAmount()==0,"Native empty-tank zero-fill identity changed");
@@ -93,10 +109,17 @@ final class NativeVatTest {
             cursor=(RegistryRecipes)constructor.newInstance(handler,Arrays.asList(taggedRecipe));row=row(0);
             @SuppressWarnings("unchecked") Set<String> known=(Set<String>)field(row.facts,"fluids");known.add(Identity.fluid("water",TypedNbt.encode(tagged.tag)));
             FluidStack cell=(FluidStack)invoke(vat,taggedRecipe,"getRequiredFluidInput",new Class<?>[]{offered.getClass()},offered(new ItemStack(Items.iron_ingot),null,offeredTag));
-            cell.amount=777;cell.tag.setInteger("batch",8);
             require(cursor.capture(0,row),"Owned table capture failed");
             JsonObject capturedFluid=row.inputs.get(1).getAsJsonObject().getAsJsonArray("choices").get(0).getAsJsonObject();
             require(capturedFluid.get("amount").getAsInt()==1250&&capturedFluid.get("id").getAsString().equals(Identity.fluid("water",TypedNbt.encode(tagged.tag))),"Captured table aliases native cells");
+            cursor.finishVerification();
+            cell.amount=777;cell.tag.setInteger("batch",8);
+            require(capturedFluid.get("amount").getAsInt()==1250,"Published Vat fact aliases a native table cell");
+            try{cursor.capture(0,row(0));throw new AssertionError("Changed native Vat table was silently recaptured");}
+            catch(com.github.dcysteine.nesql.exporter.task.Jobs.Fault failure){require(failure.code.equals("recipe_changed"),failure.toString());}
+            try{cursor.finishVerification();throw new AssertionError("Changed native Vat table was sealed");}
+            catch(com.github.dcysteine.nesql.exporter.task.Jobs.Fault failure){require(failure.code.equals("recipe_changed"),failure.toString());}
+            cursor.close();
         } finally {registered.clear();registered.addAll(previous);}
         System.out.println("EnderIO Vat native tables: float rounding, overwrite, understock, cross-slot consumption, optional input and zero yield passed");
     }

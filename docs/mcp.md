@@ -6,7 +6,7 @@
 
 目标为 GT New Horizons 2.8.4 Java 8。模组只服务本机单人世界，不支持专用服务器。MCP 客户端启动独立的 Node 进程，桥接通过受限的 loopback HTTP 接口调用游戏任务服务；Java 8 模组不嵌入 MCP SDK。
 
-当前模组 0.43.0 写出 Source 修订 38，配套 Compiler/contracts 0.38.0、Catalog 修订 37。MCP 连接协议保持不变；数据修订与传输协议是不同的元数据。编译器拒绝旧数据修订，不提供旧格式兜底读取。下文带旧版本号的段落记录功能引入历史，不代表当前发布版本。
+当前候选模组 0.45.0-semantic.5 写出 Source 修订 40，配套 Compiler 0.40.0-semantic.4、生成契约 0.40.0-semantic.70、Catalog 修订 40。原生内容动画包含精确白名单 CorePlugin，安装后必须完整重启客户端。MCP 连接协议保持不变；数据修订与传输协议是不同的元数据。新生产链不捕获原生配方 GUI。下文带旧版本号的段落记录引入历史；旧 Source 不被原地升级，新候选的全量实机验收尚未执行。
 
 ```json
 {
@@ -41,7 +41,7 @@
 
 ## 独立诊断
 
-当前 `render: true` 仅用于 `domain: "recipes"` 且显式 `limit <= 16` 的代表性渲染诊断。实际绘制图标与配方场景，记录像素数，不编码 PNG；完整数据诊断、代表性渲染与正式 Source 是三个独立事实。协调器可通过 `stages.source.preflight` 自动执行这些样本，详见 [视觉导出调度](visual-throughput.md)。
+`render: true` 用于 `domain: "recipes"` 的内容视觉诊断。代表性检查要求显式 `limit <= 16`；新候选声明 `diagnosticContentRevision: 1` 时，可显式增加 `contentAudit: true`，按不超过 4096 条的连续范围逐条检查。实际检查物品/流体预览及原生程序依赖，分别记录预览像素和程序节点/图像/像素，不绘制配方 GUI 或编码 PNG。完整数据诊断、内容视觉检查与正式 Source 是独立事实。普通 `stages.source.preflight` 仍是代表性检查，完整集中检查见 [集中诊断](batch-diagnostics.md)。
 
 `domain: "ore-groups"` 独立诊断矿辞登记，使用正式采集器读取所有已登记组；无需完整结构采集。仅需 `key` 与 `world`，不接受配方范围、handlers、controllers、resources 或渲染选项。报告目标为 `{domain:"ore-groups"}`，记录组与成员数量，失败明细保留该领域身份，不发布 Source。
 
@@ -55,7 +55,7 @@
 
 初期捕获完整模组/配置/资源/知识指纹，末尾再次比较；每个目标前后检查固定世界、玩家、资源代数、NEI列表、语言及知识。目标失败且释放成功时继续。文件故障、环境变化、无法安全释放或底层Error停止本轮，未执行目标保留pending。preview_cleanup不会被selection的preview_failed降级处理吞掉。单个原生调用未结束时，不开始下一项目，也不使用Thread.stop。
 
-报告位于nesql/checks/<job-id>.json，格式nesql.check，最大16MiB，原子替换；包含request、环境、目标、计数、耗时和有界异常cause/suppressed/栈。read_job.report返回路径、字节数、SHA256及汇总，大内容留在本地。终态checked表示报告完整，行状态可为passed、failed、unsupported、partial；pending表示未执行。recipe行含totalRecipes/offset/end/checkedRecipes/unexamined、failedRecipes和最多32条错误详情及省略计数；excludedRecipes为适配器过滤或重复折叠项，不虚构成独立产物。0.13.1起checkedRecipes记录已实际尝试的数量，包含失败及排除项；unexamined为totalRecipes减去实际尝试数，包含请求范围外与中断后未执行的配方。offset/end只描述计划范围；例如483条在index11失败，中断报告应为checkedRecipes=12、failedRecipes=[11]、unexamined=471。
+报告位于nesql/checks/<job-id>.json，格式nesql.check，最大16MiB，原子替换；包含request、环境、目标、计数、耗时和有界异常cause/suppressed/栈。read_job.report返回路径、字节数、SHA256及汇总，大内容留在本地。终态checked表示报告完整，行状态可为passed、failed、unsupported、partial；pending表示未执行。recipe行含totalRecipes/offset/end/checkedRecipes/unexamined、failedRecipes和最多32条错误详情及省略计数；新版诊断行声明 accountingRevision:1，excludedRecipes 只记录有原生证据的排除；duplicateRecipes 独立记录全重复原生项，passedRecipes 记录产生新分支的原生项，referenceRows 记录专用领域引用。emittedBranches/duplicateBranches 使用分支口径。captureOutcomeFile 固化完整 gzip JSONL 结果日志，内联 captureOutcomes 仅为有界预览。历史布尔报告按 legacy-boolean 单独识别，不能冒充新版本结果记账；详细契约见 [native-dispositions.md](native-dispositions.md)。0.13.1起checkedRecipes记录已实际尝试的数量，包含失败及排除项；unexamined为totalRecipes减去实际尝试数，包含请求范围外与中断后未执行的配方。offset/end只描述计划范围；例如483条在index11失败，中断报告应为checkedRecipes=12、failedRecipes=[11]、unexamined=471。
 
 有失败的诊断也可到checked，但result为空，不进入list_exports/read_export，不能collect/compile。取消或停止后也可收集报告；重启可能保留最后一份running报告，不能将其计为完成。重试是新任务，不复用旧临时产物。结构按稳定controller ID定位，配方index只在相同处理器与环境中有意义。正式导出缓存/检查点和公共领域/图像专项诊断仍待后续。
 
@@ -77,7 +77,7 @@ GT材料的原始颜色是short数组，并不保证每个通道都落在0–255
 
 来源解析集中在 Sources，Environment 只组合配置、资源和知识指纹。插件 metadata 在游戏线程读取，文件/归档验证和 SHA 在后台执行；不会调用插件 injectData、setup 或 transformer 安装入口。预检汇总每项文件问题，正式导出再次校验，失败不输出部分 mods 指纹。物理文件的哈希按路径共享计算，但每个真实 mod ID 独立保留。来源路径仅用于本机诊断，公开 source 不记录这些绝对路径；来源校验不会被更改为对客户端 jar 的通用豁免。
 
-三个 profile 均采集物品、流体、分组、GT 材料、电路和 Forestry 遗传定义。`full` 还采集配方、图标和静态配方视图；`data` 省略图像和视图；`images` 采集图标，不枚举配方、不接受 handler 筛选。只有 `full` 且未筛选 handler 才申请完整快照，其他任务的快照 scope 为 `selection`。电路适配按目标 NEICustomDiagram 1.7.5 的实际定义执行，不维护另一份物品清单。
+三个 profile 均采集物品、流体、分组、GT 材料、电路和 Forestry 遗传定义。`full` 还采集配方及原生内容视觉，不创建或捕获配方 GUI；`data` 省略内容图像；`images` 采集图标，不枚举配方、不接受 handler 筛选。只有 `full` 且未筛选 handler 才申请完整快照，其他任务的快照 scope 为 `selection`。电路适配按目标 NEICustomDiagram 1.7.5 的实际定义执行，不维护另一份物品清单。
 
 `probes` 为应用于每个控制器的 1–16 组不重复构建参数。每组 `count` 为全息投影物品数量（1–64），`channels` 为可选的通道值映射，最多 32 项；名称使用 1–64 个小写字母、数字、下划线或连字符，值为 1–65535 的整数。省略整个列表等同于 `[{"count":1,"channels":{}}]`。未知通道不代表控制器一定会使用该通道，实际可用名称由对应机器的 StructureLib 定义决定。
 
@@ -149,11 +149,11 @@ Build.palette 的每项为 `block/model/problem`，Build.rendered 表明是否�
 
 `Output.change` 为 null 时是固定产物；否则 `id/amount` 表示首个输入候选的产物示例。change 保存输入槽、action 和按输入 choices 顺序排列的 samples。patch 复制输入物品及 metadata/数量/NBT，再替换 set 中的根标签，并按 limits 裁剪整数；merge 保存原始模板、根键筛选和护甲/工具条件。merge 的已有标量优先保留，同类型列表按原顺序追加，compound 递归合并；模板无 NBT 时会沿用输入 metadata/数量。输出默认示例和 samples 不进入语义 ID，变换规则进入。原生示例计算只接收副本，不运行实际注魔。
 
-Salis Arcana 1.1.33-GTNH 的换芯/换端配方通过独立库存调用 getCraftingResult/getAspects，不调用依赖玩家研究的 matches。按最终 WandRod/WandCap 注册表、实际 WandHelper 部件映射与法杖形态逐组合处理，保留 NEI 和已注册配方的具体法杖示例。未带 rod/cap 标签的原版默认状态另用缺失条件表达；sceptre 只检查存在性。诊断用 UNKNOWN 部件映射到基岩且无可获得研究，不作为新材料；注册的旧哨兵状态可以参与修复。未知处理器和无法准确表达的重叠材料谓词明确报错。
+Salis Arcana 1.1.33-GTNH 的换芯/换端配方使用独立原生规则投影，不执行可能初始化缓存的 getCraftingResult/getAspects 或依赖玩家研究的 matches。按实际 WandRod/WandCap 注册表、WandHelper 字面元数据映射与法杖形态逐组合处理，绑定已就绪的 NEI 和原生配方具体样本。缺失 rod/cap 与 sceptre 标签的存在性分别保留。UNKNOWN 组件、注册研究缺失的 null link 原样保留，不以可获得性猜测跳过。当前未验证批次的完整库存规则与付款契约见 docs/native-salis-wands.md。
 
 螺丝、导体和杖端数量按各自占用的槽位记录。换芯保留配置决定按新容量裁剪或清空 Vis；新 StaffRod 的原生 AttributeModifiers 整表替换也进入 patch。普通容器归还沿用槽位逻辑，不虚构旧杖芯或杖端返还。原生结果与声明的 patch 在导出时逐样本核对。组合惰性展开，总预算 200 万次，每个状态最多 128 个示例；尚需真实整合包验证耗时。
 
-已核对目标包额外的两个 ItemWandCasting 子类。Thaumic Bases 1.8.13 施法手环按注册的 13 种 metadata 及 NEI 已知变体枚举，忽略 NBT 匹配，恒为 Staff、不是 Sceptre；有效部件和容量由 metadata 决定，Salis 替换只写标签而不会改变有效部件，配方属性明确注明此效果。Thaumic Horizons 1.7.9 一次性法杖保留普通部件语义，工坊配方上下文容量固定为 25000；在其特殊充电调用上下文观察到不同容量会拒绝导出。没有调用玩家佩戴、充电或实际合成方法。
+目标包另有两个 ItemWandCasting 子类。Thaumic Bases 1.8.13 施法手环按 13 种 metadata 与已知变体枚举，恒为 Staff、不是 Sceptre；有效部件与容量由 metadata 决定。Salis 写入部件标签后仍将 metadata 重设为合成费用，因此最终有效部件可能改变，不能仅凭写入标签判断。Thaumic Horizons 1.7.9 一次性法杖保留普通部件语义，工坊配方上下文容量为 25000，异常上下文明确拒绝。没有调用玩家佩戴、充电或实际合成方法；这些代码尚需统一验证。
 
 MagicRecipe.payment 保存允许以待替换法杖付款的配置、输入槽、要素/NBT 键、保留开关和新容量，容量以百分之一 Vis 计。仅非 Staff 输入可用，供能槽须空置。扣费按原部件及玩家装备折扣，之后保留并裁剪剩余充能或清空；不使用当前玩家去制造固定付款结果。样本以额外法杖供能为基准。creative 显式保存 infiniteCreativeVis：空成本组合不能在生存模式付款，开启豁免时仍可在创造模式使用；六项零成本不等于空列表。
 
@@ -165,13 +165,13 @@ MagicRecipe.payment 保存允许以待替换法杖付款的配置、输入槽、
 
 ## 指定处理器的正式 Source
 
-`start_export` 的 `scope: "recipes"` 必须指定 `world` 和非空 `handlers`，profile 只能是 `full` 或 `data`。只枚举所选处理器，连带保存引用的物品/流体、要素、文本和需要的图像/视图；不遍历整个物品浏览表、材料、电路、遗传、矿辞或结构。0.43.0 对需要研究依赖的魔法处理器同时保存完整注册研究闭包，包括先决条件、知识状态和物品触发事实。所有集合仍按契约声明，范围外集合为空，Source 永远为 `selection`。不能把它用于完整资料库覆盖验收。
+`start_export` 的 `scope: "recipes"` 必须指定 `world` 和非空 `handlers`，profile 只能是 `full` 或 `data`。只枚举所选处理器，连带保存引用的物品/流体、要素、文本和需要的内容图像/视觉程序；不遍历整个物品浏览表、材料、电路、遗传、矿辞或结构。需要研究依赖的魔法处理器同时保存完整注册研究闭包，包括先决条件、知识状态和物品触发事实。所有集合仍按契约声明，范围外集合为空，Source 永远为 `selection`。不能把它用于完整资料库覆盖验收。
 
 scope 进入请求重试身份和完整环境设置；运行身份只排除已知的请求字段（profile、handlers、scope、probes），因此同会话资源检查仍能关联。Compiler 0.14.3 验证 scope 与环境一致，并拒绝局部请求声称完整 Source。其他未知设置依然参与运行身份，不会被泛化剥离。
 
 支持判定和实际加载使用同一 Adapter 分派；未核实的原版处理器子类不再因继承关系被误标为 supported。此变动纠正能力报告，不表示新增适配了历史缺失的处理器。
 
-验收入口示例：`node scripts/accept.mjs --config <新配置> start visuals --scope recipes --handlers <inspect 中的精确ID> --key <新key>`。脚本支持 `scan resources --resources <namespace:path,...>`；资源诊断只证明字节解析，不能证明 GL 图标或完整静态替代。
+统一验收入口为 `node bridge/src/coordinator.mjs --config <新配置>`；追加 `--dry-run` 只验证候选包、工作单和阶段路径，不联系游戏。配置 `stages.source.preflight` 后，协调器在完整数据诊断之后、正式采集之前执行代表性内容视觉检查。单独资源诊断使用 MCP `start_check` 的 `domain: "resources"` 与 `resources` 列表；资源诊断只证明字节解析，不能证明 GL 图标或完整静态替代。
 
 ## 采集分片与离线恢复
 

@@ -1,8 +1,7 @@
 package com.github.dcysteine.nesql.exporter.capture;
 
-import codechicken.lib.gui.GuiDraw;
-import codechicken.nei.PositionedStack;
 import codechicken.nei.recipe.ICraftingHandler;
+import codechicken.nei.recipe.IRecipeHandler;
 import codechicken.nei.recipe.TemplateRecipeHandler;
 import com.github.dcysteine.nesql.exporter.task.Jobs;
 import net.minecraft.item.ItemStack;
@@ -10,86 +9,123 @@ import net.minecraft.nbt.NBTTagCompound;
 import net.minecraftforge.oredict.OreDictionary;
 import net.minecraftforge.fluids.FluidRegistry;
 import net.minecraftforge.fluids.FluidStack;
-import java.lang.reflect.Proxy;
 import java.util.*;
+import java.util.function.Supplier;
 import static com.github.dcysteine.nesql.exporter.capture.MagicApi.*;
 import static com.github.dcysteine.nesql.exporter.source.Json.*;
 
-/** IC2 2.2.828: registry predicates/results supply facts; a private native cache supplies layout. */
+/** IC2 2.2.828 semantic machine rules, independent of NEI cached layouts. */
 final class Ic2Recipes implements RegistryRecipes {
     private static final String HANDLERS = "ic2.neiIntegration.core.recipehandler.";
     private static final String API = "ic2.api.recipe.";
     private enum Machine {
-        MACERATOR("MaceratorRecipeHandler", 300, 2), EXTRACTOR("ExtractorRecipeHandler", 300, 2),
-        COMPRESSOR("CompressorRecipeHandler", 300, 2), CUTTING("MetalFormerRecipeHandlerCutting", 200, 10),
-        ROLLING("MetalFormerRecipeHandlerRolling", 200, 10), EXTRUDING("MetalFormerRecipeHandlerExtruding", 200, 10),
-        CENTRIFUGE("CentrifugeRecipeHandler", 500, 48), WASHING("OreWashingRecipeHandler", 500, 16),
-        BLOCK_CUTTER("BlockCutterRecipeHandler", 900, 48);
-        final String handler;
+        MACERATOR("MaceratorRecipeHandler", "macerator", 300, 2), EXTRACTOR("ExtractorRecipeHandler", "extractor", 300, 2),
+        COMPRESSOR("CompressorRecipeHandler", "compressor", 300, 2), CUTTING("MetalFormerRecipeHandlerCutting", "metalformerCutting", 200, 10),
+        ROLLING("MetalFormerRecipeHandlerRolling", "metalformerRolling", 200, 10), EXTRUDING("MetalFormerRecipeHandlerExtruding", "metalformerExtruding", 200, 10),
+        CENTRIFUGE("CentrifugeRecipeHandler", "centrifuge", 500, 48), WASHING("OreWashingRecipeHandler", "oreWashing", 500, 16),
+        BLOCK_CUTTER("BlockCutterRecipeHandler", "blockcutter", 900, 48);
+        final String handler, registry;
         final int ticks, energy;
-        Machine(String handler, int ticks, int energy) { this.handler = HANDLERS + handler; this.ticks = ticks; this.energy = energy; }
+        Machine(String handler,String registry,int ticks,int energy) { this.handler=HANDLERS+handler;this.registry=registry;this.ticks=ticks;this.energy=energy; }
     }
-    private static Machine machine(ICraftingHandler handler) {
+    private static Machine machine(IRecipeHandler handler) {
         for (Machine value : Machine.values()) if (value.handler.equals(handler.getClass().getName())) return value;
         return null;
     }
-    static boolean supports(ICraftingHandler handler) { return machine(handler) != null; }
+    static boolean supports(IRecipeHandler handler) { return machine(handler) != null; }
     private final TemplateRecipeHandler handler;
+    private final Map<?,?> source;
+    private final Supplier<Map<?,?>> current;
     private final List<Map.Entry<?, ?>> recipes = new ArrayList<>();
+    private final NativeDefinitions definitions;
+    private boolean closed;
 
     Ic2Recipes(TemplateRecipeHandler handler) {
-        version("IC2", "2.2.828-experimental");
+        this(handler,registrationSource(handler));
+    }
+    private Ic2Recipes(TemplateRecipeHandler handler,NativeSource selected) {
+        this(handler,selected.recipes,()->{
+            if(field(type(API+"Recipes"),null,machine(handler).registry)!=selected.manager
+                    ||field(selected.manager,"recipes")!=selected.recipes)throw changed("native manager or storage instance changed");
+            NativeSource actual=nativeSource(handler);
+            if(actual.manager!=selected.manager)throw changed("native manager instance changed");
+            return actual.recipes;
+        });
+    }
+    static final class NativeSource {
+        final Object manager;final Map<?,?> recipes;
+        NativeSource(Object manager,Map<?,?> recipes){this.manager=manager;this.recipes=recipes;}
+    }
+    static NativeSource registrationSource(IRecipeHandler handler) {
+        MagicApi.version("Ic2Recipes","IC2");
+        return nativeSource(handler);
+    }
+    private static NativeSource nativeSource(IRecipeHandler handler) {
+        Machine mode=machine(handler);if(mode==null)throw fault("Unadapted IC2 machine handler");
+        Object manager=field(type(API+"Recipes"),null,mode.registry);
+        if(manager==null)throw new Jobs.Fault("handler_not_ready","IC2 native machine manager is unavailable");
+        if(!manager.getClass().getName().equals("ic2.core.BasicMachineRecipeManager"))throw fault("Unadapted IC2 machine manager: "+manager.getClass().getName());
+        Object backing=field(manager,"recipes");
+        if(backing==null)throw new Jobs.Fault("handler_not_ready","IC2 native machine storage is unavailable");
+        if(backing.getClass()!=HashMap.class)throw fault("Unadapted IC2 machine storage map");
+        // getRecipes returns a fresh anonymous view on each call. Bind its exact
+        // native owner and underlying storage, never the ephemeral view instance.
+        Object exposed=invoke(handler.getClass(),handler,"getRecipeList",new Class<?>[0]);
+        if(exposed==null||!exposed.getClass().getName().equals("ic2.core.BasicMachineRecipeManager$1")
+                ||field(exposed,"this$0")!=manager)throw fault("IC2 handler exposes a different native source");
+        return new NativeSource(manager,(Map<?,?>)backing);
+    }
+    Ic2Recipes(TemplateRecipeHandler handler,Map<?,?> source) {this(handler,source,()->source);}
+    private Ic2Recipes(TemplateRecipeHandler handler,Map<?,?> source,Supplier<Map<?,?>> current) {
+        if(!supports(handler))throw fault("Unadapted IC2 machine handler");
+        if(source==null)throw new Jobs.Fault("handler_not_ready","IC2 machine recipe map is unavailable");
+        if(source.size()>262144)throw new Jobs.Fault("recipe_limit","IC2 native recipe map exceeds budget");
         this.handler = handler;
-        Object registry = invoke(handler.getClass(), handler, "getRecipeList", new Class<?>[0]);
-        if (!(registry instanceof Map<?, ?>)) throw fault("IC2 machine has no recipe registry");
-        for (Map.Entry<?, ?> recipe : ((Map<?, ?>) registry).entrySet()) {
+        this.source=source;this.current=current;
+        for (Map.Entry<?, ?> recipe : source.entrySet()) {
             Jobs.checkpoint();
             recipes.add(new AbstractMap.SimpleImmutableEntry<>(recipe));
         }
+        definitions=new NativeDefinitions("IC2 machine",recipes,this::currentVisible,raw->definition((Map.Entry<?,?>)raw));
     }
-    public int size() { return recipes.size(); }
+    public int size() {verify();return recipes.size(); }
+    public void verify() {
+        if(closed)throw new Jobs.Fault("capture_closed","IC2 machine reader is closed");
+        definitions.verify();
+    }
+    private List<?> currentVisible() {
+        if(current.get()!=source||source.size()!=recipes.size())throw changed("native map or count changed");
+        return recipes;
+    }
+    public void finishVerification() {
+        verify();int index=0;
+        for(Map.Entry<?,?> record:source.entrySet()) {
+            Jobs.checkpoint();Map.Entry<?,?> original=recipes.get(index++);
+            if(record.getKey()!=original.getKey()||record.getValue()!=original.getValue())throw changed("native order or entry instance changed");
+        }
+        definitions.finishVerification();
+    }
+    public void close(){if(closed)return;closed=true;recipes.clear();definitions.close();}
     public boolean capture(int index, RecipeRow row) {
-        Map.Entry<?, ?> recipe = recipes.get(index);
-        capture(handler, recipe.getKey(), recipe.getValue(), row);
-        return true;
+        verify();return definitions.checked(index,()->{
+            Map.Entry<?,?> recipe=recipes.get(index);capture(handler,recipe.getKey(),recipe.getValue(),row);return true;
+        });
     }
-
-    static int[][] progressBars(TemplateRecipeHandler handler) {
-        Machine machine = machine(handler);
-        if (machine == null) throw fault("Unverified IC2 progress layout");
-        // The block cutter's native view has a steady energy indicator, no cycling progress bar.
-        if (machine == Machine.BLOCK_CUTTER) return new int[0][];
-        if (machine == Machine.CENTRIFUGE) return new int[][] {{84, 10, 176, 50, 5, 30, 20, 3}};
-        if (machine == Machine.WASHING) return new int[][] {{114, 24, 176, 117, 20, 19, 20, 0}};
-        if (machine == Machine.CUTTING || machine == Machine.ROLLING || machine == Machine.EXTRUDING) {
-            return new int[][] {{46, 30, 177, 14, 51, 12, 20, 0}};
+    private com.google.gson.JsonObject definition(Map.Entry<?,?> recipe) {
+        if(source.get(recipe.getKey())!=recipe.getValue())throw changed("native output instance changed");
+        com.google.gson.JsonArray inputs=array(),outputs=array();
+        for(RecipeRow.Ingredient ingredient:ingredients(recipe.getKey()))inputs.add(object("stack",RecipeRow.stackEvidence(ingredient.item),
+                "amount",Long.toString(ingredient.amount),"rule",ingredient.rule));
+        Object output=recipe.getValue();
+        if(output==null||!output.getClass().getName().equals(API+"RecipeOutput"))throw fault("Unknown IC2 output type");
+        Object products=field(output,"items");
+        if(!(products instanceof List<?>)||((List<?>)products).isEmpty()||((List<?>)products).size()>4096)throw fault("Invalid IC2 output list");
+        for(Object item:(List<?>)products) {
+            Jobs.checkpoint();if(!(item instanceof ItemStack)||((ItemStack)item).getItem()==null||((ItemStack)item).stackSize<=0)throw fault("Invalid IC2 output stack");
+            outputs.add(RecipeRow.stackEvidence((ItemStack)item));
         }
-        return new int[][] {{74, 23, 176, 14, 25, 16, 20, 0}};
-    }
-
-    static void scene(TemplateRecipeHandler handler, Runnable draw) {
-        // At tick 20 native energy/heat indicators are full and the cycling progress is empty.
-        // Capture that native foreground, then animate only its progress texture in the catalog.
-        Class<?> owner = type(HANDLERS + "MachineRecipeHandler");
-        try {
-            java.lang.reflect.Field clock = owner.getDeclaredField("ticks"); clock.setAccessible(true);
-            int previous = clock.getInt(handler);
-            try { clock.setInt(handler, 20); draw.run(); }
-            finally { clock.setInt(handler, previous); }
-        } catch (ReflectiveOperationException error) {
-            Jobs.Fault failure = fault("Cannot preserve native IC2 UI clock"); failure.initCause(error); throw failure;
-        }
-    }
-
-    static void draw(TemplateRecipeHandler handler, int index) {
-        handler.drawBackground(index);
-        if (machine(handler) != Machine.WASHING) { handler.drawForeground(index); return; }
-        // Retain the native labels and tank; the native mouse tooltip dereferences the live GuiRecipe
-        // and is not part of an offscreen scene. Progress is captured as its separate native track.
-        Object water = invoke(handler.getClass(), handler, "getreqWater", new Class<?>[] {int.class}, index);
-        GuiDraw.drawStringC("require: ", 35, 20, 0, false);
-        GuiDraw.drawStringC("water", 35, 33, 0, false);
-        GuiDraw.drawStringC(water + "mb", 35, 46, 0, false);
+        return object("machine",machine(handler).name(),"inputs",inputs,"outputs",outputs,
+                "metadata",com.github.dcysteine.nesql.exporter.source.TypedNbt.encode((NBTTagCompound)field(output,"metadata")));
     }
 
     @SuppressWarnings("unchecked")
@@ -133,42 +169,12 @@ final class Ic2Recipes implements RegistryRecipes {
         }
         row.record.addProperty("duration", Integer.toString(machine.ticks));
         row.record.addProperty("energy", Integer.toString(machine.energy));
-        Class<?> api = type(API + "IRecipeInput");
-        // The layout receives only owned copies. In particular, ore-dictionary stacks are shared by IC2.
-        Object projection = projection(ingredients);
-        TemplateRecipeHandler.CachedRecipe cached;
-        try {
-            Class<?> resultType = type(API + "RecipeOutput");
-            Object result = resultType.getConstructor(NBTTagCompound.class, List.class)
-                    .newInstance(metadata == null ? null : metadata.copy(), products);
-            cached = (TemplateRecipeHandler.CachedRecipe) type(HANDLERS + "MachineRecipeHandler$CachedIORecipe")
-                    .getConstructor(type(HANDLERS + "MachineRecipeHandler"), api, resultType).newInstance(handler, projection, result);
-        } catch (ReflectiveOperationException error) {
-            Jobs.Fault failure = fault("Cannot construct native IC2 layout"); failure.initCause(error); throw failure;
-        }
-        List<PositionedStack> inputs = (List<PositionedStack>) field(cached, "ingredients");
-        if (inputs.size() != 1) throw new Jobs.Fault("slot_changed", "IC2 layout changed its input count");
-        row.itemInput(inputs.get(0), 0, ingredients, false);
-        if (water > 0) row.fluidInput(null, 0, new FluidStack(FluidRegistry.WATER, water), false,
+        row.itemInput(0, ingredients, false);
+        if (water > 0) row.fluidInput(0, new FluidStack(FluidRegistry.WATER, water), false,
                 object("kind", "wildcard", "meta", false, "nbt", true));
-        List<PositionedStack> outputs = new ArrayList<>(); outputs.add(cached.getResult()); outputs.addAll(cached.getOtherStacks());
-        if (outputs.size() != products.size()) throw new Jobs.Fault("slot_missing", "IC2 layout omitted an output");
-        for (int slot = 0; slot < products.size(); slot++) row.itemOutput(outputs.get(slot), slot, products.get(slot), 10000);
-        handler.arecipes.clear(); handler.arecipes.add(cached);
+        for (int slot = 0; slot < products.size(); slot++) row.itemOutput(slot, products.get(slot), 10000);
     }
-
-    static Object projection(List<RecipeRow.Ingredient> ingredients) {
-        Class<?> api = type(API + "IRecipeInput");
-        return Proxy.newProxyInstance(api.getClassLoader(), new Class<?>[] {api}, (proxy, method, args) -> {
-            if (method.getName().equals("getAmount")) return (int) ingredients.get(0).amount;
-            if (method.getName().equals("getInputs")) {
-                List<ItemStack> copies = new ArrayList<>();
-                for (RecipeRow.Ingredient ingredient : ingredients) copies.add(ingredient.item.copy());
-                return copies;
-            }
-            throw fault("Unexpected IC2 layout predicate call: " + method.getName());
-        });
-    }
+    private static Jobs.Fault changed(String detail){return new Jobs.Fault("recipe_changed","IC2 machine "+detail);}
 
     static List<RecipeRow.Ingredient> ingredients(Object input) {
         if (input == null) throw fault("Missing IC2 input predicate");
@@ -181,13 +187,16 @@ final class Ic2Recipes implements RegistryRecipes {
         if (offered.isEmpty() || offered.size() > 65536) throw fault("IC2 predicate has no finite input set");
         Integer override = ore ? (Integer) field(input, "meta") : null;
         List<RecipeRow.Ingredient> result = new ArrayList<>();
+        try(NativeItemExamples examples=new NativeItemExamples()){
         for (Object value : offered) {
             Jobs.checkpoint();
             if (!(value instanceof ItemStack) || ((ItemStack) value).getItem() == null) throw fault("IC2 predicate contains an invalid item");
+            if(ItemCallbacks.method(((ItemStack)value).getItem(),"getDamage","getDamage",ItemStack.class).getDeclaringClass()!=net.minecraft.item.Item.class)
+                throw fault("IC2 ingredient requires an audited metadata getter: "+((ItemStack)value).getItem().getClass().getName());
             ItemStack item = ((ItemStack) value).copy(); item.stackSize = amount;
             if (override != null) item.setItemDamage(override);
             boolean wildcard = item.getItemDamage() == OreDictionary.WILDCARD_VALUE;
-            ItemStack[] variants = wildcard ? new PositionedStack(item, 0, 0, true).items : new ItemStack[] {item};
+            ItemStack[] variants = wildcard ? examples.permutations(item) : new ItemStack[] {item};
             if (variants.length == 0 || variants.length + result.size() > 65536) throw fault("IC2 input expansion exceeds its budget");
             for (ItemStack variant : variants) {
                 if (!(Boolean) invoke(input.getClass(), input, "matches", new Class<?>[] {ItemStack.class}, variant.copy())) {
@@ -195,6 +204,7 @@ final class Ic2Recipes implements RegistryRecipes {
                 }
                 result.add(new RecipeRow.Ingredient(variant.copy(), amount, false, object("kind", "wildcard", "meta", wildcard, "nbt", true)));
             }
+        }
         }
         return result;
     }

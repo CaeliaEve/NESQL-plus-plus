@@ -21,8 +21,8 @@ import static com.github.dcysteine.nesql.exporter.source.Json.*;
 
 /** Registry material facts. No ore-name parsing, hardcoded part matrix or recipe inference. */
 final class GtMaterials {
-    private static final OrePrefixes[] PREFIXES = java.util.Arrays.stream(OrePrefixes.values())
-            .filter(prefix -> prefix.mIsMaterialBased).toArray(OrePrefixes[]::new);
+    private static final OrePrefixes[] PREFIXES = java.util.Arrays.stream(OrePrefixes.VALUES)
+            .filter(OrePrefixes::isMaterialBased).toArray(OrePrefixes[]::new);
     private GtMaterials() {}
 
     static List<Materials> all() {
@@ -39,7 +39,7 @@ final class GtMaterials {
                 continue;
             }
             Colors.material(material.mName, material.mRGBa);
-            if (material.mChemicalFormula == null) throw new Jobs.Fault("material_formula", "Material '" + material.mName + "' has no formula field");
+            if (material.getChemicalFormula() == null) throw new Jobs.Fault("material_formula", "Material '" + material.mName + "' has no formula field");
             if (material.mMaterialList == null) throw new Jobs.Fault("material_amount", "Material '" + material.mName + "' has no component list");
             for (MaterialStack component : material.mMaterialList) {
                 if (component == null || component.mMaterial == null || component.mAmount <= 0) {
@@ -95,9 +95,9 @@ final class GtMaterials {
                 components.add(object("material", component.getKey(), "amount", Long.toString(component.getValue())));
             }
             long color = Colors.material(material.mName, material.mRGBa);
-            if (material.mChemicalFormula == null) throw new Jobs.Fault("material_formula", "Material '" + material.mName + "' has no formula field");
-            record = object("id", Identity.origin("material", source), "source", source, "name", facts.text(material.mLocalizedName),
-                    "formula", material.mChemicalFormula, "color", uint(color), "components", components, "parts", parts);
+            if (material.getChemicalFormula() == null) throw new Jobs.Fault("material_formula", "Material '" + material.mName + "' has no formula field");
+            record = object("id", Identity.origin("material", source), "source", source, "name", facts.text(material.getLocalizedName()),
+                    "formula", material.getChemicalFormula(), "color", uint(color), "components", components, "parts", parts);
         }
 
         /** Stop after sixteen existing forms or two milliseconds of registry scanning. */
@@ -113,9 +113,10 @@ final class GtMaterials {
                 if (stack == null) continue; // The registry explicitly has no item for this form.
                 captured++;
                 JsonObject content = null;
-                if (prefix.mMaterialAmount > 0) {
-                    long divisor = gcd(prefix.mMaterialAmount, GTValues.M);
-                    content = object("numerator", Long.toString(prefix.mMaterialAmount / divisor), "denominator", Long.toString(GTValues.M / divisor));
+                long amount = prefix.getMaterialAmount();
+                if (amount > 0) {
+                    long divisor = gcd(amount, GTValues.M);
+                    content = object("numerator", Long.toString(amount / divisor), "denominator", Long.toString(GTValues.M / divisor));
                 }
                 parts.add(object("key", prefix.name(), "target", object("kind", "item", "id", facts.item(stack)), "content", content));
             }

@@ -10,7 +10,36 @@ import javax.imageio.ImageIO;
 
 /** Small offline behavior checks; no game instance or benchmark claim. */
 public final class VisualThroughputTest {
-    public static void main(String[] args) throws Exception { preflight(); png(); batches(); assets(); checkpointAssets(); OverlapTest.run(); System.out.println("Visual throughput: PNG bytes, provenance independence, eviction and ordered bounded capture passed"); }
+    public static void main(String[] args) throws Exception { preflight(); png(); batches(); animations(); RendererClockTest.run(); assets(); checkpointAssets(); OverlapTest.run(); System.out.println("Visual throughput: PNG bytes, provenance independence, eviction and ordered bounded capture passed"); }
+    private static void animations() throws Exception {
+        // Avaritia: six foreground frames at one tick, three background frames at two ticks.
+        int[][] front = {{0,1},{1,1},{2,1},{3,1},{4,1},{5,1}};
+        int[][] back = {{0,2},{1,2},{2,2}};
+        Class<?> timeline = Class.forName("com.github.dcysteine.nesql.exporter.capture.NativeAnimation");
+        java.lang.reflect.Method period = timeline.getDeclaredMethod("period", int.class, int[][].class);
+        period.setAccessible(true);
+        require((int) period.invoke(null, 1, new int[][] { {6}, {6} }) == 6, "Layer clocks must share their exact cycle");
+        java.lang.reflect.Method frame = timeline.getDeclaredMethod("frame", int[][].class, int.class); frame.setAccessible(true);
+        for (int tick=0; tick<12; tick++) {
+            require((int)frame.invoke(null, (Object)front, tick)==tick%6, "Foreground frametime lost");
+            require((int)frame.invoke(null, (Object)back, tick)==(tick/2)%3, "Background frametime lost");
+        }
+        require((int)period.invoke(null, 720, new int[][] {{6}})==720, "GT 3.5 degree tick rotation has a 720 tick exact cycle");
+        try { period.invoke(null, 720, new int[][] {{7}}); throw new AssertionError("Unbounded native timeline accepted"); }
+        catch (java.lang.reflect.InvocationTargetException expected) { require(expected.getCause() instanceof com.github.dcysteine.nesql.exporter.task.Jobs.Fault, "Wrong timeline budget failure"); }
+        VisualBatch progressive = new VisualBatch(); int[] steps={0}; List<String> output=new ArrayList<>();
+        progressive.add(() -> ++steps[0]<3 ? null : new Images.Image(pixels(1,1,1), new JsonArray(), "capture", "complete"), image -> output.add(image.location));
+        progressive.capture(); progressive.write(); require(output.isEmpty() && !progressive.done(), "Incomplete animation published");
+        progressive.capture(); progressive.write(); require(output.isEmpty(), "Partial native animation published");
+        progressive.capture(); progressive.write(); require(progressive.done() && output.size()==1, "Resumable animation lost");
+        Clock clock = new Clock(); RuntimeException original = new RuntimeException("renderer failed");
+        NativeAnimation.withClock(clock, 0, () -> require(clock.mAnimationTick==0, "GT phase zero must be explicit"));
+        require(clock.mAnimationTick==9123, "GT clock leaked on successful render");
+        try { NativeAnimation.withClock(clock, 719, () -> { require(clock.mAnimationTick==719, "GT phase ignored"); throw original; }); }
+        catch (RuntimeException actual) { require(actual==original, "Native failure was hidden"); }
+        require(clock.mAnimationTick==9123, "GT clock leaked on renderer failure");
+    }
+    private static final class Clock { long mAnimationTick=9123; }
     /** Production Sink encoding and checkpoint journaling share the same asset bytes and rows. */
     private static void checkpointAssets() throws Exception {
         java.nio.file.Path root = java.nio.file.Files.createTempDirectory("nesql-sink-checkpoint-");
@@ -90,6 +119,10 @@ public final class VisualThroughputTest {
                 String b=(String)asset.invoke(sink,other);
                 JsonArray frames=new JsonArray(); frames.add(com.github.dcysteine.nesql.exporter.source.Json.object("x",0,"y",0,"width",8,"height",4,"ticks",4));
                 String c=(String)asset.invoke(sink,new Images.Image(first.pixels,frames,"capture","native:first"));
+                String d=(String)asset.invoke(sink,new Images.Image(first.pixels,frames,"capture","native:first",true));
+                com.google.gson.JsonObject interpolated=com.github.dcysteine.nesql.exporter.source.Json.object("path","assets/"+com.github.dcysteine.nesql.exporter.source.CanonicalJson.digest(encode(first.pixels))+".png",
+                        "width",8,"height",4,"frames",frames,"interpolate",true,"source",com.github.dcysteine.nesql.exporter.source.Json.object("kind","capture","location","native:first"));
+                require(!c.equals(d) && d.equals(com.github.dcysteine.nesql.exporter.source.Identity.content("asset",interpolated)), "Interpolation lost at the Source boundary");
                 String path="assets/"+com.github.dcysteine.nesql.exporter.source.CanonicalJson.digest(encode(first.pixels))+".png";
                 com.google.gson.JsonObject expected=com.github.dcysteine.nesql.exporter.source.Json.object("path",path,"width",8,"height",4,"frames",new JsonArray(),"interpolate",false,
                         "source",com.github.dcysteine.nesql.exporter.source.Json.object("kind","capture","location","native:first"));
@@ -98,7 +131,7 @@ public final class VisualThroughputTest {
                 try(java.util.stream.Stream<java.nio.file.Path> files=java.nio.file.Files.list(root.resolve("source/assets"))) {
                     require(files.count()==1,"Identical PNGs produced multiple files");
                 }
-                require(rows.check().get("assets")==3,"Duplicate asset rows changed the unique result");
+                require(rows.check().get("assets")==4,"Duplicate asset rows changed the unique result");
             }
         }
         java.nio.file.Files.delete(root);

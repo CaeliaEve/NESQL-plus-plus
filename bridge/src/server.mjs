@@ -29,7 +29,7 @@ export function createServer(client) {
   server.registerTool('start_export', {
     description: 'Start one export job in a loaded local single-player world. Returns immediately. Reuse the same key when retrying an uncertain request. Bulk files remain on disk; poll read_job for completion.',
     inputSchema: {
-      key: identifier.describe('Idempotency key chosen for this operation. A retry must use identical arguments.'),
+      key: identifier.describe('Persistent idempotency key for this operation. Bind a new operation to the full run, candidate and session; only retry the same operation with identical arguments. Historical keys return historical Jobs.'),
       name: identifier.describe('Name of the local dataset.'),
       world: z.string().min(1).max(128).regex(/^[^/\\\x00-\x1f\x7f]+$/).refine(value => value !== '.' && value !== '..').optional()
         .describe('Expected single-player save folder from inspect_game.world.folder. A different world fails before capture. Included in retry identity.'),
@@ -54,7 +54,7 @@ export function createServer(client) {
   server.registerTool('start_check', {
     description: 'Start an isolated diagnostic sweep without exporting a dataset. Select structures, recipe ranges, ore dictionary registrations, or explicit texture/language resources. Resource checks hash bytes resolved by the native resource manager and recheck stability; they do not validate item rendering. Poll read_job: checked means the report is complete, not that all targets passed. Reports remain on local disk. Uses the same single active-job queue as exports.',
     inputSchema: {
-      key: identifier,
+      key: identifier.describe('Persistent key scoped to the full run, verified candidate, session and check selection. Reuse only for an identical retry; verify returned Job/report provenance before counting it as current evidence.'),
       world: z.string().min(1).max(128).regex(/^[^/\\\x00-\x1f\x7f]+$/).refine(value => value !== '.' && value !== '..'),
       domain: z.enum(['structures', 'recipes', 'resources', 'ore-groups']),
       resources: z.array(z.string().min(1).max(4096)).min(1).max(128)
@@ -66,7 +66,8 @@ export function createServer(client) {
         .describe('Recipe handler ids. Omit to inventory all handlers and check supported adapters. Only for recipes.'),
       offset: z.number().int().min(0).max(1_000_000).optional().describe('First recipe index in each handler, default 0.'),
       limit: z.number().int().min(1).max(4096).optional().describe('Maximum recipes checked per handler, default 128. Unexamined recipes remain explicit in the report.'),
-      render: z.boolean().optional().describe('Recipe ranges only, with explicit limit <=16. Draw actual native icons, pictures and views without PNG encoding or Source publication. Samples do not certify other dynamic paths.'),
+      render: z.boolean().optional().describe('Recipe ranges only: representative limit <=16, or explicit contentAudit:true limit <=4096. Draw native content without recipe GUI, PNG encoding or Source publication. Samples do not certify other dynamic paths.'),
+      contentAudit:z.boolean().optional().describe('Explicit full content diagnostics: requires render:true and recipe limit<=4096. No Source export or PNG encoding; retains per-entry native visual evidence.'),
       probes: z.array(probe).min(1).max(16).optional(),
     },
     annotations: { readOnlyHint: false, destructiveHint: false, idempotentHint: true, openWorldHint: false },

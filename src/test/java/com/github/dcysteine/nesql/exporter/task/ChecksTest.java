@@ -2,6 +2,7 @@ package com.github.dcysteine.nesql.exporter.task;
 
 import com.google.gson.JsonArray;
 import com.google.gson.JsonObject;
+import com.github.dcysteine.nesql.exporter.source.CanonicalJson;
 
 import java.nio.charset.StandardCharsets;
 import java.nio.file.Files;
@@ -16,13 +17,31 @@ final class ChecksTest {
     private ChecksTest() {}
 
     static void run(Path root) throws Exception {
+        // A safe native reflection failure must not become unknown isolation at the bridge.
+        JsonObject safeChain = Checks.failure(new IllegalStateException(new NoSuchMethodException("native callback")));
+        require(safeChain.getAsJsonObject("cause").has("fatal")
+                && !safeChain.getAsJsonObject("cause").get("fatal").getAsBoolean(), "Nested native severity was omitted");
+        JsonObject unsafeChain = Checks.failure(new IllegalStateException(new java.io.IOException("source read")));
+        require(unsafeChain.get("fatal").getAsBoolean()
+                && unsafeChain.getAsJsonObject("cause").get("fatal").getAsBoolean(), "Nested IO severity was weakened");
+        Throwable deep = new NoSuchMethodException("deep native callback");
+        for (int i=0;i<9;i++) deep=new IllegalStateException(deep);
+        JsonObject node=Checks.failure(deep);
+        while(node.has("cause")&&!node.get("cause").isJsonNull())node=node.getAsJsonObject("cause");
+        require(node.has("omitted")&&node.has("fatal")&&!node.get("fatal").getAsBoolean(), "Bounded error evidence lost native severity");
         slices();
         ores(root.resolve("ores"));
+        failureArtifacts(root.resolve("failure-artifacts"));
+        structureArtifacts(root.resolve("structure-artifacts"));
         Jobs.Request visual = Checks.request(object("key", "visual", "world", "test-copy", "domain", "recipes", "render", true, "limit", 1));
         if (!new com.google.gson.Gson().toJsonTree(visual.check).getAsJsonObject().get("render").getAsBoolean()) throw new AssertionError("Representative rendering selection lost");
+        Jobs.Request content=Checks.request(object("key","content-audit","world","test-copy","domain","recipes","render",true,"contentAudit",true,"limit",4096));
+        require(new com.google.gson.Gson().toJsonTree(content.check).getAsJsonObject().get("contentAudit").getAsBoolean(),"Full content diagnostic flag was lost");
         for (JsonObject invalid : java.util.Arrays.asList(
                 object("key", "bad", "domain", "recipes", "render", "true", "limit", 1),
                 object("key", "bad", "domain", "recipes", "render", true, "limit", 17),
+                object("key", "bad", "domain", "recipes", "contentAudit", true, "limit", 1),
+                object("key", "bad", "domain", "recipes", "render", true, "contentAudit", "true", "limit", 1),
                 object("key", "bad", "domain", "structures", "render", true))) {
             try { Checks.request(invalid); throw new AssertionError("Accepted invalid representative rendering request"); }
             catch (Jobs.Fault expected) { }
@@ -195,6 +214,10 @@ final class ChecksTest {
     }
 
     private static void recipes(Path root) throws Exception {
+        JsonObject malformed = CaptureOutcome.recipes(1, array()).json();
+        malformed.addProperty("emitted", 1.0);
+        try { CaptureOutcome.parse(malformed); throw new AssertionError("Noninteger native accounting accepted"); }
+        catch (Jobs.Fault expected) {}
         Path scope = root.resolve("recipes");
         java.util.Map<String, java.util.List<Integer>> attempts = new java.util.HashMap<>();
         try (Jobs jobs = new Jobs(scope.resolve("jobs"), context -> {
@@ -210,7 +233,11 @@ final class ChecksTest {
                             if (key.equals("recipe-many")) throw new Jobs.Fault("recipe_capture", "Independent failure " + index);
                             if (key.equals("recipe-stop") && index == 11) throw new Jobs.Fault("slot_changed", "Candidate content changed");
                             if (key.equals("recipe-range") && (index == 7 || index == 9)) throw new Jobs.Fault("recipe_capture", "Independent recipe failure");
-                            return !key.equals("recipe-range") || index != 10;
+                            if (key.equals("recipe-range") && index == 10)
+                                return CaptureOutcome.excluded(object("reason", "native test predicate is unsatisfiable", "nativeIndex", index));
+                            if (key.equals("recipe-range") && index == 11)
+                                return CaptureOutcome.recipes(0, array(object("recipe", "recipe_aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa", "firstIndex", 5, "firstBranch", 0, "branch", 0)));
+                            return CaptureOutcome.recipes(1, array());
                         }));
                 context.checked(report.finish("complete", null));
             } catch (Exception error) { report.finish("stopped", error); throw error; }
@@ -233,8 +260,27 @@ final class ChecksTest {
             require(shared.length == reference.get("bytes").getAsInt() && com.github.dcysteine.nesql.exporter.source.CanonicalJson.digest(shared).equals(reference.get("sha256").getAsString()), "Shared environment receipt is invalid");
             require(checked.state.equals("checked") && checked.report.failed == 1 && attempts.get("recipe-range").size() == 8
                     && row.get("checkedRecipes").getAsInt() == 8 && row.get("unexamined").getAsInt() == 12
-                    && row.getAsJsonArray("failedRecipes").size() == 2 && row.getAsJsonArray("excludedRecipes").size() == 1,
+                    && row.getAsJsonArray("failedRecipes").size() == 2 && row.getAsJsonArray("excludedRecipes").size() == 1
+                    && row.getAsJsonArray("duplicateRecipes").size() == 1 && row.get("passedRecipes").getAsInt() == 4
+                    && row.get("emittedBranches").getAsInt() == 4 && row.get("duplicateBranches").getAsInt() == 1,
                     "Bounded diagnostic ranges lost independent failures, excluded recipes or actual coverage");
+            JsonObject outcomeFile = row.getAsJsonObject("captureOutcomeFile");
+            Path outcomePath = scope.resolve("checks").resolve(outcomeFile.get("path").getAsString());
+            byte[] outcomeBytes = Files.readAllBytes(outcomePath);
+            require(CanonicalJson.digest(outcomeBytes).equals(outcomeFile.get("sha256").getAsString())
+                    && outcomeBytes.length == outcomeFile.get("bytes").getAsLong()
+                    && outcomeFile.get("rows").getAsInt() == 6 && outcomeFile.get("rangeComplete").getAsBoolean(),
+                    "Native outcome evidence was not sealed with a matching receipt");
+            try (java.io.BufferedReader reader = new java.io.BufferedReader(new java.io.InputStreamReader(
+                    new java.util.zip.GZIPInputStream(Files.newInputStream(outcomePath)), StandardCharsets.UTF_8))) {
+                int entries = 0, duplicateOutcomes = 0;
+                for (String line; (line = reader.readLine()) != null;) {
+                    JsonObject entry = new com.google.gson.JsonParser().parse(line).getAsJsonObject();
+                    CaptureOutcome outcome = CaptureOutcome.parse(entry.getAsJsonObject("outcome"));
+                    entries++; if (outcome.kind == CaptureOutcome.Kind.DUPLICATE) duplicateOutcomes++;
+                }
+                require(entries == 6 && duplicateOutcomes == 1, "Native ledger lost explicit dispositions");
+            }
             Jobs.Request many = Checks.request(object("key", "recipe-many", "world", "test-copy", "domain", "recipes", "limit", 65));
             Jobs.Job complete = await(jobs, startAfterTerminal(jobs, many).id);
             row = readReport(scope, complete.id);
@@ -281,6 +327,71 @@ final class ChecksTest {
     private static JsonObject readReport(Path root, String id) throws Exception {
         return new com.google.gson.JsonParser().parse(new String(Files.readAllBytes(root.resolve("checks").resolve(id + ".json")),
                 StandardCharsets.UTF_8)).getAsJsonObject().getAsJsonArray("rows").get(0).getAsJsonObject();
+    }
+
+    private static void failureArtifacts(Path root) throws Exception {
+        java.util.concurrent.atomic.AtomicReference<String> job = new java.util.concurrent.atomic.AtomicReference<>();
+        try (Jobs jobs = new Jobs(root.resolve("jobs"), context -> {
+            job.set(context.id());
+            JsonObject row = object("handler", "same-target", "status", "pending");
+            Checks.Report report = new Checks.Report(root.resolve("checks"), context, object(), array(row));
+            Jobs.Fault first = new Jobs.Fault("recipe_changed", "first identity drift");
+            report.failure(row, 0, first);
+            report.failure(row, 0, new Jobs.Fault("recipe_changed", "second identity drift"));
+            report.failure(row, 0, first);
+            require(row.getAsJsonArray("failureFiles").size() == 2,
+                    "Repeated failure evidence was not content-deduplicated");
+            row.addProperty("status", "passed");
+            context.checked(report.finish("complete", null));
+        })) {
+            Jobs.Job done = await(jobs, jobs.start(Checks.request(object(
+                    "key", "failure-artifact", "world", "test-copy", "domain", "structures"))).id);
+            require(done.state.equals("checked"), "Distinct failures for one target/index collided: " + done.state
+                    + " " + (done.error == null ? "" : done.error));
+            JsonObject report = new com.google.gson.JsonParser().parse(new String(Files.readAllBytes(
+                    root.resolve("checks").resolve(job.get() + ".json")), StandardCharsets.UTF_8)).getAsJsonObject();
+            JsonArray files = report.getAsJsonArray("rows").get(0).getAsJsonObject().getAsJsonArray("failureFiles");
+            require(files.size() == 2, "Failure report dropped a distinct error at an existing index");
+            java.util.Set<String> errors = new java.util.HashSet<>();
+            for (com.google.gson.JsonElement entry : files) {
+                JsonObject ref = entry.getAsJsonObject();
+                byte[] bytes = Files.readAllBytes(root.resolve("checks").resolve(ref.get("path").getAsString()));
+                require(bytes.length == ref.get("bytes").getAsInt()
+                        && CanonicalJson.digest(bytes).equals(ref.get("sha256").getAsString()),
+                        "Content-addressed failure detail receipt differs");
+                JsonObject detail = new com.google.gson.JsonParser().parse(new String(bytes, StandardCharsets.UTF_8)).getAsJsonObject();
+                errors.add(detail.getAsJsonObject("error").get("message").getAsString());
+            }
+            require(errors.equals(new java.util.HashSet<>(java.util.Arrays.asList(
+                    "first identity drift", "second identity drift"))), "Failure details do not preserve both root causes");
+        }
+    }
+
+    private static void structureArtifacts(Path root) throws Exception {
+        String identity = "structure_" + String.join("", java.util.Collections.nCopies(64, "a"));
+        JsonObject source = object("owner", "gregtech", "handler", "native.Cleanroom", "key", "1172");
+        try (Jobs jobs = new Jobs(root.resolve("jobs"), context -> {
+            JsonObject row = object("structure", identity, "controller", 1172, "source", source,
+                    "status", "unsupported", "limitations", array("Native construction could not settle"));
+            Checks.Report report = new Checks.Report(root.resolve("checks"), context, object(), array(row));
+            report.unsupported(row, 1172, "structure_unsupported", "Native construction could not settle");
+            context.checked(report.finish("complete", null));
+        })) {
+            Jobs.Job done = await(jobs, jobs.start(Checks.request(object("key", "structure-evidence",
+                    "world", "test-copy", "domain", "structures", "controllers", array(1172)))).id);
+            JsonObject row = readReport(root, done.id);
+            JsonObject receipt = row.getAsJsonArray("failureFiles").get(0).getAsJsonObject();
+            JsonObject detail = new com.google.gson.JsonParser().parse(new String(Files.readAllBytes(
+                    root.resolve("checks").resolve(receipt.get("path").getAsString())), StandardCharsets.UTF_8)).getAsJsonObject();
+            require(detail.getAsJsonObject("target").has("structure")
+                    && detail.getAsJsonObject("target").get("structure").getAsString().equals(identity),
+                    "Structure failure artifact lost its stable native identity");
+            require(detail.has("structureCheck")
+                    && detail.getAsJsonObject("structureCheck").getAsJsonObject("source").equals(source)
+                    && detail.getAsJsonObject("structureCheck").getAsJsonArray("limitations").get(0).getAsString()
+                            .equals("Native construction could not settle"),
+                    "Structure failure artifact omitted native source or resolved limitations");
+        }
     }
 
     private static void observed(String name, String phase, Runnable action, java.util.List<JsonObject> samples) throws Exception {

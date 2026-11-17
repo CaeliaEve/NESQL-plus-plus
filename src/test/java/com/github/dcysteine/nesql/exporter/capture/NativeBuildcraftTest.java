@@ -18,8 +18,24 @@ import static com.github.dcysteine.nesql.exporter.source.Json.*;
 final class NativeBuildcraftTest {
     private static final String API="buildcraft.api.recipes.";
     static void run() throws Exception {
+        boolean ready=codechicken.nei.ItemList.loadFinished;codechicken.nei.ItemList.loadFinished=true;
+        try{runReady();}finally{codechicken.nei.ItemList.loadFinished=ready;}
+    }
+    private static void runReady() throws Exception {
         TemplateRecipeHandler handler=(TemplateRecipeHandler)Class.forName("buildcraft.compat.nei.RecipeHandlerAssemblyTable").newInstance();
         require(Recipes.adapter(handler)!=null,"BuildCraft assembly lacks a native registry adapter");
+        Item constant=new ConstantSubtype();Item.itemRegistry.addObject(31350,"nesql:constant_subtypes",constant);
+        ItemStack constantStack=new ItemStack(constant,1,7),constantOutput=new ItemStack(Items.diamond);
+        RecipeRow constantRow=row(constantStack,constantOutput);
+        adapter(handler,Collections.singletonList(recipe(constantOutput,1,new Object[]{constantStack}))).capture(0,constantRow);
+        require(constantRow.inputs.get(0).getAsJsonObject().getAsJsonArray("choices").get(0).getAsJsonObject().getAsJsonObject("rule").get("subtypes").getAsBoolean(),"Constant native subtype predicate lost");
+        Item[] properties={new FieldSubtype(),new CapacitySubtype(),new CountSubtype(),new DelegatingSubtype()};
+        for(int i=0;i<properties.length;i++){
+            Item.itemRegistry.addObject(31353+i,"nesql:subtype_property_"+i,properties[i]);
+            ItemStack input=new ItemStack(properties[i],1,7);RecipeRow projected=row(input,constantOutput);
+            adapter(handler,Collections.singletonList(recipe(constantOutput,1,new Object[]{input}))).capture(0,projected);
+            require(projected.inputs.get(0).getAsJsonObject().getAsJsonArray("choices").get(0).getAsJsonObject().getAsJsonObject("rule").get("subtypes").getAsBoolean(),"Native read-only subtype property was lost");
+        }
         ItemStack paper=new ItemStack(Items.paper,3),iron=new ItemStack(Items.iron_ingot,99),output=new ItemStack(Items.diamond,2);
         Object recipe=recipe(output,700,new Object[]{new ArrayList<>(Arrays.asList(paper,iron)),new ArrayList<>(Collections.singletonList(new ItemStack(Items.paper)))});
         List<ItemStack> inventory=new ArrayList<>(Arrays.asList(new ItemStack(Items.paper,2),new ItemStack(Items.iron_ingot,2),new ItemStack(Items.paper)));
@@ -29,8 +45,11 @@ final class NativeBuildcraftTest {
         require(preview!=null && inventory.get(0).stackSize==2 && inventory.get(1).stackSize==2,"Native preview changed input stock");
         require(craft.invoke(recipe,crafter,false)!=null && inventory.get(0)==null && inventory.get(1).stackSize==1 && inventory.get(2)==null,
                 "Native mixed-candidate greedy allocation differs");
+        TemplateRecipeHandler.CachedRecipe borrowed=handler.new CachedRecipe(){public codechicken.nei.PositionedStack getResult(){return null;}};
+        handler.arecipes.add(borrowed);
         RegistryRecipes adapter=adapter(handler,Arrays.asList(recipe));
         RecipeRow row=row(paper,iron,output);adapter.capture(0,row);
+        require(handler.arecipes.size()==1&&handler.arecipes.get(0)==borrowed,"Assembly semantic reader rewrote borrowed GUI cache");
         require(row.inputs.size()==2 && row.outputs.size()==1 && row.record.get("duration").isJsonNull() && row.record.get("energy").isJsonNull(),
                 "Assembly gained a fixed time/EU or lost native requirements");
         require(row.record.getAsJsonObject("process").get("kind").getAsString().equals("buildcraftAssembly")
@@ -40,10 +59,10 @@ final class NativeBuildcraftTest {
                     && c.getAsJsonArray("returns").size()==0,"Alternative example counts replaced first native amount or container returns appeared");
         }
         require(row.inputs.get(0).getAsJsonObject().getAsJsonArray("choices").size()==2 && row.outputs.get(0).getAsJsonObject().get("amount").getAsInt()==2,"Assembly facts collapsed");
-        handler.arecipes.get(0).getIngredients().get(0).items[0].stackSize=123;
-        handler.arecipes.get(0).getResult().items[0].stackSize=123;
         RecipeRow repeat=row(paper,iron,output);adapter.capture(0,repeat);
         require(row.inputs.equals(repeat.inputs) && row.outputs.equals(repeat.outputs) && paper.stackSize==3 && iron.stackSize==99 && output.stackSize==2,"Owned assembly layout changed registry");
+        lifecycle(handler,recipe,adapter,paper,iron,output);
+        actualSource(handler,recipe,paper,iron,output);
         // Native greedy order can fail even though a backtracking allocator could satisfy both.
         Object greedy=recipe(output,0,new Object[]{Arrays.asList(new ItemStack(Items.paper),new ItemStack(Items.iron_ingot)),new ItemStack(Items.paper)});
         require(craft.invoke(greedy,crafter(new ArrayList<>(Arrays.asList(new ItemStack(Items.paper),new ItemStack(Items.iron_ingot)))),true)!=null,
@@ -65,8 +84,8 @@ final class NativeBuildcraftTest {
         require(freeRow.inputs.size()==0 && freeRow.outputs.size()==1,"No-input assembly plan was lost");
         Object[] many=new Object[13];Arrays.fill(many,new ItemStack(Items.paper));
         RecipeRow overflow=row(paper,output);adapter(handler,Collections.singletonList(recipe(output,1,many))).capture(0,overflow);
-        require(overflow.inputs.size()==13 && overflow.elements.size()==13 && handler.arecipes.get(0).getIngredients().size()==12,
-                "Native twelve-slot projection dropped a requirement or invented an extra display slot");
+        require(overflow.inputs.size()==13 && handler.arecipes.size()==1&&handler.arecipes.get(0)==borrowed,
+                "Assembly dropped requirements past the former twelve-slot display limit");
         Object fluid=recipe(output,1,new Object[]{new FluidStack(FluidRegistry.WATER,1)});
         RegistryRecipes impossible=adapter(handler,Collections.singletonList(fluid));
         require(!impossible.capture(0,row(output)) && impossible.exclusion(0).get("reason").getAsString().equals("native_machine_has_no_fluid_slots"),
@@ -75,7 +94,56 @@ final class NativeBuildcraftTest {
                 (p,m,a)->{throw new AssertionError("Unknown recipe callback executed");});
         try{adapter(handler,Collections.singletonList(unknown)).capture(0,row(output));throw new AssertionError("Unknown assembly subclass accepted");}
         catch(Jobs.Fault expected){require(expected.code.equals("recipe_unsupported"),"Wrong unknown assembly failure");}
-        System.out.println("Native BuildCraft assembly: mixed allocation, fixed-before-alternative order, greedy rejection, native wildcard/NBT, owned layout and no-fluid proof passed");
+        UnknownSubtype unknownSubtype=new UnknownSubtype();ItemStack callback=new ItemStack(unknownSubtype);unknownSubtype.armed=true;
+        expect("recipe_unsupported",()->adapter(handler,Collections.singletonList(recipe(output,1,new Object[]{callback}))));
+        require(unknownSubtype.calls==0,"Unreviewed assembly subtype callback was executed");
+        System.out.println("Native BuildCraft assembly: mixed/greedy allocation, wildcard/NBT, full requirements, borrowed GUI/registry preservation, native source/drift/close and callback guards passed");
+    }
+    private static void lifecycle(TemplateRecipeHandler handler,Object recipe,RegistryRecipes reader,ItemStack... stacks)throws Exception{
+        reader.finishVerification();ItemStack output=(ItemStack)MagicApi.field(recipe,"output");int amount=output.stackSize;
+        try{output.stackSize++;expect("recipe_changed",()->reader.capture(0,row(stacks)));}finally{output.stackSize=amount;}
+        int energy=(Integer)MagicApi.field(recipe,"energyCost");
+        try{set(recipe,"energyCost",energy+1);expect("recipe_changed",reader::finishVerification);}finally{set(recipe,"energyCost",energy);}
+        reader.finishVerification();reader.close();reader.close();
+        expect("capture_closed",reader::size);expect("capture_closed",()->reader.capture(0,row(stacks)));
+        require(output.stackSize==amount&&handler.arecipes.size()==1,"Closing assembly reader altered borrowed state");
+        try(RegistryRecipes empty=adapter(handler,Collections.emptyList())){require(empty.size()==0,"Ready-empty assembly failed");empty.finishVerification();}
+        expect("handler_not_ready",()->new BuildcraftRecipes(handler,(List<?>)null));
+    }
+    private static void actualSource(TemplateRecipeHandler handler,Object recipe,ItemStack... stacks)throws Exception{
+        Class<?> type=Class.forName("buildcraft.core.recipes.AssemblyRecipeManager");Object singleton=MagicApi.field(type,null,"INSTANCE");
+        Object priorMap=MagicApi.field(singleton,"assemblyRecipes");Field api=Class.forName(API+"BuildcraftRecipeRegistry").getField("assemblyTable");Object priorApi=api.get(null);
+        cpw.mods.fml.common.Loader loader=cpw.mods.fml.common.Loader.instance();
+        Map<String,cpw.mods.fml.common.ModContainer> old=cpw.mods.fml.relauncher.ReflectionHelper.getPrivateValue(cpw.mods.fml.common.Loader.class,loader,"namedMods");
+        Map<String,cpw.mods.fml.common.ModContainer> configured=new HashMap<>(old);
+        for(String[] version:new String[][]{{"BuildCraft|Silicon","7.1.44"},{"BuildCraft|Compat","7.1.18"}}){
+            cpw.mods.fml.common.ModMetadata metadata=new cpw.mods.fml.common.ModMetadata();metadata.modId=version[0];metadata.version=version[1];configured.put(version[0],new cpw.mods.fml.common.DummyModContainer(metadata));
+        }
+        Map<String,Object> owned=new HashMap<>();owned.put("fixture",recipe);
+        try{
+            set(singleton,"assemblyRecipes",owned);api.set(null,singleton);
+            cpw.mods.fml.relauncher.ReflectionHelper.setPrivateValue(cpw.mods.fml.common.Loader.class,loader,configured,"namedMods");
+            RegistrationBindings first=RegistrationBindings.read(handler);
+            require(first.same(RegistrationBindings.read((TemplateRecipeHandler)handler.getClass().newInstance())),"Independent assembly registrations differ");
+            try(RegistryRecipes reader=new BuildcraftRecipes(handler)){
+                require(reader.size()==1&&reader.capture(0,row(stacks)),"Actual assembly native source failed");reader.finishVerification();
+                try{set(singleton,"assemblyRecipes",new HashMap<>(owned));require(!first.same(RegistrationBindings.read(handler)),"Replaced assembly native table stayed equivalent");expect("recipe_changed",reader::verify);}finally{set(singleton,"assemblyRecipes",owned);}
+                try{api.set(null,type.newInstance());expect("recipe_changed",reader::verify);}finally{api.set(null,singleton);}
+                reader.finishVerification();
+            }
+        }finally{set(singleton,"assemblyRecipes",priorMap);api.set(null,priorApi);cpw.mods.fml.relauncher.ReflectionHelper.setPrivateValue(cpw.mods.fml.common.Loader.class,loader,old,"namedMods");}
+    }
+    private interface Probe{void run()throws Exception;}
+    private static void expect(String code,Probe probe)throws Exception{try{probe.run();throw new AssertionError("Expected assembly failure: "+code);}catch(Jobs.Fault failure){require(failure.code.equals(code),"Expected "+code+": "+failure);}}
+    private static void set(Object owner,String key,Object value)throws Exception{Field field=owner.getClass().getDeclaredField(key);field.setAccessible(true);field.set(owner,value);}
+    public static final class ConstantSubtype extends Item { @Override public boolean getHasSubtypes(){return true;} }
+    public static final class FieldSubtype extends Item { public boolean flag=true;@Override public boolean getHasSubtypes(){return flag;} }
+    public static final class CapacitySubtype extends Item { public int capacity=3;@Override public boolean getHasSubtypes(){return capacity>0;} }
+    public static final class CountSubtype extends Item { public int getNumSubtypes(){return 3;}@Override public boolean getHasSubtypes(){return getNumSubtypes()>1;} }
+    public static final class DelegatingSubtype extends Item { public Item item=Items.coal;@Override public boolean getHasSubtypes(){return item.getHasSubtypes();} }
+    public static final class UnknownSubtype extends Item{
+        boolean armed;int calls;
+        @Override public boolean getHasSubtypes(){if(armed){calls++;throw new AssertionError("Unknown assembly subtype callback executed");}return super.getHasSubtypes();}
     }
     private static void matching(TemplateRecipeHandler handler,ItemStack output)throws Exception {
         Method nativeMatch=Class.forName("buildcraft.core.lib.inventory.StackHelper").getMethod("isMatchingItem",ItemStack.class,ItemStack.class);

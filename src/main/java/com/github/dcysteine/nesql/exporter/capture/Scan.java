@@ -1,13 +1,10 @@
 package com.github.dcysteine.nesql.exporter.capture;
 
-import codechicken.nei.PositionedStack;
 import com.github.dcysteine.nesql.exporter.task.Jobs;
 import com.google.gson.JsonElement;
-import forestry.api.genetics.AlleleManager;
 import forestry.api.genetics.IIndividual;
 import forestry.api.genetics.ISpeciesRoot;
 import gregtech.api.util.GTRecipe;
-import gregtech.api.util.GTOreDictUnificator;
 import net.minecraft.item.ItemStack;
 import net.minecraft.nbt.NBTTagCompound;
 import net.minecraftforge.fluids.FluidStack;
@@ -25,14 +22,14 @@ final class Scan {
     static String root(String map, GTRecipe recipe) {
         if (!map.equals("gt.recipe.scanner") || !recipe.mFakeRecipe || recipe.mInputs.length != 1 || recipe.mInputs[0] == null) return null;
         Forestry.require();
-        ISpeciesRoot root = AlleleManager.alleleRegistry.getSpeciesRoot(recipe.mInputs[0].copy());
+        ISpeciesRoot root = ForestryMembers.root(recipe.mInputs[0]);
         if (root == null) return null;
         implementation(root.getUID());
         return root.getUID();
     }
 
     static List<RecipeRow> capture(String root, GTRecipe recipe, List<GtRecipes.Placement> inputs,
-                                   List<GtRecipes.Placement> outputs, RecipeRow row) {
+                                   List<GtRecipes.Placement> outputs, RecipeRow row,NativeItemExamples examples) {
         if (recipe.mInputs[0].stackSize != 1 || recipe.mOutputs.length != 1 || recipe.mOutputs[0] == null
                 || recipe.mOutputs[0].getItem() != recipe.mInputs[0].getItem() || recipe.mOutputs[0].stackSize != 1
                 || recipe.getOutputChance(0) != 10000 || recipe.mSpecialItems != null
@@ -48,16 +45,14 @@ final class Scan {
         FluidStack honey = (FluidStack) fluid.source;
         if (honey.amount != 100 || !honey.isFluidEqual(gregtech.api.enums.Materials.Honey.getFluid(100))) throw fault("Changed scan honey requirement");
         List<RecipeRow.Ingredient> expanded = GtRecipes.ingredients(input.source, recipe.isNBTSensitive,
-                item -> new PositionedStack(GTOreDictUnificator.getNonUnifiedStacks(item), input.display.relx, input.display.rely, true).items);
-        GtRecipes.displayed(0, input.display, expanded);
+                item -> GtRecipes.alternatives(item,examples));
         List<ItemStack> specimens = new ArrayList<>();
         for (RecipeRow.Ingredient candidate : expanded) specimens.add(candidate.display);
-        return branches(row, root, specimens, honey, input.display, fluid.display, output.display,
+        return branches(row, root, specimens, honey,
                 stack -> individual(root, stack));
     }
 
     static List<RecipeRow> branches(RecipeRow base, String root, List<ItemStack> specimens, FluidStack honey,
-                                    PositionedStack input, PositionedStack fluid, PositionedStack output,
                                     Function<ItemStack, IIndividual> reader) {
         List<ItemStack> fresh = new ArrayList<>(), analyzed = new ArrayList<>();
         for (ItemStack specimen : specimens) {
@@ -91,14 +86,14 @@ final class Scan {
             List<RecipeRow.Ingredient> ingredients = new ArrayList<>();
             for (ItemStack member : members) ingredients.add(new RecipeRow.Ingredient(member, 1, false,
                     object("kind", "member", "root", root, "analyzed", done)));
-            row.itemInput(input, 0, ingredients, false);
+            row.itemInput(0, ingredients, false);
             for (JsonElement choice : row.inputs.get(0).getAsJsonObject().getAsJsonArray("choices")) {
                 choice.getAsJsonObject().add("consume", object("kind", "stack"));
             }
             // Even an already analyzed member needs 100 mB in the tank, but consumes none.
-            row.fluidInput(fluid, 0, honey, done);
+            row.fluidInput(0, honey, done);
             Products product = Products.observe(members, object("kind", "analyze"), member -> analyze(member, reader), row.facts);
-            row.itemOutput(output, 0, product.output, 10000);
+            row.itemOutput(0, product.output, 10000);
             product.attach(row);
             result.add(row);
         }
@@ -115,9 +110,9 @@ final class Scan {
     }
 
     private static IIndividual individual(String root, ItemStack stack) {
-        ISpeciesRoot actual = AlleleManager.alleleRegistry.getSpeciesRoot(stack);
+        ISpeciesRoot actual = ForestryMembers.root(stack);
         if (actual == null || !root.equals(actual.getUID())) throw fault("Scan candidate changed its species root");
-        IIndividual member = AlleleManager.alleleRegistry.getIndividual(stack);
+        IIndividual member = ForestryMembers.read(actual,stack);
         if (member == null || !member.getClass().getName().equals(implementation(root))) throw fault("Unknown scan member implementation for " + root);
         return member;
     }

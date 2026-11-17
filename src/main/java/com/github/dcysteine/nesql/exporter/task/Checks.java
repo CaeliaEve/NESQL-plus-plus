@@ -1,11 +1,12 @@
 package com.github.dcysteine.nesql.exporter.task;
 
+import static com.github.dcysteine.nesql.exporter.source.Json.*;
+
 import com.github.dcysteine.nesql.exporter.source.CanonicalJson;
 import com.github.dcysteine.nesql.exporter.source.Dataset;
 import com.google.gson.JsonArray;
 import com.google.gson.JsonElement;
 import com.google.gson.JsonObject;
-
 import java.io.IOException;
 import java.nio.file.Files;
 import java.nio.file.LinkOption;
@@ -20,8 +21,6 @@ import java.util.List;
 import java.util.Set;
 import java.util.TreeSet;
 
-import static com.github.dcysteine.nesql.exporter.source.Json.*;
-
 /** Diagnostic requests and reports never become source datasets. */
 public final class Checks {
     public static final int REPORT_LIMIT = 16 * 1024 * 1024;
@@ -32,9 +31,9 @@ public final class Checks {
         public final List<Integer> controllers;
         public final List<String> resources;
         public final int offset, limit;
-        public final boolean render;
+        public final boolean render, contentAudit;
 
-        private Selection(String domain, List<Integer> controllers, List<String> resources, int offset, int limit, boolean render) {
+        private Selection(String domain, List<Integer> controllers, List<String> resources, int offset, int limit, boolean render, boolean contentAudit) {
             if (!Arrays.asList("structures", "recipes", "resources", "ore-groups").contains(domain)) throw invalid("Choose structures, recipes, resources or ore-groups");
             if (controllers.size() > 512 || new TreeSet<>(controllers).size() != controllers.size()) throw invalid("Controller ids must be unique, with at most 512 targets");
             if (!domain.equals("structures") && !controllers.isEmpty()) throw invalid("Only structure checks accept controller ids");
@@ -44,12 +43,13 @@ public final class Checks {
             this.domain = domain;
             this.controllers = Collections.unmodifiableList(new ArrayList<>(new TreeSet<>(controllers)));
             this.offset = offset; this.limit = limit;
-            if (render && (!domain.equals("recipes") || limit > 16)) throw invalid("Representative rendering requires a recipe range of 1-16 entries");
-            this.render = render;
+            if(contentAudit&&!render)throw invalid("Content auditing requires native rendering");
+            if (render && (!domain.equals("recipes") || limit > (contentAudit?4096:16))) throw invalid("Rendering requires a bounded recipe range; representative <=16, explicit content audit <=4096");
+            this.render = render;this.contentAudit=contentAudit;
         }
 
         public static Selection parse(JsonObject body) {
-            fields(body, "domain", "controllers", "resources", "offset", "limit", "render");
+            fields(body, "domain", "controllers", "resources", "offset", "limit", "render", "contentAudit");
             JsonElement domain = body.get("domain");
             if (domain == null || !domain.isJsonPrimitive() || !domain.getAsJsonPrimitive().isString()) throw invalid("domain must be a string");
             List<Integer> controllers = new ArrayList<>();
@@ -71,25 +71,26 @@ public final class Checks {
             int limit = body.has("limit") ? integer(body.get("limit"), "limit", 1, 4096) : 128;
             if (!domain.getAsString().equals("recipes") && (offset != 0 || limit != 128)) throw invalid("Recipe ranges only apply to recipes");
             if (body.has("render") && (!body.get("render").isJsonPrimitive() || !body.get("render").getAsJsonPrimitive().isBoolean())) throw invalid("render must be a boolean");
-            return new Selection(domain.getAsString(), controllers, resources, offset, limit, body.has("render") && body.get("render").getAsBoolean());
+            if(body.has("contentAudit")&&(!body.get("contentAudit").isJsonPrimitive()||!body.get("contentAudit").getAsJsonPrimitive().isBoolean()))throw invalid("contentAudit must be a boolean");
+            return new Selection(domain.getAsString(), controllers, resources, offset, limit, body.has("render") && body.get("render").getAsBoolean(),body.has("contentAudit")&&body.get("contentAudit").getAsBoolean());
         }
 
         @Override public boolean equals(Object value) {
             if (!(value instanceof Selection)) return false;
             Selection other = (Selection) value;
-            return domain.equals(other.domain) && controllers.equals(other.controllers) && resourceSelection().equals(other.resourceSelection()) && offset == other.offset && limit == other.limit && render == other.render;
+            return domain.equals(other.domain) && controllers.equals(other.controllers) && resourceSelection().equals(other.resourceSelection()) && offset == other.offset && limit == other.limit && render == other.render && contentAudit==other.contentAudit;
         }
         // Gson restores pre-resource diagnostic history without this additive field.
         private List<String> resourceSelection() { return resources == null ? Collections.emptyList() : resources; }
-        @Override public int hashCode() { return java.util.Objects.hash(domain, controllers, resourceSelection(), offset, limit, render); }
+        @Override public int hashCode() { return java.util.Objects.hash(domain, controllers, resourceSelection(), offset, limit, render,contentAudit); }
     }
 
     public static Jobs.Request request(JsonObject body) {
-        fields(body, "key", "world", "domain", "controllers", "handlers", "resources", "probes", "offset", "limit", "render");
+        fields(body, "key", "world", "domain", "controllers", "handlers", "resources", "probes", "offset", "limit", "render","contentAudit");
         JsonObject request = object("name", "check", "profile", "data");
         for (String field : new String[] {"key", "world", "handlers", "probes"}) if (body.has(field)) request.add(field, body.get(field));
         JsonObject selection = new JsonObject();
-        for (String field : new String[] {"domain", "controllers", "resources", "offset", "limit", "render"}) if (body.has(field)) selection.add(field, body.get(field));
+        for (String field : new String[] {"domain", "controllers", "resources", "offset", "limit", "render","contentAudit"}) if (body.has(field)) selection.add(field, body.get(field));
         request.add("check", selection);
         return Jobs.Request.parse(request);
     }
@@ -147,23 +148,40 @@ public final class Checks {
 
         /** Every failed recipe has an immutable detail file, independently of the inline preview limit. */
         public void failure(JsonObject row, int index, Throwable error) throws IOException {
-            JsonObject identity = row.has("domain") ? object("domain", row.get("domain")) : row.has("resource") ? object("resource", row.get("resource")) : row.has("handler") ? object("handler", row.get("handler")) : object("controller", row.get("controller"));
-            String name = CanonicalJson.digest(identity) + "-" + index + ".json";
+            JsonObject identity = row.has("structure") ? object("structure", row.get("structure"))
+                    : row.has("domain") ? object("domain", row.get("domain")) : row.has("resource") ? object("resource", row.get("resource")) : row.has("handler") ? object("handler", row.get("handler")) : object("controller", row.get("controller"));
             String folder = context.id() + "-details";
             Path directory = path.getParent().resolve(folder);
             Dataset.directory(directory);
             JsonObject detail = object("format", "nesql.failure", "job", context.id(), "target", identity,
                     "index", index, "error", Checks.failure(error));
+            if (row.has("structure")) {
+                JsonObject checked = new com.google.gson.JsonParser().parse(row.toString()).getAsJsonObject();
+                checked.remove("failureFiles");
+                checked.remove("unsupportedStructures");
+                detail.add("structureCheck", checked);
+            }
             byte[] bytes = CanonicalJson.bytes(detail);
             if (bytes.length > REPORT_LIMIT) throw new IOException("Failure detail exceeds its size budget");
-            Path output = directory.resolve(name), temporary = directory.resolve(name + ".tmp");
-            if (Files.exists(output, LinkOption.NOFOLLOW_LINKS) || Files.exists(temporary, LinkOption.NOFOLLOW_LINKS)) {
-                throw new IOException("Failure detail already exists: " + name);
+            String name = CanonicalJson.digest(bytes) + "-" + index + ".json";
+            Path output = directory.resolve(name);
+            if (Files.exists(output, LinkOption.NOFOLLOW_LINKS)) {
+                Dataset.plain(output);
+                byte[] existing = Files.readAllBytes(output);
+                if (!java.util.Arrays.equals(existing, bytes))
+                    throw new IOException("Failure detail content hash collision: " + name);
+            } else {
+                Path temporary = directory.resolve(name + ".tmp");
+                if (Files.exists(temporary, LinkOption.NOFOLLOW_LINKS))
+                    throw new IOException("Failure detail write already exists: " + name);
+                Files.write(temporary, bytes, java.nio.file.StandardOpenOption.CREATE_NEW);
+                Files.move(temporary, output, StandardCopyOption.ATOMIC_MOVE);
             }
-            Files.write(temporary, bytes, java.nio.file.StandardOpenOption.CREATE_NEW);
-            Files.move(temporary, output, StandardCopyOption.ATOMIC_MOVE);
             if (!row.has("failureFiles")) row.add("failureFiles", new JsonArray());
-            row.getAsJsonArray("failureFiles").add(object("path", folder + "/" + name, "sha256", CanonicalJson.digest(bytes), "bytes", bytes.length, "index", index));
+            String relative = folder + "/" + name;
+            for (JsonElement existing : row.getAsJsonArray("failureFiles"))
+                if (existing.getAsJsonObject().get("path").getAsString().equals(relative)) return;
+            row.getAsJsonArray("failureFiles").add(object("path", relative, "sha256", CanonicalJson.digest(bytes), "bytes", bytes.length, "index", index));
         }
 
         /** Unsupported structure variants still need an immutable reason artifact. */
@@ -171,7 +189,7 @@ public final class Checks {
             Jobs.Fault error = new Jobs.Fault(code, message);
             failure(row, index, error);
             if (!row.has("unsupportedStructures")) row.add("unsupportedStructures", new JsonArray());
-            row.getAsJsonArray("unsupportedStructures").add(row.get("controller"));
+            row.getAsJsonArray("unsupportedStructures").add(row.has("structure") ? row.get("structure") : row.get("controller"));
         }
 
         public Summary save() throws IOException {
@@ -218,59 +236,233 @@ public final class Checks {
 
     public interface Guard { void check() throws Exception; }
     public interface Step { void run(int index, JsonObject row) throws Exception; }
-    public interface Recipe { boolean check(int index) throws Exception; }
+
+    public interface Recipe {
+        CaptureOutcome check(int index) throws Exception;
+    }
+
+    /** Full evidence lives off the game thread; report previews have a separate byte cap. */
+    private static final class OutcomeLog implements AutoCloseable {
+        private final Path temporary, target;
+        private final String relative;
+        private final JsonObject row;
+        private final java.security.MessageDigest digest = CanonicalJson.sha256();
+        private final java.io.OutputStream output;
+        private long bytes, rows;
+        private boolean complete;
+
+        OutcomeLog(Report report, JsonObject row) throws IOException {
+            this.row = row;
+            String folder = report.context.id() + "-outcomes";
+            Path directory = report.path.getParent().resolve(folder);
+            Dataset.directory(directory);
+            String name = CanonicalJson.digest(object("handler", row.get("handler"))) + ".jsonl.gz";
+            relative = folder + "/" + name;
+            target = directory.resolve(name);
+            temporary = directory.resolve(name + ".tmp");
+            if (Files.exists(target, LinkOption.NOFOLLOW_LINKS)
+                    || Files.exists(temporary, LinkOption.NOFOLLOW_LINKS))
+                throw new IOException("Native outcome ledger already exists");
+            java.io.OutputStream raw =
+                    new java.security.DigestOutputStream(
+                            new java.io.BufferedOutputStream(
+                                    Files.newOutputStream(
+                                            temporary,
+                                            java.nio.file.StandardOpenOption.CREATE_NEW)),
+                            digest);
+            try {
+                output = new java.util.zip.GZIPOutputStream(raw);
+            } catch (IOException error) {
+                try {
+                    raw.close();
+                } catch (IOException cleanup) {
+                    error.addSuppressed(cleanup);
+                }
+                throw error;
+            }
+        }
+
+        void append(int index, CaptureOutcome outcome) throws IOException {
+            byte[] encoded = CanonicalJson.bytes(object("index", index, "outcome", outcome.json()));
+            if (encoded.length > Dataset.RECORD_LIMIT + 256
+                    || bytes + encoded.length + 1 > 8L * 1024 * 1024 * 1024)
+                throw new IOException("Native outcome ledger exceeds its byte budget");
+            output.write(encoded);
+            output.write('\n');
+            bytes += encoded.length + 1;
+            rows++;
+        }
+
+        @Override
+        public void close() throws IOException {
+            boolean interrupted = Thread.interrupted();
+            try {
+                output.close();
+                Files.move(temporary, target, StandardCopyOption.ATOMIC_MOVE);
+                row.add(
+                        "captureOutcomeFile",
+                        object(
+                                "format",
+                                "nesql.capture-outcomes",
+                                "revision",
+                                1,
+                                "path",
+                                relative,
+                                "sha256",
+                                CanonicalJson.hex(digest.digest()),
+                                "bytes",
+                                Long.toString(Files.size(target)),
+                                "logicalBytes",
+                                Long.toString(bytes),
+                                "rows",
+                                Long.toString(rows),
+                                "rangeComplete",
+                                complete));
+            } finally {
+                if (interrupted) Thread.currentThread().interrupt();
+            }
+        }
+    }
 
     /** Count actual attempts, including the failing recipe when a range stops early. */
-    public static void recipes(Jobs.Context context, Report report, Guard guard, JsonObject row, int total, Recipe recipe) throws Exception {
+    public static void recipes(
+            Jobs.Context context,
+            Report report,
+            Guard guard,
+            JsonObject row,
+            int total,
+            Recipe recipe)
+            throws Exception {
         Selection selection = context.request().check;
-        int begin = Math.min(total, selection.offset), end = Math.min(total, begin + selection.limit);
-        JsonArray failed = new JsonArray(), failures = new JsonArray(), excluded = new JsonArray();
-        row.addProperty("totalRecipes", total); row.addProperty("offset", begin); row.addProperty("end", end);
-        row.addProperty("checkedRecipes", 0); row.addProperty("unexamined", total); row.addProperty("failuresOmitted", 0);
-        row.add("failedRecipes", failed); row.add("failures", failures); row.add("excludedRecipes", excluded);
+        int begin = Math.min(total, selection.offset),
+                end = Math.min(total, begin + selection.limit);
+        JsonArray failed = new JsonArray(),
+                failures = new JsonArray(),
+                excluded = new JsonArray(),
+                duplicates = new JsonArray(),
+                outcomes = new JsonArray();
+        row.addProperty("totalRecipes", total);
+        row.addProperty("offset", begin);
+        row.addProperty("end", end);
+        row.addProperty("accountingRevision", 1);
+        row.addProperty("checkedRecipes", 0);
+        row.addProperty("unexamined", total);
+        row.addProperty("failuresOmitted", 0);
+        row.add("failedRecipes", failed);
+        row.add("failures", failures);
+        row.add("excludedRecipes", excluded);
+        row.add("duplicateRecipes", duplicates);
+        row.add("captureOutcomes", outcomes);
         row.add("failureFiles", new JsonArray());
+        row.addProperty("passedRecipes", 0);
+        row.addProperty("referenceRows", 0);
+        row.addProperty("emittedBranches", 0);
+        row.addProperty("duplicateBranches", 0);
+        row.addProperty("outcomesOmitted", 0);
         int attempted = 0;
-        for (int index = begin; index < end; index++) {
-            context.check();
-            try {
-                if (!recipe.check(index)) excluded.add(value(index));
-            } catch (Exception error) {
-                failed.add(value(index));
-                if (failures.size() < 32) failures.add(object("index", index, "error", failure(error)));
-                archive(report, row, index, error);
-                if (fatal(error)) throw error;
-            } catch (Error error) {
-                failed.add(value(index));
-                if (failures.size() < 32) failures.add(object("index", index, "error", failure(error)));
-                archive(report, row, index, error);
-                throw error;
-            } finally {
-                attempted++;
-                row.addProperty("checkedRecipes", attempted);
-                row.addProperty("unexamined", total - attempted);
-                row.addProperty("failuresOmitted", failed.size() - failures.size());
+        int passed = 0, references = 0, previewBytes = 0;
+        long emitted = 0, deduped = 0;
+        try (OutcomeLog ledger = new OutcomeLog(report, row)) {
+            for (int index = begin; index < end; index++) {
+                context.check();
+                try {
+                    CaptureOutcome outcome = recipe.check(index);
+                    if (outcome == null)
+                        throw new Jobs.Fault(
+                                "check_incomplete", "Native entry did not return a disposition");
+                    ledger.append(index, outcome);
+                    switch (outcome.kind) {
+                        case CAPTURED:
+                            passed++;
+                            break;
+                        case EXCLUDED:
+                            excluded.add(value(index));
+                            break;
+                        case DUPLICATE:
+                            duplicates.add(value(index));
+                            break;
+                        case REFERENCE:
+                            references++;
+                            break;
+                        default:
+                            throw new AssertionError(outcome.kind);
+                    }
+                    emitted += outcome.emitted;
+                    deduped += outcome.duplicates;
+                    JsonObject entry = object("index", index, "outcome", outcome.json());
+                    int size = CanonicalJson.bytes(entry).length;
+                    if (outcomes.size() < 32 && previewBytes + size <= 32768) {
+                        outcomes.add(entry);
+                        previewBytes += size;
+                    }
+                } catch (Exception error) {
+                    failed.add(value(index));
+                    if (failures.size() < 32)
+                        failures.add(object("index", index, "error", failure(error)));
+                    archive(report, row, index, error);
+                    if (fatal(error)) throw error;
+                } catch (Error error) {
+                    failed.add(value(index));
+                    if (failures.size() < 32)
+                        failures.add(object("index", index, "error", failure(error)));
+                    archive(report, row, index, error);
+                    throw error;
+                } finally {
+                    attempted++;
+                    row.addProperty("checkedRecipes", attempted);
+                    row.addProperty("unexamined", total - attempted);
+                    row.addProperty("failuresOmitted", failed.size() - failures.size());
+                    row.addProperty("passedRecipes", passed);
+                    row.addProperty("referenceRows", references);
+                    row.addProperty("emittedBranches", emitted);
+                    row.addProperty("duplicateBranches", deduped);
+                    row.addProperty("outcomesOmitted", attempted - failed.size() - outcomes.size());
+                }
+                if (attempted % 16 == 0
+                        || failed.size() > 0 && failed.get(failed.size() - 1).getAsInt() == index)
+                    report.save();
+                guard.check();
             }
-            if (attempted % 16 == 0 || failed.size() > 0 && failed.get(failed.size() - 1).getAsInt() == index) report.save();
-            guard.check();
+            ledger.complete = true;
         }
-        row.addProperty("status", failed.size() > 0 ? "failed" : begin != 0 || end != total ? "partial" : "passed");
+        row.addProperty(
+                "status",
+                failed.size() > 0 ? "failed" : begin != 0 || end != total ? "partial" : "passed");
     }
 
     /** The same failure-isolation loop serves native checks and lifecycle regressions. */
-    public static void sweep(Jobs.Context context, Report report, Guard guard, Step step) throws Exception {
+    public static void sweep(Jobs.Context context, Report report, Guard guard, Step step)
+            throws Exception {
         for (int index = 0; index < report.size(); index++) {
-            context.check(); guard.check();
-            JsonObject row = report.row(index); row.addProperty("status", "running"); report.save();
-            String target = row.has("domain") ? row.get("domain").getAsString() : row.has("resource") ? row.get("resource").getAsString() : row.has("controller") ? "controller " + row.get("controller").getAsInt() : row.get("handler").getAsString();
-            context.progress("check_" + context.request().check.domain, index, report.size(), "Checking " + target);
+            context.check();
+            guard.check();
+            JsonObject row = report.row(index);
+            row.addProperty("status", "running");
+            report.save();
+            String target =
+                    row.has("domain")
+                            ? row.get("domain").getAsString()
+                            : row.has("resource")
+                                    ? row.get("resource").getAsString()
+                                    : row.has("controller")
+                                            ? "controller " + row.get("controller").getAsInt()
+                                            : row.get("handler").getAsString();
+            context.progress(
+                    "check_" + context.request().check.domain,
+                    index,
+                    report.size(),
+                    "Checking " + target);
             long began = System.nanoTime();
             try {
                 step.run(index, row);
-                if (!Arrays.asList("passed", "failed", "partial", "unsupported").contains(row.get("status").getAsString())) {
-                    throw new Jobs.Fault("check_incomplete", "The check did not record a target outcome");
+                if (!Arrays.asList("passed", "failed", "partial", "unsupported")
+                        .contains(row.get("status").getAsString())) {
+                    throw new Jobs.Fault(
+                            "check_incomplete", "The check did not record a target outcome");
                 }
             } catch (Exception error) {
-                row.addProperty("status", "failed"); row.add("error", failure(error));
+                row.addProperty("status", "failed");
+                row.add("error", failure(error));
                 if (row.has("controller")) {
                     if (!row.has("failedStructures")) row.add("failedStructures", new JsonArray());
                     row.getAsJsonArray("failedStructures").add(row.get("controller"));
@@ -278,7 +470,8 @@ public final class Checks {
                 archive(report, row, index, error);
                 if (fatal(error)) throw error;
             } catch (Error error) {
-                row.addProperty("status", "failed"); row.add("error", failure(error));
+                row.addProperty("status", "failed");
+                row.add("error", failure(error));
                 if (row.has("controller")) {
                     if (!row.has("failedStructures")) row.add("failedStructures", new JsonArray());
                     row.getAsJsonArray("failedStructures").add(row.get("controller"));
@@ -287,7 +480,8 @@ public final class Checks {
                 throw error;
             } finally {
                 row.addProperty("elapsedMicros", Long.toString((System.nanoTime() - began) / 1000));
-                row.add("timings", context.timings()); report.save();
+                row.add("timings", context.timings());
+                report.save();
             }
             guard.check();
             context.progress("check_" + context.request().check.domain, index + 1, report.size(), "Checked " + target + ": " + row.get("status").getAsString());
@@ -314,19 +508,17 @@ public final class Checks {
     }
 
     public static JsonObject failure(Throwable error) {
-        JsonObject result = failure(error, Collections.newSetFromMap(new IdentityHashMap<>()), new int[] {0}, 0);
-        if (result != null) result.addProperty("fatal", fatal(error));
-        return result;
+        return failure(error, Collections.newSetFromMap(new IdentityHashMap<>()), new int[] {0}, 0);
     }
 
     private static JsonObject failure(Throwable error, Set<Throwable> seen, int[] count, int depth) {
         if (error == null) return null;
-        if (depth >= 6 || ++count[0] > 32 || !seen.add(error)) return object("type", error.getClass().getName(), "omitted", true);
+        if (depth >= 6 || ++count[0] > 32 || !seen.add(error)) return object("type", error.getClass().getName(), "omitted", true, "fatal", fatal(error));
         JsonArray stack = new JsonArray(), suppressed = new JsonArray();
         StackTraceElement[] trace = error.getStackTrace();
         for (int index = 0; index < Math.min(24, trace.length); index++) stack.add(value(shorten(trace[index].toString(), 512)));
         for (int index = 0; index < Math.min(4, error.getSuppressed().length); index++) suppressed.add(failure(error.getSuppressed()[index], seen, count, depth + 1));
-        return object("type", error.getClass().getName(), "code", error instanceof Jobs.Fault ? ((Jobs.Fault) error).code : "check_failed",
+        return object("type", error.getClass().getName(), "fatal", fatal(error), "code", error instanceof Jobs.Fault ? ((Jobs.Fault) error).code : "check_failed",
                 "message", shorten(error.getMessage(), 2000), "stack", stack, "framesOmitted", Math.max(0, trace.length - 24),
                 "cause", failure(error.getCause(), seen, count, depth + 1), "suppressed", suppressed,
                 "suppressedOmitted", Math.max(0, error.getSuppressed().length - 4));

@@ -11,14 +11,20 @@ const output = path.resolve(process.argv[2] ?? path.join(root, 'release'));
 const version = (await readFile(path.join(root, 'gradle.properties'), 'utf8')).match(/^modVersion=([0-9A-Za-z.+-]+)$/m)?.[1];
 if (!version) throw new Error('Missing modVersion');
 const mod = `NESQL++-${version}.jar`;
-execFileSync(process.execPath, [path.join(root, 'scripts/check-jar.mjs')], { stdio: 'inherit' });
+const modFile = path.resolve(root, process.env.NESQL_RELEASE_JAR ?? path.join('build/libs', mod));
+execFileSync(process.execPath, [path.join(root, 'scripts/check-jar.mjs'), modFile], { stdio: 'inherit' });
 const files = new Map([
-  [`mod/${mod}`, `build/libs/${mod}`],
+  [`mod/${mod}`, modFile],
   ['README.md', 'README.md'],
   ['docs/mcp.md', 'docs/mcp.md'],
   ['docs/native-semantics.md', 'docs/native-semantics.md'],
+  ['docs/native-usage.md', 'docs/native-usage.md'],
+  ['docs/batch-diagnostics.md', 'docs/batch-diagnostics.md'],
+  ['docs/native-batch-fixes.md', 'docs/native-batch-fixes.md'],
   ['docs/visual-throughput.md', 'docs/visual-throughput.md'],
+  ['docs/native-item-animation.md', 'docs/native-item-animation.md'],
   ['docs/recovery.md', 'docs/recovery.md'],
+  ['docs/native-ore-storage.md', 'docs/native-ore-storage.md'],
   ['bridge/package.json', 'bridge/package.json'],
   ['bridge/package-lock.json', 'bridge/package-lock.json'],
 ]);
@@ -32,7 +38,7 @@ const manifest = [];
 for (const [name, source] of files) {
   const target = path.join(output, name);
   await mkdir(path.dirname(target), { recursive: true });
-  await copyFile(path.join(root, source), target, constants.COPYFILE_EXCL);
+  await copyFile(path.resolve(root, source), target, constants.COPYFILE_EXCL);
   const bytes = await readFile(target);
   manifest.push({ path: name, bytes: bytes.length, sha256: createHash('sha256').update(bytes).digest('hex') });
 }

@@ -6,17 +6,15 @@ import com.github.dcysteine.nesql.exporter.task.ClientThread;
 import com.github.dcysteine.nesql.exporter.task.Jobs;
 import com.github.dcysteine.nesql.exporter.task.Slice;
 import com.google.gson.JsonArray;
+import com.google.gson.JsonObject;
 import cpw.mods.fml.relauncher.ReflectionHelper;
 import net.minecraft.client.renderer.RenderHelper;
 import net.minecraft.client.Minecraft;
 import net.minecraft.client.renderer.texture.TextureAtlasSprite;
 import net.minecraft.client.renderer.texture.TextureMap;
 import net.minecraft.client.resources.data.AnimationMetadataSection;
-import net.minecraft.item.ItemBlock;
 import net.minecraft.util.IIcon;
 import net.minecraft.util.ResourceLocation;
-import net.minecraftforge.client.IItemRenderer;
-import net.minecraftforge.client.MinecraftForgeClient;
 import net.minecraftforge.fluids.Fluid;
 import net.minecraftforge.fluids.FluidRegistry;
 import net.minecraftforge.fluids.FluidStack;
@@ -42,9 +40,21 @@ import static com.github.dcysteine.nesql.exporter.source.Json.*;
  * detaches/decodes its pixels there; PNG encoding always stays off the client.
  */
 final class Images implements AutoCloseable {
+    final com.github.dcysteine.nesql.exporter.core.RendererRandom.Session random = new com.github.dcysteine.nesql.exporter.core.RendererRandom.Session();
+    final InventoryTextures inventoryTextures = new InventoryTextures();
+    final NativeModelBuffers inventoryModels = new NativeModelBuffers();
+    final NativeAuthorities authorities = new NativeAuthorities();
+    private VisualGraph.Node sine;
+    VisualGraph.Node sine(){if(sine==null)sine=NativeVisualSources.sine();return sine;}
     private static final int SIZE = 64;
     private final Surface icons = new Surface();
-    private final Surface scenes = new Surface();
+    private final boolean allowNativeFallback;
+
+    Images() { this(false); }
+
+    Images(boolean allowNativeFallback) {
+        this.allowNativeFallback = allowNativeFallback;
+    }
 
     Image paint(Models.Paint paint, ClientThread.Session client) throws Exception {
         if (paint.sprite != null) return sprite(paint.sprite, client);
@@ -64,13 +74,105 @@ final class Images implements AutoCloseable {
         return new Image(decode(width, height, rgba), new JsonArray(), "capture", picture.location);
     }
 
-    Image scene(Facts.Scene scene, ClientThread.Session client) throws Exception {
-        int width = scene.width * 2, height = scene.height * 2;
-        byte[] rgba = client.call(() -> scenes.capture(width, height, scene.width, scene.height, 1000, scene.location, scene.draw));
-        return new Image(decode(width, height, rgba), new JsonArray(), "capture", scene.location);
+    Image capture(Facts.Icon request, ClientThread.Session client) throws Exception {
+        java.util.concurrent.Callable<Image> operation = progressive(this, request, client);
+        Image result;
+        do { result = client.call("native icon slice", operation); } while (result == null);
+        return result;
     }
 
-    Image capture(Facts.Icon request, ClientThread.Session client) throws Exception {
+    /** Construct lazily: renderer selection and all native state stay on the client. */
+    static java.util.concurrent.Callable<Image> progressive(Images images, Facts.Icon request, ClientThread.Session client) {
+        return new java.util.concurrent.Callable<Image>() {
+            NativeAnimation nativeAnimation; InventoryVisual.Selection renderer; boolean selected, inventoryProgram;
+            boolean flatFallback;
+            @Override public Image call() throws Exception {
+                if (flatFallback) return images.captureFlatFrameOptional(request);
+                if (!selected) {
+                    try {
+                        renderer = InventoryVisual.select(request);
+                        inventoryProgram = InventoryVisual.handles(renderer);
+                        if (!inventoryProgram) nativeAnimation = NativeAnimation.select(request,renderer.renderer);
+                        selected = true;
+                    } catch (RuntimeException failure) {
+                        if (images.allowNativeFallback && request.fluid != null && missingVisualFault(failure)) {
+                            return images.missing(request.registry, failure);
+                        }
+                        if (!images.allowNativeFallback || !fallbackFault(failure)) throw failure;
+                        flatFallback = true;
+                        return images.captureFlatFrameOptional(request);
+                    }
+                }
+                try {
+                    if (inventoryProgram) {
+                        NativeAuthorities.Scope scope = images.authorities.observe();
+                        try {
+                            NativeVisualSources.renderer(request,renderer);
+                            return InventoryVisual.capture(images, request, renderer);
+                        } catch (RuntimeException failure) {
+                            if (images.allowNativeFallback && fallbackFault(failure)) scope.rollback();
+                            throw failure;
+                        } finally { scope.close(); }
+                    }
+                    if (nativeAnimation != null) return nativeAnimation.advance(images, request);
+                    return images.captureFlat(request, client);
+                } catch (RuntimeException failure) {
+                    if (images.allowNativeFallback && request.fluid != null && missingVisualFault(failure)) {
+                        return images.missing(request.registry, failure);
+                    }
+                    if (!images.allowNativeFallback || !fallbackFault(failure)) throw failure;
+                    nativeAnimation = null;
+                    inventoryProgram = false;
+                    flatFallback = true;
+                    return images.captureFlatFrameOptional(request);
+                }
+            }
+        };
+    }
+
+    private Image captureFlatFrameOptional(Facts.Icon request) {
+        try {
+            return captureFlatFrame(request);
+        } catch (RuntimeException failure) {
+            if (allowNativeFallback && request.fluid != null && missingVisualFault(failure)) {
+                return missing(request.registry, failure);
+            }
+            throw failure;
+        }
+    }
+
+    /** Images-only fallback for unreviewed native renderers. The source and
+     * diagnostic profiles must continue to surface these faults. */
+    static boolean fallbackFault(Throwable error) {
+        for (Throwable cause = error; cause != null; cause = cause.getCause()) {
+            if (!(cause instanceof Jobs.Fault)) continue;
+            String code = ((Jobs.Fault) cause).code;
+            if (code.startsWith("target_") || code.equals("animation_unsupported") || code.equals("animation_changed")) return true;
+        }
+        return false;
+    }
+
+    static boolean missingVisualFault(Throwable error) {
+        for (Throwable cause = error; cause != null; cause = cause.getCause())
+            if (cause instanceof Jobs.Fault && ((Jobs.Fault) cause).code.equals("texture_missing")) return true;
+        return false;
+    }
+
+    private Image missing(String location, Throwable failure) {
+        Jobs.Fault fault = null;
+        for (Throwable cause = failure; cause != null; cause = cause.getCause())
+            if (cause instanceof Jobs.Fault) { fault = (Jobs.Fault) cause; break; }
+        JsonObject error = object("code", fault == null ? "texture_missing" : fault.code,
+                "message", fault == null ? failure.getMessage() : fault.getMessage());
+        BufferedImage transparent = new BufferedImage(1, 1, BufferedImage.TYPE_INT_ARGB);
+        return new Image(transparent, new JsonArray(), "missing", location, false, null, error);
+    }
+
+    private Image captureFlatFrame(Facts.Icon request) {
+        return new Image(decode(SIZE, SIZE, render(request)), new JsonArray(), "capture", request.registry);
+    }
+
+    private Image captureFlat(Facts.Icon request, ClientThread.Session client) throws Exception {
         Captured captured = client.call("icon capture", () -> {
             Plan plan = plan(request);
             return plan == null ? new Captured(null, render(request)) : new Captured(plan, null);
@@ -162,16 +264,19 @@ final class Images implements AutoCloseable {
             timeline.add(object("x", (position % columns) * plan.width, "y", (position / columns) * plan.height,
                     "width", plan.width, "height", plan.height, "ticks", step[1]));
         }
-        return new Image(image, timeline, "resource", plan.location);
+        return new Image(image, timeline, "resource", plan.location, interpolated(plan.sprite));
     }
 
     private Plan plan(Facts.Icon request) {
         FluidTexture fluid = request.item == null ? fluidTexture(request.fluid) : null;
         IIcon icon = request.item != null ? request.item.getIconIndex() : fluid.icon;
-        boolean flat = request.item == null || (!(request.item.getItem() instanceof ItemBlock)
-                && !request.item.getItem().requiresMultipleRenderPasses()
-                && MinecraftForgeClient.getItemRenderer(request.item, IItemRenderer.ItemRenderType.INVENTORY) == null);
-        if (!(icon instanceof TextureAtlasSprite) || !flat) return null;
+        // A custom inventory renderer does not imply a static icon. Several
+        // GT/Forge items keep their animated TextureAtlasSprite in
+        // getIconIndex() while the renderer only changes transforms or tint.
+        // Extract the native sprite timeline before falling back to a single
+        // rendered frame; reviewed NativeAnimation/InventoryVisual paths still
+        // take precedence in progressive().
+        if (!(icon instanceof TextureAtlasSprite)) return null;
         return animation((TextureAtlasSprite) icon, request.item != null
                 ? request.item.getItem().getColorFromItemStack(request.item, 0) : fluid.tint);
     }
@@ -192,7 +297,7 @@ final class Images implements AutoCloseable {
         String blockName = block == null ? null : net.minecraft.block.Block.blockRegistry.getNameForObject(block);
         cpw.mods.fml.common.ModContainer gt = cpw.mods.fml.common.Loader.instance().getIndexedModList().get("gregtech_nh");
         if (name.equals("sludge") && fluid.getClass().getName().equals("toxiceverglades.block.BlockDarkWorldSludgeFluid")
-                && FluidRegistry.getFluid(name) == fluid && gt != null && "5.09.51.482".equals(gt.getVersion())
+                && FluidRegistry.getFluid(name) == fluid && TargetAdmission.matches("Images", "gregtech_nh", gt)
                 && block != null && block.getClass().getName().equals("gtPlusPlus.core.block.base.BlockBaseFluid")
                 && blockName != null && net.minecraft.block.Block.blockRegistry.getObject(blockName) == block
                 && ((net.minecraftforge.fluids.BlockFluidBase) block).getFluid() == fluid) {
@@ -203,7 +308,7 @@ final class Images implements AutoCloseable {
         boolean fuel = name.equals("fuel") || name.equals("fuelgc");
         cpw.mods.fml.common.ModContainer mod = cpw.mods.fml.common.Loader.instance().getIndexedModList().get("GalacticraftCore");
         if ((oil || fuel) && fluid.getClass() == Fluid.class && fluid.getBlock() == null
-                && FluidRegistry.getFluid(name) == fluid && mod != null && "3.3.13-GTNH".equals(mod.getVersion())) {
+                && FluidRegistry.getFluid(name) == fluid && TargetAdmission.matches("Images", "GalacticraftCore", mod)) {
             Fluid active = (Fluid) MagicApi.field(MagicApi.type("micdoodle8.mods.galacticraft.core.GalacticraftCore"),
                     null, oil ? "fluidOil" : "fluidFuel");
             String other = oil ? (name.equals("oil") ? "oilgc" : "oil") : (name.equals("fuel") ? "fuelgc" : "fuel");
@@ -251,6 +356,25 @@ final class Images implements AutoCloseable {
         return new int[] {width, height};
     }
 
+    static boolean interpolated(TextureAtlasSprite sprite) {
+        // Angelica/NotFine supplies interpolation in 1.7.10; vanilla metadata has no flag.
+        for (Class<?> type = sprite.getClass(); type != null; type = type.getSuperclass())
+            if (type.getName().equals("jss.notfine.render.InterpolatedIcon")) {
+                AnimationMetadataSection metadata = ReflectionHelper.getPrivateValue(TextureAtlasSprite.class, sprite,
+                        "animationMetadata", "field_110982_k");
+                // Installed beta66b directly indexes explicit metadata frames.
+                // An empty list throws inside its swallowed interpolation call;
+                // only the superclass's ordinary frame uploads take effect.
+                return metadata != null && metadata.getFrameCount() > 0;
+            }
+        return false;
+    }
+
+    static int[][] timeline(TextureAtlasSprite sprite) {
+        Plan plan = animation(sprite, 0xffffff);
+        return plan == null ? new int[][] {{0, 1}} : plan.timeline.toArray(new int[plan.timeline.size()][]);
+    }
+
     private static Plan animation(TextureAtlasSprite sprite, int tint) {
         if (sprite.getFrameCount() <= 1) return null;
         AnimationMetadataSection metadata = ReflectionHelper.getPrivateValue(TextureAtlasSprite.class, sprite,
@@ -273,7 +397,7 @@ final class Images implements AutoCloseable {
         return plan;
     }
 
-    private byte[] render(Facts.Icon request) {
+    byte[] render(Facts.Icon request) {
         Jobs.checkpoint();
         FluidTexture fluid = request.item == null ? fluidTexture(request.fluid) : null;
         IIcon icon = request.item != null ? request.item.getIconIndex() : fluid.icon;
@@ -293,11 +417,11 @@ final class Images implements AutoCloseable {
 
     byte[] icon(String location, Runnable draw) {
         // NEI adds 100 to RenderItem.zLevel; the item/effect pass adds another 50.
-        // Keep the same depth envelope as pictures/scenes, including raised 3D geometry.
+        // Keep the same depth envelope as content pictures, including raised 3D geometry.
         return icons.capture(SIZE, SIZE, 16, 16, 1000, location, draw);
     }
 
-    private static BufferedImage decode(int width, int height, byte[] rgba) {
+    static BufferedImage decode(int width, int height, byte[] rgba) {
         BufferedImage image = new BufferedImage(width, height, BufferedImage.TYPE_INT_ARGB);
         int[] pixels = ((DataBufferInt) image.getRaster().getDataBuffer()).getData();
         for (int y = 0; y < height; y++) for (int x = 0; x < width; x++) {
@@ -308,7 +432,11 @@ final class Images implements AutoCloseable {
         return image;
     }
 
-    @Override public void close() { try (GlState state = new GlState()) { icons.close(); scenes.close(); } }
+    @Override public void close() {
+        sine=null;
+        try (GlState state = new GlState()) { icons.close(); }
+        finally { try { inventoryTextures.close(); } finally { try { inventoryModels.close(); } finally { try { authorities.close(); } finally { random.close(); } } } }
+    }
 
     private static final class Captured {
         final Plan plan; final byte[] rgba;
@@ -333,8 +461,22 @@ final class Images implements AutoCloseable {
         final BufferedImage pixels;
         final JsonArray frames;
         final String kind, location;
+        final boolean interpolate;
+        final InventoryVisual visual;
         Image(BufferedImage pixels, JsonArray frames, String kind, String location) {
-            this.pixels = pixels; this.frames = frames; this.kind = kind; this.location = location;
+            this(pixels, frames, kind, location, false);
         }
+        Image(BufferedImage pixels, JsonArray frames, String kind, String location, boolean interpolate) {
+            this(pixels, frames, kind, location, interpolate, null);
+        }
+        Image(BufferedImage pixels, JsonArray frames, String kind, String location, boolean interpolate, InventoryVisual visual) {
+            this(pixels, frames, kind, location, interpolate, visual, null);
+        }
+        Image(BufferedImage pixels, JsonArray frames, String kind, String location, boolean interpolate,
+              InventoryVisual visual, JsonObject error) {
+            this.pixels = pixels; this.frames = frames; this.kind = kind; this.location = location;
+            this.interpolate = interpolate; this.visual = visual; this.error = error;
+        }
+        final JsonObject error;
     }
 }

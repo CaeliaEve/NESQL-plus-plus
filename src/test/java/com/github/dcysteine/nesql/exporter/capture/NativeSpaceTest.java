@@ -24,6 +24,9 @@ final class NativeSpaceTest {
         for (int tier = 1; tier <= 8; tier++) {
             TemplateRecipeHandler handler = (TemplateRecipeHandler) rocket.getConstructor(int.class, int.class, int.class).newInstance(tier, -12, 176);
             require(Recipes.adapter(handler) != null, "NASA tier " + tier + " has no native adapter");
+            RegistrationBindings bindings = RegistrationBindings.read(handler);
+            require(bindings != null && bindings.same(RegistrationBindings.read((TemplateRecipeHandler) rocket.getConstructor(int.class, int.class, int.class)
+                    .newInstance(tier, 80, 240))), "NASA semantic source depends on discarded GUI geometry or is unverified");
         }
         for (String name : new String[] {"core.nei.BuggyRecipeHandler", "planets.mars.nei.CargoRocketRecipeHandler", "planets.asteroids.nei.AstroMinerRecipeHandler"})
             require(Recipes.adapter((TemplateRecipeHandler) Class.forName("micdoodle8.mods.galacticraft." + name).newInstance()) != null,
@@ -64,31 +67,48 @@ final class NativeSpaceTest {
             { addSlotToContainer(output); addSlotToContainer(slot); addSlotToContainer(empty); }
             @Override public boolean canInteractWith(net.minecraft.entity.player.EntityPlayer player) { return true; }
         };
-        SpaceRecipes.Layout layout = new SpaceRecipes.Layout(container, 16);
+        SpaceRecipes.Layout layout = new SpaceRecipes.Layout(container);
         require(!SpaceRecipes.shadowed(Collections.emptyList(), recipe, layout)
                 && SpaceRecipes.shadowed(Collections.singletonList(recipe), recipe, layout), "Native NASA first-match precedence changed");
         TemplateRecipeHandler handler = (TemplateRecipeHandler) rocket.getConstructor(int.class, int.class, int.class).newInstance(1, -12, 176);
         RecipeRow row = row(new ItemStack(Items.paper, 1, 2), result);
-        require(SpaceRecipes.capture(handler, recipe, layout, row), "Usable native NASA recipe was excluded");
+        require(SpaceRecipes.capture(recipe, layout, row), "Usable native NASA recipe was excluded");
+        require(handler.arecipes.isEmpty(),"Native NASA semantic reader populated a GUI cache");
         com.google.gson.JsonObject choice = row.inputs.get(0).getAsJsonObject().getAsJsonArray("choices").get(0).getAsJsonObject();
         require(row.inputs.get(0).getAsJsonObject().getAsJsonArray("choices").size() == 1 && choice.get("amount").getAsString().equals("1")
                 && choice.getAsJsonObject("rule").get("nbt").getAsBoolean() && !choice.getAsJsonObject("rule").get("meta").getAsBoolean(),
                 "NASA exported display counts, required NBT, or a physically rejected wildcard");
         require(row.inputs.get(0).getAsJsonObject().get("slot").getAsInt() == 1 && row.properties.has("galacticraft:emptySlots"), "NASA fixed/empty slot requirements disappeared");
-        require(row.outputs.get(0).getAsJsonObject().get("amount").getAsString().equals("3") && row.elements.get(0).getAsJsonObject().get("x").getAsInt() == 40,
-                "NASA result count or native layout crop changed");
-        handler.arecipes.get(0).getResult().item.stackSize = 99;
-        handler.arecipes.get(0).getIngredients().get(0).item.setItemDamage(100);
+        require(row.outputs.get(0).getAsJsonObject().get("amount").getAsString().equals("3"),
+                "NASA result count changed");
         require(result.stackSize == 3 && paper.stackSize == 17 && paper.getItemDamage() == 2 && paper.getTagCompound().getInteger("ignored") == 1,
                 "NASA display mutated original native records");
+        List<Object> registered = new ArrayList<>(Collections.singletonList(recipe));
+        SpaceRecipes reader = new SpaceRecipes(registered, layout);
+        require(reader.capture(0, row(new ItemStack(Items.paper, 1, 2), result)), "NASA owned semantic reader failed");
+        reader.finishVerification();
+        result.stackSize = 4;
+        try {
+            try { reader.capture(0, row(new ItemStack(Items.paper, 1, 2), result)); throw new AssertionError("Changed native NASA output was silently recaptured"); }
+            catch (Jobs.Fault failure) { require(failure.code.equals("recipe_changed"), failure.toString()); }
+            try { reader.finishVerification(); throw new AssertionError("Changed native NASA output was sealed"); }
+            catch (Jobs.Fault failure) { require(failure.code.equals("recipe_changed"), failure.toString()); }
+        } finally { result.stackSize = 3; }
+        registered.add(recipe);
+        try { reader.verify(); throw new AssertionError("Changed native NASA registry count was ignored"); }
+        catch (Jobs.Fault failure) { require(failure.code.equals("recipe_changed"), failure.toString()); }
+        registered.remove(1);
+        reader.close(); reader.close();
+        try { reader.size(); throw new AssertionError("Closed NASA reader still exposed rows"); }
+        catch (Jobs.Fault failure) { require(failure.code.equals("capture_closed"), failure.toString()); }
         input.remove(2);
-        try { SpaceRecipes.capture(handler, recipe, layout, row(new ItemStack(Items.paper, 1, 2), result)); throw new AssertionError("Unconstrained usable native slot accepted"); }
+        try { SpaceRecipes.capture(recipe, layout, row(new ItemStack(Items.paper, 1, 2), result)); throw new AssertionError("Unconstrained usable native slot accepted"); }
         catch (Jobs.Fault expected) { require(expected.code.equals("recipe_unsupported"), "Wrong unconstrained slot failure"); }
         input.put(2, null);
         paper.setItemDamage(3);
-        require(!SpaceRecipes.capture(handler, recipe, layout, row(new ItemStack(Items.paper, 1, 3), result)), "Physically impossible registered recipe accepted");
+        require(!SpaceRecipes.capture(recipe, layout, row(new ItemStack(Items.paper, 1, 3), result)), "Physically impossible registered recipe accepted");
         paper.setItemDamage(2);
-        try { SpaceRecipes.capture(handler, new Object(), layout, row(paper, result)); throw new AssertionError("Unknown native predicate accepted"); }
+        try { SpaceRecipes.capture(new Object(), layout, row(paper, result)); throw new AssertionError("Unknown native predicate accepted"); }
         catch (Jobs.Fault expected) { require(expected.code.equals("recipe_unsupported"), "Wrong unknown NASA predicate failure"); }
         java.lang.reflect.Method returnMethod = SpaceRecipes.class.getDeclaredMethod("containerReturn", ItemStack.class, com.google.gson.JsonObject.class, Facts.class);
         returnMethod.setAccessible(true);
@@ -119,23 +139,23 @@ final class NativeSpaceTest {
         net.minecraft.entity.player.InventoryPlayer inventory = new net.minecraft.entity.player.InventoryPlayer(emptyPlayer());
         net.minecraft.inventory.Container container = (net.minecraft.inventory.Container) Class.forName(prefix + "inventory.schematic.ContainerSchematicShuttle")
                 .getConstructor(net.minecraft.entity.player.InventoryPlayer.class, int.class, int.class, int.class).newInstance(inventory, 0, 0, 0);
-        SpaceRecipes.Layout layout = new SpaceRecipes.Layout(container, 0);
-        require(layout.slots.size() == 21 && layout.output.xDisplayPosition == 142 && layout.output.yDisplayPosition == 96, "Native shuttle layout changed");
+        SpaceRecipes.Layout layout = new SpaceRecipes.Layout(container);
+        require(layout.slots.size() == 21 && layout.output.getSlotIndex() == 0, "Native shuttle inventory indices changed");
         require(layout.slots.get(1).isItemValid(new ItemStack(Items.paper, 1, 2)) && !layout.slots.get(1).isItemValid(new ItemStack(Items.paper, 1, 32767)),
                 "Native ItemDamagePair slot restrictions changed");
         require(layout.slots.get(21).isItemValid(new ItemStack(Items.diamond)), "Empty native type set is not an unrestricted slot");
         TemplateRecipeHandler handler = (TemplateRecipeHandler) Class.forName(prefix + "nei.recipehandler.ARNasaWorkbenchShuttle").newInstance();
         RecipeRow row = row(new ItemStack(Items.paper, 1, 2), output);
-        require(SpaceRecipes.capture(handler, recipe, layout, row), "Usable native shuttle recipe rejected");
+        require(SpaceRecipes.capture(recipe, layout, row), "Usable native shuttle recipe rejected");
         require(row.inputs.size() == 1 && row.inputs.get(0).getAsJsonObject().getAsJsonArray("choices").size() == 1
                 && row.properties.getAsJsonObject("galacticraft:emptySlots").getAsJsonObject("value").getAsJsonArray("values").size() == 20,
                 "Shuttle exact slot or empty positions lost");
-        require(row.elements.get(0).getAsJsonObject().get("x").getAsInt() == 44 && row.elements.get(0).getAsJsonObject().get("y").getAsInt() == 18,
-                "Native shuttle crop changed");
+        require(row.inputs.get(0).getAsJsonObject().get("slot").getAsInt() == 1,
+                "Native shuttle logical slot changed");
         require(!SpaceRecipes.shadowed(Collections.emptyList(), recipe, layout) && SpaceRecipes.shadowed(Collections.singletonList(recipe), recipe, layout),
                 "Shuttle native precedence lost");
         input.remove(21);
-        try { SpaceRecipes.capture(handler, recipe, layout, row(new ItemStack(Items.paper, 1, 2), output)); throw new AssertionError("Unconstrained shuttle slot accepted"); }
+        try { SpaceRecipes.capture(recipe, layout, row(new ItemStack(Items.paper, 1, 2), output)); throw new AssertionError("Unconstrained shuttle slot accepted"); }
         catch (Jobs.Fault expected) { require(expected.code.equals("recipe_unsupported"), "Wrong shuttle predicate failure"); }
         require(input.get(1).stackSize == 17 && inventory.getStackInSlot(0) == null, "Shuttle capture changed native or player inventory");
         System.out.println("Native AmunRa shuttle: 21-slot container, exact ItemDamagePair restrictions, explicit empty slots and owned layout passed");
@@ -157,7 +177,7 @@ final class NativeSpaceTest {
             net.minecraft.entity.player.InventoryPlayer inventory = new net.minecraft.entity.player.InventoryPlayer(player);
             net.minecraft.inventory.Container owned = (net.minecraft.inventory.Container) Class.forName(names.get(i))
                     .getConstructor(net.minecraft.entity.player.InventoryPlayer.class, int.class, int.class, int.class).newInstance(inventory, 0, 0, 0);
-            SpaceRecipes.Layout layout = new SpaceRecipes.Layout(owned, 16);
+            SpaceRecipes.Layout layout = new SpaceRecipes.Layout(owned);
             require(layout.slots.size() == counts[i] && layout.output != null, "Native workbench layout changed: " + names.get(i));
             require(inventory.getStackInSlot(0) == null, "Native empty constructor modified its player inventory");
         }

@@ -12,7 +12,7 @@ import org.lwjgl.opengl.GL30;
 /** Offscreen captures restore both fixed-function state and the bindings not covered by pushAttrib. */
 final class GlState implements AutoCloseable {
     private final String location;
-    private final int matrix, texture, draw, read, program, packBuffer;
+    private final int matrix, texture, draw, read, program, packBuffer, unpackBuffer;
     private final int[] bindings = new int[2];
     private final int[] units = { OpenGlHelper.defaultTexUnit, OpenGlHelper.lightmapTexUnit };
 
@@ -27,6 +27,7 @@ final class GlState implements AutoCloseable {
         read = GL11.glGetInteger(GL30.GL_READ_FRAMEBUFFER_BINDING);
         program = GL11.glGetInteger(GL20.GL_CURRENT_PROGRAM);
         packBuffer = GL11.glGetInteger(GL21.GL_PIXEL_PACK_BUFFER_BINDING);
+        unpackBuffer = GL11.glGetInteger(GL21.GL_PIXEL_UNPACK_BUFFER_BINDING);
         for (int index = 0; index < units.length; index++) {
             OpenGlHelper.setActiveTexture(units[index]);
             bindings[index] = GL11.glGetInteger(GL11.GL_TEXTURE_BINDING_2D);
@@ -49,6 +50,7 @@ final class GlState implements AutoCloseable {
         GL11.glPopClientAttrib(); GL11.glPopAttrib();
         GL20.glUseProgram(program);
         GL15.glBindBuffer(GL21.GL_PIXEL_PACK_BUFFER, packBuffer);
+        GL15.glBindBuffer(GL21.GL_PIXEL_UNPACK_BUFFER, unpackBuffer);
         for (int index = 0; index < units.length; index++) {
             OpenGlHelper.setActiveTexture(units[index]);
             GL11.glBindTexture(GL11.GL_TEXTURE_2D, bindings[index]);

@@ -1,9 +1,9 @@
 package com.github.dcysteine.nesql.exporter.capture;
 
-import codechicken.nei.PositionedStack;
 import codechicken.nei.recipe.ICraftingHandler;
 import codechicken.nei.recipe.TemplateRecipeHandler;
 import com.github.dcysteine.nesql.exporter.task.Jobs;
+import com.google.gson.JsonArray;
 import com.google.gson.JsonObject;
 import net.minecraft.client.Minecraft;
 import net.minecraft.entity.player.InventoryPlayer;
@@ -23,9 +23,10 @@ final class SpaceRecipes implements RegistryRecipes {
     private static final String GS = "galaxyspace.core.";
     private static final String AR = "de.katzenpapst.amunra.";
     private static final String RECIPE = GC + "core.recipe.NasaWorkbenchRecipe";
-    private final TemplateRecipeHandler handler;
     private final List<Object> recipes;
-    private final Layout layout;
+    private final NativeDefinitions definitions;
+    private Layout layout;
+    private boolean closed;
 
     static boolean supports(ICraftingHandler handler) {
         String name = handler.getClass().getName();
@@ -38,27 +39,39 @@ final class SpaceRecipes implements RegistryRecipes {
     }
 
     SpaceRecipes(TemplateRecipeHandler handler) {
-        version("GalacticraftCore", "3.3.13-GTNH");
+        this(registry(handler), () -> registry(handler), () -> layout(handler));
+    }
+
+    private static List<?> registry(TemplateRecipeHandler handler) {
+        return registry(handler, true);
+    }
+
+    static List<?> registrationSource(TemplateRecipeHandler handler) { return registry(handler, false); }
+
+    private static List<?> registry(TemplateRecipeHandler handler, boolean requireVersion) {
+        if (requireVersion) MagicApi.version("SpaceRecipes","GalacticraftCore");
         if (!supports(handler)) throw fault("Unknown NASA handler");
-        this.handler = handler;
         boolean galaxy = handler.getClass().getName().equals(GS + "nei.RocketRecipeHandler");
         boolean shuttle = handler.getClass().getName().equals(AR + "nei.recipehandler.ARNasaWorkbenchShuttle");
         int tier = galaxy ? (Integer) field(handler, "tier") : 0;
-        if (galaxy) version("GalaxySpace", "1.1.121-GTNH");
+        if (galaxy && requireVersion) MagicApi.version("SpaceRecipes","GalaxySpace");
         String registry = galaxy ? GS + "recipe.RocketRecipes" : GC + "api.GalacticraftRegistry";
         String getter = galaxy ? "getRocketT" + tier + "Recipes" : handler.getClass().getName().contains("Buggy")
                 ? "getBuggyBenchRecipes" : handler.getClass().getName().contains("Cargo") ? "getCargoRocketRecipes" : "getAstroMinerRecipes";
         List<?> registered;
         if (shuttle) {
-            version("GalacticraftAmunRa", "0.8.2");
+            if (requireVersion) MagicApi.version("SpaceRecipes","GalacticraftAmunRa");
             registered = (List<?>) invoke(type(AR + "crafting.RecipeHelper"), null, "getAllRecipesFor", new Class<?>[] {Item.class},
                     field(type(AR + "item.ARItems"), null, "shuttleItem"));
         } else registered = (List<?>) invoke(type(registry), null, getter, new Class<?>[0]);
-        if (registered == null) throw fault("NASA native registry is unavailable");
-        if (registered.size() > 262144) throw fault("NASA registry exceeds its budget");
-        recipes = new ArrayList<>(registered);
+        return registered;
+    }
+
+    private static Layout layout(TemplateRecipeHandler handler) {
+        boolean galaxy = handler.getClass().getName().equals(GS + "nei.RocketRecipeHandler");
+        boolean shuttle = handler.getClass().getName().equals(AR + "nei.recipehandler.ARNasaWorkbenchShuttle");
+        int tier = galaxy ? (Integer) field(handler, "tier") : 0;
         // Constructors query this registry with an empty matrix: reject unknown executable predicates first.
-        for (Object recipe : recipes) { Jobs.checkpoint(); audit(recipe); }
         String container = shuttle ? AR + "inventory.schematic.ContainerSchematicShuttle"
                 : galaxy ? GS + "inventory.container.rocket.ContainerSchematicTier" + tier + "Rocket"
                 : handler.getClass().getName().contains("Buggy") ? GC + "core.inventory.ContainerBuggyBench"
@@ -69,14 +82,38 @@ final class SpaceRecipes implements RegistryRecipes {
         Container owned = (Container) TinkerRecipes.construct(type(container),
                 new Class<?>[] {InventoryPlayer.class, int.class, int.class, int.class},
                 new InventoryPlayer(Minecraft.getMinecraft().thePlayer), 0, 0, 0);
-        layout = new Layout(owned, shuttle ? 0 : galaxy ? 4 - (Integer) field(handler, "y") : 16);
+        return new Layout(owned);
     }
 
-    public int size() { return recipes.size(); }
+    /** Owned layout plus native definitions for the same semantic reader, without client startup. */
+    SpaceRecipes(List<?> registered, Layout layout) {
+        this(registered, () -> registered, () -> layout);
+    }
+
+    private SpaceRecipes(List<?> registered, java.util.function.Supplier<List<?>> current,
+                         java.util.function.Supplier<Layout> layoutFactory) {
+        if (registered == null) throw new Jobs.Fault("handler_not_ready", "NASA native registry is unavailable");
+        if (registered.size() > 262144) throw fault("NASA registry exceeds its budget");
+        this.recipes = new ArrayList<>(registered);
+        // Audit before constructing a native container, which queries the registry with an empty matrix.
+        for (Object recipe : recipes) { Jobs.checkpoint(); audit(recipe); }
+        this.layout = layoutFactory.get();
+        if (this.layout == null) throw new Jobs.Fault("handler_not_ready", "NASA inventory predicates are unavailable");
+        this.definitions = new NativeDefinitions("NASA", registered, current, recipe -> definition(recipe, this.layout));
+    }
+
+    public int size() { verify(); return recipes.size(); }
+    public void verify() { if(closed)throw new Jobs.Fault("capture_closed","Native NASA reader is closed");definitions.verify(); }
+    public void finishVerification() { verify(); definitions.finishVerification(); }
+    public void close() { if(!closed){ recipes.clear(); definitions.close(); layout=null; closed=true; } }
     public boolean capture(int index, RecipeRow row) {
-        Object recipe = recipes.get(index);
-        if (shadowed(recipes.subList(0, index), recipe, layout)) return false;
-        return capture(handler, recipe, layout, row);
+        verify();
+        return definitions.checked(index, () -> {
+            Object recipe = recipes.get(index);
+            if (shadowed(recipes.subList(0, index), recipe, layout)) return row.exclude(object("native", RECIPE,
+                    "reason", "earlier_native_recipe_claims_all_admissible_inputs", "nativeIndex", index, "earlierEntries", index));
+            return capture(recipe, layout, row);
+        });
     }
 
     static boolean shadowed(List<?> previous, Object recipe, Layout layout) {
@@ -99,10 +136,10 @@ final class SpaceRecipes implements RegistryRecipes {
         return false;
     }
 
-    static boolean capture(TemplateRecipeHandler handler, Object recipe, Layout layout, RecipeRow row) {
+    static boolean capture(Object recipe, Layout layout, RecipeRow row) {
         audit(recipe);
         Map<Integer, ItemStack> inputs = inputs(recipe);
-        ArrayList<PositionedStack> display = new ArrayList<>();
+        int required = 0;
         List<Integer> empty = new ArrayList<>();
         for (Integer index : inputs.keySet()) if (!layout.slots.containsKey(index)) throw fault("NASA recipe references inaccessible slot " + index);
         for (Map.Entry<Integer, Slot> entry : layout.slots.entrySet()) {
@@ -120,27 +157,20 @@ final class SpaceRecipes implements RegistryRecipes {
                 if (slot.isItemValid(offered.copy())) choices.add(new RecipeRow.Ingredient(offered, 1, false,
                         object("kind", "wildcard", "meta", false, "nbt", true)));
             }
-            if (choices.isEmpty()) return false; // Native inventory cannot admit this registered ingredient.
-            PositionedStack position = new PositionedStack(choices.stream().map(choice -> choice.item.copy()).toArray(ItemStack[]::new),
-                    slot.xDisplayPosition - 4, slot.yDisplayPosition - layout.offsetY, false);
-            row.itemInput(position, index, choices, false);
+            if (choices.isEmpty()) return row.exclude(object("native", slot.getClass().getName(),
+                    "reason", "native_inventory_slot_rejects_registered_ingredient", "slot", index, "input", RecipeRow.stackEvidence(source)));
+            row.itemInput(index, choices, false);
             JsonObject semantic = row.inputs.get(row.inputs.size() - 1).getAsJsonObject();
             for (int alternative = 0; alternative < choices.size(); alternative++)
                 containerReturn(choices.get(alternative).item, semantic.getAsJsonArray("choices").get(alternative).getAsJsonObject(), row.facts);
-            display.add(position);
+            required++;
         }
-        if (display.isEmpty()) throw fault("NASA recipe has no required ingredients");
+        if (required == 0) throw fault("NASA recipe has no required ingredients");
         ItemStack output = (ItemStack) invoke(type(RECIPE), recipe, "getRecipeOutput", new Class<?>[0]);
         if (output == null || output.getItem() == null || output.stackSize <= 0) throw fault("Invalid NASA output");
-        PositionedStack result = new PositionedStack(output.copy(), layout.output.xDisplayPosition - 4, layout.output.yDisplayPosition - layout.offsetY, false);
-        row.itemOutput(result, 0, output, 10000);
+        row.itemOutput(0, output, 10000);
         if (!empty.isEmpty()) row.property("galacticraft:emptySlots", "Required empty workbench slots", empty);
-        row.property("galacticraft:layout", "Input slot numbering", "Native NASA workbench inventory indices; fixed positions");
-        handler.arecipes.clear();
-        handler.arecipes.add(handler.new CachedRecipe() {
-            @Override public List<PositionedStack> getIngredients() { return display; }
-            @Override public PositionedStack getResult() { return result; }
-        });
+        row.property("galacticraft:layout", "Input slot numbering", "Native NASA workbench inventory indices");
         return true;
     }
 
@@ -161,6 +191,30 @@ final class SpaceRecipes implements RegistryRecipes {
     }
     private static void audit(Object recipe) {
         if (recipe == null || !recipe.getClass().getName().equals(RECIPE)) throw fault("Unadapted NASA recipe: " + (recipe == null ? "null" : recipe.getClass().getName()));
+    }
+
+    private static JsonObject definition(Object recipe, Layout layout) {
+        audit(recipe);
+        Map<Integer, ItemStack> inputs = inputs(recipe);
+        JsonObject raw = object();
+        for (Map.Entry<Integer, ItemStack> entry : inputs.entrySet())
+            raw.add(Integer.toString(entry.getKey()), value(RecipeRow.stackEvidence(entry.getValue())));
+        JsonArray predicates = array();
+        for (Map.Entry<Integer, Slot> entry : layout.slots.entrySet()) {
+            Jobs.checkpoint();
+            ItemStack input = inputs.get(entry.getKey());
+            JsonArray admission = array();
+            if (input != null) {
+                for (int meta : input.getItemDamage() == 32767 ? new int[] {32767} : new int[] {input.getItemDamage(), 32767}) {
+                    ItemStack offered = input.copy(); offered.stackSize = 1; offered.setTagCompound(null); offered.setItemDamage(meta);
+                    admission.add(value(entry.getValue().isItemValid(offered)));
+                }
+            }
+            predicates.add(object("index", entry.getKey(), "class", entry.getValue().getClass().getName(),
+                    "disabled", disabled(entry.getValue()), "admission", admission));
+        }
+        ItemStack output = (ItemStack) invoke(type(RECIPE), recipe, "getRecipeOutput", new Class<?>[0]);
+        return object("input", raw, "output", RecipeRow.stackEvidence(output), "size", layout.size, "predicates", predicates);
     }
     @SuppressWarnings("unchecked")
     private static Map<Integer, ItemStack> inputs(Object recipe) {
@@ -187,9 +241,8 @@ final class SpaceRecipes implements RegistryRecipes {
     static final class Layout {
         final Map<Integer, Slot> slots = new TreeMap<>();
         final Slot output;
-        final int size, offsetY;
-        Layout(Container container, int offsetY) {
-            this.offsetY = offsetY;
+        final int size;
+        Layout(Container container) {
             IInventory matrix = (IInventory) field(container, "craftMatrix");
             size = matrix.getSizeInventory();
             if (size <= 1 || size > 129) throw fault("Invalid NASA inventory size");

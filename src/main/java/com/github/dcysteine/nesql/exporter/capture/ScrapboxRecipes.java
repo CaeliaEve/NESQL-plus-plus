@@ -1,6 +1,5 @@
 package com.github.dcysteine.nesql.exporter.capture;
 
-import codechicken.nei.PositionedStack;
 import codechicken.nei.recipe.ICraftingHandler;
 import codechicken.nei.recipe.TemplateRecipeHandler;
 import com.github.dcysteine.nesql.exporter.source.Chance;
@@ -19,14 +18,27 @@ final class ScrapboxRecipes implements RegistryRecipes {
     private static final String MANAGER = "ic2.core.item.ItemScrapbox$ScrapboxRecipeManager";
     private static final String DROP = "ic2.core.item.ItemScrapbox$Drop";
     private static final int SAMPLES = 1 << 24;
-    private final TemplateRecipeHandler handler;
     private final ItemStack box;
     private final List<Drop> drops;
+    private NativeDefinitionGraph bindings;
+    private boolean closed;
 
     static boolean supports(ICraftingHandler handler) {return handler.getClass().getName().equals(HANDLER);}
-    ScrapboxRecipes(TemplateRecipeHandler handler) {this(handler, registry(), box());}
+    ScrapboxRecipes(TemplateRecipeHandler handler) {
+        if(!supports(handler))throw fault("Unknown scrapbox handler");
+        try{
+          bindings=new NativeDefinitionGraph(ScrapboxRecipes::registrationAnchors,NativeDefinitionGraph.shapes(DROP,"item","upperChanceBound"));
+          ItemStack nativeBox=box();NativeStackAudit.audit(nativeBox);box=nativeBox.copy();box.stackSize=1;drops=read(registry());
+        }catch(RuntimeException|Error failure){close();throw failure;}
+    }
+    static boolean supportsClass(String name){return HANDLER.equals(name);}
+    static Object[] registrationAnchors(){Object manager=registry();if(manager==null||manager.getClass()!=type(MANAGER))throw new Jobs.Fault("handler_not_ready","Scrapbox drop manager is unavailable");return new Object[]{field(manager,"drops"),field(type(DROP),null,"topChance"),box()};}
+    public void verify(){alive();bindings.verifyRoots();}
+    public void finishVerification(){verify();bindings.verify();}
+    private void alive(){Jobs.checkpoint();if(closed)throw new Jobs.Fault("capture_closed","Scrapbox reader is closed");}
+    public void close(){closed=true;if(bindings!=null)bindings.close();if(drops!=null)drops.clear();}
     private static Object registry() {
-        version("IC2", "2.2.828-experimental");
+        MagicApi.version("ScrapboxRecipes","IC2");
         return field(type("ic2.api.recipe.Recipes"),null,"scrapboxDrops");
     }
     private static ItemStack box() {
@@ -35,11 +47,7 @@ final class ScrapboxRecipes implements RegistryRecipes {
             throw fault("Unknown scrapbox use behavior");
         return box;
     }
-    ScrapboxRecipes(TemplateRecipeHandler handler, Object manager, ItemStack box) {
-        if (!supports(handler) || manager == null || !manager.getClass().getName().equals(MANAGER)) throw fault("Unknown scrapbox manager");
-        this.handler=handler;
-        if (box == null || box.getItem() == null) throw fault("Missing scrapbox item");
-        this.box=box.copy();this.box.stackSize=1;
+    private static List<Drop> read(Object manager){
         List<?> records=(List<?>)field(manager,"drops");
         if (records == null || records.size() > 262144) throw fault("Invalid scrapbox drop registry");
         float total=(Float)field(type(DROP),null,"topChance"), previous=0;
@@ -63,19 +71,17 @@ final class ScrapboxRecipes implements RegistryRecipes {
             if(drop==null) {drop=new Drop(source.copy());outcomes.put(key,drop);}
             drop.samples+=next-prior;prior=next;
         }
-        drops=new ArrayList<>(outcomes.values());
+        return new ArrayList<>(outcomes.values());
     }
-    public int size() {return drops.size();}
+    public int size() {alive();return drops.size();}
     public boolean capture(int index, RecipeRow row) {
-        Drop drop=drops.get(index);
-        if(drop.samples==0)return false;
-        row.itemInput(new PositionedStack(box.copy(),51,24,false),0,1,false,false,object("kind","wildcard","meta",true,"nbt",true));
-        row.itemOutput(new PositionedStack(drop.item.copy(),111,24,false),0,drop.item.copy(),10000);
+        alive();Drop drop=drops.get(index);
+        if(drop.samples==0)return row.exclude(object("native",HANDLER,"reason","no_native_random_ticket_selects_this_drop",
+            "output",RecipeRow.stackEvidence(drop.item),"tickets",0,"sampleSpace",SAMPLES));
+        row.itemInput(0,Collections.singletonList(new RecipeRow.Ingredient(box.copy(),1,false,object("kind","wildcard","meta",true,"nbt",true))),false);
+        row.itemOutput(0,drop.item.copy(),10000);
         row.outputs.get(0).getAsJsonObject().add("chance",Chance.of(drop.samples,SAMPLES));
-        row.property("ic2:scrapboxOutcome","Drop selection","One opening consumes one scrapbox and selects exactly one outcome from this category; rows are mutually exclusive. Creative opening does not consume the box.");
-        handler.arecipes.clear();
-        handler.arecipes.add((TemplateRecipeHandler.CachedRecipe) TinkerRecipes.construct(type(HANDLER+"$CachedScrapboxRecipe"),
-            new Class<?>[]{handler.getClass(),Map.Entry.class},handler,new AbstractMap.SimpleImmutableEntry<>(drop.item.copy(),(float)drop.samples/SAMPLES)));
+        row.note("ic2:scrapbox-outcome","ic2.core.item.ItemScrapbox#getDrop",row.facts.locale().equals("zh_CN")?"每次打开消耗一个废料盒，并从本分类中选择且仅选择一种结果；各条配方互斥。创造模式打开时不消耗盒子。":"Each opening consumes one scrapbox and selects exactly one outcome from this category; rows are mutually exclusive. Creative mode does not consume the box.");
         return true;
     }
     /** Count k in [0,2^24) for which Java's rounded (k/2^24)*total is below bound. */

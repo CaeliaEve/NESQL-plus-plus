@@ -7,12 +7,14 @@ import { parseArgs } from 'node:util';
 import { execFile } from 'node:child_process';
 import { promisify } from 'node:util';
 import assert from 'node:assert/strict';
-import { prepare, canonical, sha, artifact, digest } from './plan.mjs';
+import { prepare, canonical, sha, artifact, digest, validateHandlerRoute } from './plan.mjs';
 import { GameClient, GameError } from './client.mjs';
 import { memoryPolicy, assessMemory, readMemory } from './resources.mjs';
 import { resolveReport } from './reports.mjs';
 import { CheckpointLog, readCheckpoint } from './checkpoint.mjs';
 import { visualChecks } from './visual-checks.mjs';
+import { archiveOutcomes } from './outcomes.mjs';
+import { JOB_ISOLATION_REVISION, scopedJobKey, assertJobScope, assertReportScope } from './job-scope.mjs';
 
 const execFileAsync = promisify(execFile);
 
@@ -75,13 +77,14 @@ export class AcceptanceCoordinator {
     if (existsSync(this.checkpointPath)) {
       try {
         const data = await readCheckpoint(this.checkpointPath, { repairTail: true });
-        if (data.fingerprint && data.fingerprint === currentFingerprint) {
+        if (data.jobIsolationRevision === JOB_ISOLATION_REVISION && data.fingerprint === currentFingerprint
+          && (!this.options.runId || this.options.runId === data.runId)) {
           // Restore persisted runId to ensure idempotence across restarts (C8)
           this.runId = data.runId || this.runId;
           this.journal = new CheckpointLog(this.checkpointPath, data);
           return data;
         }
-        console.warn(`[Coordinator] Checkpoint environment fingerprint mismatch (${data.fingerprint} vs ${currentFingerprint}); starting fresh.`);
+        console.warn(`[Coordinator] Checkpoint run, environment or Job isolation revision differs; starting fresh.`);
       } catch (err) {
         if (existsSync(this.checkpointPath + '.journal')) throw err;
         console.warn('[Coordinator] Corrupted checkpoint, starting fresh:', err.message);
@@ -89,6 +92,7 @@ export class AcceptanceCoordinator {
     }
     return {
       version: '0.15.0',
+      jobIsolationRevision: JOB_ISOLATION_REVISION,
       runId: this.runId,
       fingerprint: currentFingerprint,
       createdAt: new Date().toISOString(),
@@ -135,6 +139,12 @@ export class AcceptanceCoordinator {
     this.currentCheckpoint = null;
     this.journal = null;
     try { return await this.executePlan(plan, { onProgress }); }
+    catch (error) {
+      if (error.code === 'job_scope_mismatch' && this.currentCheckpoint) {
+        this.currentCheckpoint.scopeStop = { code: error.code, job: error.job, message: error.message, at: new Date().toISOString() };
+      }
+      throw error;
+    }
     finally { if (this.currentCheckpoint) await this.saveCheckpoint(this.currentCheckpoint, true); }
   }
 
@@ -171,6 +181,7 @@ export class AcceptanceCoordinator {
     const planHash = digest(JSON.stringify(canonical({ handlers: plan.handlers, probes: plan.probes ?? [], dependencies: plan.dependencies ?? {}, pageSize: this.options.pageSize ?? 4096, memory: plan.memory ?? null,
       source: plan.stages?.source ? { handlers: plan.stages.source.handlers ?? null, scope: plan.stages.source.scope ?? null } : null })));
     const envFingerprint = AcceptanceCoordinator.fingerprint({
+      jobIsolationRevision: JOB_ISOLATION_REVISION,
       world: actualWorld, exporter: game.exporter, revision: game.revision,
       modSha256: actualModSha, planHash, session: this.client.session,
       sources: game.sources, handlers: game.handlers, structures: game.structures,
@@ -181,9 +192,12 @@ export class AcceptanceCoordinator {
   }
 
   async executePlan(plan, { onProgress }) {
+    if(plan.diagnostics?.collectVisuals)assert.ok(!plan.stages?.source?.execute&&!plan.stages?.compiler?.execute,'Diagnostic collection must not export or compile');
     memoryPolicy(plan.memory);
     const game = await this.client.request('GET', '/game');
+    if(plan.diagnostics?.visualCoverage==='all')assert.equal(game.diagnosticContentRevision,1,'Full content diagnostics require the candidate content-audit API');
     const checkpoint = await this.loadCheckpoint(await this.planFingerprint(plan, game));
+    checkpoint.transportSession ??= this.client.session;
     const actualWorld = game.world?.folder || game.world?.name;
     this.currentCheckpoint = checkpoint;
 
@@ -243,34 +257,15 @@ export class AcceptanceCoordinator {
 
       console.log(`[Coordinator] Processing ${item.name} (${handlerId}) from offset ${state.offset}...`);
 
-      const domain = item.domain === 'structures' || ['domain:structure', 'domain:structures'].includes(item.route) || item.route?.startsWith('structure:') ? 'structures' : 'recipes';
-      if ((item.classification === 'domain' || item.classification === 'interactive') && domain !== 'structures') {
-        // Domain and interactive work is validated by the export pipeline, not
-        // by recipe pagination. Require a declared export dataset and record
-        // it as a pending route until the domain report is consumed. Never
-        // silently downgrade it to unsupported.
-        assert.ok(item.route && item.route.startsWith(`${item.classification}:`), `Invalid ${item.classification} route`);
-        state.status = 'pending';
-        state.route = item.route;
-        state.error = { code: 'domain_export_required', message: 'A complete source export and domain report are required for ' + item.route };
-        checkpoint.failures.push({ handler: handlerId, error: state.error });
-        await this.saveCheckpoint(checkpoint);
-        // A complete source stage may still run after diagnostics. Keep this
-        // route explicitly pending; never turn it into a recipe pass.
-        if (plan.stages?.source?.execute) continue;
-        throw new Error(state.error.message);
-      }
+      const domain = validateHandlerRoute(item);
+      // Reference and interactive handlers are still first-class NEI cursors.
+      // Recipes.Cursor exposes them through the same bounded row protocol
+      // (recordKind=references), so validate them with the same pagination
+      // and failure gates instead of leaving them pending until export.
 
       while (true) {
-        // Enforce key <= 80 characters strictly, including runId slice
-        const shortHash = createHash('sha256').update(handlerId).digest('hex').slice(0, 16);
-        const shortRun = this.runId.slice(-6);
-        const key = `chk-${shortRun}-${shortHash}-${state.offset}`;
-        if (key.length > 80) throw new Error(`Generated job key exceeds 80 chars: ${key}`);
-
         const limit = this.options.pageSize || 4096;
         const checkRequest = {
-          key,
           world: actualWorld,
           domain,
           probes: plan.probes ?? [{ count: 1, channels: {} }]
@@ -283,6 +278,8 @@ export class AcceptanceCoordinator {
           checkRequest.offset = state.offset;
           checkRequest.limit = limit;
         }
+        const key = scopedJobKey(checkpoint, this.runId, 'chk', checkRequest);
+        checkRequest.key = key;
 
         let jobId;
         if (checkpoint.activeJob && checkpoint.activeJob.key === key) {
@@ -300,23 +297,23 @@ export class AcceptanceCoordinator {
         while (true) {
           const poll = await this.client.request('GET', `/jobs/${jobId}`);
           job = poll.job;
+          if (job) assertJobScope(job, jobId, checkRequest, checkpoint, this.client.session);
           if (job && (job.state === 'checked' || job.state === 'failed' || job.state === 'cancelled')) {
             break;
           }
           await new Promise(resolve => setTimeout(resolve, 500));
         }
 
-        checkpoint.activeJob = null;
-        await this.saveCheckpoint(checkpoint);
-
         // Check for fatal errors that MUST stop the whole plan (R7 / C8 / U8)
         if (job.state === 'cancelled') {
+          checkpoint.activeJob = null;
           state.status = 'cancelled';
           await this.saveCheckpoint(checkpoint);
           throw new Error(`Acceptance plan cancelled during handler ${handlerId}`);
         }
 
         if (job.state === 'failed' && isFatalError(job.error)) {
+          checkpoint.activeJob = null;
           assertFailureDetails(job.error);
           state.status = 'failed';
           state.error = job.error;
@@ -325,6 +322,7 @@ export class AcceptanceCoordinator {
         }
 
         if (job.state !== 'checked') {
+          checkpoint.activeJob = null;
           if (job.error) assertFailureDetails(job.error);
           state.status = 'failed';
           state.error = job.error || { code: 'job_' + job.state, message: 'Job stopped without check completion' };
@@ -383,6 +381,8 @@ export class AcceptanceCoordinator {
 
         // Parse row and enforce strict protocol checks (C2)
         const reportData = await resolveReport(JSON.parse(rawReport.toString('utf8')), path.dirname(report.path));
+        assertReportScope(reportData, job, checkRequest, checkpoint, plan);
+        checkpoint.activeJob = null;
         if (!Array.isArray(reportData.rows)) {
           state.status = 'failed';
           state.error = { code: 'invalid_report_format', message: 'Report data has no rows array' };
@@ -414,7 +414,6 @@ export class AcceptanceCoordinator {
           await this.saveCheckpoint(checkpoint);
           break;
         }
-
         const validStatuses = ['passed', 'partial', 'failed', 'unsupported'];
         if (!row.status || typeof row.status !== 'string' || !validStatuses.includes(row.status)) {
           state.status = 'failed';
@@ -442,6 +441,17 @@ export class AcceptanceCoordinator {
           checkpoint.archivedReports.push(await this.archiveReport(job, rawReport, [row]));
           state.status = 'failed';
           state.error = { code: 'handler_unsupported', message: row.reason || 'Handler is unsupported' };
+          checkpoint.failures.push({ handler: handlerId, offset: state.offset, error: state.error });
+          await this.saveCheckpoint(checkpoint);
+          break;
+        }
+
+        const referenceHandler = item.classification === 'domain' || item.classification === 'interactive';
+        if (referenceHandler && row.recordKind !== 'references') {
+          state.status = 'failed';
+          state.error = row.recordKind === undefined
+            ? { code: 'missing_record_kind', message: `Reference handler ${handlerId} did not report recordKind=references` }
+            : { code: 'record_kind_mismatch', message: `Expected references records for ${item.classification}, got ${row.recordKind}` };
           checkpoint.failures.push({ handler: handlerId, offset: state.offset, error: state.error });
           await this.saveCheckpoint(checkpoint);
           break;
@@ -507,12 +517,19 @@ export class AcceptanceCoordinator {
         const rowOmitted = typeof row.failuresOmitted === 'number' ? row.failuresOmitted : 0;
 
         const archive = await this.archiveReport(job, rawReport, [row]);
+        if (game.diagnosticAccountingRevision === 1) assert.equal(row.accountingRevision, 1, 'Current exporter omitted native disposition accounting');
         checkpoint.archivedReports.push(archive);
 
         // Accumulate contiguous page data (C2)
         state.checked += row.checkedRecipes;
         state.failed.push(...row.failedRecipes);
         state.excluded.push(...row.excludedRecipes);
+        if (row.accountingRevision === 1) {
+          state.accountingRevision = 1;
+          state.nativeAccounting ??= { captured: 0, excluded: 0, duplicate: 0, reference: 0, emitted: 0, duplicates: 0 };
+          assert.equal(archive.outcomes.length, 1, 'Native diagnostic outcome evidence is incomplete');
+          for (const [key, value] of Object.entries(archive.outcomes[0].counts)) state.nativeAccounting[key] += value;
+        } else state.accountingRevision = 'legacy-boolean';
         if (row.failures.length > 0) {
           state.hasFailures = true;
           // Full reports and every per-recipe error have already been hash-verified and
@@ -554,6 +571,7 @@ export class AcceptanceCoordinator {
     }
 
     this.updateSummary(checkpoint);
+    if(plan.diagnostics?.collectVisuals)await this.runDiagnosticVisualStage(plan,checkpoint);
     if (plan.stages?.source?.execute) {
       checkpoint.stages ??= {};
       if (!checkpoint.stages.source?.status || checkpoint.stages.source.status === 'failed') {
@@ -568,15 +586,18 @@ export class AcceptanceCoordinator {
         await this.saveCheckpoint(checkpoint);
       }
     }
+    delete checkpoint.scopeStop;
     return checkpoint;
   }
 
   async runSourceStage(plan, checkpoint) {
+    assert.ok(!plan.diagnostics?.collectVisuals,'Diagnostic collection cannot start Source export');
+    assert.ok(!checkpoint.stages?.diagnosticVisual||checkpoint.stages.diagnosticVisual.status==='passed','Full content diagnostics contain failures or unchecked coverage');
     const stage = plan.stages.source;
     assert.ok(Array.isArray(stage.handlers) && stage.handlers.length, 'Source stage requires an explicit nonempty selection');
     assert.equal(new Set(stage.handlers).size, stage.handlers.length, 'Duplicate source handler');
     for (const id of stage.handlers) assert.match(id, /^category_[a-f0-9]{64}$/);
-    assert.ok(plan.handlers.every(item => item.classification === 'recipe'), 'Recipe export requires a recipe-only diagnostic plan');
+    assert.ok(plan.handlers.every(item => ['recipe', 'domain', 'interactive'].includes(item.classification)), 'Source export requires gameplay handlers only');
     assert.deepEqual([...stage.handlers].sort(), plan.handlers.map(item => item.id).sort(), 'Source selection differs from the diagnostic plan');
     assert.ok(stage.scope === undefined || stage.scope === 'recipes', 'Unsupported source scope');
     assert.ok(!checkpoint.activeJob && !checkpoint.resourceStop, 'Diagnostics are still active or stopped');
@@ -595,7 +616,7 @@ export class AcceptanceCoordinator {
       const visual = await this.runVisualStage(plan, checkpoint);
       assert.equal(visual.status, 'passed', 'Representative rendering failed; Source export is blocked');
     }
-    const request = { key: stage.key || `selection-${this.runId.slice(-12)}`, name: stage.name || 'gtnh-selection', profile: 'full', world: plan.world, probes: plan.probes,
+    const request = { name: stage.name || 'gtnh-selection', profile: 'full', world: plan.world, ...(plan.probes ? { probes: plan.probes } : {}),
       handlers: [...stage.handlers], ...(stage.scope === undefined ? {} : { scope: stage.scope }) };
     if (stage.resume !== undefined) {
       assert.equal(stage.scope, 'recipes', 'Recovery requires recipe scope');
@@ -605,9 +626,10 @@ export class AcceptanceCoordinator {
       const previous = checkpoint.stages?.source;
       assert.ok(previous?.status === 'failed' && previous.job === stage.resume.job, 'Recovery must reference the recorded failed Source attempt');
       assert.equal(previous.checkpoint?.sha256, stage.resume.sha256, 'Recovery digest differs from the recorded completed prefix');
-      assert.notEqual(request.key, previous.request?.key, 'Recovery must use a new key');
+      assert.notEqual(stage.key, previous.request?.key, 'Recovery must use a new key label');
       request.resume = { ...stage.resume };
     }
+    request.key = scopedJobKey(checkpoint, this.runId, 'src', request, stage.key ?? null);
     if (checkpoint.activeExport?.key !== request.key) await this.guardResources(plan, checkpoint, { stage: 'source' });
     const started = checkpoint.activeExport?.key === request.key
       ? checkpoint.activeExport
@@ -619,6 +641,7 @@ export class AcceptanceCoordinator {
     for (;;) {
       const response = await this.client.request('GET', `/jobs/${started.id}`);
       job = response.job;
+      if (job) assertJobScope(job, started.id, request, checkpoint, this.client.session);
       if (job && ['succeeded', 'failed', 'cancelled'].includes(job.state)) break;
       await new Promise(resolve => setTimeout(resolve, 1000));
     }
@@ -638,6 +661,9 @@ export class AcceptanceCoordinator {
   }
 
   async runCompilerStage(plan, checkpoint) {
+    assert.ok(!plan.diagnostics?.collectVisuals, 'Diagnostic collection cannot start Compiler');
+    assert.ok(!checkpoint.stages?.diagnosticVisual || checkpoint.stages.diagnosticVisual.status === 'passed',
+      'Full content diagnostics contain failures or unchecked coverage');
     await this.guardResources(plan, checkpoint, { stage: 'compiler' });
     const stage = plan.stages.compiler;
     const source = checkpoint.stages?.source?.result?.path;
@@ -652,6 +678,10 @@ export class AcceptanceCoordinator {
   }
 
   async runVisualStage(plan, checkpoint) { return visualChecks(this, plan, checkpoint, isFatalError); }
+  async runDiagnosticVisualStage(plan,checkpoint){
+    assert.ok(plan.diagnostics?.collectVisuals===true&&!plan.stages?.source?.execute&&!plan.stages?.compiler?.execute,'Diagnostic collection cannot export or compile');
+    return visualChecks(this,plan,checkpoint,isFatalError,{diagnostic:true});
+  }
 
   async guardResources(plan, checkpoint, target) {
     if (!memoryPolicy(plan.memory)) return;
@@ -675,7 +705,8 @@ export class AcceptanceCoordinator {
     await mkdir(directory, { recursive: true });
     const files = [];
     const evidence = [];
-    await resolveReport(JSON.parse(rawReport.toString('utf8')), path.dirname(job.report.path), async (reference, bytes) => {
+    const outcomes = [];
+    const fullReport = await resolveReport(JSON.parse(rawReport.toString('utf8')), path.dirname(job.report.path), async (reference, bytes) => {
       const archivePath = path.join(directory, reference.path);
       await mkdir(path.dirname(archivePath), { recursive: true });
       if (!existsSync(archivePath)) {
@@ -686,14 +717,28 @@ export class AcceptanceCoordinator {
       evidence.push({ ...reference, archivePath });
     });
     for (const row of rows) {
+      if (row.accountingRevision !== undefined || row.captureOutcomeFile) {
+        assert.equal(row.captureOutcomeFile?.path, `${job.id}-outcomes/${digest(Buffer.from(JSON.stringify(canonical({ handler: row.handler }))))}.jsonl.gz`, 'Native outcome ledger belongs to another job or handler');
+        outcomes.push(await archiveOutcomes(path.dirname(job.report.path), directory, row));
+      }
       const isResource = typeof row.resource === 'string';
       const isStructure = Number.isInteger(row.controller);
+      let targetFailureIndex = null;
+      if (!isResource && !isStructure && row.error) {
+        // Checks.sweep archives an open/finalization exception at the target's
+        // report ordinal, independently of per-recipe failure indices.
+        const matches = fullReport.rows.map((native, index) => ({ native, index }))
+          .filter(({ native }) => native.handler === row.handler && native.error);
+        assert.equal(matches.length, 1, 'Handler error belongs to another report target');
+        assert.deepEqual(matches[0].native.error, row.error, 'Handler error differs from native evidence');
+        targetFailureIndex = matches[0].index;
+      }
       const failures = isResource ? (row.status === 'failed' ? [row.resource] : []) : isStructure
         ? (row.status === 'passed' ? [] : [
           ...(Array.isArray(row.failedStructures) ? row.failedStructures : row.status === 'failed' ? [row.controller] : []),
           ...(Array.isArray(row.unsupportedStructures) ? row.unsupportedStructures : row.status === 'unsupported' ? [row.controller] : [])
         ])
-        : (row.failedRecipes ?? []);
+        : [...(row.failedRecipes ?? []), ...(targetFailureIndex === null ? [] : [targetFailureIndex])];
       const details = row.failureFiles ?? [];
       assert.equal(details.length, failures.length, 'Failure detail files are incomplete');
       const pending = isStructure || isResource ? null : new Set(failures);
@@ -707,6 +752,7 @@ export class AcceptanceCoordinator {
         else if (isStructure) assert.equal(detail.target.controller, row.controller);
         else assert.equal(detail.target.handler, row.handler);
         assert.equal(detail.index, entry.index);
+        if (targetFailureIndex === entry.index) assert.deepEqual(detail.error, row.error, 'Handler failure detail lost its native error');
         const archivePath = path.join(directory, path.basename(entry.path));
         await this.storeArtifact(archivePath, checked.bytes);
         files.push({ ...entry, archivePath });
@@ -715,7 +761,7 @@ export class AcceptanceCoordinator {
     }
     const archivePath = path.join(directory, 'report.json');
     await this.storeArtifact(archivePath, rawReport);
-    return { job: job.id, sourcePath: job.report.path, archivePath, sha256: digest(rawReport), bytes: rawReport.length, files, evidence };
+    return { job: job.id, sourcePath: job.report.path, archivePath, sha256: digest(rawReport), bytes: rawReport.length, files, evidence, outcomes };
   }
 
   async storeArtifact(file, bytes) {
@@ -740,7 +786,8 @@ if (process.argv[1] && import.meta.url === pathToFileURL(process.argv[1]).href) 
       const coordinator = new AcceptanceCoordinator(config.instance, { pageSize: config.pageSize ?? 4096, runId: config.runId });
       const result = await coordinator.runPlan(plan);
       console.log(JSON.stringify(result.summary));
-      process.exitCode = result.summary.failed || result.summary.unexamined || result.failures.length ? 1 : 0;
+      if(plan.diagnostics?.collectVisuals)console.log(JSON.stringify({diagnosticVisual:result.stages?.diagnosticVisual?.status,visualCoverage:result.stages?.diagnosticVisual?.coverage,exportExecuted:false}));
+      process.exitCode = result.summary.failed || result.summary.unexamined || result.failures.length || plan.diagnostics?.collectVisuals&&result.stages?.diagnosticVisual?.status!=='passed' ? 1 : 0;
     }
   } catch (error) {
     console.error(error.message);

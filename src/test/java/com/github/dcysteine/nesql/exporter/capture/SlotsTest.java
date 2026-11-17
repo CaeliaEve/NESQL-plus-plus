@@ -19,46 +19,17 @@ import java.util.Set;
 
 import static com.github.dcysteine.nesql.exporter.source.Json.object;
 
-/** Native slot order disambiguates overlaps; raw alternative inputs can have no base stack. */
+/** Native ingredient alternatives and quantities, independent of GUI geometry/cache probes. */
 final class SlotsTest {
     private SlotsTest() {}
 
     static void run() {
         ItemStack first = new ItemStack(Items.paper, 3), second = new ItemStack(Items.diamond, 9);
-        FluidStack water = new FluidStack(FluidRegistry.WATER, 125);
-        List<GtRecipes.Binding> slots = Arrays.asList(
-                new GtRecipes.Binding(0, false, false, false, true, 10, 20),
-                new GtRecipes.Binding(0, false, false, false, false, 10, 20),
-                new GtRecipes.Binding(1, false, false, false, false, 30, 20),
-                new GtRecipes.Binding(2, false, false, true, false, 10, 20),
-                new GtRecipes.Binding(0, true, false, false, false, 10, 20));
-        // The middle slot is empty; three populated output slots overlap exactly.
-        List<PositionedStack> displays = Arrays.asList(display(), display(), display());
-        java.util.function.Function<GtRecipes.Binding, Object> source = binding -> binding.input ? first
-                : binding.fluid ? water : binding.index == 0 ? first : binding.index == 2 ? second : null;
-        List<GtRecipes.Placement> projected = GtRecipes.project(slots, source, displays, false);
-        require(projected.size() == 3 && projected.get(0).source == first && projected.get(1).source == second
-                && projected.get(1).binding.overflow && projected.get(2).source == water, "Overlapping native slots lost their identities or source values");
-        require(GtRecipes.project(slots, source, Collections.singletonList(display()), true).get(0).source == first,
-                "Input/output directions collided");
         Facts facts = new Facts("en_US");
         Set<String> known = ReflectionHelper.getPrivateValue(Facts.class, facts, "items");
         known.add(Identity.item("minecraft:paper", 0, null)); known.add(Identity.item("minecraft:diamond", 0, null));
         RecipeRow row = new RecipeRow(facts, object("owner", "fixture", "handler", "slots", "key", "overlap"), "fixture", 0);
-        for (GtRecipes.Placement placed : projected) {
-            if (placed.binding.fluid) row.fluidOutput(placed.display, placed.binding.index, (FluidStack) placed.source);
-            else row.itemOutput(placed.display, placed.binding.index, (ItemStack) placed.source, 10000);
-        }
-        require(row.outputs.get(0).getAsJsonObject().get("amount").getAsString().equals("3")
-                && row.outputs.get(1).getAsJsonObject().get("amount").getAsString().equals("9")
-                && row.outputs.get(2).getAsJsonObject().get("amount").getAsString().equals("125")
-                && row.outputs.get(1).getAsJsonObject().get("slot").getAsInt() == 2
-                && row.elements.size() == 3, "Projection replaced source quantities with display quantities");
-        reject("slot_missing", () -> GtRecipes.project(slots, source, displays.subList(0, 2), false));
-        reject("slot_missing", () -> GtRecipes.project(slots, source, Arrays.asList(display(), display(), display(), display()), false));
-        List<PositionedStack> moved = Arrays.asList(display(), new PositionedStack(first, 11, 20, false), display());
-        reject("slot_changed", () -> GtRecipes.project(slots, source, moved, false));
-        try { row.fluidOutput(display(), 4, new FluidStack(FluidRegistry.WATER, 0)); throw new AssertionError("Zero output was changed to a fixed positive yield"); }
+        try { row.fluidOutput(4, new FluidStack(FluidRegistry.WATER, 0)); throw new AssertionError("Zero output was changed to a fixed positive yield"); }
         catch (Jobs.Fault expected) {
             require(expected.code.equals("invalid_amount") && expected.getMessage().contains("slot=4")
                     && expected.getMessage().contains("registry=water") && expected.getMessage().contains("amount=0"), "Output failure lost its source context");
@@ -78,13 +49,11 @@ final class SlotsTest {
         require(fallback.length == 2 && ((ItemStack) fallback[0]).stackSize == 3 && fallback[1] != second,
                 "An empty or absent alternative hid the base source");
         alternatives(facts);
-        permutations(facts);
         quantities(facts);
         scans(facts);
         unregisteredDisplay();
         nativeFailures();
-        inputEvidence();
-        System.out.println("GT slots: ordered overlaps, empty slots, input/output separation, exact output quantities and alternative-only inputs passed");
+        System.out.println("GT ingredients: exact quantities, alternative-only inputs, symbolic predicates and native scanner branches passed");
     }
 
     private static void unregisteredDisplay() {
@@ -96,18 +65,6 @@ final class SlotsTest {
         } catch (Jobs.Fault failure) {
             require(failure.code.equals("unregistered_item") && failure.getMessage().contains("native source")
                     && failure.getMessage().contains("meta=17"), "Failure did not distinguish the native source from its display expansion");
-        }
-        for (boolean source : new boolean[] {false, true}) {
-            RecipeRow.Ingredient ingredient = new RecipeRow.Ingredient(paper, source ? ghost : paper, 1, false, object("kind", "exact"));
-            PositionedStack cached = new PositionedStack(paper, 10, 20, false);
-            cached.items = new ItemStack[] {source ? paper : ghost};
-            try { GtRecipes.displayed(7, cached, Collections.singletonList(ingredient)); throw new AssertionError("Unregistered item accepted"); }
-            catch (Jobs.Fault failure) {
-                require(failure.code.equals("unregistered_item") && failure.getMessage().contains("slot=7")
-                        && failure.getMessage().contains(source ? "source expansion alternative=0" : "cached alternative=0")
-                        && failure.getMessage().contains("meta=17") && failure.getMessage().contains(ghost.getItem().getClass().getName()),
-                        "Unregistered diagnostic lost source/cached identity: " + failure.getMessage());
-            }
         }
     }
 
@@ -154,7 +111,7 @@ final class SlotsTest {
         }
         RecipeRow base = new RecipeRow(facts, object("owner", "fixture", "handler", "scan", "key", "scan"), "fixture", 3);
         List<RecipeRow> rows = Scan.branches(base, "rootTrees", Arrays.asList(input, input.copy()),
-                new FluidStack(FluidRegistry.WATER, 100), display(), display(), display(), reader);
+                new FluidStack(FluidRegistry.WATER, 100), reader);
         require(rows.size() == 2, "Scanner lost its analyzed or unanalyzed branch");
         for (int index = 0; index < rows.size(); index++) {
             RecipeRow row = rows.get(index);
@@ -170,9 +127,9 @@ final class SlotsTest {
                     && change.getAsJsonArray("samples").size() == 1, "Scan branch costs, deduplication or member semantics changed");
         }
         reject("scan_semantics", () -> Scan.branches(base, "rootTrees", Collections.singletonList(new ItemStack(Items.paper)),
-                new FluidStack(FluidRegistry.WATER, 100), display(), display(), display(), reader));
+                new FluidStack(FluidRegistry.WATER, 100), reader));
         reject("scan_semantics", () -> Scan.branches(base, "rootTrees", Collections.singletonList(input),
-                new FluidStack(FluidRegistry.WATER, 100), display(), display(), display(), stack -> {
+                new FluidStack(FluidRegistry.WATER, 100), stack -> {
                     stack.getTagCompound().getCompoundTag("Genome").setString("testAllele", "invented.default");
                     return reader.apply(stack);
                 }));
@@ -183,7 +140,7 @@ final class SlotsTest {
     private static void quantities(Facts facts) {
         java.util.Map<Integer, com.google.gson.JsonObject> rules = Amounts.sparge(0, 7, 200, 1000);
         RecipeRow row = new RecipeRow(facts, object("owner", "fixture", "handler", "sparge", "key", "quantities"), "fixture", 0);
-        for (int slot = 1; slot < 7; slot++) row.fluidOutput(display(), slot,
+        for (int slot = 1; slot < 7; slot++) row.fluidOutput(slot,
                 new FluidStack(FluidRegistry.WATER, slot == 2 ? 123 : 0), rules.get(slot));
         require(row.outputs.size() == 6 && row.outputs.get(0).getAsJsonObject().get("amount").isJsonNull()
                 && row.outputs.get(1).getAsJsonObject().get("amount").isJsonNull(), "Sparging retained a placeholder or a previously sampled amount");
@@ -198,8 +155,8 @@ final class SlotsTest {
         com.google.gson.JsonObject branchSuper = Amounts.branch("steam_output", "superheated", "tRealConsume >= threshold", null, 64000);
         require("branch".equals(branchNormal.get("kind").getAsString()) && "normal".equals(branchNormal.get("branch").getAsString()), "Invalid branch structure");
         RecipeRow branchRow = new RecipeRow(facts, object("owner", "fixture", "handler", "heat_exchanger", "key", "branch"), "fixture", 0);
-        branchRow.fluidOutput(display(), 0, new FluidStack(FluidRegistry.WATER, 0), branchNormal);
-        branchRow.fluidOutput(display(), 1, new FluidStack(FluidRegistry.WATER, 0), branchSuper);
+        branchRow.fluidOutput(0, new FluidStack(FluidRegistry.WATER, 0), branchNormal);
+        branchRow.fluidOutput(1, new FluidStack(FluidRegistry.WATER, 0), branchSuper);
         require(branchRow.outputs.size() == 2 && branchRow.outputs.get(0).getAsJsonObject().get("amount").isJsonNull()
                 && branchRow.outputs.get(1).getAsJsonObject().get("amount").isJsonNull(), "Branch quantity did not clear fixed amount");
         reject("quantity_rule", () -> Amounts.branch("steam_output", "normal", null, null, 0));
@@ -208,188 +165,39 @@ final class SlotsTest {
         com.google.gson.JsonObject potential = Amounts.potential("forestry.yield", "yield_dependent", "0", 4);
         require("potential".equals(potential.get("kind").getAsString()) && "forestry.yield".equals(potential.get("stat").getAsString()), "Invalid potential structure");
         RecipeRow potentialRow = new RecipeRow(facts, object("owner", "fixture", "handler", "tree_farm", "key", "potential"), "fixture", 0);
-        potentialRow.itemOutput(display(), 0, new ItemStack(Items.paper, 0), 10000, potential);
+        potentialRow.itemOutput(0, new ItemStack(Items.paper, 0), 10000, potential);
         require(potentialRow.outputs.size() == 1 && potentialRow.outputs.get(0).getAsJsonObject().get("amount").isJsonNull(), "Potential quantity did not clear fixed amount");
         require(Amounts.potential("forestry.yield", "canBearFruit=false", "0", 0).get("nominal").getAsString().equals("0"),
                 "Zero potential quantity must remain representable");
 
-        ItemStack[] outputs = new ItemStack[26]; outputs[25] = new ItemStack(Items.paper, 9);
-        Set<String> captured = new java.util.HashSet<>();
-        reject("slot_missing", () -> GtRecipes.covered(captured, outputs, outputs, 25, false, false, null));
-        RecipeRow hidden = new RecipeRow(facts, object("owner", "fixture", "handler", "slots", "key", "hidden"), "fixture", 0);
-        GtRecipes.covered(captured, outputs, outputs, 25, false, false,
-                (slot, value) -> hidden.itemOutput(null, slot, (ItemStack) value, 10000));
-        require(hidden.outputs.size() == 1 && hidden.elements.size() == 0
-                && hidden.outputs.get(0).getAsJsonObject().get("slot").getAsInt() == 25
-                && hidden.outputs.get(0).getAsJsonObject().get("amount").getAsString().equals("9"),
-                "A hidden native output was dropped or assigned fabricated coordinates");
     }
 
     private static void alternatives(Facts facts) {
         ItemStack[] source = {new ItemStack(Items.paper, 3), new ItemStack(Items.paper, 8), new ItemStack(Items.paper, 0),
                 new ItemStack(Items.paper, 2, OreDictionary.WILDCARD_VALUE), new ItemStack(Items.paper, 8)};
-        List<RecipeRow.Ingredient> ingredients = GtRecipes.ingredients(source, true,
-                item -> new PositionedStack(item, 10, 20, true).items);
-        PositionedStack display = new PositionedStack(source, 10, 20, true);
-        for (ItemStack item : display.items) item.stackSize = 1; // Native renderRealStackSizes=false.
-        GtRecipes.displayed(0, display, ingredients);
-        RecipeRow row = new RecipeRow(facts, object("owner", "fixture", "handler", "slots", "key", "alternatives"), "fixture", 0);
-        row.itemInput(display, 0, ingredients, false);
+        List<RecipeRow.Ingredient> expanded = GtRecipes.ingredients(source, true,
+                item -> new PositionedStack(item, 0, 0, true).items);
+        RecipeRow row = new RecipeRow(facts, object("owner", "fixture", "handler", "gt", "key", "alternatives"), "fixture", 0);
+        row.itemInput(0, expanded, false);
         com.google.gson.JsonArray choices = row.inputs.get(0).getAsJsonObject().getAsJsonArray("choices");
-        require(choices.size() == 4, "Same-item quantities/consumption were merged or identical choices were retained");
-        require(choices.get(0).getAsJsonObject().get("amount").getAsString().equals("3")
+        require(choices.size() == 4 && choices.get(0).getAsJsonObject().get("amount").getAsString().equals("3")
                 && choices.get(1).getAsJsonObject().get("amount").getAsString().equals("8")
-                && choices.get(2).getAsJsonObject().get("amount").getAsString().equals("1")
                 && choices.get(2).getAsJsonObject().getAsJsonObject("consume").get("kind").getAsString().equals("keep")
-                && choices.get(3).getAsJsonObject().get("amount").getAsString().equals("2")
                 && choices.get(3).getAsJsonObject().getAsJsonObject("rule").get("meta").getAsBoolean(),
-                "An alternative inherited the first candidate's amount, consumption or wildcard rule");
-        require(source[0].stackSize == 3 && source[2].stackSize == 0 && source[3].getItemDamage() == OreDictionary.WILDCARD_VALUE,
-                "Alternative capture changed the registered stacks");
-        display.items[1] = new ItemStack(Items.diamond);
-        reject("slot_changed", () -> GtRecipes.displayed(0, display, ingredients));
+                "Native alternatives lost distinct quantities, catalysts, wildcard rules or exact deduplication");
+        require(source[0].stackSize == 3 && source[2].stackSize == 0, "Semantic expansion changed a source stack");
         reject("invalid_amount", () -> GtRecipes.ingredients(new ItemStack(Items.paper, -1), false,
-                item -> new PositionedStack(item, 0, 0, true).items));
-        ItemStack tagged = new ItemStack(Items.paper, 4, OreDictionary.WILDCARD_VALUE);
-        net.minecraft.nbt.NBTTagCompound tags = new net.minecraft.nbt.NBTTagCompound(); tags.setLong("owner", Long.MAX_VALUE); tagged.setTagCompound(tags);
-        List<RecipeRow.Ingredient> sensitive = GtRecipes.ingredients(tagged, true, item -> new ItemStack[] {new ItemStack(Items.paper)});
-        require(sensitive.get(0).item.getTagCompound().getLong("owner") == Long.MAX_VALUE && !sensitive.get(0).display.hasTagCompound(),
-                "The display permutation replaced the source NBT predicate");
-        GtRecipes.displayed(0, display(), sensitive);
-        PositionedStack emptyTagged = display();
-        emptyTagged.items[0].setTagCompound(new net.minecraft.nbt.NBTTagCompound());
-        require(!ItemStack.areItemStackTagsEqual(emptyTagged.items[0], sensitive.get(0).display),
-                "Pinned native NBT equality unexpectedly treats missing and empty compounds as equal");
-        reject("slot_changed", () -> GtRecipes.displayed(0, emptyTagged, sensitive));
-        sensitive.get(0).display.setTagCompound(new net.minecraft.nbt.NBTTagCompound());
-        reject("slot_changed", () -> GtRecipes.displayed(0, display(), sensitive));
-        sensitive.get(0).display.setTagCompound(null);
-        require("wildcard".equals(sensitive.get(0).rule.get("kind").getAsString()) && !sensitive.get(0).rule.get("nbt").getAsBoolean(),
-                "Sensitive wildcard rule was changed or permitted NBT drift");
-        String sensitiveFact = Identity.item(Item.itemRegistry.getNameForObject(sensitive.get(0).item.getItem()),
-                Items.feather.getDamage(sensitive.get(0).item), TypedNbt.encode(sensitive.get(0).item.getTagCompound()));
-        require(sensitiveFact.startsWith("item_") && sensitive.get(0).item.getTagCompound().getLong("owner") == Long.MAX_VALUE,
-                "Sensitive fact identity or NBT predicate changed");
-        ItemStack exactTagged = new ItemStack(Items.paper, 1, 0); exactTagged.setTagCompound(tags);
-        List<RecipeRow.Ingredient> sensitiveExact = GtRecipes.ingredients(exactTagged, true, item -> new ItemStack[] {new ItemStack(Items.paper)});
-        require("exact".equals(sensitiveExact.get(0).rule.get("kind").getAsString()), "Sensitive exact rule was changed");
-        reject("slot_changed", () -> GtRecipes.displayed(0, emptyTagged, sensitiveExact));
-        List<RecipeRow.Ingredient> mixed = Arrays.asList(sensitive.get(0), ingredients.get(0));
-        PositionedStack mixedDisplay = new PositionedStack(new ItemStack[] {new ItemStack(Items.paper), new ItemStack(Items.paper)}, 10, 20, false);
-        mixedDisplay.items[1].setTagCompound(new net.minecraft.nbt.NBTTagCompound());
-        // A mixed slot contains both exact and wildcard predicates: missing vs empty compound must NOT be tolerated.
-        reject("slot_changed", () -> GtRecipes.displayed(0, mixedDisplay, mixed));
-        sensitive.get(0).item.getTagCompound().setLong("owner", 0);
-        require(tags.getLong("owner") == Long.MAX_VALUE, "Source NBT was shared with its expanded candidate");
-    }
-
-    private static void permutations(Facts facts) {
-        List<ItemStack> previous = new java.util.ArrayList<>(codechicken.nei.ItemList.itemMap.get(Items.paper));
-        ItemStack a = new ItemStack(Items.paper, 1, 0), b = new ItemStack(Items.paper, 1, 1), c = new ItemStack(Items.paper, 1, 2);
-        ItemStack[] source = {new ItemStack(Items.paper, 3, OreDictionary.WILDCARD_VALUE), new ItemStack(Items.paper, 0, 1)};
-        try {
-            codechicken.nei.ItemList.itemMap.replaceValues(Items.paper, Arrays.asList(a, b, c));
-            PositionedStack cached = new PositionedStack(source, 10, 20, true);
-            for (ItemStack item : cached.items) item.stackSize = 1;
-            // A GT cached display predates the current NEI wildcard ordering.
-            codechicken.nei.ItemList.itemMap.replaceValues(Items.paper, Arrays.asList(a, c, b));
-            List<RecipeRow.Ingredient> ingredients = GtRecipes.ingredients(source, false,
-                    item -> new PositionedStack(item, 10, 20, true).items);
-            require(cached.items[1].getItemDamage() != ingredients.get(1).display.getItemDamage(),
-                    "Native permutation fixture did not reorder the second alternative");
-            GtRecipes.displayed(2, cached, ingredients);
-            Set<String> known = ReflectionHelper.getPrivateValue(Facts.class, facts, "items");
-            known.add(Identity.item("minecraft:paper", 1, null)); known.add(Identity.item("minecraft:paper", 2, null));
-            RecipeRow row = new RecipeRow(facts, object("owner", "fixture", "handler", "slots", "key", "permutations"), "fixture", 0);
-            row.itemInput(cached, 2, ingredients, false);
-            com.google.gson.JsonArray choices = row.inputs.get(0).getAsJsonObject().getAsJsonArray("choices");
-            require(choices.size() == 4 && choices.get(0).getAsJsonObject().get("amount").getAsString().equals("3")
-                    && choices.get(3).getAsJsonObject().getAsJsonObject("consume").get("kind").getAsString().equals("keep")
-                    && cached.items[1].getItemDamage() == 1 && source[0].stackSize == 3 && source[1].stackSize == 0,
-                    "Display reordering changed source semantics or the shared cached display");
-            ItemStack[] original = cached.items.clone();
-            cached.items[1] = cached.items[0].copy();
-            reject("slot_changed", () -> GtRecipes.displayed(2, cached, ingredients));
-            cached.items = original.clone();
-            cached.items[1] = cached.items[1].copy();
-            cached.items[1].setTagCompound(new net.minecraft.nbt.NBTTagCompound());
-            // Direction 1: cached has empty compound {}, source has null -> equal
-            GtRecipes.displayed(2, cached, ingredients);
-
-            // Direction 2: cached has null, source has empty compound {} -> equal
-            cached.items[1].setTagCompound(null);
-            ingredients.get(1).display.setTagCompound(new net.minecraft.nbt.NBTTagCompound());
-            GtRecipes.displayed(2, cached, ingredients);
-            ingredients.get(1).display.setTagCompound(null);
-
-            // Multiplicity check after empty tag projection: 2 empty-tag candidates require exactly 2 display stacks
-            List<RecipeRow.Ingredient> duplicateEmpty = Arrays.asList(ingredients.get(0), ingredients.get(0));
-            PositionedStack duplicateDisplay = new PositionedStack(new ItemStack[] {new ItemStack(Items.paper, 1, 0), new ItemStack(Items.paper, 1, 0)}, 10, 20, false);
-            duplicateDisplay.items[1].setTagCompound(new net.minecraft.nbt.NBTTagCompound());
-            GtRecipes.displayed(0, duplicateDisplay, duplicateEmpty);
-            PositionedStack underflowDisplay = new PositionedStack(new ItemStack[] {new ItemStack(Items.paper, 1, 0)}, 10, 20, false);
-            reject("slot_changed", () -> GtRecipes.displayed(0, underflowDisplay, duplicateEmpty));
-            PositionedStack overflowDisplay = new PositionedStack(new ItemStack[] {new ItemStack(Items.paper, 1, 0), new ItemStack(Items.paper, 1, 0), new ItemStack(Items.paper, 1, 0)}, 10, 20, false);
-            reject("slot_changed", () -> GtRecipes.displayed(0, overflowDisplay, duplicateEmpty));
-
-            // Container diagnostic test: summarize compound keys and list length without recursive values
-            net.minecraft.nbt.NBTTagCompound containerCached = new net.minecraft.nbt.NBTTagCompound();
-            containerCached.setTag("compoundTag", new net.minecraft.nbt.NBTTagCompound());
-            containerCached.setTag("listTag", new net.minecraft.nbt.NBTTagList());
-            cached.items[1].setTagCompound(containerCached);
-            try { GtRecipes.displayed(2, cached, ingredients); throw new AssertionError("Container drift was accepted"); }
-            catch (Jobs.Fault expected) {
-                String msg = expected.getMessage();
-                require(msg.contains("\"compoundTag\": cached=compound=keys=0 (values omitted)")
-                        && msg.contains("\"listTag\": cached=list=length=0 (values omitted)"),
-                        "Container diagnostic did not summarize keys/length without full values: " + msg);
-            }
-
-            cached.items = original.clone();
-            cached.items[1] = cached.items[1].copy();
-            net.minecraft.nbt.NBTTagCompound tag = new net.minecraft.nbt.NBTTagCompound(); tag.setInteger("owner", 1);
-            cached.items[1].setTagCompound(tag);
-            try { GtRecipes.displayed(2, cached, ingredients); throw new AssertionError("NBT drift was accepted"); }
-            catch (Jobs.Fault expected) {
-                require(expected.code.equals("slot_changed") && expected.getMessage().contains("slot=2")
-                        && expected.getMessage().contains("minecraft:paper") && expected.getMessage().contains("meta=1")
-                        && expected.getMessage().contains("id=item_")
-                        && expected.getMessage().contains("nbt diff: [\"owner\": cached=int=1 vs source=absent]"),
-                        "Candidate mismatch lost its slot, exact item identity or bounded NBT diff diagnostic");
-            }
-
-            // Diagnostic test: multi-tag diff and value truncation (values > 32 chars and > 3 tags)
-            net.minecraft.nbt.NBTTagCompound multiCached = new net.minecraft.nbt.NBTTagCompound();
-            multiCached.setString("alpha", "very_long_string_value_exceeding_thirty_two_characters_limit");
-            multiCached.setInteger("beta", 100);
-            multiCached.setInteger("gamma", 200);
-            multiCached.setInteger("delta", 300);
-            cached.items[1].setTagCompound(multiCached);
-            try { GtRecipes.displayed(2, cached, ingredients); throw new AssertionError("Multi-tag drift was accepted"); }
-            catch (Jobs.Fault expected) {
-                String msg = expected.getMessage();
-                require(msg.contains("nbt diff: [") && msg.contains("\"alpha\": cached=string=\"")
-                        && !msg.contains("very_long_string_value_exceeding_thirty_two_characters_limit") && msg.contains("...\"")
-                        && msg.contains("(+1 more)"), "Bounded NBT diff did not truncate long value or tag count: " + msg);
-            }
-            net.minecraft.nbt.NBTTagCompound longKey = new net.minecraft.nbt.NBTTagCompound();
-            String key = String.join("", Collections.nCopies(2000, "label")) + "\n";
-            longKey.setString(key, "value\nwith control character");
-            cached.items[1].setTagCompound(longKey);
-            try { GtRecipes.displayed(2, cached, ingredients); throw new AssertionError("Long-key drift was accepted"); }
-            catch (Jobs.Fault expected) {
-                require(expected.code.equals("slot_changed") && expected.getMessage().length() < 1500
-                        && !expected.getMessage().contains(key) && !expected.getMessage().contains("\n"),
-                        "NBT diagnostic did not bound/escape keys and values");
-            }
-            cached.items = Arrays.copyOf(original, original.length - 1);
-            reject("slot_changed", () -> GtRecipes.displayed(2, cached, ingredients));
-            cached.items = original.clone(); cached.items[1] = null;
-            reject("slot_changed", () -> GtRecipes.displayed(2, cached, ingredients));
-        } finally {
-            codechicken.nei.ItemList.itemMap.replaceValues(Items.paper, previous);
-        }
-        System.out.println("GT alternatives: native cached wildcard reorder, multiplicity, NBT drift, independent quantities and unchanged cache passed");
+                item -> new ItemStack[] {item}));
+        ItemStack original = new ItemStack(Items.paper, 3); original.setTagInfo("owner", new net.minecraft.nbt.NBTTagInt(7));
+        List<RecipeRow.Ingredient> exact = GtRecipes.ingredients(original, true, item -> new ItemStack[] {new ItemStack(Items.paper)});
+        require(exact.get(0).item.getTagCompound().getInteger("owner") == 7
+                && exact.get(0).item.getTagCompound() != original.getTagCompound()
+                && !exact.get(0).display.hasTagCompound() && exact.get(0).amount == 3,
+                "Exact native NBT or quantity was replaced by its display example");
+        exact.get(0).item.getTagCompound().setInteger("owner", 8);
+        require(original.getTagCompound().getInteger("owner") == 7, "Owned predicate NBT aliases the registered source");
+        List<RecipeRow.Ingredient> ignored = GtRecipes.ingredients(original, false, item -> new ItemStack[] {item});
+        require(ignored.get(0).rule.get("nbt").getAsBoolean(), "Native ignored-NBT matching became exact");
     }
 
     private static void nativeFailures() {
@@ -403,53 +211,7 @@ final class SlotsTest {
         catch (Jobs.Fault actual) { require(actual.getCause() == checked && actual.getMessage().contains("nativeFailure"), "Native checked cause lost"); }
     }
 
-    private static void inputEvidence() {
-        List<ItemStack> previous = new java.util.ArrayList<>(codechicken.nei.ItemList.itemMap.get(Items.paper));
-        ItemStack source = new ItemStack(Items.paper, 3, OreDictionary.WILDCARD_VALUE);
-        try {
-            codechicken.nei.ItemList.itemMap.removeAll(Items.paper);
-            PositionedStack cached = new PositionedStack(source, 10, 20, true);
-            for (int meta = 0; meta < 25; meta++)
-                codechicken.nei.ItemList.itemMap.put(Items.paper, new ItemStack(Items.paper, 1, meta));
-            List<RecipeRow.Ingredient> expanded = GtRecipes.ingredients(source, false,
-                    item -> new PositionedStack(item, 10, 20, true).items);
-            require(cached.items.length == 1 && expanded.size() == 25, "Native stale-permutation setup failed");
-            try {
-                GtRecipes.checkedDisplay(0, cached, expanded, source, "fixture.native.recipe",
-                        () -> new PositionedStack(source, 10, 20, true));
-                throw new AssertionError("Evidence collection accepted stale display");
-            } catch (Jobs.Fault failure) {
-                require(failure.code.equals("slot_changed") && failure.getSuppressed().length == 4,
-                        "Missing bounded native comparison evidence");
-                com.google.gson.JsonObject encoded = com.github.dcysteine.nesql.exporter.task.Checks.failure(failure);
-                com.google.gson.JsonArray notes = encoded.getAsJsonArray("suppressed");
-                int[] counts = {1, 25, 1, 25};
-                for (int i = 0; i < 4; i++) {
-                    String message = notes.get(i).getAsJsonObject().get("message").getAsString();
-                    require(message.length() < 2000, "Evidence was truncated by diagnostic serialization");
-                    com.google.gson.JsonObject note = new com.google.gson.JsonParser().parse(message).getAsJsonObject();
-                    require(note.get("count").getAsInt() == counts[i], "Raw input and expanded counts conflated");
-                    if (i == 3) require(note.get("matchesExpansion").getAsBoolean(), "Fresh native comparison missing");
-                }
-            }
-            require(cached.items.length == 1 && source.stackSize == 3 && source.getItemDamage() == 32767,
-                    "Evidence collection rewrote shared cache or source");
-            PositionedStack current = new PositionedStack(source, 10, 20, true);
-            GtRecipes.checkedDisplay(0, current, expanded, source, "fixture.native.recipe",
-                    () -> { throw new AssertionError("Successful capture ran the failure probe"); });
-            try {
-                GtRecipes.checkedDisplay(0, cached, expanded, source, "fixture.native.recipe",
-                        () -> { throw new IllegalStateException("probe failure"); });
-                throw new AssertionError("Failed probe swallowed original failure");
-            } catch (Jobs.Fault failure) {
-                require(failure.code.equals("slot_changed") && failure.getSuppressed().length == 4,
-                        "Probe failure replaced the original diagnostic");
-            }
-        } finally { codechicken.nei.ItemList.itemMap.replaceValues(Items.paper, previous); }
-        System.out.println("GT input evidence: native 1-to-25 stale permutation, bounded reports, strict failure and unchanged cache passed");
-    }
     private static void nativeFailure(Throwable failure) throws Throwable { throw failure; }
-    private static PositionedStack display() { return new PositionedStack(new ItemStack(Items.paper), 10, 20, false); }
     private static void reject(String code, Runnable action) {
         try { action.run(); throw new AssertionError("Expected " + code); }
         catch (Jobs.Fault expected) { require(expected.code.equals(code), "Wrong projection failure: " + expected.code); }

@@ -3,18 +3,42 @@ package com.github.dcysteine.nesql.exporter.capture;
 import com.github.dcysteine.nesql.exporter.task.Jobs;
 import com.google.gson.JsonArray;
 import com.google.gson.JsonObject;
-import cpw.mods.fml.relauncher.ReflectionHelper;
 import gregtech.common.render.BaseMetaTileEntityRenderer;
 import gregtech.common.render.IMTERenderer;
 import gregtech.common.render.LaserRenderer;
-import gregtech.common.tileentities.render.TileEntityLaser;
+import gregtech.common.tileentities.render.RenderingTileEntityLaser;
+import net.minecraft.client.Minecraft;
+import net.minecraft.client.multiplayer.WorldClient;
 import net.minecraft.util.ResourceLocation;
 
 /** Headless adapter checks invoked by the existing source behavior suite. */
 public final class ModelsTest {
     private ModelsTest() {}
 
+    public static void main(String[] args) throws Exception {
+        run();
+        System.out.println("Target model geometry: clock phases, realism, float rounding, rotation, RGBA, winding and ownership passed");
+    }
+
     public static void run() {
+        try { fixture(); } catch (ReflectiveOperationException failure) { throw new AssertionError(failure); }
+    }
+
+    private static void fixture() throws ReflectiveOperationException {
+        java.lang.reflect.Field access = sun.misc.Unsafe.class.getDeclaredField("theUnsafe");
+        access.setAccessible(true);
+        sun.misc.Unsafe allocator = (sun.misc.Unsafe) access.get(null);
+        java.lang.reflect.Field singleton = Minecraft.class.getDeclaredField("theMinecraft");
+        singleton.setAccessible(true);
+        Object previous = singleton.get(null);
+        Minecraft client = (Minecraft) allocator.allocateInstance(Minecraft.class);
+        ClockWorld world = (ClockWorld) allocator.allocateInstance(ClockWorld.class);
+        client.theWorld = world;
+        singleton.set(null, client);
+        try { checks(world, allocator); } finally { singleton.set(null, previous); }
+    }
+
+    private static void checks(ClockWorld world, sun.misc.Unsafe allocator) throws InstantiationException {
         require(Models.world(0, false, true), "Entity renderer suppressed a standard world model");
         require(Models.world(100, true, true), "Entity renderer suppressed a registered world model");
         require(!Models.world(22, false, true) && !Models.world(-1, false, true), "Entity-only block required a world model");
@@ -28,7 +52,10 @@ public final class ModelsTest {
         unsupported(() -> Entities.emptyMachine(machine, custom));
         require(!Entities.emptyMachine(new BaseMetaTileEntityRenderer() {}, null), "Unknown dispatcher override was accepted");
 
-        TileEntityLaser tile = new TileEntityLaser();
+        RenderingTileEntityLaser tile = new RenderingTileEntityLaser();
+        ClockWorld detached = (ClockWorld) allocator.allocateInstance(ClockWorld.class);
+        detached.time = 9;
+        tile.setWorldObj(detached);
         LaserRenderer laser = new LaserRenderer();
         Models.Draft model = new Models.Draft(new JsonObject());
         Entities.capture(tile, laser, model);
@@ -39,14 +66,12 @@ public final class ModelsTest {
         Entities.capture(tile, laser, model);
         require(model.faces.size() == 1 && model.faces.get(0) == body, "Empty entity capture discarded the world model");
 
-        tile.shouldRender = true; tile.counter = 17; tile.red = 1; tile.green = .5f; tile.blue = 0;
-        ReflectionHelper.setPrivateValue(LaserRenderer.class, laser, .25d, "xOffset");
-        ReflectionHelper.setPrivateValue(LaserRenderer.class, laser, .75d, "zOffset");
+        tile.shouldRender = true; tile.red = 1; tile.green = .5f; tile.blue = 0;
         Entities.capture(tile, laser, model);
         require(model.faces.size() == 5 && model.faces.get(0) == body, "Laser capture did not add both sides to the body");
         JsonArray front = model.faces.get(1).record.getAsJsonArray("vertices");
         JsonArray back = model.faces.get(2).record.getAsJsonArray("vertices");
-        point(front, 0, .47f, -3, .5f); point(front, 2, .28f, .5f, .25f);
+        point(front, 0, .47f, -3, .5f); point(front, 2, .53f, .5f, .5f);
         for (int i = 0; i < 4; i++) {
             require(front.get(i).equals(back.get(3 - i)), "Laser back face has the wrong winding");
             require(front.get(i).getAsJsonObject().get("color").getAsLong() == 0xff7f00b2L, "Laser vertex lost its color or opacity");
@@ -57,18 +82,32 @@ public final class ModelsTest {
         require(plain.pixels.getWidth() == 1 && plain.pixels.getHeight() == 1 && plain.pixels.getRGB(0, 0) == -1,
                 "Untextured geometry acquired a resource-pack tint");
 
+        world.time = 1;
+        model.faces.clear(); Entities.capture(tile, laser, model);
+        point(model.faces.get(0).record.getAsJsonArray("vertices"), 0, .47f, -3, .5f);
+        point(model.faces.get(0).record.getAsJsonArray("vertices"), 2, .70220757f, .5f, .05f);
         tile.realism = true;
         model.faces.clear(); Entities.capture(tile, laser, model);
-        point(model.faces.get(0).record.getAsJsonArray("vertices"), 0, .22f, -3, .25f);
+        point(model.faces.get(0).record.getAsJsonArray("vertices"), 0, .64220756f, -3, .05f);
+        world.time = 16777217L;
+        model.faces.clear(); Entities.capture(tile, laser, model);
+        point(model.faces.get(0).record.getAsJsonArray("vertices"), 0, .47f, -3, .5f);
         tile.realism = false; tile.rotationAngle = 90; tile.rotAxisZ = 2;
         model.faces.clear(); Entities.capture(tile, laser, model);
         point(model.faces.get(0).record.getAsJsonArray("vertices"), 0, -3, .53f, .5f);
-        require(tile.counter == 17 && tile.rotationAngle == 90 && tile.rotAxisZ == 2, "Capture changed native laser state");
-        require((double) ReflectionHelper.getPrivateValue(LaserRenderer.class, laser, "xOffset") == .25
-                && (double) ReflectionHelper.getPrivateValue(LaserRenderer.class, laser, "zOffset") == .75, "Capture advanced shared laser offsets");
+        require(tile.rotationAngle == 90 && tile.rotAxisZ == 2 && !tile.realism && tile.shouldRender
+                && tile.red == 1 && tile.green == .5f && tile.blue == 0 && tile.getWorldObj() == detached,
+                "Capture changed native laser state");
+        require(world.time == 16777217L && detached.time == 9, "Capture advanced native world time");
         tile.rotationAngle = Double.NaN;
         unsupported(() -> Entities.capture(tile, laser, new Models.Draft(new JsonObject())));
-        unsupported(() -> Entities.capture(new TileEntityLaser() {}, laser, new Models.Draft(new JsonObject())));
+        unsupported(() -> Entities.capture(new RenderingTileEntityLaser() {}, laser, new Models.Draft(new JsonObject())));
+    }
+
+    public static final class ClockWorld extends WorldClient {
+        long time;
+        private ClockWorld() { super(null, null, 0, null, null); }
+        @Override public long getTotalWorldTime() { return time; }
     }
 
     private static void point(JsonArray vertices, int index, float x, float y, float z) {

@@ -1,7 +1,5 @@
 package com.github.dcysteine.nesql.exporter.capture;
 
-import codechicken.nei.recipe.TemplateRecipeHandler;
-import codechicken.nei.PositionedStack;
 import com.github.dcysteine.nesql.exporter.task.Jobs;
 import com.google.gson.*;
 import forestry.api.recipes.ISqueezerRecipe;
@@ -60,25 +58,7 @@ final class SqueezerEntries {
     ISqueezerRecipe recipe(int index){return copy(recipes.get(index));}
     JsonObject selector(int index){return new JsonParser().parse(selectors.get(index).toString()).getAsJsonObject();}
 
-    TemplateRecipeHandler.CachedRecipe cached(TemplateRecipeHandler handler,int index){
-        if(!handler.getClass().getName().equals(PREFIX+"nei.NEIHandlerSqueezer"))throw fault("Wrong squeezer handler");
-        try{
-            ISqueezerRecipe source=recipe(index);
-            ItemStack[] original=source.getResources();
-            ItemStack[] visible=Arrays.stream(original).filter(Objects::nonNull).toArray(ItemStack[]::new);
-            // Native stock ignores null holes, but NEI's constructor rejects them.
-            // Construct its same positioned stacks, then restore the original grid
-            // coordinates. The owned source and rule selector retain every hole.
-            TemplateRecipeHandler.CachedRecipe cached=(TemplateRecipeHandler.CachedRecipe)type(handler.getClass().getName()+"$CachedSqueezerRecipe")
-                .getConstructor(handler.getClass(),ISqueezerRecipe.class,boolean.class).newInstance(handler,copy(source,visible),true);
-            @SuppressWarnings("unchecked") List<PositionedStack> positions=(List<PositionedStack>)field(cached,"inputs");
-            int display=0;
-            for(int slot=0;slot<original.length;slot++)if(original[slot]!=null){
-                PositionedStack position=positions.get(display++);position.relx=12+slot%3*18;position.rely=10+slot/3*18;
-            }
-            return cached;
-        }catch(ReflectiveOperationException error){Jobs.Fault failure=fault("Cannot construct owned native squeezer layout");failure.initCause(error);throw failure;}
-    }
+    void close(){recipes.clear();selectors.clear();}
 
     private void add(ISqueezerRecipe recipe,JsonObject selector){
         if(recipes.size()>=327680)throw fault("Squeezer cursor exceeds ordinary/fixed registry budget");

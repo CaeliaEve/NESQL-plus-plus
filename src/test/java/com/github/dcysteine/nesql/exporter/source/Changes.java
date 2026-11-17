@@ -24,7 +24,7 @@ final class Changes {
         String base=item(items,"fixture:soul_spawner",0,null,false,"Broken spawner 破损刷怪笼",texture,text);
         NBTTagCompound ztag=new NBTTagCompound();ztag.setString("mobType","Zombie");NBTTagCompound stag=new NBTTagCompound();stag.setString("mobType","Sheep");
         String zo=item(items,"fixture:soul_spawner",0,ztag,false,"Zombie bound spawner 僵尸刷怪笼",texture,text),so=item(items,"fixture:soul_spawner",0,stag,false,"Sheep bound spawner 绵羊刷怪笼",texture,text);
-        categories.add(object("id",category,"source",origin,"name",text.apply("EnderIO Soul Binder 灵魂绑定机"),"icon",object("kind","item","id",vessel),"machines",array(),"view",null,"order",categories.size()));
+        categories.add(object("id",category,"source",origin,"name",text.apply("EnderIO Soul Binder 灵魂绑定机"),"icon",object("kind","item","id",vessel),"machines",array(),"order",categories.size()));
         for(int n=0;n<2;n++){
             boolean spawner=n==1;
             JsonObject filter=object("vessel",vessel,"names",spawner?array(null,"Forbidden"):array(null,"Zombie"),"exclude",spawner);
@@ -35,7 +35,7 @@ final class Changes {
             outputs.add(object("kind","item","slot",0,"id",vessel,"amount",spawner?"1":null,"change",null,"role","result","chance",Chance.of(1,1),"quantity",spawner?null:object("kind","soul","nominal","1")));
             outputs.add(object("kind","item","slot",1,"id",spawner?zo:product,"amount",spawner?"1":null,"change",spawner?object("input",0,"action",object("kind","soul","base",base),"samples",array(object("id",zo,"amount","1"),object("id",so,"amount","1"))):null,"role","result","chance",Chance.of(1,1),"quantity",spawner?null:object("kind","soul","nominal","2")));
             JsonArray earlier=spawner?array(object("soul",object("vessel",vessel,"names",array(null,"Zombie"),"exclude",false),"material",object("id",vessel,"rule",object("kind","wildcard","meta",false,"nbt",true)))):array();
-            JsonObject row=object("source",origin,"category",category,"order",n,"inputs",inputs,"outputs",outputs,"process",object("kind","soul","energy",1000,"levels",16,"experience",272,"capacity",825,"drains",spawner,"spawner",spawner,"earlier",earlier),"duration",null,"energy",null,"grid",null,"magic",null,"view",null,"properties",new JsonObject());
+            JsonObject row=object("source",origin,"category",category,"order",n,"inputs",inputs,"outputs",outputs,"process",object("kind","soul","energy",1000,"levels",16,"experience",272,"capacity",825,"drains",spawner,"spawner",spawner,"earlier",earlier),"duration",null,"energy",null,"grid",null,"magic",null,"properties",new JsonObject());
             row.addProperty("id",Identity.recipe(row));recipes.add(row);
         }
     }
@@ -48,7 +48,7 @@ final class Changes {
         String result=item(items,"fixture:sag_output",0,null,false,"SAG output 磨粉产物",texture,text);
         String ball=item(items,"fixture:sag_ball",0,null,false,"SAG ball 研磨珠",texture,text);
         String prior=item(items,"fixture:sag_input",1,null,false,"SAG earlier 前序材料",texture,text);
-        categories.add(object("id",category,"source",origin,"name",text.apply("EnderIO SAG Mill 磨粉机"),"icon",object("kind","item","id",material),"machines",array(),"view",null,"order",categories.size()));
+        categories.add(object("id",category,"source",origin,"name",text.apply("EnderIO SAG Mill 磨粉机"),"icon",object("kind","item","id",material),"machines",array(),"order",categories.size()));
         JsonArray inputs=array();
         for(int i=0;i<2;i++){
             JsonObject c=choice(i==0?material:ball);c.add("rule",object("kind","wildcard","meta",i==0,"nbt",true));c.add("consume",object("kind",i==0?"allocated":"reserve"));
@@ -61,7 +61,7 @@ final class Changes {
             "balls",array(object("choices",array(ballCase),"grinding","2.5","chance","2.0","power","0.5","duration",10000)),
             "blocked",array(priorCase),"oreBlocked",array(priorCase));
         JsonObject output=object("kind","item","slot",0,"id",result,"amount",null,"change",null,"role","result","chance",Chance.of(1,1),"quantity",object("kind","grinding","nominal","2","threshold","0.5"));
-        JsonObject row=object("source",origin,"category",category,"order",0,"inputs",inputs,"outputs",array(output),"process",process,"duration",null,"energy",null,"grid",null,"magic",null,"view",null,"properties",new JsonObject());
+        JsonObject row=object("source",origin,"category",category,"order",0,"inputs",inputs,"outputs",array(output),"process",process,"duration",null,"energy",null,"grid",null,"magic",null,"properties",new JsonObject());
         row.addProperty("id",Identity.recipe(row));recipes.add(row);
     }
 
@@ -73,7 +73,7 @@ final class Changes {
         String result=item(items,"fixture:splice_output",0,null,false,"Splice output 头颅装配产物",texture,text);
         String axe=item(items,"fixture:splice_axe",0,null,false,"Splice axe 装配斧头",texture,text);
         String shears=item(items,"fixture:splice_shears",0,null,false,"Splice shears 装配剪刀",texture,text);
-        categories.add(object("id",category,"source",origin,"name",text.apply("EnderIO Slice and Splice 头颅装配机"),"icon",object("kind","item","id",material),"machines",array(),"view",null,"order",categories.size()));
+        categories.add(object("id",category,"source",origin,"name",text.apply("EnderIO Slice and Splice 头颅装配机"),"icon",object("kind","item","id",material),"machines",array(),"order",categories.size()));
         JsonArray inputs=array();
         for(int i=0;i<4;i++){
             JsonObject c=choice(i<2?material:i==2?axe:shears);
@@ -81,7 +81,7 @@ final class Changes {
             inputs.add(object("kind","item","slot",i<2?i:i+4,"choices",array(c)));
         }
         JsonObject output=object("kind","item","slot",0,"id",result,"amount",null,"change",null,"role","result","chance",Chance.of(1,1),"quantity",object("kind","sharedRoll","nominal","1","threshold","1.0"));
-        JsonObject row=object("source",origin,"category",category,"order",0,"inputs",inputs,"outputs",array(output),"process",object("kind","splice","energy",2000,"slots",array(5,0)),"duration",null,"energy",null,"grid",null,"magic",null,"view",null,"properties",new JsonObject());
+        JsonObject row=object("source",origin,"category",category,"order",0,"inputs",inputs,"outputs",array(output),"process",object("kind","splice","energy",2000,"slots",array(5,0)),"duration",null,"energy",null,"grid",null,"magic",null,"properties",new JsonObject());
         row.addProperty("id",Identity.recipe(row));recipes.add(row);
     }
 
@@ -92,7 +92,7 @@ final class Changes {
         String iron=item(items,"fixture:alloy_input",0,null,false,"Alloy input 合金材料",texture,text);
         String gold=item(items,"fixture:alloy_output",0,null,false,"Alloy output 合金产物",texture,text);
         String rare=item(items,"fixture:alloy_output",1,null,false,"Alloy rare 稀有产物",texture,text);
-        categories.add(object("id",category,"source",origin,"name",text.apply("EnderIO Alloy Smelter 合金炉"),"icon",object("kind","item","id",iron),"machines",array(),"view",null,"order",categories.size()));
+        categories.add(object("id",category,"source",origin,"name",text.apply("EnderIO Alloy Smelter 合金炉"),"icon",object("kind","item","id",iron),"machines",array(),"order",categories.size()));
         JsonArray inputs=array(),outputs=array();
         for(int i=0;i<2;i++){
             JsonObject c=choice(iron);c.addProperty("amount",Integer.toString(i+1));c.add("consume",object("kind","allocated"));
@@ -101,7 +101,7 @@ final class Changes {
                 "quantity",object("kind","sharedRoll","nominal",Integer.toString(i+2),"threshold",i==0?"0.5":"0.0")));
         }
         JsonObject row=object("source",origin,"category",category,"order",0,"inputs",inputs,"outputs",outputs,"process",object("kind","alloy","energy",1200,"slots",array(1,0)),
-            "duration",null,"energy",null,"grid",null,"magic",null,"view",null,"properties",new JsonObject());
+            "duration",null,"energy",null,"grid",null,"magic",null,"properties",new JsonObject());
         row.addProperty("id",Identity.recipe(row));recipes.add(row);
     }
 
@@ -112,7 +112,7 @@ final class Changes {
         String left=item(items,"fixture:vat_reagent",0,null,false,"Vat reagent 储液罐反应物",texture,text);
         String right=item(items,"fixture:vat_reagent",1,null,false,"Vat catalyst 储液罐催化物",texture,text);
         String extra=item(items,"fixture:vat_optional",0,null,false,"Vat optional 额外材料",texture,text);
-        categories.add(object("id",category,"source",origin,"name",text.apply("EnderIO Vat 末影接口储液罐"),"icon",object("kind","item","id",left),"machines",array(),"view",null,"order",categories.size()));
+        categories.add(object("id",category,"source",origin,"name",text.apply("EnderIO Vat 末影接口储液罐"),"icon",object("kind","item","id",left),"machines",array(),"order",categories.size()));
         for(int mode=0;mode<3;mode++) {
             JsonArray inputs=array(), rules=array();
             for(int slot=0;slot<(mode==0?2:1);slot++) {
@@ -128,7 +128,7 @@ final class Changes {
             JsonArray outputs=mode==2?array():array(object("slot",0,"kind","fluid","id",Identity.fluid("honey",null),"amount","1788","quantity",null,"chance",Chance.of(1,1),"role","result","change",null));
             JsonObject row=object("source",origin,"category",category,"order",mode,"inputs",inputs,"outputs",outputs,
                 "process",object("kind","vat","energy",1200,"extra",rules,"zeroOutput",mode==2?Identity.fluid("honey",null):null),
-                "duration",null,"energy",null,"grid",null,"magic",null,"view",null,"properties",new JsonObject());
+                "duration",null,"energy",null,"grid",null,"magic",null,"properties",new JsonObject());
             row.addProperty("id",Identity.recipe(row));recipes.add(row);
         }
     }
@@ -139,7 +139,7 @@ final class Changes {
         String category=Identity.origin("category",origin);
         String book=item(items,"minecraft:writable_book",0,null,false,"Book and Quill 书与笔",texture,text);
         String material=item(items,"fixture:enchanter_material",4,null,false,"Enchanter material 附魔材料",texture,text);
-        categories.add(object("id",category,"source",origin,"name",text.apply("EnderIO Enchanter 末影接口附魔器"),"icon",object("kind","item","id",book),"machines",array(),"view",null,"order",categories.size()));
+        categories.add(object("id",category,"source",origin,"name",text.apply("EnderIO Enchanter 末影接口附魔器"),"icon",object("kind","item","id",book),"machines",array(),"order",categories.size()));
         for(int level:new int[]{1,2,5}) {
             NBTTagCompound tag=new NBTTagCompound(),ench=new NBTTagCompound();NBTTagList list=new NBTTagList();
             ench.setShort("id",(short)16);ench.setShort("lvl",(short)level);list.appendTag(ench);tag.setTag("StoredEnchantments",list);
@@ -151,7 +151,7 @@ final class Changes {
                 "inputs",array(object("slot",0,"kind","item","choices",array(bookChoice)),object("slot",1,"kind","item","choices",array(materialChoice))),
                 "outputs",array(object("slot",0,"kind","item","id",output,"amount","1","quantity",null,"chance",Chance.of(1,1),"role","result","change",null)),
                 "process",object("kind","enchanter","level",level,"maxLevel",5,"itemsPerLevel",3,"cost",7+2*level*level),
-                "duration",null,"energy",null,"grid",null,"magic",null,"view",null,"properties",new JsonObject());
+                "duration",null,"energy",null,"grid",null,"magic",null,"properties",new JsonObject());
             row.addProperty("id",Identity.recipe(row));recipes.add(row);
         }
     }
@@ -165,7 +165,7 @@ final class Changes {
         String bottom = item(items,"fixture:inscriber_bottom",0,null,false,"Inscriber bottom 下模板",texture,text);
         String name = item(items,"fixture:name_press",0,null,false,"Name press 命名模板",texture,text);
         String output = item(items,"fixture:processor",0,null,false,"Inscriber output 压印产物",texture,text);
-        categories.add(object("id",category,"source",origin,"name",text.apply("Inscriber 压印器"),"icon",object("kind","item","id",center),"machines",array(),"view",null,"order",categories.size()));
+        categories.add(object("id",category,"source",origin,"name",text.apply("Inscriber 压印器"),"icon",object("kind","item","id",center),"machines",array(),"order",categories.size()));
         for(int mode=0;mode<3;mode++) {
             JsonArray inputs=array();
             for(int slot=0;slot<3;slot++) {
@@ -177,7 +177,7 @@ final class Changes {
             }
             JsonObject row=object("source",origin,"category",category,"order",mode,"inputs",inputs,
                 "outputs",array(object("slot",0,"kind","item","id",output,"amount","3","quantity",null,"chance",Chance.of(1,1),"role","result","change",null)),
-                "duration",null,"energy",null,"grid",null,"magic",null,"view",null,"properties",new JsonObject(),
+                "duration",null,"energy",null,"grid",null,"magic",null,"properties",new JsonObject(),
                 "process",object("kind","inscriber","mode",mode==0?"inscribe":"press","top",mode==2?null:top,"bottom",bottom,"namePress",name));
             row.addProperty("id",Identity.recipe(row)); recipes.add(row);
         }
@@ -199,13 +199,13 @@ final class Changes {
             inputs.add(object("kind", "item", "slot", slot, "choices", array(choice))); cells.add(value(slot));
         }
         categories.add(object("id", category, "source", origin, "name", text.apply("Map scaling 地图扩展"),
-                "icon", object("kind", "item", "id", center), "machines", array(), "view", null, "order", categories.size()));
+                "icon", object("kind", "item", "id", center), "machines", array(), "order", categories.size()));
         JsonObject row = object("source", origin, "category", category, "order", 0, "inputs", inputs,
                 "outputs", array(object("slot", 0, "kind", "item", "id", output, "amount", "1", "quantity", null,
                         "chance", Chance.of(1,1), "role", "result", "change", object("input", 4,
                                 "action", object("kind", "mapScaling"), "samples", array(stack(output))))),
                 "duration", null, "energy", null, "grid", object("width", 3, "height", 3, "cells", cells, "mirror", true),
-                "view", null, "properties", new JsonObject(), "process", object("kind", "mapScaling"), "magic", null);
+                "properties", new JsonObject(), "process", object("kind", "mapScaling"), "magic", null);
         row.addProperty("id", Identity.recipe(row)); recipes.add(row);
     }
 
@@ -232,11 +232,11 @@ final class Changes {
                 Identity.origin("aspect", object("owner", "Thaumcraft", "handler", "thaumcraft.api.aspects.Aspect", "key", key)),
                 "amount", key.equals("potentia") ? "256" : "128"));
         categories.add(object("id", category, "source", origin, "name", text.apply("Runic 符文注魔"),
-                "icon", object("kind", "item", "id", center), "machines", array(), "view", null, "order", categories.size()));
+                "icon", object("kind", "item", "id", center), "machines", array(), "order", categories.size()));
         JsonObject row = object("source", origin, "category", category, "order", 0, "inputs", inputs,
                 "outputs", array(object("slot", 0, "kind", "item", "id", output, "amount", "1", "quantity", null,
                         "chance", Chance.of(1,1), "role", "result", "change", object("input", 0, "action", object("kind", "runic"), "samples", array(stack(output))))),
-                "duration", null, "energy", null, "grid", null, "view", null, "properties", new JsonObject(),
+                "duration", null, "energy", null, "grid", null, "properties", new JsonObject(),
                 "process", object("kind", "runic", "charge", 3), "magic", object("kind", "infusion", "central", 0, "instability", 6,
                         "aspects", costs, "research", array(object("key", "RUNICAUGMENTATION", "id", null, "completed", null)), "payment", null, "creative", false));
         row.addProperty("id", Identity.recipe(row)); recipes.add(row);
@@ -262,19 +262,19 @@ final class Changes {
             for (JsonArray cases : samples) cases.add(stack(ids[1]));
         }
         categories.add(object("id", category, "source", origin, "name", text.apply("Scanner 基因扫描"), "icon", object("kind", "item", "id", choices[0].get(0).getAsJsonObject().get("id")),
-                "machines", new JsonArray(), "view", null, "order", categories.size()));
+                "machines", new JsonArray(), "order", categories.size()));
         for (int state = 0; state < 2; state++) {
             JsonObject output = object("slot", 0, "kind", "item", "id", samples[state].get(0).getAsJsonObject().get("id"), "amount", "1", "quantity", null,
                     "chance", object("numerator", "1", "denominator", "1"), "role", "result", "change", object("input", 0, "action", object("kind", "analyze"), "samples", samples[state]));
             JsonObject row = object("source", origin, "category", category, "inputs", array(object("slot", 0, "kind", "item", "choices", choices[state]),
                     object("slot", 0, "kind", "fluid", "choices", array(object("id", honey, "amount", "100", "consume", object("kind", state == 0 ? "consume" : "keep"), "returns", new JsonArray(), "rule", object("kind", "exact"))))),
                     "outputs", array(output), "duration", state == 0 ? "500" : "1", "energy", state == 0 ? "2" : "1", "grid", null, "magic", null,
-                    "properties", new JsonObject(), "view", null, "order", state);
+                    "properties", new JsonObject(), "order", state);
             row.addProperty("id", Identity.recipe(row)); recipes.add(row);
         }
     }
 
-    static void fixture(List<JsonObject> items, List<JsonObject> recipes, List<JsonObject> categories, List<JsonObject> views,
+    static void fixture(List<JsonObject> items, List<JsonObject> recipes, List<JsonObject> categories,
                         String paper, String texture, Function<String, String> text) {
         NBTTagCompound memory = new NBTTagCompound();
         memory.setLong("energy", 9007199254740993L); memory.setInteger("mark", 0);
@@ -286,14 +286,8 @@ final class Changes {
         NBTTagCompound markedMemory = copy(memory); markedMemory.setInteger("mark", 1);
         String markedRemembered = item(items, "minecraft:paper", 3, markedMemory, false, "Marked memory 铭记纸", texture, text);
 
-        JsonArray elements = array(object("kind", "slot", "direction", "input", "substance", "item", "slot", 0, "x", 32, "y", 20, "width", 16, "height", 16, "z", 1),
-                object("kind", "slot", "direction", "input", "substance", "item", "slot", 1, "x", 8, "y", 54, "width", 16, "height", 16, "z", 1),
-                object("kind", "slot", "direction", "output", "substance", "item", "slot", 0, "x", 112, "y", 20, "width", 16, "height", 16, "z", 1),
-                object("kind", "cost", "index", 0, "x", 64, "y", 54, "width", 16, "height", 16, "z", 2));
-        JsonObject view = object("width", 176, "height", 85, "elements", elements);
-        String viewId = Identity.content("view", view); view.addProperty("id", viewId); views.add(view);
         recipe(recipes, categories, "imprint", "Tag infusion 标签注魔", Arrays.asList(paper, remembered),
-                Arrays.asList(marked, markedRemembered), object("kind", "patch", "set", object("mark", TypedNbt.encode(new NBTTagInt(1))), "limits", new JsonObject()), paper, viewId, text);
+                Arrays.asList(marked, markedRemembered), object("kind", "patch", "set", object("mark", TypedNbt.encode(new NBTTagInt(1))), "limits", new JsonObject()), paper, text);
 
         String armor = item(items, "fixture:armor", 7, null, true, "Armor blank 空白护甲", texture, text);
         NBTTagCompound input = new NBTTagCompound();
@@ -318,16 +312,16 @@ final class Changes {
         String selective = item(items, "fixture:robe", 2, filtered, true, "Robe filtered 筛选法袍", texture, text);
         List<String> centers = Arrays.asList(armor, named, remembered);
         recipe(recipes, categories, "inherit", "NBT inheritance 数据继承", centers, Arrays.asList(base, inherited, base),
-                object("kind", "merge", "base", stack(base), "keys", null, "tools", true), paper, viewId, text);
+                object("kind", "merge", "base", stack(base), "keys", null, "tools", true), paper, text);
         recipe(recipes, categories, "copy", "NBT copy 数据传承", centers, Arrays.asList(bare, copied, bare),
-                object("kind", "merge", "base", stack(bare), "keys", null, "tools", true), paper, viewId, text);
+                object("kind", "merge", "base", stack(bare), "keys", null, "tools", true), paper, text);
         recipe(recipes, categories, "filter", "NBT filter 定向继承", centers, Arrays.asList(base, selective, base),
-                object("kind", "merge", "base", stack(base), "keys", array("display"), "tools", true), paper, viewId, text);
-        wands(items, recipes, categories, views, texture, text);
+                object("kind", "merge", "base", stack(base), "keys", array("display"), "tools", true), paper, text);
+        wands(items, recipes, categories, texture, text);
     }
 
     private static void wands(List<JsonObject> items, List<JsonObject> recipes, List<JsonObject> categories,
-                              List<JsonObject> views, String texture, Function<String, String> text) {
+                              String texture, Function<String, String> text) {
         String core = item(items, "fixture:core", 0, null, false, "Wand core 杖芯", texture, text);
         String cap = item(items, "fixture:cap", 0, null, false, "Wand cap 杖端", texture, text);
         String screw = item(items, "fixture:screw", 0, null, false, "Wand screw 螺丝", texture, text);
@@ -358,7 +352,7 @@ final class Changes {
             JsonObject origin = object("owner", "fixture", "handler", "fixture:wand", "key", "wand_" + mode);
             String category = Identity.origin("category", origin);
             categories.add(object("id", category, "source", origin, "name", text.apply(titleText), "icon", object("kind", "item", "id", centers.get(0)),
-                    "machines", new JsonArray(), "view", null, "order", categories.size()));
+                    "machines", new JsonArray(), "order", categories.size()));
             NBTTagCompound set = new NBTTagCompound(); set.setString(rod ? "rod" : "cap", rod ? staffMode ? "new_staff" : "silverwood" : "gold");
             if (staffMode) {
                 NBTTagCompound attribute = new NBTTagCompound(); attribute.setString("AttributeName", "generic.attackDamage");
@@ -394,19 +388,12 @@ final class Changes {
                 supplies.add(conductor); supplies.add(conductor);
             } else supplies.add(cap);
             for (String supply : supplies) inputs.add(object("slot", inputs.size(), "kind", "item", "choices", array(choice(supply))));
-            JsonArray elements = new JsonArray();
-            for (int slot = 0; slot < inputs.size(); slot++) elements.add(object("kind", "slot", "direction", "input", "substance", "item", "slot", slot,
-                    "x", 8 + slot % 3 * 20, "y", 8 + slot / 3 * 20, "width", 16, "height", 16, "z", 1));
-            elements.add(object("kind", "slot", "direction", "output", "substance", "item", "slot", 0, "x", 112, "y", 28, "width", 16, "height", 16, "z", 1));
-            JsonObject view = object("width", 160, "height", 82, "elements", elements);
-            String viewId = Identity.content("view", view); view.addProperty("id", viewId);
-            if (views.stream().noneMatch(existing -> existing.get("id").getAsString().equals(viewId))) views.add(view);
             JsonObject action = object("kind", "patch", "set", TypedNbt.encode(set).getAsJsonObject().get("value"), "limits", limits);
             JsonObject output = object("slot", 0, "kind", "item", "id", samples.get(0).getAsJsonObject().get("id"), "amount", "1",
                     "quantity", null, "chance", object("numerator", "1", "denominator", "1"), "role", "result", "change", object("input", 0, "action", action, "samples", samples));
             JsonObject payment = staffMode ? null : object("input", 0, "charges", object(air, "air", fire, "fire"), "capacity", capacity, "preserve", !clear);
             JsonObject recipe = object("source", origin, "category", category, "inputs", inputs, "outputs", array(output), "duration", null, "energy", null,
-                    "grid", null, "properties", new JsonObject(), "view", viewId, "order", 0,
+                    "grid", null, "properties", new JsonObject(), "order", 0,
                     "magic", object("kind", "arcane", "central", null, "instability", null, "research", new JsonArray(), "payment", payment, "creative", true,
                             "aspects", mode.equals("creative") ? new JsonArray() : array(object("aspect", fire, "amount", "2"))));
             recipe.addProperty("id", Identity.recipe(recipe)); recipes.add(recipe);
@@ -414,11 +401,11 @@ final class Changes {
     }
 
     private static void recipe(List<JsonObject> recipes, List<JsonObject> categories, String key, String name,
-                               List<String> inputs, List<String> outputs, JsonObject action, String paper, String view, Function<String, String> text) {
+                               List<String> inputs, List<String> outputs, JsonObject action, String paper, Function<String, String> text) {
         JsonObject origin = object("owner", "fixture", "handler", "fixture:" + key, "key", key);
         String category = Identity.origin("category", origin);
         categories.add(object("id", category, "source", origin, "name", text.apply(name), "icon", object("kind", "item", "id", inputs.get(0)),
-                "machines", new JsonArray(), "view", null, "order", categories.size()));
+                "machines", new JsonArray(), "order", categories.size()));
         JsonArray choices = new JsonArray(), samples = new JsonArray();
         for (String input : inputs) choices.add(choice(input));
         for (String output : outputs) samples.add(stack(output));
@@ -428,7 +415,7 @@ final class Changes {
                 "quantity", null, "chance", object("numerator", "1", "denominator", "1"), "role", "result", "change", object("input", 0, "action", action, "samples", samples));
         JsonObject recipe = object("source", origin, "category", category,
                 "inputs", array(object("slot", 0, "kind", "item", "choices", choices), object("slot", 1, "kind", "item", "choices", array(choice(paper)))),
-                "outputs", array(output), "duration", null, "energy", null, "grid", null, "properties", new JsonObject(), "view", view, "order", 0,
+                "outputs", array(output), "duration", null, "energy", null, "grid", null, "properties", new JsonObject(), "order", 0,
                 "magic", object("kind", "infusion", "central", 0, "instability", 4, "payment", null, "creative", false, "aspects", array(object("aspect", aspect, "amount", "2")),
                         "research", array(object("key", "BASICS", "id", research, "completed", null))));
         recipe.addProperty("id", Identity.recipe(recipe)); recipes.add(recipe);
@@ -440,7 +427,7 @@ final class Changes {
         JsonObject origin = object("owner", "fixture", "handler", "fixture:rolling", "key", "rolling");
         String category = Identity.origin("category", origin);
         categories.add(object("id", category, "source", origin, "name", text.apply("Rolling machine 轧制机"), "icon", object("kind","item","id",stone),
-                "machines", array(), "view", null, "order", categories.size()));
+                "machines", array(), "order", categories.size()));
         JsonObject priorGrid = object("width",2,"height",1,"cells",array(0,null),"mirror",true);
         JsonObject predicate = object("kind","wildcard","meta",false,"nbt",true);
         for (boolean shaped : new boolean[] {true, false}) {
@@ -449,7 +436,7 @@ final class Changes {
                     "inputs",array(object("slot",0,"kind","item","choices",array(first)),object("slot",1,"kind","item","choices",array(second))),
                     "outputs",array(object("slot",0,"kind","item","id",paper,"amount","2","quantity",null,"chance",object("numerator","1","denominator","1"),"role","result","change",null)),
                     "duration",null,"energy",null,"grid",shaped ? object("width",2,"height",2,"cells",array(0,null,null,1),"mirror",false) : null,
-                    "properties",object(),"magic",null,"view",null,"order",shaped ? 0 : 1,
+                    "properties",object(),"magic",null,"order",shaped ? 0 : 1,
                     "process",object("kind","rolling","powered",shaped,"earlier",array(object("grid",priorGrid,"inputs",array(array(object("id",priorItem,"rule",predicate)))))));
             recipe.addProperty("id", Identity.recipe(recipe)); recipes.add(recipe);
         }
@@ -460,7 +447,7 @@ final class Changes {
         JsonObject origin = object("owner", "ExtraUtilities", "handler", "com.rwtema.extrautils.nei.EnderConstructorHandler", "key", "qed");
         String category = Identity.origin("category", origin);
         categories.add(object("id", category, "source", origin, "name", text.apply("QED 量子纠缠装置"),
-                "icon", object("kind", "item", "id", stone), "machines", array(), "view", null, "order", categories.size()));
+                "icon", object("kind", "item", "id", stone), "machines", array(), "order", categories.size()));
         JsonObject predicate = object("kind", "wildcard", "meta", false, "nbt", true);
         JsonObject input = choice(stone); input.add("rule", predicate);
         JsonObject recipe = object("source", origin, "category", category, "order", 0,
@@ -470,7 +457,7 @@ final class Changes {
                 "process", object("kind", "qed", "enderFlux", "20000", "earlier", array(object("grid", null,
                         "inputs", array(array(object("id", paper, "rule", predicate)))))),
                 "grid", object("width", 1, "height", 1, "cells", array(0), "mirror", true),
-                "duration", null, "energy", null, "magic", null, "view", null, "properties", object());
+                "duration", null, "energy", null, "magic", null, "properties", object());
         recipe.addProperty("id", Identity.recipe(recipe)); recipes.add(recipe);
     }
 
@@ -480,7 +467,7 @@ final class Changes {
         JsonObject origin = object("owner", "fixture", "handler", "galaxyspace.core.nei.AssemblyMachineRecipeHandler", "key", "assembly");
         String category = Identity.origin("category", origin);
         categories.add(object("id", category, "source", origin, "name", text.apply("GalaxySpace Assembly 太空装配机"),
-                "icon", object("kind", "item", "id", stone), "machines", array(), "view", null, "order", categories.size()));
+                "icon", object("kind", "item", "id", stone), "machines", array(), "order", categories.size()));
         JsonObject predicate = object("kind", "wildcard", "meta", false, "nbt", true);
         JsonObject first = choice(stone), second = choice(paper);
         first.add("rule", predicate); second.add("rule", predicate);
@@ -490,9 +477,9 @@ final class Changes {
                 "outputs", array(object("kind", "item", "slot", 0, "id", paper, "amount", "70", "quantity", null,
                         "chance", Chance.of(1, 1), "role", "result", "change", null)),
                 "process", object("kind", "galaxyspace-assembly", "earlier", array(object("grid", null,
-                        "inputs", array(array(object("id", prior, "rule", predicate)))))),
+                        "inputs", array(array(object("id", prior, "rule", predicate))))), "repair", array()),
                 "grid", object("width", 2, "height", 2, "cells", array(0, null, null, 1), "mirror", true),
-                "duration", null, "energy", null, "magic", null, "view", null, "properties", object());
+                "duration", null, "energy", null, "magic", null, "properties", object());
         recipe.addProperty("id", Identity.recipe(recipe)); recipes.add(recipe);
     }
 
@@ -506,7 +493,7 @@ final class Changes {
         String special=item(items,"fixture:special_flower",0,specialTag,false,"Special flower 特殊花",texture,text);
         String base=item(items,"fixture:floating_special",0,baseTag,false,"Floating flower base 浮空花变换基类",texture,text);
         String product=item(items,"fixture:floating_special",0,resultTag,false,"Floating pure daisy 浮空白雏菊",texture,text);
-        categories.add(object("id",category,"source",origin,"name",text.apply("Floating flowers 浮空花合成"),"icon",object("kind","item","id",product),"machines",array(),"view",null,"order",categories.size()));
+        categories.add(object("id",category,"source",origin,"name",text.apply("Floating flowers 浮空花合成"),"icon",object("kind","item","id",product),"machines",array(),"order",categories.size()));
         JsonArray inputs=array();
         for(int slot=0;slot<3;slot++) {
             JsonObject c=choice(slot==0?floating:special);
@@ -516,7 +503,7 @@ final class Changes {
         JsonObject recipe=object("source",origin,"category",category,"order",0,"inputs",inputs,
             "outputs",array(object("kind","item","slot",0,"id",product,"amount","1","quantity",null,"role","result","chance",Chance.of(1,1),
                 "change",object("input",2,"action",object("kind","floatingFlower","base",base),"samples",array(stack(product))))),
-            "process",object("kind","floatingFlowers","special",array(1,2)),"duration",null,"energy",null,"grid",null,"magic",null,"view",null,"properties",object());
+            "process",object("kind","floatingFlowers","special",array(1,2)),"duration",null,"energy",null,"grid",null,"magic",null,"properties",object());
         recipe.addProperty("id",Identity.recipe(recipe));recipes.add(recipe);
     }
 
@@ -524,7 +511,7 @@ final class Changes {
         String stone=Identity.item("minecraft:stone",0,null), paper=Identity.item("minecraft:paper",0,null);
         JsonObject origin=object("owner","fixture","handler","fixture:buildcraft","key","assembly");
         String category=Identity.origin("category",origin);
-        categories.add(object("id",category,"source",origin,"name",text.apply("BuildCraft Assembly 激光装配台"),"icon",object("kind","item","id",stone),"machines",array(),"view",null,"order",categories.size()));
+        categories.add(object("id",category,"source",origin,"name",text.apply("BuildCraft Assembly 激光装配台"),"icon",object("kind","item","id",stone),"machines",array(),"order",categories.size()));
         JsonObject first=choice(stone), second=choice(paper), last=choice(paper);
         for(JsonObject c:Arrays.asList(first,second,last)) {
             c.add("rule",object("kind","buildcraft","wildcard",c==second,"subtypes",c==first));
@@ -533,7 +520,7 @@ final class Changes {
         JsonObject recipe=object("source",origin,"category",category,"order",0,
             "inputs",array(object("kind","item","slot",0,"choices",array(first,second)),object("kind","item","slot",1,"choices",array(last))),
             "outputs",array(object("kind","item","slot",0,"id",paper,"amount","2","quantity",null,"change",null,"role","result","chance",Chance.of(1,1))),
-            "process",object("kind","buildcraftAssembly","energy",700),"duration",null,"energy",null,"grid",null,"magic",null,"view",null,"properties",object());
+            "process",object("kind","buildcraftAssembly","energy",700),"duration",null,"energy",null,"grid",null,"magic",null,"properties",object());
         recipe.addProperty("id",Identity.recipe(recipe));recipes.add(recipe);
     }
 
@@ -541,21 +528,21 @@ final class Changes {
         String water=Identity.fluid("water",null),honey=Identity.fluid("honey",null);
         JsonObject origin=object("owner","fixture","handler","fixture:refining","key","refining");
         String category=Identity.origin("category",origin);
-        categories.add(object("id",category,"source",origin,"name",text.apply("BuildCraft Refinery 精炼厂"),"icon",object("kind","fluid","id",water),"machines",array(),"view",null,"order",categories.size()));
+        categories.add(object("id",category,"source",origin,"name",text.apply("BuildCraft Refinery 精炼厂"),"icon",object("kind","fluid","id",water),"machines",array(),"order",categories.size()));
         JsonArray inputs=new JsonArray();
         for(int slot=0;slot<2;slot++) {JsonObject c=choice(water);c.addProperty("amount","700");c.add("consume",object("kind","allocated"));inputs.add(object("kind","fluid","slot",slot,"choices",array(c)));}
         JsonObject recipe=object("source",origin,"category",category,"order",0,"inputs",inputs,
             "outputs",array(object("kind","fluid","slot",0,"id",honey,"amount","50","quantity",null,"change",null,"role","result","chance",Chance.of(1,1))),
             "process",object("kind","buildcraftRefinery","energy",30,"delay","5","capacity",4000,
                 "earlier",array(array(object("id",Identity.fluid("hydrogen",null),"amount","200"))),"filling",array(array(Identity.fluid("helium",null),water),array(water))),
-            "duration",null,"energy",null,"grid",null,"magic",null,"view",null,"properties",object());
+            "duration",null,"energy",null,"grid",null,"magic",null,"properties",object());
         recipe.addProperty("id",Identity.recipe(recipe));recipes.add(recipe);
     }
 
     static void blast(List<JsonObject> recipes,List<JsonObject> categories,Function<String,String> text) {
         String stone=Identity.item("minecraft:stone",0,null),paper=Identity.item("minecraft:paper",0,null);
         JsonObject origin=object("owner","fixture","handler","fixture:blast","key","blast");String category=Identity.origin("category",origin);
-        categories.add(object("id",category,"source",origin,"name",text.apply("IC2 Blast Furnace 高炉"),"icon",object("kind","item","id",stone),"machines",array(),"view",null,"order",categories.size()));
+        categories.add(object("id",category,"source",origin,"name",text.apply("IC2 Blast Furnace 高炉"),"icon",object("kind","item","id",stone),"machines",array(),"order",categories.size()));
         JsonObject primary=choice(stone),air=choice(paper);primary.addProperty("amount","4");
         primary.add("rule",object("kind","wildcard","meta",false,"nbt",true));air.add("rule",object("kind","untagged","meta",true));
         for(JsonObject c:Arrays.asList(primary,air))c.add("consume",object("kind","staged"));
@@ -564,7 +551,7 @@ final class Changes {
             "inputs",array(object("kind","item","slot",0,"choices",array(primary)),object("kind","item","slot",1,"choices",array(air))),
             "outputs",array(object("kind","item","slot",0,"id",paper,"amount","2","quantity",null,"change",null,"role","result","chance",Chance.of(1,1)),
                 object("kind","item","slot",1,"id",stone,"amount",null,"quantity",object("kind","potential","stat","ic2:slagSpace","nominal","3"),"change",null,"role","result","chance",Chance.of(1,1))),
-            "process",object("kind","ic2Blast","heat",50000,"containers",array(array((Object)null),array(object("id",stone,"amount","1")))),"duration",null,"energy",null,"grid",null,"magic",null,"view",null,"properties",object());
+            "process",object("kind","ic2Blast","heat",50000,"containers",array(array((Object)null),array(object("id",stone,"amount","1")))),"duration",null,"energy",null,"grid",null,"magic",null,"properties",object());
         recipe.addProperty("id",Identity.recipe(recipe));recipes.add(recipe);
     }
 
@@ -572,12 +559,12 @@ final class Changes {
         String stone=Identity.item("minecraft:stone",0,null);
         JsonObject origin=object("owner","fixture","handler","tconstruct.plugins.nei.RecipeHandlerCastingTable","key","unstable-fixture");
         String category=Identity.origin("category",origin);
-        categories.add(object("id",category,"source",origin,"name",text.apply("Unstable casting 浇铸计时"),"icon",null,"machines",array(),"view",null,"order",categories.size()));
+        categories.add(object("id",category,"source",origin,"name",text.apply("Unstable casting 浇铸计时"),"icon",null,"machines",array(),"order",categories.size()));
         JsonObject fluid=choice(Identity.fluid("water",null));fluid.addProperty("amount","144");
         JsonObject recipe=object("source",origin,"category",category,"order",0,
             "inputs",array(object("kind","fluid","slot",0,"choices",array(fluid))),
             "outputs",array(object("kind","item","slot",0,"id",stone,"amount","1","quantity",null,"change",null,"role","result","chance",Chance.of(1,1))),
-            "process",object("kind","unstableCasting"),"duration","80","energy",null,"grid",null,"magic",null,"view",null,"properties",object());
+            "process",object("kind","unstableCasting"),"duration","80","energy",null,"grid",null,"magic",null,"properties",object());
         recipe.addProperty("id",Identity.recipe(recipe));recipes.add(recipe);
     }
 
@@ -596,7 +583,7 @@ final class Changes {
                 products[r][b]=item(items,"fixture:integration_robot",0,output,false,(r==0?"Initialized ":"Charged ")+id+" robot 集成机器人",texture,text);
             }
         }
-        categories.add(object("id",category,"source",origin,"name",text.apply("BuildCraft Integration Table 集成台"),"icon",object("kind","item","id",robots[0]),"machines",array(),"view",null,"order",categories.size()));
+        categories.add(object("id",category,"source",origin,"name",text.apply("BuildCraft Integration Table 集成台"),"icon",object("kind","item","id",robots[0]),"machines",array(),"order",categories.size()));
         JsonArray inputs=array();
         for(int column=0;column<3;column++){
             JsonArray choices=array();for(String id:column==0?robots:column==1?boards:new String[]{boards[1]}){
@@ -610,7 +597,7 @@ final class Changes {
             "outputs",array(object("kind","item","slot",0,"id",products[0][0],"amount","1","quantity",null,"role","result","chance",Chance.of(1,1),
                 "change",object("input",0,"action",object("kind","integration"),"bindings",bindings,"samples",samples))),
             "process",object("kind","buildcraftIntegration","rule",object("kind","robot","energy",50000,"maximum",1,"primary",array("fixture:integration_robot"),"robot","fixture:integration_robot","empty","empty","boards",object("red","red","blue","blue"))),
-            "duration",null,"energy",null,"grid",null,"magic",null,"view",null,"properties",object());
+            "duration",null,"energy",null,"grid",null,"magic",null,"properties",object());
         recipe.addProperty("id",Identity.recipe(recipe));recipes.add(recipe);
     }
 

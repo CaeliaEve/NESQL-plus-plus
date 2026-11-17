@@ -8,6 +8,7 @@ import com.github.dcysteine.nesql.exporter.task.ClientThread;
 import com.google.gson.JsonArray;
 import com.google.gson.JsonObject;
 import com.gtnewhorizon.structurelib.alignment.constructable.IConstructable;
+import com.gtnewhorizon.structurelib.alignment.constructable.IMultiblockInfoContainer;
 import com.gtnewhorizon.structurelib.structure.AutoPlaceEnvironment;
 import com.gtnewhorizon.structurelib.structure.IStructureDefinition;
 import com.gtnewhorizon.structurelib.structure.IStructureElement;
@@ -20,6 +21,8 @@ import cpw.mods.fml.relauncher.ReflectionHelper;
 import gregtech.api.GregTechAPI;
 import gregtech.api.interfaces.metatileentity.IMetaTileEntity;
 import net.minecraft.item.ItemStack;
+import net.minecraft.item.ItemBlock;
+import net.minecraft.tileentity.TileEntity;
 
 import java.util.ArrayList;
 import java.util.HashSet;
@@ -37,8 +40,8 @@ import static com.github.dcysteine.nesql.exporter.source.Json.*;
 /** Reads definitions and captures native construction in an owned preview world. */
 final class Structures {
     static List<Machine> all() {
-        version("structurelib", "1.4.23");
-        version("blockrenderer6343", "1.3.17");
+        version("structurelib");
+        version("blockrenderer6343");
         List<Machine> result = new ArrayList<>();
         for (int id = 0; id < GregTechAPI.METATILEENTITIES.length; id++) {
             IMetaTileEntity machine = GregTechAPI.METATILEENTITIES[id];
@@ -47,17 +50,95 @@ final class Structures {
         return result;
     }
 
-    static void version(String id, String version) {
-        ModContainer mod = Loader.instance().getIndexedModList().get(id);
-        if (mod == null || !version.equals(mod.getVersion())) {
-            throw new Jobs.Fault("structure_version", "Structure capture requires " + id + " " + version);
-        }
+    /** Completed native scan supplies controllers; never borrow its ObserverWorld tiles for capture. */
+    static List<Machine> compatAll() {
+        if (!Loader.isModLoaded("structurecompat")) return java.util.Collections.emptyList();
+        version("structurecompat");
+        Class<?> handler = MagicApi.type("blockrenderer6343.integration.structurelib.StructureCompatNEIHandler");
+        Object components = MagicApi.field(handler, null, "multiBlockComponents");
+        Object stacks = MagicApi.field(handler, null, "stacks");
+        if (!(components instanceof Map) || !(stacks instanceof Map))
+            throw new Jobs.Fault("handler_not_ready", "Native compatibility structure scan has not completed");
+        return compatMachines((Map<?, ?>) stacks, IMultiblockInfoContainer.MULTIBLOCK_MAP);
     }
+
+    static List<Machine> compatMachines(Map<?, ?> stacks, Map<String, IMultiblockInfoContainer<?>> providers) {
+        if (stacks == null || providers == null || stacks.size() > 8192 || providers.size() > 8192)
+            throw new Jobs.Fault("structure_limit", "Invalid native compatibility scan size");
+        List<Machine> machines = new ArrayList<>();
+        Set<String> seen = new HashSet<>();
+        for (Map.Entry<?, ?> entry : stacks.entrySet()) {
+            Jobs.checkpoint();
+            Object nativeConstructable = entry.getKey();
+            if (nativeConstructable == null || !nativeConstructable.getClass().getName().equals(
+                    "com.gtnewhorizon.structurelib.alignment.constructable.IMultiblockInfoContainer$1")
+                    || !(entry.getValue() instanceof ItemStack))
+                throw new Jobs.Fault("structure_unsupported", "Unknown native compatibility wrapper/controller");
+            Object tile = MagicApi.field(nativeConstructable, "val$tileEntity");
+            Object provider = MagicApi.field(nativeConstructable, "this$0");
+            Object facing = MagicApi.field(nativeConstructable, "val$aSide");
+            if (!(tile instanceof TileEntity) || !(provider instanceof IMultiblockInfoContainer)
+                    || facing != com.gtnewhorizon.structurelib.alignment.enumerable.ExtendedFacing.DEFAULT)
+                throw new Jobs.Fault("structure_unsupported", "Native compatibility context changed");
+            String key = tile.getClass().getCanonicalName();
+            if (key == null || providers.get(key) != provider || !seen.add(key))
+                throw new Jobs.Fault("environment_changed", "Native compatibility registry/scan binding differs");
+            ItemStack controller = (ItemStack) entry.getValue();
+            String registry = controller.getItem() == null ? null : net.minecraft.item.Item.itemRegistry.getNameForObject(controller.getItem());
+            if (registry == null || !registry.contains(":"))
+                throw new Jobs.Fault("structure_controller", "Unregistered compatibility controller");
+            machines.add(Machine.compat(registry.substring(0, registry.indexOf(':')), key,
+                    (IMultiblockInfoContainer<?>) provider, controller));
+        }
+        if (!seen.equals(providers.keySet()))
+            throw new Jobs.Fault("handler_not_ready", "Native compatibility scan omitted registered providers");
+        return machines;
+    }
+
+    static void version(String id) { TargetAdmission.require("Structures", id); }
 
     static final class Machine {
         final int id;
         final IMetaTileEntity machine;
-        Machine(int id, IMetaTileEntity machine) { this.id = id; this.machine = machine; }
+        final IMultiblockInfoContainer<TileEntity> container;
+        final String tileClass;
+        private final ItemStack stack;
+        private final String owner;
+        Machine(int id, IMetaTileEntity machine) {
+            this.id = id; this.machine = machine; this.container = null; this.tileClass = null;
+            this.stack = null; this.owner = "gregtech";
+        }
+        @SuppressWarnings("unchecked")
+        private Machine(String owner, String tileClass, IMultiblockInfoContainer<?> container, ItemStack stack) {
+            if (owner == null || owner.isEmpty() || tileClass == null || tileClass.isEmpty() || container == null
+                    || stack == null || !(stack.getItem() instanceof ItemBlock))
+                throw new Jobs.Fault("structure_controller", "Invalid native compatibility controller");
+            this.id = -1; this.machine = null; this.owner = owner; this.tileClass = tileClass;
+            this.container = (IMultiblockInfoContainer<TileEntity>) container; this.stack = stack.copy();
+        }
+        static Machine compat(String owner, String tileClass, IMultiblockInfoContainer<?> container, ItemStack stack) {
+            return new Machine(owner, tileClass, container, stack);
+        }
+        void verify() {
+            if (container == null) {
+                if (id < 0 || id >= GregTechAPI.METATILEENTITIES.length || GregTechAPI.METATILEENTITIES[id] != machine)
+                    throw new Jobs.Fault("environment_changed", "Native GT structure controller changed: " + id);
+            } else if (IMultiblockInfoContainer.MULTIBLOCK_MAP.get(tileClass) != container)
+                throw new Jobs.Fault("environment_changed", "Native compatibility provider changed: " + tileClass);
+        }
+        ItemStack controller() {
+            verify();
+            ItemStack result = container == null ? machine.getStackForm(1) : stack.copy();
+            if (result == null || result.getItem() == null) throw new Jobs.Fault("structure_controller", "Controller has no item stack");
+            return result.copy();
+        }
+        JsonObject origin() {
+            return container == null ? object("owner", owner, "handler", machine.getClass().getName(), "key", Integer.toString(id))
+                    : object("owner", owner, "handler", container.getClass().getName(), "key", tileClass + ":"
+                        + Identity.item(net.minecraft.item.Item.itemRegistry.getNameForObject(stack.getItem()),
+                            stack.getItemDamage(), com.github.dcysteine.nesql.exporter.source.TypedNbt.encode(stack.getTagCompound())));
+        }
+        String identity() { return Identity.origin("structure", origin()); }
     }
 
     /** Item suggestions are optional; a block without an Item is not an empty item fact. */
@@ -126,13 +207,14 @@ final class Structures {
             this.probes = Probe.order(probes);
             this.complete = complete;
             trigger = Preview.trigger(this.probes.get(0));
-            ItemStack controller = source.machine.getStackForm(1);
+            ItemStack controller = source.controller();
             if (controller == null || controller.getItem() == null) throw new Jobs.Fault("structure_controller", "Controller has no item stack");
-            JsonObject origin = object("owner", "gregtech", "handler", source.machine.getClass().getName(), "key", Integer.toString(source.id));
+            JsonObject origin = source.origin();
             JsonArray description = new JsonArray();
             record = object("id", Identity.origin("structure", origin), "source", origin, "name", facts.text(controller.getDisplayName()),
                     "controller", facts.item(controller), "description", description, "probe", this.probes.get(0).json(),
-                    "pieces", pieces, "variants", variants, "problem", null);
+                    "pieces", pieces, "variants", variants, "problem", null,
+                    "definitionKind", source.container == null ? "structurelib" : "construction");
             try {
                 if (open()) describe(description);
                 else record.addProperty("problem", facts.text("首组参数无法创建控制器预览，未读取片段定义。"));
@@ -145,12 +227,23 @@ final class Structures {
         @SuppressWarnings("unchecked")
         private void describe(JsonArray description) {
             ClientThread.phase("definition");
-            context = preview.machine;
-            IConstructable constructable = (IConstructable) context;
+            context = preview.context;
+            IConstructable constructable = preview.constructable;
             String[] lines = constructable.getStructureDescription(trigger.copy());
             if (lines == null || lines.length > 1024) throw new Jobs.Fault("structure_description", "Invalid structure description");
             for (String line : lines) description.add(value(facts.text(line)));
+            // The pinned native container wrapper has no enumerable definition API.
+            // Its actual owned construction below provides geometry, not guessed pieces.
+            if (source.container != null) return;
             IStructureDefinition<?> supplied = constructable.getStructureDefinition();
+            // Cleanroom deliberately implements construct() without an enumerable definition.
+            // Keep that native path explicit: an unknown/empty definition remains an error.
+            if (supplied == null && constructable.getClass().getName().equals(
+                    "gregtech.common.tileentities.machines.multi.MTECleanroom")) {
+                version("gregtech_nh");
+                record.addProperty("definitionKind", "gtconstruction");
+                return;
+            }
             if (!(supplied instanceof StructureDefinition) || ((StructureDefinition<?>) supplied).getShapes().isEmpty()) {
                 if (complete) throw new Jobs.Fault("structure_unsupported", "No enumerable structure definition: " + context.getClass().getName());
                 record.addProperty("problem", facts.text("此控制器没有可枚举的结构定义。"));

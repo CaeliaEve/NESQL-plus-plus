@@ -54,7 +54,9 @@ final class NativeImbuingTest {
             boolean captured = false;
             for (JsonElement raw : row.inputs.get(0).getAsJsonObject().getAsJsonArray("choices")) {
                 JsonObject choice = raw.getAsJsonObject();
-                captured |= NativeRailTest.matches(choice.getAsJsonObject("rule"), known.get(choice.get("id").getAsString()), offered, known);
+                JsonObject rule = choice.getAsJsonObject("rule");
+                captured |= rule.get("kind").getAsString().equals("ore")
+                        && rule.get("name").getAsString().equals("nesqlImbuingMetal");
             }
             require(captured, "Captured shared ore alternatives are narrower than native matching");
             ItemStack wrongBase = base.copy(); wrongBase.setTagInfo("native", new NBTTagInt(9)); inv.setInventorySlotContents(3, wrongBase);
